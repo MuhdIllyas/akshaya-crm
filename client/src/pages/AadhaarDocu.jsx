@@ -23,7 +23,7 @@ import { DOCUMENTS } from '../utils/aadhaar/Aadhaardocuments.js';
 // ---------------------------------------------------------------------
 const inputCls =
   'w-full px-4 py-2.5 bg-white border border-gray-300 rounded-xl text-gray-900 placeholder-gray-400 ' +
-  'focus:outline-none focus:ring-2 focus:ring-navy-500 focus:border-navy-500 transition-all';
+  'focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all';
 
 const Field = ({ label, hint, children }) => (
   <div>
@@ -52,7 +52,7 @@ const Segmented = ({ value, onChange, options }) => (
         type="button"
         onClick={() => onChange(o)}
         className={`flex-1 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
-          value === o ? 'bg-white text-navy-700 shadow' : 'text-gray-600 hover:text-navy-700'
+          value === o ? 'bg-white text-teal-700 shadow border-b-2 border-teal-500' : 'text-gray-600 hover:text-teal-700'
         }`}
       >
         {o}
@@ -66,7 +66,7 @@ const Card = ({ title, icon: Icon, children, className = '' }) => (
     {title && (
       <div className="flex items-center mb-5">
         {Icon && (
-          <div className="w-10 h-10 bg-gradient-to-br from-navy-600 to-navy-800 rounded-xl flex items-center justify-center mr-3">
+          <div className="w-10 h-10 bg-gradient-to-br from-teal-500 to-teal-600 rounded-xl flex items-center justify-center mr-3 shadow-sm">
             <Icon className="h-5 w-5 text-white" />
           </div>
         )}
@@ -106,13 +106,13 @@ const Section = ({ label, children, tone = 'plain' }) => {
   if (!children) return null;
   const tones = {
     plain: 'bg-gray-50 border-gray-100',
-    note: 'bg-navy-50 border-navy-100',
-    warn: 'bg-amber-50 border-amber-200',
+    note: 'bg-teal-50 border-teal-100 text-teal-900',
+    warn: 'bg-amber-50 border-amber-200 text-amber-900',
   };
   return (
     <div className={`rounded-xl border p-4 ${tones[tone]}`}>
-      <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">{label}</p>
-      <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-line">{children}</p>
+      <p className={`text-xs font-bold uppercase tracking-wide mb-1.5 ${tone === 'note' ? 'text-teal-600' : 'text-gray-500'}`}>{label}</p>
+      <p className="text-sm leading-relaxed whitespace-pre-line">{children}</p>
     </div>
   );
 };
@@ -184,7 +184,7 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
                 <Field label="Override detected type (optional)" hint="Leave blank to use the auto-detected code. Use it to force (a) abbreviation or (d) phonetic spelling.">
                   <Select value={nameForm.overrideCode} onChange={setN('overrideCode')} options={nameCodes} placeholder="Auto-detect" />
                 </Field>
-                {autoCode && <p className="text-sm text-gray-600">Detected scenario: <span className="font-bold text-navy-700">{autoCode}</span></p>}
+                {autoCode && <p className="text-sm text-gray-600">Detected scenario: <span className="font-bold text-teal-600">{autoCode}</span></p>}
               </>
             ) : (
               <>
@@ -214,7 +214,7 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
           </div>
 
           <div className="mt-6 flex items-center justify-between">
-            <button type="button" onClick={loadExample} className="text-sm font-medium text-navy-600 hover:text-navy-800">Try an example</button>
+            <button type="button" onClick={loadExample} className="text-sm font-medium text-teal-600 hover:text-teal-800">Try an example</button>
             <button type="button" onClick={() => (isName ? setNameForm(emptyName) : setDobForm(emptyDob))} className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800">
               <FiRefreshCw className="h-4 w-4 mr-1.5" /> Clear
             </button>
@@ -237,7 +237,7 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
                 {result.scenario && (
                   <>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-sm font-bold">Scenario {result.code}</span>
+                      <span className="px-3 py-1 rounded-full bg-teal-50 text-teal-700 text-sm font-bold border border-teal-100">Scenario {result.code}</span>
                       <span className="px-3 py-1 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">{result.scenario.category}</span>
                     </div>
                     <Section label="Scenario">{result.scenario.description}</Section>
@@ -248,11 +248,11 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
                     <Section label="Exceptions and conditions">{result.scenario.exceptions}</Section>
                     <Section label="Examples from the source">{result.scenario.examples}</Section>
                     <p className="text-xs text-gray-500 flex items-start">
-                      <FiBookOpen className="h-4 w-4 mr-1.5 mt-0.5 flex-shrink-0" /> Source: {result.scenario.source}
+                      <FiBookOpen className="h-4 w-4 mr-1.5 mt-0.5 flex-shrink-0 text-teal-600" /> Source: {result.scenario.source}
                     </p>
                     <div className="flex flex-wrap gap-3 pt-2 print:hidden">
                       {!result.scenario.blocked && (
-                        <button type="button" onClick={openDocs} className="inline-flex items-center px-4 py-2.5 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm">
+                        <button type="button" onClick={openDocs} className="inline-flex items-center px-4 py-2.5 bg-gradient-to-r from-teal-500 to-teal-600 text-white rounded-xl hover:shadow-lg transition-all font-medium text-sm">
                           See acceptable documents <FiArrowRight className="ml-2 h-4 w-4" />
                         </button>
                       )}
@@ -278,14 +278,14 @@ const ProcedureFinder = ({ onOpenDocuments }) => {
 // 2. Documents finder (Requirements Wizard)
 // ---------------------------------------------------------------------
 const DocRow = ({ doc, route }) => (
-  <div className={`rounded-xl border p-4 flex flex-col hover:shadow-md transition-all ${route === 'hof' ? 'bg-navy-50 border-navy-100' : 'bg-white border-gray-200'}`}>
+  <div className={`rounded-xl border p-4 flex flex-col hover:shadow-md transition-all ${route === 'hof' ? 'bg-teal-50 border-teal-100' : 'bg-white border-gray-200'}`}>
     <div className="flex items-start gap-3 mb-2">
-      <span className="flex-shrink-0 px-2 py-1 rounded bg-navy-100 text-navy-700 text-xs font-bold">Sl. {doc.sl}</span>
+      <span className="flex-shrink-0 px-2 py-1 rounded bg-teal-100 text-teal-800 text-xs font-bold">Sl. {doc.sl}</span>
       <p className="font-bold text-gray-900 text-sm">{doc.name}</p>
     </div>
     {doc.displayNote && (
       <div className="flex items-start mt-auto pt-2 border-t border-gray-100">
-        <FiInfo className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
+        <FiInfo className="h-4 w-4 text-teal-500 mt-0.5 flex-shrink-0" />
         <p className="ml-2 text-xs text-gray-600 font-medium">{doc.displayNote}</p>
       </div>
     )}
@@ -329,7 +329,7 @@ const DocumentsFinder = ({ preset, presetKey }) => {
             )}
           </div>
           <div className="mt-6 flex justify-end">
-            <button type="button" onClick={() => { setF({ updateType: '', residentType: '', category: '', dobStatus: '' }); setQuery(''); }} className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-gray-800">
+            <button type="button" onClick={() => { setF({ updateType: '', residentType: '', category: '', dobStatus: '' }); setQuery(''); }} className="inline-flex items-center text-sm font-medium text-gray-500 hover:text-teal-600">
               <FiRefreshCw className="h-4 w-4 mr-1.5" /> Clear
             </button>
           </div>
@@ -347,23 +347,20 @@ const DocumentsFinder = ({ preset, presetKey }) => {
             <StatusBanner check={res.check} />
           ) : (
             <div className="space-y-5">
-              <div className="rounded-xl bg-navy-50 border border-navy-100 p-4">
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">Proof type needed</p>
-                <p className="font-semibold text-navy-800 text-sm">{res.proofNeeded}</p>
+              <div className="rounded-xl bg-teal-50 border border-teal-100 p-4">
+                <p className="text-xs font-bold uppercase tracking-wide text-teal-600 mb-1">Proof type needed</p>
+                <p className="font-semibold text-teal-900 text-sm">{res.proofNeeded}</p>
               </div>
-
               <div className="relative">
                 <FiSearch className="absolute left-3.5 top-3.5 h-4 w-4 text-gray-400" />
                 <input className={`${inputCls} pl-10`} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search within these targeted results..." />
               </div>
-
               <div>
                 <h3 className="font-bold text-gray-900 mb-3">Standard route <span className="text-gray-500 font-medium text-sm">({std.length})</span></h3>
                 {std.length === 0 ? <p className="text-sm text-gray-500">No matching documents for this combination.</p> : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{std.map((d) => <DocRow key={d.sl} doc={d} route="std" />)}</div>
                 )}
               </div>
-
               {res.hof.length > 0 && (
                 <div className="mt-8">
                   <h3 className="font-bold text-gray-900 mb-1">HoF-based route <span className="text-gray-500 font-medium text-sm">({hof.length})</span></h3>
@@ -412,11 +409,11 @@ const DocumentGallery = () => {
         <div className="flex flex-col lg:flex-row gap-4 justify-between items-center">
           <div className="relative w-full lg:w-96">
             <FiSearch className="absolute left-4 top-3.5 text-gray-400 h-5 w-5" />
-            <input type="text" placeholder="Search all 43 UIDAI documents..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all" />
+            <input type="text" placeholder="Search all 43 UIDAI documents..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
           </div>
           <div className="flex overflow-x-auto w-full lg:w-auto pb-2 lg:pb-0 gap-2 hide-scrollbar">
             {GAL_TABS.map((tab) => (
-              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-navy-700 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap px-5 py-2.5 rounded-xl text-sm font-semibold transition-all ${activeTab === tab.id ? 'bg-teal-600 text-white shadow-md' : 'bg-gray-100 text-gray-600 hover:bg-teal-50 hover:text-teal-700'}`}>
                 {tab.id === 'all' && <FiFilter className="inline mr-2 mb-0.5" />} {tab.label}
               </button>
             ))}
@@ -429,8 +426,11 @@ const DocumentGallery = () => {
         <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           <AnimatePresence>
             {filteredDocs.map((doc) => (
-              <motion.div layout key={doc.sl} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="rounded-2xl border bg-white border-gray-200 p-5 flex flex-col hover:shadow-lg transition-all">
-                <div className="flex items-start gap-3 mb-3"><span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-navy-100 text-navy-700 text-xs font-bold">Sl. {doc.sl}</span><p className="font-bold text-gray-900 text-sm leading-snug">{doc.name}</p></div>
+              <motion.div layout key={doc.sl} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="rounded-2xl border bg-white border-gray-200 p-5 flex flex-col hover:shadow-lg transition-all hover:border-teal-200">
+                <div className="flex items-start gap-3 mb-3">
+                  <span className="flex-shrink-0 px-2.5 py-1 rounded-lg bg-teal-50 text-teal-700 text-xs font-bold border border-teal-100">Sl. {doc.sl}</span>
+                  <p className="font-bold text-gray-900 text-sm leading-snug">{doc.name}</p>
+                </div>
                 <div className="flex flex-wrap gap-2 mt-auto mb-3">
                   {doc.poi && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-100">PoI</span>}
                   {doc.poa && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-50 text-green-700 border border-green-100">PoA</span>}
@@ -438,7 +438,7 @@ const DocumentGallery = () => {
                   {doc.pdb && <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-100">PDB</span>}
                 </div>
                 {doc.conditions && (
-                  <div className="flex items-start pt-3 border-t border-gray-100"><FiInfo className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" /><p className="ml-2 text-xs text-gray-600 font-medium leading-relaxed">{doc.conditions}</p></div>
+                  <div className="flex items-start pt-3 border-t border-gray-100"><FiInfo className="h-4 w-4 text-teal-400 mt-0.5 flex-shrink-0" /><p className="ml-2 text-xs text-gray-600 font-medium leading-relaxed">{doc.conditions}</p></div>
                 )}
               </motion.div>
             ))}
@@ -503,7 +503,7 @@ const ScenariosGallery = () => {
           <div>
             <h2 className="text-2xl font-bold text-gray-900 flex items-center">
               UIDAI Aadhaar Update Rules
-              <span className="ml-3 px-2.5 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-semibold border border-gray-200">Gallery View</span>
+              <span className="ml-3 px-2.5 py-0.5 bg-teal-50 text-teal-700 rounded-full text-xs font-semibold border border-teal-200">Gallery View</span>
             </h2>
             <p className="text-sm text-gray-500 mt-1">Standard Operating Procedures & Official Document Verification Matrix</p>
           </div>
@@ -517,7 +517,7 @@ const ScenariosGallery = () => {
               placeholder="Search scenarios, examples, rules..." 
               value={searchQuery} 
               onChange={(e) => setSearchQuery(e.target.value)} 
-              className="w-full pl-11 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:outline-none transition-all text-sm" 
+              className="w-full pl-11 pr-4 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-sm" 
             />
           </div>
           
@@ -526,7 +526,7 @@ const ScenariosGallery = () => {
             <select 
               value={activeCategory} 
               onChange={(e) => setActiveCategory(e.target.value)}
-              className="w-full lg:w-48 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-navy-500"
+              className="w-full lg:w-48 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
             >
               <option value="All Categories">All Categories</option>
               {uniqueCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
@@ -540,7 +540,7 @@ const ScenariosGallery = () => {
               <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
               <p className="text-xs font-medium text-gray-500 mt-1">Scenarios Shown</p>
             </div>
-            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center"><FiGrid className="h-5 w-5" /></div>
+            <div className="w-10 h-10 rounded-full bg-teal-50 text-teal-500 flex items-center justify-center"><FiGrid className="h-5 w-5" /></div>
           </div>
           <div className="border border-gray-200 rounded-xl p-4 flex justify-between items-center bg-white shadow-sm">
             <div>
@@ -561,7 +561,7 @@ const ScenariosGallery = () => {
               <p className="text-2xl font-bold text-gray-900">{stats.dobCount}</p>
               <p className="text-xs font-medium text-gray-500 mt-1">DoB Procedures</p>
             </div>
-            <div className="w-10 h-10 rounded-full bg-green-50 text-green-500 flex items-center justify-center"><FiShield className="h-5 w-5" /></div>
+            <div className="w-10 h-10 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center"><FiShield className="h-5 w-5" /></div>
           </div>
         </div>
 
@@ -569,7 +569,7 @@ const ScenariosGallery = () => {
           <button 
             onClick={() => setActiveCategory('All Categories')} 
             className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center border ${
-              activeCategory === 'All Categories' ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+              activeCategory === 'All Categories' ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200'
             }`}
           >
             All <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${activeCategory === 'All Categories' ? 'bg-white/20' : 'bg-gray-100'}`}>{stats.total}</span>
@@ -580,7 +580,7 @@ const ScenariosGallery = () => {
               key={cat}
               onClick={() => setActiveCategory(cat)} 
               className={`whitespace-nowrap px-4 py-1.5 rounded-full text-sm font-medium transition-all flex items-center border ${
-                activeCategory === cat ? 'bg-navy-900 text-white border-navy-900' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'
+                activeCategory === cat ? 'bg-teal-600 text-white border-teal-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200'
               }`}
             >
               {cat} <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-bold ${activeCategory === cat ? 'bg-white/20' : 'bg-gray-100 text-gray-500'}`}>{categoryCounts[cat]}</span>
@@ -604,7 +604,7 @@ const ScenariosGallery = () => {
                 initial={{ opacity: 0, scale: 0.98 }} 
                 animate={{ opacity: 1, scale: 1 }} 
                 exit={{ opacity: 0, scale: 0.98 }} 
-                className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 flex flex-col overflow-hidden"
+                className="bg-white rounded-xl shadow-sm hover:shadow-md transition-all duration-300 border border-gray-200 flex flex-col overflow-hidden hover:border-teal-200"
               >
                 <div className="p-6 flex-1 flex flex-col">
                   <div className="flex justify-between items-center mb-4">
@@ -622,7 +622,7 @@ const ScenariosGallery = () => {
                   <h3 className="text-base font-bold text-gray-900 mb-2 leading-snug">{s.description}</h3>
                   {s.appliesTo && (
                     <div className="flex items-start text-xs text-gray-600 mb-4">
-                      <FiUsers className="mr-1.5 mt-0.5 text-gray-400 flex-shrink-0" />
+                      <FiUsers className="mr-1.5 mt-0.5 text-teal-500 flex-shrink-0" />
                       <span><span className="font-medium text-gray-700">Target:</span> {s.appliesTo}</span>
                     </div>
                   )}
@@ -661,7 +661,7 @@ const ScenariosGallery = () => {
                   </span>
                   <button 
                     onClick={() => setSelectedScenario(s)} 
-                    className="text-navy-600 font-medium hover:text-navy-800 transition-colors flex items-center px-2 py-1 rounded hover:bg-navy-50"
+                    className="text-teal-600 font-medium hover:text-teal-800 transition-colors flex items-center px-2 py-1 rounded hover:bg-teal-50"
                   >
                     Inspect <FiArrowRight className="ml-1 h-3 w-3" />
                   </button>
@@ -672,7 +672,6 @@ const ScenariosGallery = () => {
         </motion.div>
       )}
 
-      {/* Inspect Modal Overlay */}
       <AnimatePresence>
         {selectedScenario && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-navy-900/40 backdrop-blur-sm">
@@ -685,7 +684,7 @@ const ScenariosGallery = () => {
             >
               <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                 <div className="flex items-center gap-3">
-                  <span className="px-3 py-1 rounded-full bg-navy-100 text-navy-700 text-xs font-bold">Scenario {selectedScenario.code}</span>
+                  <span className="px-3 py-1 rounded-full bg-teal-100 text-teal-800 text-xs font-bold border border-teal-200">Scenario {selectedScenario.code}</span>
                   <span className="text-sm font-semibold text-gray-600">{selectedScenario.category}</span>
                 </div>
                 <button onClick={() => setSelectedScenario(null)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors">
@@ -707,11 +706,11 @@ const ScenariosGallery = () => {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Adult Annexure</p>
-                      <p className="text-navy-700 font-semibold">{selectedScenario.annexureAdult || 'None required'}</p>
+                      <p className="text-teal-700 font-semibold">{selectedScenario.annexureAdult || 'None required'}</p>
                     </div>
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
                       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Minor Annexure</p>
-                      <p className="text-navy-700 font-semibold">{selectedScenario.annexureMinor || 'None required'}</p>
+                      <p className="text-teal-700 font-semibold">{selectedScenario.annexureMinor || 'None required'}</p>
                     </div>
                   </div>
 
@@ -742,7 +741,7 @@ const ScenariosGallery = () => {
                 <p className="text-xs text-gray-500 flex items-center">
                   <FiBookOpen className="mr-2 text-gray-400" /> {selectedScenario.source || 'UIDAI Standard Operating Procedure'}
                 </p>
-                <button onClick={() => setSelectedScenario(null)} className="px-5 py-2.5 bg-navy-700 text-white rounded-lg text-sm font-semibold hover:bg-navy-800 transition-colors shadow-sm">
+                <button onClick={() => setSelectedScenario(null)} className="px-5 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold hover:bg-teal-700 transition-colors shadow-sm">
                   Close Inspection
                 </button>
               </div>
@@ -771,7 +770,7 @@ const AadhaarDocuFinder = () => {
 
   useEffect(() => {
     const prev = document.title;
-    document.title = 'Aadhaar Docu Finder | Akshaya e-Centre Pukayur';
+    document.title = 'Aadhaar Docu Finder | Akshaya Sahayi';
     return () => { document.title = prev; };
   }, []);
 
@@ -792,12 +791,13 @@ const AadhaarDocuFinder = () => {
                 <img src="/logo-light.png" alt="Akshaya Sahayi Logo" className="h-7 w-7 object-contain" />
               </div>
               <div className="ml-3">
-                <h1 className="text-xl font-bold text-navy-900 leading-tight">Akshaya</h1>
-                <p className="text-xs text-navy-600">e-Centre Pukayur</p>
+                <h1 className="text-xl font-bold text-navy-900 leading-tight">
+                  Akshaya <span className="text-teal-600">Sahayi</span>
+                </h1>
               </div>
             </Link>
             <div className="flex items-center space-x-3">
-              <Link to="/" className="inline-flex items-center px-4 py-2 bg-navy-50 text-navy-700 rounded-xl hover:bg-navy-100 transition-all font-medium text-sm">
+              <Link to="/" className="inline-flex items-center px-4 py-2 bg-teal-50 text-teal-700 rounded-xl hover:bg-teal-100 transition-all font-medium text-sm">
                 <FiHome className="h-4 w-4 mr-2" /> Home
               </Link>
             </div>
@@ -808,7 +808,7 @@ const AadhaarDocuFinder = () => {
       <header className="pt-16 bg-navy-900 text-white print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 md:py-14">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-            <span className="inline-block px-3 py-1 rounded-full bg-white/15 text-xs font-semibold mb-3">
+            <span className="inline-block px-3 py-1 rounded-full bg-teal-500/20 text-teal-400 border border-teal-500/30 text-xs font-semibold mb-3">
               UIDAI Support & Resolution Suite
             </span>
             <h1 className="text-3xl md:text-4xl font-bold mb-2">Aadhaar Document Suite</h1>
@@ -829,14 +829,14 @@ const AadhaarDocuFinder = () => {
                 type="button"
                 onClick={() => setTab(t.id)}
                 className={`flex items-center text-left p-4 rounded-2xl border transition-all ${
-                  active ? 'bg-white border-navy-500 shadow-lg ring-2 ring-navy-100' : 'bg-white border-gray-200 hover:border-navy-200 hover:shadow'
+                  active ? 'bg-white border-teal-500 shadow-lg ring-2 ring-teal-50' : 'bg-white border-gray-200 hover:border-teal-200 hover:shadow'
                 }`}
               >
-                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 ${active ? 'bg-gradient-to-br from-navy-600 to-navy-800' : 'bg-gray-100'}`}>
+                <div className={`w-11 h-11 rounded-xl flex items-center justify-center mr-4 flex-shrink-0 ${active ? 'bg-gradient-to-br from-teal-500 to-teal-600 shadow-md' : 'bg-gray-100'}`}>
                   <t.icon className={`h-5 w-5 ${active ? 'text-white' : 'text-gray-500'}`} />
                 </div>
                 <div>
-                  <p className={`font-bold ${active ? 'text-navy-800' : 'text-gray-800'}`}>{t.label}</p>
+                  <p className={`font-bold ${active ? 'text-teal-900' : 'text-gray-800'}`}>{t.label}</p>
                   <p className="text-xs text-gray-500 mt-0.5 leading-snug">{t.blurb}</p>
                 </div>
               </button>
@@ -850,7 +850,7 @@ const AadhaarDocuFinder = () => {
         {tab === 'gallery' && <DocumentGallery />}
 
         <div className="mt-8 flex items-start p-4 rounded-xl bg-white border border-gray-200 text-xs text-gray-600 print:hidden">
-          <FiInfo className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0 text-navy-600" />
+          <FiInfo className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0 text-teal-600" />
           <p>
             This tool summarises the UIDAI documents it was built from and may not reflect later circulars. Always confirm with the latest UIDAI SoP before submitting a request.
           </p>
@@ -859,8 +859,7 @@ const AadhaarDocuFinder = () => {
 
       <footer className="bg-gradient-to-br from-navy-900 to-navy-800 text-navy-200 text-sm print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>&copy; {new Date().getFullYear()} Akshaya Sahayi</p>
-          <Link to="/" className="hover:text-white transition-colors">Back to home</Link>
+          <p>&copy; {new Date().getFullYear()} Akshaya Sahayi. All rights reserved.</p>
         </div>
       </footer>
     </div>
