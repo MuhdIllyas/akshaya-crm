@@ -5,10 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
-  FiMapPin, FiPhone, FiMail
+  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget
 } from 'react-icons/fi';
-import { FaWhatsapp } from 'react-icons/fa';
 
 // ---------------------------------------------------------------------
 // Animation Variants
@@ -81,152 +79,7 @@ const Navbar = () => {
 };
 
 // ---------------------------------------------------------------------
-// Contact Section Component
-// ---------------------------------------------------------------------
-const ContactSection = () => {
-  const [formData, setFormData] = useState({
-    name: '', centreName: '', phone: '', email: '', centres: '', interest: '', message: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    // In a real app, this would submit to an API
-    console.log('Form submitted:', formData);
-    alert('Thank you! Your enquiry has been received. Our team will contact you shortly.');
-    setFormData({ name: '', centreName: '', phone: '', email: '', centres: '', interest: '', message: '' });
-  };
-
-  return (
-    <section id="contact" className="py-24 bg-gray-50 border-t border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">
-            Let’s Build a Smarter Akshaya Centre
-          </motion.h2>
-          <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Have questions about Akshaya Sahayi, pricing, onboarding, or setting up your centre? Send us a message and our team will get back to you.
-          </motion.p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* Left Column: Form */}
-          <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="lg:col-span-2 bg-white rounded-3xl p-8 sm:p-10 shadow-lg border border-gray-100">
-            <div className="mb-8 border-b border-gray-100 pb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                <FiMail className="mr-3 text-teal-500" /> GET IN TOUCH
-              </h3>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Name *</label>
-                  <input type="text" required placeholder="Your full name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Centre Name</label>
-                  <input type="text" placeholder="Your Akshaya Centre name" value={formData.centreName} onChange={(e) => setFormData({...formData, centreName: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number *</label>
-                  <input type="tel" required placeholder="WhatsApp/Contact number" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
-                  <input type="email" placeholder="Your email address" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Centres</label>
-                  <input type="number" min="1" placeholder="e.g. 1" value={formData.centres} onChange={(e) => setFormData({...formData, centres: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Interested In</label>
-                  <select value={formData.interest} onChange={(e) => setFormData({...formData, interest: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-700">
-                    <option value="">Select a topic...</option>
-                    <option value="Demo">Akshaya Sahayi Demo</option>
-                    <option value="WhatsApp">WhatsApp Integration</option>
-                    <option value="Customers">Customer Management</option>
-                    <option value="Tokens">Token & Campaign System</option>
-                    <option value="Finance">Finance & Accounts</option>
-                    <option value="Staff">Staff & Payroll</option>
-                    <option value="App">Companion App</option>
-                    <option value="Multi-Centre">Multi-Centre Management</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Message *</label>
-                <textarea required rows="4" placeholder="Tell us how we can help..." value={formData.message} onChange={(e) => setFormData({...formData, message: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all resize-none"></textarea>
-              </div>
-
-              <div className="pt-2">
-                <button type="submit" className="w-full sm:w-auto px-8 py-3.5 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center">
-                  Send Enquiry <FiArrowRight className="ml-2" />
-                </button>
-              </div>
-            </form>
-          </motion.div>
-
-          {/* Right Column: Direct Contact */}
-          <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="lg:col-span-1 space-y-6">
-            <div className="bg-navy-900 text-white rounded-3xl p-8 shadow-xl">
-              <h3 className="text-xl font-bold mb-6">Talk to us</h3>
-              <div className="space-y-6">
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FiPhone className="text-teal-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">Phone</p>
-                    <p className="font-semibold">+91 98765 43210</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FaWhatsapp className="text-green-400 text-lg" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">WhatsApp</p>
-                    <p className="font-semibold">+91 98765 43210</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FiMail className="text-teal-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">Email</p>
-                    <p className="font-semibold text-sm">support@akshayasahayi.com</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FiMapPin className="text-teal-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">Location</p>
-                    <p className="font-semibold text-sm leading-relaxed">Akshaya Sahayi HQ,<br/>Calicut, Kerala - 673001</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-10 pt-8 border-t border-white/10">
-                <button onClick={() => window.open('https://wa.me/919876543210', '_blank')} className="w-full py-3.5 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center">
-                  <FaWhatsapp className="mr-2 text-xl" /> Chat with us on WhatsApp
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </section>
-  );
-};
-
-// ---------------------------------------------------------------------
-// Main Page Component Container
+// Main Page Component
 // ---------------------------------------------------------------------
 const Home = () => {
   return (
@@ -357,6 +210,87 @@ const Home = () => {
         </div>
       </section>
 
+      {/* 11. SIGNATURE SECTION: EVERYTHING CONNECTED */}
+      <section id="workflow" className="py-24 bg-white relative">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={fadeUp} className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Everything Works Together.</h2>
+            <p className="text-lg text-gray-600 max-w-3xl mx-auto">Citizen registers or books online → service application created → staff processes it → payment collected → WhatsApp delivers real-time notifications → accounting records the money → management sees real-time performance.</p>
+          </motion.div>
+
+          {/* Connected Workflow Visual */}
+          <div className="relative py-10">
+            <div className="flex flex-col items-center">
+              
+              {/* Level 1: Customer */}
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-navy-50 border border-navy-100 rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-sm">
+                <FiUsers className="text-navy-600 h-5 w-5" />
+                <span className="font-bold text-navy-900 text-sm">CUSTOMER (ONLINE / WALKIN)</span>
+              </motion.div>
+              
+              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2"></div>
+              
+              {/* Level 2: Services & Bookings */}
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-teal-500 text-white rounded-xl p-4 flex items-center gap-3 w-72 justify-center z-10 relative shadow-md">
+                <FiLayers className="h-5 w-5" />
+                <span className="font-bold tracking-wider text-sm">SERVICES &amp; BOOKINGS</span>
+              </motion.div>
+
+              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
+              </div>
+
+              {/* Level 3: Ops Row */}
+              <div className="grid grid-cols-3 gap-4 md:gap-12 w-full max-w-3xl z-10 relative">
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="flex flex-col items-center">
+                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
+                    <FiBriefcase className="mx-auto text-blue-500 h-5 w-5 mb-2" />
+                    <span className="font-bold text-gray-800 text-xs md:text-sm">STAFF</span>
+                  </div>
+                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
+                  <div className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-blue-100 w-full text-center">ATTENDANCE</div>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="flex flex-col items-center">
+                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
+                    <FiCreditCard className="mx-auto text-green-500 h-5 w-5 mb-2" />
+                    <span className="font-bold text-gray-800 text-xs md:text-sm">PAYMENT</span>
+                  </div>
+                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
+                  <div className="bg-green-50 text-green-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-green-100 w-full text-center">WALLET</div>
+                </motion.div>
+
+                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="flex flex-col items-center">
+                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
+                    <FiMessageCircle className="mx-auto text-teal-500 h-5 w-5 mb-2" />
+                    <span className="font-bold text-gray-800 text-xs md:text-sm">WHATSAPP</span>
+                  </div>
+                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
+                  <div className="bg-teal-50 text-teal-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-teal-100 w-full text-center">NOTIFICATIONS</div>
+                </motion.div>
+              </div>
+
+              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
+              </div>
+
+              {/* Level 4: Analytics */}
+              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.5 }} className="bg-navy-900 text-white rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-lg">
+                <FiPieChart className="h-5 w-5 text-teal-400" />
+                <span className="font-bold tracking-wider">ANALYTICS</span>
+              </motion.div>
+
+              <div className="h-6 border-l-2 border-navy-900 my-1"></div>
+              <motion.div initial={{ opacity: 0, scale: 0.8 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.6 }} className="text-center">
+                <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-navy-900 to-teal-600 text-xl tracking-tight uppercase">
+                  Business Insights
+                </span>
+              </motion.div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* 2. CORE FEATURES (Complete 8-Card Grid) */}
       <section id="features" className="py-24 bg-gray-50 border-t border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -442,88 +376,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 3. WORKFLOW: EVERYTHING CONNECTED */}
-      <section id="workflow" className="py-24 bg-white relative">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={fadeUp} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Everything Works Together.</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">Citizen registers or books online → service application created → staff processes it → payment collected → WhatsApp delivers real-time notifications → accounting records the money → management sees real-time performance.</p>
-          </motion.div>
-
-          {/* Connected Workflow Visual */}
-          <div className="relative py-10">
-            <div className="flex flex-col items-center">
-              
-              {/* Level 1: Customer */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-navy-50 border border-navy-100 rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-sm">
-                <FiUsers className="text-navy-600 h-5 w-5" />
-                <span className="font-bold text-navy-900 text-sm">CUSTOMER (ONLINE / WALKIN)</span>
-              </motion.div>
-              
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2"></div>
-              
-              {/* Level 2: Services & Bookings */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-teal-500 text-white rounded-xl p-4 flex items-center gap-3 w-72 justify-center z-10 relative shadow-md">
-                <FiLayers className="h-5 w-5" />
-                <span className="font-bold tracking-wider text-sm">SERVICES &amp; BOOKINGS</span>
-              </motion.div>
-
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
-              </div>
-
-              {/* Level 3: Ops Row */}
-              <div className="grid grid-cols-3 gap-4 md:gap-12 w-full max-w-3xl z-10 relative">
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiBriefcase className="mx-auto text-blue-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">STAFF</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-blue-100 w-full text-center">ATTENDANCE</div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiCreditCard className="mx-auto text-green-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">PAYMENT</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-green-50 text-green-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-green-100 w-full text-center">WALLET</div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiMessageCircle className="mx-auto text-teal-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">WHATSAPP</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-teal-50 text-teal-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-teal-100 w-full text-center">NOTIFICATIONS</div>
-                </motion.div>
-              </div>
-
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
-              </div>
-
-              {/* Level 4: Analytics */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.5 }} className="bg-navy-900 text-white rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-lg">
-                <FiPieChart className="h-5 w-5 text-teal-400" />
-                <span className="font-bold tracking-wider">ANALYTICS</span>
-              </motion.div>
-
-              <div className="h-6 border-l-2 border-navy-900 my-1"></div>
-              <motion.div initial={{ opacity: 0, scale: 0.8 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.6 }} className="text-center">
-                <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-navy-900 to-teal-600 text-xl tracking-tight uppercase">
-                  Business Insights
-                </span>
-              </motion.div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. FINANCIAL MANAGEMENT */}
+      {/* 3. FINANCIAL MANAGEMENT */}
       <section id="finances" className="py-24 bg-navy-900 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col lg:flex-row gap-16 items-center">
@@ -561,7 +414,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 5 & 6. STAFF & TEAMS */}
+      {/* 4 & 5. STAFF & TEAMS */}
       <section className="py-24 bg-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
@@ -741,9 +594,6 @@ const Home = () => {
           </div>
         </div>
       </section>
-
-      {/* CONTACT SECTION */}
-      <ContactSection />
 
       {/* 14. CTA SECTION */}
       <section className="py-20 relative bg-teal-500 overflow-hidden">
