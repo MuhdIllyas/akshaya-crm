@@ -859,7 +859,7 @@ const AadhaarDocuFinder = () => {
 
       <footer className="bg-gradient-to-br from-navy-900 to-navy-800 text-navy-200 text-sm print:hidden">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col sm:flex-row items-center justify-between gap-2">
-          <p>&copy; {new Date().getFullYear()} Akshaya e-Centre Pukayur</p>
+          <p>&copy; {new Date().getFullYear()} Akshaya Sahayi</p>
           <Link to="/" className="hover:text-white transition-colors">Back to home</Link>
         </div>
       </footer>
