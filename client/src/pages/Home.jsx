@@ -5,7 +5,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiSettings, FiActivity, FiMap, FiCreditCard, FiBookOpen
+  FiLayers, FiActivity, FiCreditCard, FiBookOpen
 } from 'react-icons/fi';
 
 // ---------------------------------------------------------------------
@@ -41,11 +41,12 @@ const Navbar = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between">
           <Link to="/" className="flex items-center group">
-            <div className={`p-1.5 rounded-xl transition-all duration-300 ${scrolled ? 'bg-navy-900' : 'bg-white shadow-lg'}`}>
-              <img src="/logo-light.png" alt="Akshaya Sahayi" className={`h-8 w-8 object-contain ${scrolled ? 'brightness-0 invert' : ''}`} />
+            {/* FIX: Removed the invert/brightness filters. The logo container stays consistently white. */}
+            <div className="bg-white p-1.5 rounded-xl shadow-sm border border-gray-100 group-hover:shadow-md transition-all duration-300">
+              <img src="/logo-light.png" alt="Akshaya Sahayi" className="h-8 w-8 object-contain" />
             </div>
             <div className="ml-3">
-              <h1 className={`text-xl font-bold leading-tight ${scrolled ? 'text-navy-900' : 'text-white'}`}>
+              <h1 className={`text-xl font-bold leading-tight transition-colors ${scrolled ? 'text-navy-900' : 'text-white'}`}>
                 Akshaya <span className="text-teal-500">Sahayi</span>
               </h1>
             </div>
@@ -59,10 +60,10 @@ const Navbar = () => {
           </div>
 
           <div className="flex items-center space-x-4">
-            <button onClick={() => navigate('/login')} className="hidden sm:block text-sm font-bold text-teal-500 hover:text-teal-400 transition-colors">
+            <button onClick={() => navigate('/login')} className={`hidden sm:block text-sm font-bold transition-colors ${scrolled ? 'text-teal-600 hover:text-teal-700' : 'text-teal-400 hover:text-teal-300'}`}>
               Sign In
             </button>
-            <button onClick={() => navigate('/login')} className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-navy-900 font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5">
+            <button onClick={() => navigate('/login')} className="px-5 py-2.5 bg-teal-500 hover:bg-teal-400 text-white md:text-navy-900 font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5">
               Get Started
             </button>
           </div>
@@ -570,8 +571,10 @@ const Home = () => {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
             <div className="col-span-1 md:col-span-2">
               <div className="flex items-center mb-6">
-                <img src="/logo-light.png" alt="Akshaya Sahayi" className="h-8 w-8 object-contain brightness-0 invert" />
-                <h1 className="ml-3 text-2xl font-bold text-white">Akshaya Sahayi</h1>
+                <div className="bg-white p-1 rounded-lg mr-3">
+                  <img src="/logo-light.png" alt="Akshaya Sahayi" className="h-6 w-6 object-contain" />
+                </div>
+                <h1 className="text-2xl font-bold text-white">Akshaya <span className="text-teal-500">Sahayi</span></h1>
               </div>
               <p className="text-sm text-navy-300 max-w-sm leading-relaxed">
                 The complete management platform for modern Akshaya centres. Unifying services, accounting, and communication.
