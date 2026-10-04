@@ -154,7 +154,6 @@ const StaffDashboard = () => {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Explicitly pass the staffId to force the backend to return ONLY this user's data
       const [statsRes, entriesRes] = await Promise.all([
         fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats?staff=${staffId}`, { headers }),
         fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/entries?staff=${staffId}&limit=100`, { headers })
@@ -168,13 +167,12 @@ const StaffDashboard = () => {
 
       setTrackingStats(statsData || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
       
-      // The /entries endpoint wraps the array inside a 'data' property
       const entries = entriesData.data || [];
       setTrackingEntries(entries);
     } catch (err) {
       console.error('Error fetching tracking data:', err);
     }
-  }, [staffId]); // Added staffId to dependencies
+  }, [staffId]);
 
   // Update clock every minute
   useEffect(() => {
@@ -210,7 +208,7 @@ const StaffDashboard = () => {
   }, []);
 
 
-  // --- Refresh tokens (unchanged) ---
+  // --- Refresh tokens ---
   const refreshTokens = useCallback(async () => {
     try {
       const tokensRes = await getTokens(centreId, 'all');
@@ -269,7 +267,6 @@ const StaffDashboard = () => {
       });
 
       // 2. Set Tasks & Events with STRICT isolation
-      // Only keep tasks assigned strictly to this staff member
       setMyTasks(tasks || []);
       
       const validEvents = (events || [])
@@ -277,7 +274,6 @@ const StaffDashboard = () => {
           if (!e.assigned_to) return true;
           return String(e.assigned_to) === String(staffId);
         })
-        // 🔥 Flip 'a' and 'b' to sort in descending order (largest dates first)
         .sort((a, b) => new Date(b.date || b.start_datetime) - new Date(a.date || a.start_datetime));
       setUpcomingEvents(validEvents);
 
@@ -304,7 +300,7 @@ const StaffDashboard = () => {
         const currentIndex = tabs.indexOf(prev);
         return tabs[(currentIndex + 1) % tabs.length];
       });
-    }, 5000); // Rotates every 5 seconds
+    }, 5000);
     
     return () => clearInterval(interval);
   }, [isEventsHovered, upcomingEvents.length]);
@@ -314,26 +310,23 @@ const StaffDashboard = () => {
       const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
       await api.patch(`/${taskId}/status`, { status: 'completed' }, { baseURL: tasksUrl });
       toast.success('Task completed!');
-      fetchWorkspaceInit(); // 👈 And this here!
+      fetchWorkspaceInit();
     } catch (err) {
       toast.error('Failed to complete task');
     }
   };
 
-  // 🔥 Navigation Handler for Calendar Events
+  // Navigation Handler for Calendar Events
   const handleViewService = (event) => {
     const eventIdStr = String(event.id || "");
     let targetTrackingId;
     
-    // 1. FOR EXPIRIES
     if (eventIdStr.startsWith("expiry-")) {
       targetTrackingId = event.tracking_id; 
     } 
-    // 2. FOR DELIVERIES
     else if (eventIdStr.startsWith("delivery-")) {
       targetTrackingId = eventIdStr.replace("delivery-", ""); 
     } 
-    // 3. FALLBACK FOR CUSTOM TASKS
     else if (event.tracking_id) {
       targetTrackingId = event.tracking_id;
     }
@@ -345,7 +338,7 @@ const StaffDashboard = () => {
     }
   };
 
-  // Load wallets (unchanged)
+  // Load wallets
   useEffect(() => {
     getWalletsForCentre().then(setWallets).catch(() => toast.error('Failed to load wallets'));
   }, []);
@@ -357,7 +350,6 @@ const StaffDashboard = () => {
       try {
         if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
         
-        // Load the 3 main pillars concurrently
         await Promise.all([
           getCategories().then(res => setCategories(res.data || [])),
           refreshTokens(),
@@ -387,7 +379,7 @@ const StaffDashboard = () => {
     }
   }, [period, customDateRange, fetchWorkspaceInit, loading]);
 
-  // --- Socket events (unchanged) ---
+  // --- Socket events ---
   useEffect(() => {
     const onTokenUpdate = (data) => {
       setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
@@ -428,7 +420,7 @@ const StaffDashboard = () => {
     };
   }, [centreId, staffId, refreshTokens, fetchWorkspaceInit]);
 
-  // --- Helper functions (unchanged) ---
+  // --- Helper functions ---
   const getCategoryName = (id) => categories.find(c => c.id === id)?.name || 'N/A';
   const getSubcategoryName = (catId, subId) => {
     const cat = categories.find(c => c.id === catId);
@@ -466,7 +458,7 @@ const StaffDashboard = () => {
       setShowCancelModal(false);
       setCancelTokenData(null);
       setCancelReason('');
-      refreshTokens(); // Refresh the list to remove the token
+      refreshTokens();
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to cancel token');
@@ -478,7 +470,6 @@ const StaffDashboard = () => {
     if (trackingId) {
       navigate(`/dashboard/staff/track_service/${trackingId}`);
     } else if (tokenId) {
-      // Fallback just in case it's a legacy token without a tracking entry
       navigate(`/dashboard/staff/token/${tokenId}/details`);
     } else {
       toast.info("No tracking details available for this quick service.");
@@ -534,12 +525,10 @@ const StaffDashboard = () => {
   const filteredTokens = useMemo(() => {
     let source = activeView === 'active' ? activeTokens : activeView === 'completed' ? completedTokens : campaignTokens;
     
-    // 1. Calculate search string ONCE outside the loop (Performance)
     const searchLower = searchQuery.toLowerCase().trim();
     
-    // 2. Safely calculate Dates ONCE outside the loop
     const todayObj = new Date();
-    todayObj.setHours(0, 0, 0, 0); // Normalize today to midnight
+    todayObj.setHours(0, 0, 0, 0);
     
     const yesterdayObj = new Date(todayObj);
     yesterdayObj.setDate(yesterdayObj.getDate() - 1);
@@ -551,13 +540,11 @@ const StaffDashboard = () => {
     const yesterdayStr = yesterdayObj.toDateString();
 
     return source.filter(token => {
-      // 3. Safe string conversion to prevent crashes if a number is passed
       const matchesSearch = !searchLower || 
                             String(token.customerName || '').toLowerCase().includes(searchLower) ||
                             String(token.tokenId || '').toLowerCase().includes(searchLower) ||
                             String(token.phone || '').toLowerCase().includes(searchLower);
 
-      // 4. Accurate date matching ignoring the exact hour/minute
       const tokenDateObj = new Date(token.createdAt);
       tokenDateObj.setHours(0, 0, 0, 0);
       const tokenDateStr = tokenDateObj.toDateString();
@@ -565,7 +552,7 @@ const StaffDashboard = () => {
       const matchesDate = activeDate === 'today' ? tokenDateStr === todayStr :
                           activeDate === 'yesterday' ? tokenDateStr === yesterdayStr :
                           activeDate === 'week' ? tokenDateObj >= weekAgoObj : 
-                          true; // Fallback for 'all'
+                          true;
 
       return matchesSearch && matchesDate;
     });
@@ -595,7 +582,6 @@ const StaffDashboard = () => {
   const filteredApplications = useMemo(() => {
     let source = trackingEntries;
     
-    // 1. Filter by Tab View
     if (activeAppView === 'active') {
       source = source.filter(app => ['pending', 'in_progress', 'resubmit'].includes(app.status));
     } else if (activeAppView === 'completed') {
@@ -604,7 +590,6 @@ const StaffDashboard = () => {
       source = source.filter(app => ['rejected', 'delayed'].includes(app.status));
     }
 
-    // 2. Filter by Search Query (Seamless integration with the top search bar)
     const searchLower = searchQuery.toLowerCase().trim();
     if (searchLower) {
       source = source.filter(app => 
@@ -621,7 +606,7 @@ const StaffDashboard = () => {
     try {
       await api.put(`/customer-services/${bookingId}/take`);
       toast.success('Work assigned to you');
-      await fetchWorkspaceInit(); // 👈 Just call this to refresh everything!
+      await fetchWorkspaceInit();
     } catch (err) {
       toast.error(err.response?.data?.error || 'Already taken by another staff');
     }
@@ -632,17 +617,15 @@ const StaffDashboard = () => {
       setAttendanceLoading(true);
       const isPunchOut = todayAttendance && todayAttendance.punch_in && !todayAttendance.punch_out;
       
-      // Get exact current time formatted for Asia/Kolkata to match backend validation perfectly
       const now = new Date();
-      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
+      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       const formattedTime = now.toLocaleTimeString('en-GB', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
         timeZone: 'Asia/Kolkata'
-      }); // HH:mm
+      });
       
-      // Send the exact payload the backend expects
       await postAttendance({
         punch_type: isPunchOut ? 'out' : 'in',
         date: formattedDate,
@@ -650,7 +633,7 @@ const StaffDashboard = () => {
       });
       
       toast.success(`Successfully punched ${isPunchOut ? 'out' : 'in'}`);
-      await fetchWorkspaceInit(); // Instantly refresh the dashboard!
+      await fetchWorkspaceInit();
     } catch (err) {
       console.error('Attendance Punch Error:', err.response?.data || err.message);
       toast.error(err.response?.data?.error || 'Failed to update attendance');
@@ -698,23 +681,20 @@ const StaffDashboard = () => {
     return n;
   })();
 
-  // ── STEP 1: derived values (Glance strip) ────────────────────────────
+  // ── STEP 1: derived values for the glance strip ──────────────────────
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
-  // Tasks tile
   const overdueTasks = myTasks.filter(t => t.due_date && new Date(t.due_date) < todayStart);
   const nextTask = [...myTasks]
     .filter(t => t.due_date)
     .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0] || null;
 
-  // Next event tile (upcomingEvents is sorted newest-first, so pick the nearest future one)
   const nextEvent = upcomingEvents
     .map(e => ({ ...e, _d: new Date(e.date || e.start_datetime) }))
     .filter(e => !isNaN(e._d) && e._d >= todayStart)
     .sort((a, b) => a._d - b._d)[0] || null;
 
-  // Score tile
   const scoreLabel =
     performance.incentiveScore >= 80 ? 'Excellent' :
     performance.incentiveScore >= 60 ? 'Good' :
@@ -743,7 +723,6 @@ const StaffDashboard = () => {
     </div>
   );
 
-  // Find the wallet assigned to the logged-in staff member
   const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
 
   return (
@@ -823,7 +802,7 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
+      {/* ===== SMART ATTENDANCE BANNER ===== */}
       <AnimatePresence>
         {!loading && (
           <motion.div
@@ -893,7 +872,6 @@ const StaffDashboard = () => {
           </motion.div>
         )}
       </AnimatePresence>
-      {/* ========================================= */}
       
       {/* Original Header */}
       <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
@@ -1041,7 +1019,7 @@ const StaffDashboard = () => {
               <option value="all">All Time</option>
             </select>
 
-            {/* ----- Ultra‑Compact Wallet Pill ----- */}
+            {/* Ultra‑Compact Wallet Pill */}
             {myWallet && (
               <motion.div
                 whileHover={{ y: -1 }}
@@ -1090,111 +1068,168 @@ const StaffDashboard = () => {
             )}
           </div>
 
-          {/* ===== STEP 2: GLANCE STRIP ===== */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr] gap-4 mb-6">
+          {/* ===== ALTERNATIVE A: BENTO COMMAND DECK ===== */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-6">
 
-            {/* Target */}
+            {/* TARGET — hero tile with donut ring */}
             <div
               onClick={scrollToPerf}
-              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
+              className="lg:col-span-4 lg:row-span-2 bg-gradient-to-br from-indigo-600 via-indigo-700 to-blue-800 rounded-2xl p-5 text-white shadow-lg shadow-indigo-500/20 cursor-pointer hover:shadow-xl hover:shadow-indigo-500/30 transition-all relative overflow-hidden"
             >
-              <div className="flex items-center justify-between mb-3">
+              <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
+
+              <div className="relative">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs font-semibold text-white/80 flex items-center">
+                    <FiTarget className="h-3.5 w-3.5 mr-1.5" />
+                    Monthly Target
+                  </p>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
+                    +10% growth
+                  </span>
+                </div>
+
+                {performanceLoading ? (
+                  <div className="h-32 bg-white/10 animate-pulse rounded-xl" />
+                ) : performance.monthlyTarget > 0 ? (
+                  <div className="flex items-center gap-4">
+                    {/* Donut ring */}
+                    <div className="relative shrink-0">
+                      <svg className="w-24 h-24 -rotate-90">
+                        <circle cx="48" cy="48" r="40" stroke="rgba(255,255,255,0.2)" strokeWidth="8" fill="transparent" />
+                        <circle
+                          cx="48" cy="48" r="40"
+                          stroke="white" strokeWidth="8" fill="transparent"
+                          strokeLinecap="round"
+                          strokeDasharray={2 * Math.PI * 40}
+                          strokeDashoffset={2 * Math.PI * 40 * (1 - Math.min(performance.targetProgress, 100) / 100)}
+                          className="transition-all duration-1000"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <span className="text-lg font-black">{performance.targetProgress.toFixed(0)}%</span>
+                      </div>
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <p className="text-2xl font-black leading-tight truncate">
+                        {formatCurrency(performance.currentAchieved)}
+                      </p>
+                      <p className="text-xs text-white/70 mt-0.5">
+                        of {formatCurrency(performance.monthlyTarget)}
+                      </p>
+
+                      <div className="mt-3 pt-3 border-t border-white/20">
+                        <div className="flex justify-between text-[11px] text-white/80 mb-1">
+                          <span>Today's goal</span>
+                          <span className="font-bold">
+                            {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
+                          </span>
+                        </div>
+                        <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
+                          <div
+                            className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-300' : 'bg-white'}`}
+                            style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-xs text-white/60 py-6">No target set for this month yet</p>
+                )}
+              </div>
+            </div>
+
+            {/* SCORE */}
+            <div
+              onClick={scrollToPerf}
+              className="lg:col-span-4 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all"
+            >
+              <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-gray-600 flex items-center">
-                  <FiTarget className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                  Target (+10% Growth)
+                  <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                  Performance Score
                 </p>
-                {!performanceLoading && performance.monthlyTarget > 0 && (
-                  <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
-                    {performance.targetProgress.toFixed(0)}%
+                {!performanceLoading && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${scoreColor} text-white`}>
+                    {scoreLabel}
                   </span>
                 )}
               </div>
-
               {performanceLoading ? (
-                <div className="h-14 bg-gray-200 animate-pulse rounded" />
-              ) : performance.monthlyTarget > 0 ? (
-                <>
-                  <div className="flex justify-between items-baseline text-sm mb-1">
-                    <span className="font-black text-gray-900">{formatCurrency(performance.currentAchieved)}</span>
-                    <span className="text-xs text-gray-500">of {formatCurrency(performance.monthlyTarget)}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
-                         style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
-                  </div>
-
-                  <div className="flex justify-between text-[11px] text-gray-500 mt-2.5 mb-1">
-                    <span>Today's goal</span>
-                    <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-600' : ''}>
-                      {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                      style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
-                    />
-                  </div>
-                </>
+                <div className="h-12 bg-gray-100 animate-pulse rounded" />
               ) : (
-                <p className="text-xs text-gray-400 py-3">No target set for this month yet</p>
+                <div className="flex items-end gap-3">
+                  <span className="text-3xl font-black text-gray-900 leading-none">{performance.incentiveScore}%</span>
+                  <div className="flex-1 pb-1">
+                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
+                      <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
 
-            {/* Score */}
-            <div
-              onClick={scrollToPerf}
-              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
-            >
-              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
-                <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                Performance score
-              </p>
-              {performanceLoading ? (
-                <div className="h-14 bg-gray-200 animate-pulse rounded" />
-              ) : (
-                <>
-                  <p className="text-2xl font-black text-gray-900">{performance.incentiveScore}%</p>
-                  <p className="text-[11px] text-gray-500 mb-2">{scoreLabel}</p>
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Tasks */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
-                <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                Pending tasks
-              </p>
-              <p className="text-2xl font-black text-gray-900">{myTasks.length}</p>
-              {overdueTasks.length > 0 ? (
-                <p className="text-[11px] font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
-              ) : nextTask ? (
-                <p className="text-[11px] text-gray-500 mt-1 truncate" title={nextTask.title}>
-                  Next: {nextTask.title}
+            {/* TASKS */}
+            <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-gray-600 flex items-center">
+                  <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                  Pending Tasks
                 </p>
-              ) : (
-                <p className="text-[11px] text-emerald-600 mt-1">All clear</p>
-              )}
+                {overdueTasks.length > 0 && (
+                  <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
+                    {overdueTasks.length} overdue
+                  </span>
+                )}
+              </div>
+              <div className="flex items-end gap-3">
+                <span className="text-3xl font-black text-gray-900 leading-none">{myTasks.length}</span>
+                {nextTask && (
+                  <p className="text-[11px] text-gray-500 pb-1 truncate" title={nextTask.title}>
+                    Next: {nextTask.title}
+                  </p>
+                )}
+                {!nextTask && myTasks.length > 0 && (
+                  <p className="text-[11px] text-gray-500 pb-1">No due dates</p>
+                )}
+                {myTasks.length === 0 && (
+                  <p className="text-[11px] text-emerald-600 font-semibold pb-1">All clear ✨</p>
+                )}
+              </div>
             </div>
 
-            {/* Next event */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
-                <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                Next event
-              </p>
-              {nextEvent ? (
-                <>
-                  <p className="text-sm font-bold text-gray-900 line-clamp-2" title={nextEvent.title}>{nextEvent.title}</p>
-                  <p className="text-[11px] text-gray-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
-                </>
-              ) : (
-                <p className="text-xs text-gray-400">Nothing upcoming</p>
-              )}
+            {/* NEXT EVENT — wide tile */}
+            <div className="lg:col-span-8 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold text-gray-600 flex items-center mb-2">
+                    <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                    Next Up
+                  </p>
+                  {nextEvent ? (
+                    <>
+                      <p className="text-sm font-bold text-gray-900 truncate" title={nextEvent.title}>{nextEvent.title}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}
+                        {nextEvent.description && ` · ${nextEvent.description}`}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-400">Nothing on the calendar</p>
+                  )}
+                </div>
+                {nextEvent && (
+                  <button
+                    onClick={() => handleViewService(nextEvent)}
+                    className="shrink-0 ml-3 p-2 bg-indigo-50 hover:bg-indigo-100 rounded-full text-indigo-600 transition-colors"
+                    title="View"
+                  >
+                    <FiExternalLink className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1398,7 +1433,6 @@ const StaffDashboard = () => {
                       {/* Sub-Tabs for Applications */}
                       <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'delayed'].map(tab => {
-                          // Calculate counts based on global stats for the badges
                           let count = 0;
                           if (tab === 'active') count = (trackingStats.pending || 0) + (trackingStats.in_progress || 0);
                           if (tab === 'completed') count = (trackingStats.completed || 0);
@@ -1694,7 +1728,6 @@ const StaffDashboard = () => {
                       {Object.entries(groupedRecentActivities).map(([date, entries]) => (
                         <div key={date} className="relative">
                           
-                          {/* Compact Date Sticky Header */}
                           <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
                             <div className="p-1 bg-gray-100 rounded text-gray-500">
                               <FiCalendar className="h-3 w-3" />
@@ -1705,7 +1738,6 @@ const StaffDashboard = () => {
                             <div className="h-px bg-gray-200 flex-1 ml-1"></div>
                           </div>
 
-                          {/* Compact Timeline Entries */}
                           <div className="space-y-2.5 relative">
                             {entries.map((entry, index) => (
                               <div key={entry.id} className="group relative flex gap-3">
@@ -1790,10 +1822,10 @@ const StaffDashboard = () => {
             </div>
           </div>
 
-          {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
+          {/* ===== PERFORMANCE DETAILS ROW ===== */}
           <div id="perf-details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
 
-            {/* 3a: MONTHLY & DAILY TARGET METER */}
+            {/* MONTHLY & DAILY TARGET METER */}
             <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
               <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
                 <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
@@ -1804,7 +1836,7 @@ const StaffDashboard = () => {
                 <div className="h-24 bg-gray-200 animate-pulse rounded"></div>
               ) : (
                 <div>
-                  {/* --- MONTHLY PROGRESS --- */}
+                  {/* MONTHLY PROGRESS */}
                   <div className="flex justify-between items-end mb-2">
                     <div>
                       <p className="text-xs text-gray-500 font-medium">Month Achieved</p>
@@ -1836,7 +1868,7 @@ const StaffDashboard = () => {
 
                   <div className="border-t border-gray-100 mb-4"></div>
 
-                  {/* --- DAILY PROGRESS --- */}
+                  {/* DAILY PROGRESS */}
                   <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-50">
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
@@ -1864,7 +1896,7 @@ const StaffDashboard = () => {
                        </p>
                     )}
                   </div>
-                  {/* --- PREVIOUS MONTHS --- */}
+                  {/* PREVIOUS MONTHS */}
                   {targetHistory.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <div className="flex items-center justify-between mb-2">
@@ -1915,7 +1947,7 @@ const StaffDashboard = () => {
               )}
             </div>
 
-            {/* 3b: PERFORMANCE SCORE CARD */}
+            {/* PERFORMANCE SCORE CARD */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-semibold text-gray-900 text-sm flex items-center">
@@ -1962,7 +1994,7 @@ const StaffDashboard = () => {
               </div>
             </div>
 
-            {/* 3c: PERFORMANCE METRICS */}
+            {/* PERFORMANCE METRICS */}
             <div className="bg-white rounded-xl border border-gray-200 p-5">
               <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
                 <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
