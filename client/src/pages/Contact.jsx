@@ -23,21 +23,29 @@ const Contact = () => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-  const handleSubmit = (e) => {
+const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      setLoading(false);
-      toast.success("Message sent successfully! We'll get back to you soon.", {
+    try {
+      // Send the actual POST request to your Node.js backend
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/contact/enquiry`, formData);
+      
+      if (response.data.success) {
+        toast.success("Message sent successfully! We'll get back to you soon.", {
+          position: "top-right",
+        });
+        // Clear the form
+        setFormData({ name: '', centreName: '', phone: '', email: '', centres: '', interest: '', message: '' });
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Failed to send message. Please try again later.", {
         position: "top-right",
       });
-      setFormData({ name: '', email: '', subject: '', message: '' });
-      
-      // Optionally navigate back to login after successful submission
-      // navigate('/login');
-    }, 1500);
+      console.error("Contact Form Error:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
