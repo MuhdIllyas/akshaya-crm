@@ -15,16 +15,19 @@ const Contact = () => {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
+    centreName: '',
+    phone: '',
     email: '',
-    subject: '',
+    centres: '',
+    interest: '',
     message: ''
   });
 
-const handleChange = (e) => {
+  const handleChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
   };
 
-const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
 
@@ -56,7 +59,7 @@ const handleSubmit = async (e) => {
       <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-teal-500/10 blur-[100px] rounded-full pointer-events-none"></div>
       <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none"></div>
 
-      <div className="w-full max-w-6xl z-10">
+      <div className="w-full max-w-6xl z-10 py-10">
         
         {/* Navigation / Header */}
         <div className="mb-8 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -130,7 +133,7 @@ const handleSubmit = async (e) => {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-navy-300 uppercase tracking-wider mb-1">Email</p>
-                    <a href="mailto:muhdillyasks@gmail.com" className="font-medium text-base hover:text-blue-400 transition-colors">
+                    <a href="mailto:muhdillyasks@gmail.com" className="font-medium text-base hover:text-blue-400 transition-colors break-all">
                       support@akshayasahayi.com
                     </a>
                   </div>
@@ -158,76 +161,51 @@ const handleSubmit = async (e) => {
             <div className="flex items-center mb-8 bg-blue-50 border border-blue-100 p-4 rounded-xl">
               <FiInfo className="text-blue-600 h-5 w-5 mr-3 shrink-0" />
               <p className="text-sm text-blue-900 font-medium">
-                If you are a citizen looking to book a service, please use the <Link to="/customer/register" className="text-blue-700 underline font-bold">Citizen Portal</Link>. This form is for Centre Admins and Staff support.
+                Please fill in your details below so our support team can assist you as quickly as possible.
               </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
-                  <label htmlFor="name" className="block text-sm font-bold text-gray-700 mb-2">Full Name</label>
-                  <input
-                    type="text"
-                    id="name"
-                    name="name"
-                    required
-                    placeholder="Enter your name"
-                    value={formData.name}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-gray-900 placeholder-gray-400"
-                    disabled={loading}
-                  />
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Name *</label>
+                  <input type="text" required name="name" placeholder="Your full name" value={formData.name} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-900" disabled={loading} />
                 </div>
                 <div>
-                  <label htmlFor="email" className="block text-sm font-bold text-gray-700 mb-2">Email or Phone</label>
-                  <input
-                    type="text"
-                    id="email"
-                    name="email"
-                    required
-                    placeholder="How can we reach you?"
-                    value={formData.email}
-                    onChange={handleChange}
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-gray-900 placeholder-gray-400"
-                    disabled={loading}
-                  />
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Centre Name</label>
+                  <input type="text" name="centreName" placeholder="Your Akshaya Centre name" value={formData.centreName} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-900" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Phone Number *</label>
+                  <input type="tel" required name="phone" placeholder="WhatsApp/Contact number" value={formData.phone} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-900" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Email Address</label>
+                  <input type="email" name="email" placeholder="Your email address" value={formData.email} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-900" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Number of Centres</label>
+                  <input type="number" min="1" name="centres" placeholder="e.g. 1" value={formData.centres} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-900" disabled={loading} />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-2">Subject / Interested In</label>
+                  <select name="interest" value={formData.interest} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-700" disabled={loading}>
+                    <option value="">Select a topic...</option>
+                    <option value="Login Issue">Cannot log into my account</option>
+                    <option value="Demo">Akshaya Sahayi Demo</option>
+                    <option value="WhatsApp">WhatsApp Integration</option>
+                    <option value="Customers">Customer Management</option>
+                    <option value="Finance">Finance & Accounts</option>
+                    <option value="Staff">Staff & Payroll</option>
+                    <option value="Multi-Centre">Multi-Centre Management</option>
+                    <option value="Other">Other</option>
+                  </select>
                 </div>
               </div>
 
               <div>
-                <label htmlFor="subject" className="block text-sm font-bold text-gray-700 mb-2">Subject</label>
-                <select
-                  id="subject"
-                  name="subject"
-                  required
-                  value={formData.subject}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-gray-900"
-                  disabled={loading}
-                >
-                  <option value="" disabled>Select an issue...</option>
-                  <option value="login_issue">Cannot log into my account</option>
-                  <option value="password_reset">Need a password reset</option>
-                  <option value="billing">Billing or Subscription inquiry</option>
-                  <option value="bug">Report a bug or technical issue</option>
-                  <option value="onboarding">New Centre Onboarding</option>
-                  <option value="other">Other</option>
-                </select>
-              </div>
-
-              <div>
-                <label htmlFor="message" className="block text-sm font-bold text-gray-700 mb-2">Message Details</label>
-                <textarea
-                  id="message"
-                  name="message"
-                  rows="5"
-                  required
-                  placeholder="Please describe your issue or question in detail..."
-                  value={formData.message}
-                  onChange={handleChange}
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 transition-all text-gray-900 placeholder-gray-400 resize-none"
-                  disabled={loading}
-                ></textarea>
+                <label className="block text-sm font-bold text-gray-700 mb-2">Message Details *</label>
+                <textarea required name="message" rows="4" placeholder="Please describe your issue or question in detail..." value={formData.message} onChange={handleChange} className="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-900 resize-none" disabled={loading}></textarea>
               </div>
 
               <motion.button
