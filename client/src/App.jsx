@@ -79,6 +79,7 @@ import ViewServiceDetails from './components/ViewServiceDetails';
 import PublicReview from './components/PublicReview';
 import PublicTrackingPage from './pages/PublicTrackingPage';
 import AadhaarDocu from './pages/AadhaarDocu';
+import Contact from './pages/Contact';
 
 // ---------------------------------------------------------------------
 // Protected Route Component (FIXED - No toasts, no retry logic)
@@ -262,6 +263,7 @@ const App = () => {
       <Routes>
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/home" element={<Home />} />
+        <Route path="/contact" element={<Contact />} />
         <Route path="/aadhaar-docufinder" element={<AadhaarDocu />} />
         <Route path="/login" element={<Login />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
