@@ -681,7 +681,7 @@ const StaffDashboard = () => {
     return n;
   })();
 
-  // ── STEP 1: derived values for the glance strip ──────────────────────
+  // ── STEP 1: derived values for the priority stack ────────────────────
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
@@ -1068,169 +1068,78 @@ const StaffDashboard = () => {
             )}
           </div>
 
-          {/* ===== ALTERNATIVE A: BENTO COMMAND DECK ===== */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 mb-6">
+          {/* ===== ALTERNATIVE F: PRIORITY STACK ===== */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
 
-            {/* TARGET — hero tile with donut ring */}
-            <div
-              onClick={scrollToPerf}
-              className="lg:col-span-4 lg:row-span-2 bg-gradient-to-br from-indigo-600 via-indigo-700 to-blue-800 rounded-2xl p-5 text-white shadow-lg shadow-indigo-500/20 cursor-pointer hover:shadow-xl hover:shadow-indigo-500/30 transition-all relative overflow-hidden"
-            >
-              <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl pointer-events-none" />
-
-              <div className="relative">
-                <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs font-semibold text-white/80 flex items-center">
-                    <FiTarget className="h-3.5 w-3.5 mr-1.5" />
-                    Monthly Target
-                  </p>
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-full">
-                    +10% growth
-                  </span>
-                </div>
-
-                {performanceLoading ? (
-                  <div className="h-32 bg-white/10 animate-pulse rounded-xl" />
-                ) : performance.monthlyTarget > 0 ? (
-                  <div className="flex items-center gap-4">
-                    {/* Donut ring */}
-                    <div className="relative shrink-0">
-                      <svg className="w-24 h-24 -rotate-90">
-                        <circle cx="48" cy="48" r="40" stroke="rgba(255,255,255,0.2)" strokeWidth="8" fill="transparent" />
-                        <circle
-                          cx="48" cy="48" r="40"
-                          stroke="white" strokeWidth="8" fill="transparent"
-                          strokeLinecap="round"
-                          strokeDasharray={2 * Math.PI * 40}
-                          strokeDashoffset={2 * Math.PI * 40 * (1 - Math.min(performance.targetProgress, 100) / 100)}
-                          className="transition-all duration-1000"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex items-center justify-center">
-                        <span className="text-lg font-black">{performance.targetProgress.toFixed(0)}%</span>
-                      </div>
-                    </div>
-
-                    <div className="min-w-0 flex-1">
-                      <p className="text-2xl font-black leading-tight truncate">
-                        {formatCurrency(performance.currentAchieved)}
-                      </p>
-                      <p className="text-xs text-white/70 mt-0.5">
-                        of {formatCurrency(performance.monthlyTarget)}
-                      </p>
-
-                      <div className="mt-3 pt-3 border-t border-white/20">
-                        <div className="flex justify-between text-[11px] text-white/80 mb-1">
-                          <span>Today's goal</span>
-                          <span className="font-bold">
-                            {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                          </span>
-                        </div>
-                        <div className="w-full bg-white/20 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-300' : 'bg-white'}`}
-                            style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="text-xs text-white/60 py-6">No target set for this month yet</p>
-                )}
-              </div>
-            </div>
-
-            {/* SCORE */}
-            <div
-              onClick={scrollToPerf}
-              className="lg:col-span-4 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-600 flex items-center">
-                  <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                  Performance Score
+            {/* Priority hero — morphs based on urgency */}
+            {overdueTasks.length > 0 ? (
+              <div className="md:col-span-2 bg-gradient-to-br from-rose-500 to-red-600 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                <p className="relative text-[10px] font-bold uppercase tracking-wider text-white/80 mb-2 flex items-center">
+                  <FiAlertCircle className="h-3.5 w-3.5 mr-1.5" /> Action needed
                 </p>
-                {!performanceLoading && (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${scoreColor} text-white`}>
-                    {scoreLabel}
-                  </span>
+                <p className="relative text-3xl font-black leading-tight">
+                  {overdueTasks.length} overdue task{overdueTasks.length > 1 ? 's' : ''}
+                </p>
+                <p className="relative text-sm text-white/90 mt-1 truncate">{overdueTasks[0].title}</p>
+              </div>
+            ) : nextTask ? (
+              <div className="md:col-span-2 bg-gradient-to-br from-indigo-600 to-blue-700 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                <p className="relative text-[10px] font-bold uppercase tracking-wider text-white/80 mb-2 flex items-center">
+                  <FiCheckSquare className="h-3.5 w-3.5 mr-1.5" /> Up next
+                </p>
+                <p className="relative text-xl font-black leading-tight line-clamp-2">{nextTask.title}</p>
+                {nextTask.due_date && (
+                  <p className="relative text-xs text-white/80 mt-2">Due {getEventDayLabel(nextTask.due_date)}</p>
                 )}
               </div>
-              {performanceLoading ? (
-                <div className="h-12 bg-gray-100 animate-pulse rounded" />
+            ) : (
+              <div className="md:col-span-2 bg-gradient-to-br from-emerald-500 to-teal-600 text-white rounded-2xl p-5 shadow-lg relative overflow-hidden">
+                <div className="absolute -top-8 -right-8 w-32 h-32 bg-white/10 rounded-full blur-2xl" />
+                <p className="relative text-[10px] font-bold uppercase tracking-wider text-white/80 mb-2">Status</p>
+                <p className="relative text-2xl font-black">All clear ✨</p>
+                <p className="relative text-sm text-white/90 mt-1">No overdue tasks</p>
+              </div>
+            )}
+
+            {/* Target */}
+            <button
+              onClick={scrollToPerf}
+              className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm text-left hover:border-indigo-300 transition-colors"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-3 flex items-center">
+                <FiTarget className="h-3.5 w-3.5 mr-1.5 text-indigo-600" /> Target
+              </p>
+              {performance.monthlyTarget > 0 ? (
+                <>
+                  <p className="text-2xl font-black text-gray-900">{performance.targetProgress.toFixed(0)}%</p>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 mt-2 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
+                      style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-2 truncate">
+                    {formatCurrency(performance.currentAchieved)} of {formatCurrency(performance.monthlyTarget)}
+                  </p>
+                </>
               ) : (
-                <div className="flex items-end gap-3">
-                  <span className="text-3xl font-black text-gray-900 leading-none">{performance.incentiveScore}%</span>
-                  <div className="flex-1 pb-1">
-                    <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden">
-                      <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
-                    </div>
-                  </div>
-                </div>
+                <p className="text-xs text-gray-400">Not set</p>
               )}
-            </div>
+            </button>
 
-            {/* TASKS */}
-            <div className="lg:col-span-4 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-gray-600 flex items-center">
-                  <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                  Pending Tasks
-                </p>
-                {overdueTasks.length > 0 && (
-                  <span className="text-[10px] font-bold bg-rose-100 text-rose-700 px-2 py-0.5 rounded-full">
-                    {overdueTasks.length} overdue
-                  </span>
-                )}
-              </div>
-              <div className="flex items-end gap-3">
-                <span className="text-3xl font-black text-gray-900 leading-none">{myTasks.length}</span>
-                {nextTask && (
-                  <p className="text-[11px] text-gray-500 pb-1 truncate" title={nextTask.title}>
-                    Next: {nextTask.title}
-                  </p>
-                )}
-                {!nextTask && myTasks.length > 0 && (
-                  <p className="text-[11px] text-gray-500 pb-1">No due dates</p>
-                )}
-                {myTasks.length === 0 && (
-                  <p className="text-[11px] text-emerald-600 font-semibold pb-1">All clear ✨</p>
-                )}
-              </div>
-            </div>
-
-            {/* NEXT EVENT — wide tile */}
-            <div className="lg:col-span-8 bg-white rounded-2xl border border-gray-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div className="min-w-0">
-                  <p className="text-xs font-semibold text-gray-600 flex items-center mb-2">
-                    <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                    Next Up
-                  </p>
-                  {nextEvent ? (
-                    <>
-                      <p className="text-sm font-bold text-gray-900 truncate" title={nextEvent.title}>{nextEvent.title}</p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
-                        {getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}
-                        {nextEvent.description && ` · ${nextEvent.description}`}
-                      </p>
-                    </>
-                  ) : (
-                    <p className="text-xs text-gray-400">Nothing on the calendar</p>
-                  )}
-                </div>
-                {nextEvent && (
-                  <button
-                    onClick={() => handleViewService(nextEvent)}
-                    className="shrink-0 ml-3 p-2 bg-indigo-50 hover:bg-indigo-100 rounded-full text-indigo-600 transition-colors"
-                    title="View"
-                  >
-                    <FiExternalLink className="h-4 w-4" />
-                  </button>
-                )}
-              </div>
-            </div>
+            {/* Score */}
+            <button
+              onClick={scrollToPerf}
+              className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm text-left hover:border-indigo-300 transition-colors"
+            >
+              <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-3 flex items-center">
+                <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" /> Score
+              </p>
+              <p className="text-2xl font-black text-gray-900">{performance.incentiveScore}%</p>
+              <p className="text-[11px] text-gray-500 mt-1">{scoreLabel}</p>
+            </button>
           </div>
 
           {/* Two‑Column Layout */}
@@ -1271,7 +1180,6 @@ const StaffDashboard = () => {
                   {/* TAB 1: TOKENS */}
                   {workspaceTab === 'tokens' && (
                     <div className="space-y-4">
-                      {/* Sub-Tabs for Tokens */}
                       <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'campaign'].map(tab => (
                           <button
@@ -1430,7 +1338,6 @@ const StaffDashboard = () => {
                   {workspaceTab === 'applications' && (
                     <div className="space-y-4">
                       
-                      {/* Sub-Tabs for Applications */}
                       <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'delayed'].map(tab => {
                           let count = 0;
@@ -1455,7 +1362,6 @@ const StaffDashboard = () => {
                         })}
                       </div>
 
-                      {/* Application List */}
                       <div className="space-y-3">
                         {filteredApplications.length === 0 ? (
                           <div className="text-center py-16 text-gray-400">
@@ -1577,7 +1483,6 @@ const StaffDashboard = () => {
                   </span>
                 </div>
 
-                {/* Event Tabs */}
                 <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
                   {['All', 'Tasks', 'Deliveries', 'Expiries', 'Days'].map(tab => {
                     const count = upcomingEvents.filter(e => {
@@ -1609,7 +1514,6 @@ const StaffDashboard = () => {
                   })}
                 </div>
                 
-                {/* Dynamic Event Feed */}
                 <motion.div 
                   key={activeEventTab}
                   initial={{ opacity: 0, y: 5 }}
@@ -1836,7 +1740,6 @@ const StaffDashboard = () => {
                 <div className="h-24 bg-gray-200 animate-pulse rounded"></div>
               ) : (
                 <div>
-                  {/* MONTHLY PROGRESS */}
                   <div className="flex justify-between items-end mb-2">
                     <div>
                       <p className="text-xs text-gray-500 font-medium">Month Achieved</p>
@@ -1868,7 +1771,6 @@ const StaffDashboard = () => {
 
                   <div className="border-t border-gray-100 mb-4"></div>
 
-                  {/* DAILY PROGRESS */}
                   <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-50">
                     <div className="flex justify-between items-center mb-2">
                       <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
@@ -1896,7 +1798,6 @@ const StaffDashboard = () => {
                        </p>
                     )}
                   </div>
-                  {/* PREVIOUS MONTHS */}
                   {targetHistory.length > 0 && (
                     <div className="mt-4 pt-4 border-t border-gray-100">
                       <div className="flex items-center justify-between mb-2">
