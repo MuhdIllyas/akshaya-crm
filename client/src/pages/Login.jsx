@@ -506,7 +506,7 @@ const Login = () => {
               
               <div className="text-center mt-6">
                 <p className="text-gray-500 text-sm">
-                  Need help? <a href="#" className="text-teal-600 hover:text-teal-800 font-semibold ml-1 transition-colors">Contact Support</a>
+                  Need help? <Link to="/contact" className="text-teal-600 hover:text-teal-800 font-semibold ml-1 transition-colors">Contact Support</Link>
                 </p>
               </div>
             </div>
