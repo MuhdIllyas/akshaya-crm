@@ -97,7 +97,7 @@ const Contact = () => {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-navy-300 uppercase tracking-wider mb-1">Call Us</p>
-                    <p className="font-medium text-lg">+91 98765 43210</p>
+                    <p className="font-medium text-lg">+91 80865 15301</p>
                     <p className="text-xs text-navy-400 mt-1">Mon-Sat, 9:00 AM to 6:00 PM</p>
                   </div>
                 </div>
@@ -108,8 +108,8 @@ const Contact = () => {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-navy-300 uppercase tracking-wider mb-1">WhatsApp Support</p>
-                    <a href="https://wa.me/919876543210" target="_blank" rel="noreferrer" className="font-medium text-lg hover:text-green-400 transition-colors">
-                      +91 98765 43210
+                    <a href="https://wa.me/919633975301" target="_blank" rel="noreferrer" className="font-medium text-lg hover:text-green-400 transition-colors">
+                      +91 96339 75301
                     </a>
                     <p className="text-xs text-navy-400 mt-1">Fastest way to reach us</p>
                   </div>
