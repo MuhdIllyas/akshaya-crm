@@ -74,6 +74,9 @@ import companionRoutes from "./routes/companion.js";
 //Public Tracking - documents view
 import serviceTrackingDocumentsRoutes from "./routes/serviceTrackingDocuments.js";
 
+//Contact Route
+import contactRoutes from "./routes/contact.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -458,6 +461,9 @@ app.use("/api/companion", companionRoutes);
 
 /* Service Tracking Documents - for public access */
 app.use("/api/servicetracking", serviceTrackingDocumentsRoutes);
+
+/* Contact us - for public access */
+app.use("/api/contact", contactRoutes);
 
 /* ================================
    STATIC FILES
