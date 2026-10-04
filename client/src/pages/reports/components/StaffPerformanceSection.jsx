@@ -9,6 +9,8 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
+import StaffTargetsPanel from "./StaffTargetsPanel";
+import StaffTargetHistory from "./StaffTargetHistory";
 
 const formatINR = (value) =>
   Number(value || 0).toLocaleString("en-IN");
@@ -207,6 +209,23 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
           <span className="font-medium text-blue-600">₹{formatINR(staff.expectedAmount)}</span>
         </div>
       </div>
+
+      {/* Target Progress */}
+      {staff.monthlyTarget > 0 && (
+        <div className="pt-2 border-t border-gray-100 mt-2">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-gray-500 flex items-center"><FiTarget className="h-3 w-3 mr-1" />Target</span>
+            <span className={`font-semibold ${staff.targetPercent >= 100 ? "text-emerald-600" : "text-gray-700"}`}>
+              {staff.targetPercent.toFixed(0)}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className={`h-full ${staff.targetPercent >= 100 ? "bg-emerald-500" : staff.targetPercent >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                style={{ width: `${Math.min(staff.targetPercent, 100)}%` }} />
+          </div>
+          <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(staff.targetAchieved)} / ₹{formatINR(staff.monthlyTarget)}</p>
+        </div>
+      )}
       
       {staff.pendingAmount > 0 && (
         <div className="flex items-center justify-between text-xs text-rose-600 pt-2 border-t border-gray-100 mt-2">
@@ -229,6 +248,58 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
   );
 };
 
+// Shows ONE staff's last 6 months inside the side panel.
+const StaffTargetTab = ({ staffId }) => {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${staffId}/target-history?months=6`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setRows(res.ok ? await res.json() : []);
+      } catch { setRows([]); }
+    })();
+  }, [staffId]);
+
+  if (!rows) return <p className="text-xs text-gray-400">Loading…</p>;
+  if (rows.length === 0) return <p className="text-xs text-gray-400">No target history yet</p>;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+        <FiTarget className="h-3 w-3 mr-2 text-indigo-600" /> Target History (+10% Growth)
+      </h3>
+      <div className="space-y-3">
+        {rows.map((r) => {
+          const pct = Number(r.achievement_percent || 0);
+          const open = r.status === "active";
+          const hasTarget = Number(r.target_amount) > 0;
+          return (
+            <div key={r.month}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="font-medium text-gray-700">
+                  {new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric" })}
+                </span>
+                <span className={!hasTarget ? "text-gray-400" : open ? "text-blue-600" : pct >= 100 ? "text-emerald-600" : "text-rose-600"}>
+                  {!hasTarget ? "No target" : open ? `In progress · ${pct.toFixed(0)}%` : pct >= 100 ? `✓ Achieved · ${pct.toFixed(0)}%` : `✗ Missed · ${pct.toFixed(0)}%`}
+                </span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full ${pct >= 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                     style={{ width: `${Math.min(pct, 100)}%` }} />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(r.achieved_amount)} / ₹{formatINR(r.target_amount)}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // StaffDetailsPanel Component - Updated to match WalletDetailsPanel style with ratings
 const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingDistribution, onClose }) => {
   const [activeTab, setActiveTab] = useState('performance');
@@ -236,7 +307,8 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
   const tabs = [
     { id: 'performance', label: 'Performance', icon: FiTrendingUp },
     { id: 'categories', label: 'Categories', icon: FiBriefcase },
-    { id: 'efficiency', label: 'Efficiency', icon: FiActivity }
+    { id: 'efficiency', label: 'Efficiency', icon: FiActivity },
+    { id: 'targets', label: 'Targets', icon: FiTarget }
   ];
 
   return (
@@ -547,6 +619,9 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 </div>
               </div>
             )}
+
+            {/* Staff Targets */}
+            {activeTab === 'targets' && <StaffTargetTab staffId={staff.id} />}
           </div>
         </div>
       </motion.div>
@@ -593,6 +668,29 @@ const StaffPerformanceSection = ({
   const reviewSummary = isSuperAdmin ? null : internalReviewSummary; // Superadmin doesn't need summary cards
   const ratingDistribution = externalRatingDistribution || internalRatingDistribution;
   const loadingReviews = externalLoadingReviews !== undefined ? externalLoadingReviews : internalLoadingReviews;
+
+  //Staff Targets
+  const [showTargets, setShowTargets] = useState(false);
+  const [targetMap, setTargetMap] = useState({});
+
+  // Cards show the target of the month that `toDate` falls in (targets are monthly,
+  // the date picker is free-range — so the card is labelled by month, not by range).
+  useEffect(() => {
+    if (!toDate) return;
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const params = new URLSearchParams({ month: toDate.slice(0, 7) });
+        if (centreId) params.append("centreId", centreId);
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff-targets?${params}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const rows = res.ok ? await res.json() : [];
+        setTargetMap(Object.fromEntries(rows.map((r) => [String(r.staff_id), r])));
+      } catch { setTargetMap({}); }
+    })();
+  }, [centreId, toDate]);
 
   // Date range picker component
   const DateRangePicker = () => {
@@ -950,7 +1048,19 @@ const StaffPerformanceSection = ({
   }, [staffPerformance, traineeIds]);
 
   // Active dataset based on toggle
-  const activeData = staffMode === 'permanent' ? permanentStaff : traineePerformance;
+  const activeData = useMemo(
+    () =>
+      (staffMode === "permanent" ? permanentStaff : traineePerformance).map((s) => {
+        const t = targetMap[String(s.id)];
+        return {
+          ...s,
+          monthlyTarget: Number(t?.target_amount || 0),
+          targetAchieved: Number(t?.achieved_amount || 0),
+          targetPercent: Number(t?.achievement_percent || 0),
+        };
+      }),
+    [staffMode, permanentStaff, traineePerformance, targetMap]
+  );
 
   // Filter and sort active data
   const filteredAndSortedStaff = useMemo(() => {
@@ -1053,6 +1163,15 @@ const StaffPerformanceSection = ({
           >
             <FiRefreshCw className={`h-4 w-4 mr-2 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
             Refresh
+          </button>
+
+          <button
+            onClick={() => setShowTargets((v) => !v)}
+            className={`flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              showTargets ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <FiTarget className="h-4 w-4 mr-2" /> Targets
           </button>
         </div>
 
@@ -1325,6 +1444,13 @@ const StaffPerformanceSection = ({
               )}
             </div>
           </div>
+        )}
+
+        {showTargets && (
+          <>
+            <StaffTargetsPanel centreId={centreId} />
+            <StaffTargetHistory centreId={centreId} />
+          </>
         )}
 
         {/* ========== NEW: Revenue Breakdown Quick View Table ========== */}
