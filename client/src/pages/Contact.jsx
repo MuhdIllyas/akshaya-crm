@@ -8,6 +8,7 @@ import {
   FiArrowLeft, FiInfo 
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
+import axios from 'axios';
 
 const Contact = () => {
   const navigate = useNavigate();
