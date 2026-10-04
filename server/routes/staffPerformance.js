@@ -3,6 +3,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { logActivity } from '../utils/activityLogger.js';
+import { ensureTargets, refreshActive } from '../utils/staffTargets.js';
 
 const router = express.Router();
 
@@ -1432,6 +1433,9 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       return eventDateFilter.replace(/\{col\}/g, colName);
     };
 
+    await ensureTargets(client, { staffId });   // this month's row, no-op once it exists
+    await refreshActive(client, { staffId });   // closes any finished month for this staff only
+
     // Fire ALL queries concurrently in PostgreSQL
     const [
       performanceRes,
@@ -1444,7 +1448,8 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       deliveriesRes,
       expiriesRes,
       todayAttendanceRes,
-      targetRes
+      targetRes,
+      targetHistoryRes
     ] = await Promise.all([
       // 1. Performance Summary
       client.query(`
@@ -1585,36 +1590,30 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         LIMIT 1
       `, [staffId]),
 
-      // 11. Monthly & Daily Target Calculation
+      // 11. Target (frozen snapshot) + live achieved/today
       client.query(`
-        WITH PastThreeMonths AS (
-          SELECT COALESCE(SUM(service_charges), 0) / 3 as avg_service_charge
-          FROM service_entries
-          WHERE staff_id = $1 
-            AND status = 'completed'
-            AND created_at >= date_trunc('month', CURRENT_DATE - INTERVAL '3 months')
-            AND created_at < date_trunc('month', CURRENT_DATE)
-        ),
-        CurrentMonth AS (
-          SELECT COALESCE(SUM(service_charges), 0) as current_service_charge
-          FROM service_entries
-          WHERE staff_id = $1
-            AND status = 'completed'
-            AND created_at >= date_trunc('month', CURRENT_DATE)
-        ),
-        Today AS (
-          SELECT COALESCE(SUM(service_charges), 0) as today_service_charge
-          FROM service_entries
-          WHERE staff_id = $1
-            AND status = 'completed'
-            AND created_at::date = CURRENT_DATE
-        )
-        SELECT 
-          p.avg_service_charge,
-          (p.avg_service_charge * 1.10) as monthly_target,
-          c.current_service_charge,
-          t.today_service_charge
-        FROM PastThreeMonths p, CurrentMonth c, Today t;
+        SELECT
+          t.target_amount AS monthly_target,
+          COALESCE((SELECT SUM(se.service_charges) FROM service_entries se
+                    WHERE se.staff_id = $1 AND se.status = 'completed'
+                      AND se.created_at >= date_trunc('month', CURRENT_DATE)), 0) AS current_service_charge,
+          COALESCE((SELECT SUM(se.service_charges) FROM service_entries se
+                    WHERE se.staff_id = $1 AND se.status = 'completed'
+                      AND se.created_at >= CURRENT_DATE), 0) AS today_service_charge
+        FROM staff_monthly_targets t
+        WHERE t.staff_id = $1
+          AND t.month = date_trunc('month', CURRENT_DATE)::date
+      `, [staffId]),
+
+      // 12. Closed-month target history (last 6)
+      client.query(`
+        SELECT month, target_amount, achieved_amount, achievement_percent
+        FROM staff_monthly_targets
+        WHERE staff_id = $1
+          AND status = 'closed'
+          AND month < date_trunc('month', CURRENT_DATE)::date
+        ORDER BY month DESC
+        LIMIT 6
       `, [staffId])
     ]);
 
@@ -1708,7 +1707,13 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
             current_achieved: currentAchieved,
             daily_target: dailyTarget,
             today_achieved: todayAchieved,
-            progress_percentage: progressPercentage
+            progress_percentage: progressPercentage,
+            history: targetHistoryRes.rows.map(r => ({
+              month: r.month,
+              target: parseFloat(r.target_amount),
+              achieved: parseFloat(r.achieved_amount),
+              percent: r.achievement_percent === null ? null : parseFloat(r.achievement_percent)
+            }))
           },
           ratings: {
             avg_rating: avgRating.toFixed(1),
