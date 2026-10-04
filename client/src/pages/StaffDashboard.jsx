@@ -95,6 +95,7 @@ const StaffDashboard = () => {
     dailyTarget: 0,
     todayAchieved: 0,
     targetProgress: 0,
+    targetHistory: [] ,
   });
 
   // Cancel modal state
@@ -264,6 +265,7 @@ const StaffDashboard = () => {
         dailyTarget: perfData.target?.daily_target || 0,
         todayAchieved: perfData.target?.today_achieved || 0, 
         targetProgress: perfData.target?.progress_percentage || 0,
+        targetHistory: perfData.target?.history || [],
       });
 
       // 2. Set Tasks & Events with STRICT isolation
@@ -686,6 +688,15 @@ const StaffDashboard = () => {
       default: return null;
     }
   };
+
+  // history is newest-first; only months that had a real target count
+  const targetHistory = (performance.targetHistory || []).filter(h => h.target > 0);
+  const lastMonth = targetHistory[0];
+  const targetStreak = (() => {
+    let n = 0;
+    for (const h of targetHistory) { if (h.percent >= 100) n++; else break; }
+    return n;
+  })();
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -1408,7 +1419,53 @@ const StaffDashboard = () => {
                          </p>
                       )}
                     </div>
-                    
+                    {/* --- PREVIOUS MONTHS --- */}
+                    {targetHistory.length > 0 && (
+                      <div className="mt-4 pt-4 border-t border-gray-100">
+                        <div className="flex items-center justify-between mb-2">
+                          <h4 className="text-xs font-bold text-gray-700">Previous months</h4>
+                          {targetStreak >= 2 && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                              🔥 {targetStreak} months in a row
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex gap-2 overflow-x-auto pb-1">
+                          {[...targetHistory].reverse().map((h) => {
+                            const met = h.percent >= 100;
+                            return (
+                              <div
+                                key={h.month}
+                                title={`Target ${formatCurrency(h.target)} · Achieved ${formatCurrency(h.achieved)}`}
+                                className={`flex-shrink-0 rounded-lg px-2.5 py-1.5 text-center border ${
+                                  met ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                      : 'bg-rose-50 border-rose-200 text-rose-700'
+                                }`}
+                              >
+                                <p className="text-[10px] font-medium">
+                                  {new Date(h.month).toLocaleString('en-IN', { month: 'short' })}
+                                </p>
+                                <p className="text-xs font-bold">
+                                  {met ? '✓' : '✗'} {Math.round(h.percent || 0)}%
+                                </p>
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {lastMonth && (
+                          <p className="text-[11px] text-gray-500 mt-2">
+                            Last month:{' '}
+                            {lastMonth.percent >= 100
+                              ? <span className="font-semibold text-emerald-600">target achieved 🎉</span>
+                              : <span className="font-semibold text-rose-600">
+                                  {formatCurrency(Math.max(lastMonth.target - lastMonth.achieved, 0))} short of target
+                                </span>}
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
