@@ -135,8 +135,8 @@ const Contact = () => {
                     <p className="text-xs font-bold text-navy-300 uppercase tracking-wider mb-1">Headquarters</p>
                     <p className="font-medium text-sm leading-relaxed text-navy-100">
                       Akshaya Sahayi Solutions<br />
-                      HiLITE Business Park<br />
-                      Calicut, Kerala - 673014
+                      Centre Park<br />
+                      Malappuram, Kerala - 673638
                     </p>
                   </div>
                 </div>
