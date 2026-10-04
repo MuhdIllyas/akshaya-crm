@@ -297,7 +297,7 @@ const StaffDashboard = () => {
   // --- Auto-cycle Events Tabs ---
   useEffect(() => {
     if (isEventsHovered || upcomingEvents.length === 0) return;
-    const tabs = ['All', 'Tasks', 'Deliveries', 'Expiries'];
+    const tabs = ['All', 'Tasks', 'Deliveries', 'Expiries', 'Days'];
     
     const interval = setInterval(() => {
       setActiveEventTab(prev => {
@@ -698,6 +698,35 @@ const StaffDashboard = () => {
     return n;
   })();
 
+  // ── STEP 1: derived values (Glance strip) ────────────────────────────
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+
+  // Tasks tile
+  const overdueTasks = myTasks.filter(t => t.due_date && new Date(t.due_date) < todayStart);
+  const nextTask = [...myTasks]
+    .filter(t => t.due_date)
+    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0] || null;
+
+  // Next event tile (upcomingEvents is sorted newest-first, so pick the nearest future one)
+  const nextEvent = upcomingEvents
+    .map(e => ({ ...e, _d: new Date(e.date || e.start_datetime) }))
+    .filter(e => !isNaN(e._d) && e._d >= todayStart)
+    .sort((a, b) => a._d - b._d)[0] || null;
+
+  // Score tile
+  const scoreLabel =
+    performance.incentiveScore >= 80 ? 'Excellent' :
+    performance.incentiveScore >= 60 ? 'Good' :
+    performance.incentiveScore >= 40 ? 'Average' : 'Needs improvement';
+  const scoreColor =
+    performance.incentiveScore >= 80 ? 'bg-emerald-500' :
+    performance.incentiveScore >= 60 ? 'bg-amber-400' : 'bg-rose-500';
+
+  const barColor = (p) => (p >= 100 ? 'bg-emerald-500' : p >= 50 ? 'bg-amber-400' : 'bg-rose-500');
+  const scrollToPerf = () =>
+    document.getElementById('perf-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="text-center"><div className="w-12 h-12 border-3 border-gray-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="text-gray-600">Loading dashboard...</p></div>
@@ -1061,6 +1090,114 @@ const StaffDashboard = () => {
             )}
           </div>
 
+          {/* ===== STEP 2: GLANCE STRIP ===== */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr] gap-4 mb-6">
+
+            {/* Target */}
+            <div
+              onClick={scrollToPerf}
+              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-600 flex items-center">
+                  <FiTarget className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                  Target (+10% Growth)
+                </p>
+                {!performanceLoading && performance.monthlyTarget > 0 && (
+                  <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
+                    {performance.targetProgress.toFixed(0)}%
+                  </span>
+                )}
+              </div>
+
+              {performanceLoading ? (
+                <div className="h-14 bg-gray-200 animate-pulse rounded" />
+              ) : performance.monthlyTarget > 0 ? (
+                <>
+                  <div className="flex justify-between items-baseline text-sm mb-1">
+                    <span className="font-black text-gray-900">{formatCurrency(performance.currentAchieved)}</span>
+                    <span className="text-xs text-gray-500">of {formatCurrency(performance.monthlyTarget)}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
+                         style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
+                  </div>
+
+                  <div className="flex justify-between text-[11px] text-gray-500 mt-2.5 mb-1">
+                    <span>Today's goal</span>
+                    <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-600' : ''}>
+                      {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                      style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-gray-400 py-3">No target set for this month yet</p>
+              )}
+            </div>
+
+            {/* Score */}
+            <div
+              onClick={scrollToPerf}
+              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
+            >
+              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
+                <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                Performance score
+              </p>
+              {performanceLoading ? (
+                <div className="h-14 bg-gray-200 animate-pulse rounded" />
+              ) : (
+                <>
+                  <p className="text-2xl font-black text-gray-900">{performance.incentiveScore}%</p>
+                  <p className="text-[11px] text-gray-500 mb-2">{scoreLabel}</p>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Tasks */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
+                <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                Pending tasks
+              </p>
+              <p className="text-2xl font-black text-gray-900">{myTasks.length}</p>
+              {overdueTasks.length > 0 ? (
+                <p className="text-[11px] font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
+              ) : nextTask ? (
+                <p className="text-[11px] text-gray-500 mt-1 truncate" title={nextTask.title}>
+                  Next: {nextTask.title}
+                </p>
+              ) : (
+                <p className="text-[11px] text-emerald-600 mt-1">All clear</p>
+              )}
+            </div>
+
+            {/* Next event */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
+                <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                Next event
+              </p>
+              {nextEvent ? (
+                <>
+                  <p className="text-sm font-bold text-gray-900 line-clamp-2" title={nextEvent.title}>{nextEvent.title}</p>
+                  <p className="text-[11px] text-gray-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
+                </>
+              ) : (
+                <p className="text-xs text-gray-400">Nothing upcoming</p>
+              )}
+            </div>
+          </div>
+
           {/* Two‑Column Layout */}
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
             
@@ -1345,132 +1482,10 @@ const StaffDashboard = () => {
               </div>
             </div>
 
-            {/* Right Column – Performance, Tasks & Events */}
+            {/* Right Column – Tasks & Events (Performance cards moved out) */}
             <div className="space-y-6">
 
-              {/* ===== MONTHLY & DAILY TARGET METER ===== */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                  <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
-                  Target (+10% Growth)
-                </h3>
-                
-                {performanceLoading ? (
-                  <div className="h-24 bg-gray-200 animate-pulse rounded"></div>
-                ) : (
-                  <div>
-                    {/* --- MONTHLY PROGRESS --- */}
-                    <div className="flex justify-between items-end mb-2">
-                      <div>
-                        <p className="text-xs text-gray-500 font-medium">Month Achieved</p>
-                        <p className="text-xl font-black text-gray-900">
-                          {formatCurrency(performance.currentAchieved)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-gray-500 font-medium">Month Target</p>
-                        <p className="text-lg font-bold text-gray-900">
-                          {formatCurrency(performance.monthlyTarget)}
-                        </p>
-                      </div>
-                    </div>
-                    
-                    <div className="w-full bg-gray-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-1000 ${
-                          performance.targetProgress >= 100 ? 'bg-emerald-500' :
-                          performance.targetProgress >= 50 ? 'bg-amber-400' : 
-                          'bg-rose-500'
-                        }`}
-                        style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-[10px] font-bold text-gray-500 text-right mb-4">
-                      {performance.targetProgress.toFixed(1)}% Completed
-                    </p>
-
-                    <div className="border-t border-gray-100 mb-4"></div>
-
-                    {/* --- DAILY PROGRESS --- */}
-                    <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-50">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
-                          <FiActivity className="h-3 w-3 text-indigo-600" />
-                          Today's Goal
-                        </h4>
-                        <span className="text-xs font-bold text-indigo-700">
-                          {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                        </span>
-                      </div>
-                      
-                      <div className="w-full bg-indigo-100/50 rounded-full h-2 overflow-hidden">
-                        <div 
-                          className={`h-full rounded-full transition-all duration-1000 ${
-                            performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'
-                          }`}
-                          style={{ 
-                            width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` 
-                          }}
-                        ></div>
-                      </div>
-                      {performance.todayAchieved >= performance.dailyTarget && performance.dailyTarget > 0 && (
-                         <p className="text-[10px] font-bold text-emerald-600 mt-1.5 flex items-center gap-1">
-                           <FiCheckCircle className="h-3 w-3" /> Daily target met!
-                         </p>
-                      )}
-                    </div>
-                    {/* --- PREVIOUS MONTHS --- */}
-                    {targetHistory.length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="flex items-center justify-between mb-2">
-                          <h4 className="text-xs font-bold text-gray-700">Previous months</h4>
-                          {targetStreak >= 2 && (
-                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                              🔥 {targetStreak} months in a row
-                            </span>
-                          )}
-                        </div>
-
-                        <div className="flex gap-2 overflow-x-auto pb-1">
-                          {[...targetHistory].reverse().map((h) => {
-                            const met = h.percent >= 100;
-                            return (
-                              <div
-                                key={h.month}
-                                title={`Target ${formatCurrency(h.target)} · Achieved ${formatCurrency(h.achieved)}`}
-                                className={`flex-shrink-0 rounded-lg px-2.5 py-1.5 text-center border ${
-                                  met ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                      : 'bg-rose-50 border-rose-200 text-rose-700'
-                                }`}
-                              >
-                                <p className="text-[10px] font-medium">
-                                  {new Date(h.month).toLocaleString('en-IN', { month: 'short' })}
-                                </p>
-                                <p className="text-xs font-bold">
-                                  {met ? '✓' : '✗'} {Math.round(h.percent || 0)}%
-                                </p>
-                              </div>
-                            );
-                          })}
-                        </div>
-
-                        {lastMonth && (
-                          <p className="text-[11px] text-gray-500 mt-2">
-                            Last month:{' '}
-                            {lastMonth.percent >= 100
-                              ? <span className="font-semibold text-emerald-600">target achieved 🎉</span>
-                              : <span className="font-semibold text-rose-600">
-                                  {formatCurrency(Math.max(lastMonth.target - lastMonth.achieved, 0))} short of target
-                                </span>}
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-              
-              {/* ===== NEW: MY TASKS ===== */}
+              {/* ===== MY TASKS ===== */}
               <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-gray-900 text-sm flex items-center">
@@ -1511,7 +1526,7 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* ===== NEW: UPCOMING EVENTS (AUTO-CYCLING) ===== */}
+              {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
                 className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
                 onMouseEnter={() => setIsEventsHovered(true)}
@@ -1530,7 +1545,6 @@ const StaffDashboard = () => {
 
                 {/* Event Tabs */}
                 <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
-                  {/* 🔥 FIX: Added 'Days' to the array */}
                   {['All', 'Tasks', 'Deliveries', 'Expiries', 'Days'].map(tab => {
                     const count = upcomingEvents.filter(e => {
                       const displayKey = e.event_type || e.type;
@@ -1538,7 +1552,6 @@ const StaffDashboard = () => {
                       if (tab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
                       if (tab === 'Deliveries') return e.source === 'service_delivery';
                       if (tab === 'Expiries') return e.source === 'service_expiry';
-                      // 🔥 FIX: Add the counter logic for the Days tab
                       if (tab === 'Days') return ['working', 'holiday', 'weekend'].includes(displayKey);
                       return false;
                     }).length;
@@ -1577,7 +1590,6 @@ const StaffDashboard = () => {
                       if (activeEventTab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
                       if (activeEventTab === 'Deliveries') return e.source === 'service_delivery';
                       if (activeEventTab === 'Expiries') return e.source === 'service_expiry';
-                      // 🔥 FIX: Add the filter logic for the Days tab
                       if (activeEventTab === 'Days') return ['working', 'holiday', 'weekend'].includes(displayKey);
                       return false;
                     });
@@ -1601,7 +1613,6 @@ const StaffDashboard = () => {
                       let typeColor = 'text-indigo-600 bg-indigo-50 border-indigo-100';
                       let badgeLabel = 'Event';
                       
-                      // 🔥 FIX: Distinct styling for every possible event type
                       if (event.source === 'service_delivery') {
                         Icon = FiBriefcase;
                         typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
@@ -1619,7 +1630,7 @@ const StaffDashboard = () => {
                         typeColor = 'text-green-600 bg-green-50 border-green-100';
                         badgeLabel = displayKey === 'working' ? 'Working Day' : 'Start';
                       } else if (displayKey === 'holiday') {
-                        Icon = FiStar; // Or FiHeart
+                        Icon = FiStar;
                         typeColor = 'text-red-600 bg-red-50 border-red-100';
                         badgeLabel = 'Holiday';
                       } else if (displayKey === 'weekend') {
@@ -1653,7 +1664,6 @@ const StaffDashboard = () => {
                             </div>
                           </div>
                           
-                          {/* 🔥 The Action Button */}
                           <div className="shrink-0 flex flex-col items-center justify-center self-stretch ml-1">
                             <button
                               onClick={() => handleViewService(event)}
@@ -1668,121 +1678,6 @@ const StaffDashboard = () => {
                     });
                   })()}
                 </motion.div>
-              </div>
-              
-              {/* Performance Score Card */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                    <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
-                    Performance Score
-                  </h3>
-                  <div className="relative group">
-                    <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
-                    <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
-                      Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
-                    </div>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="relative inline-block">
-                    <svg className="w-32 h-32">
-                      <circle className="text-gray-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
-                      <circle
-                        className="transition-all duration-1000"
-                        strokeWidth="12"
-                        strokeDasharray={339.292}
-                        strokeDashoffset={339.292 * (1 - (performanceLoading ? 0 : performance.incentiveScore / 100))}
-                        strokeLinecap="round"
-                        stroke={`url(#gradient)`}
-                        fill="transparent"
-                        r="54"
-                        cx="64"
-                        cy="64"
-                      />
-                      <defs>
-                        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                          <stop offset="0%" stopColor={performance.incentiveScore >= 80 ? '#10B981' : performance.incentiveScore >= 60 ? '#F59E0B' : '#EF4444'} />
-                          <stop offset="100%" stopColor={performance.incentiveScore >= 80 ? '#059669' : performance.incentiveScore >= 60 ? '#D97706' : '#DC2626'} />
-                        </linearGradient>
-                      </defs>
-                    </svg>
-                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                      <p className="text-2xl font-bold text-gray-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
-                      <p className="text-xs text-gray-500">
-                        {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Performance Metrics */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5">
-                <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                  <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
-                  Performance Metrics
-                </h3>
-                {performanceLoading ? (
-                  <div className="space-y-3">
-                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-                    <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div>
-                      <div className="flex justify-between mb-1 text-sm">
-                        <span className="text-gray-600">Completion Rate</span>
-                        <span className="font-medium text-gray-900">{performance.completionRate}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between mb-1 text-sm">
-                        <span className="text-gray-600">Avg Transaction Value</span>
-                        <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-blue-600 h-2 rounded-full"
-                          style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="flex justify-between mb-1 text-sm">
-                        <span className="text-gray-600">Customer Satisfaction</span>
-                        <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-2">
-                        <div
-                          className="bg-purple-600 h-2 rounded-full"
-                          style={{ width: `${(performance.avgRating / 5) * 100}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-100">
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-600">Collection Rate</span>
-                        <span className="font-medium text-gray-900">{performance.collectionRate}%</span>
-                      </div>
-                      <div className="flex justify-between text-sm mt-2">
-                        <span className="text-gray-600">Total Revenue</span>
-                        <span className="font-medium text-gray-900">{formatCurrency(performance.totalCollected)}</span>
-                      </div>
-                      <div className="flex justify-between text-sm mt-2">
-                        <span className="text-gray-600">Total Services</span>
-                        <span className="font-medium text-gray-900">{performance.totalServices}</span>
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Recent Activity (Compact Version) */}
@@ -1814,25 +1709,20 @@ const StaffDashboard = () => {
                           <div className="space-y-2.5 relative">
                             {entries.map((entry, index) => (
                               <div key={entry.id} className="group relative flex gap-3">
-                                {/* Timeline Vertical Line - Centered for smaller avatar */}
                                 {index !== entries.length - 1 && (
                                   <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
                                 )}
                                 
-                                {/* Smaller Activity Avatar */}
                                 <div className="w-8 h-8 mt-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
                                   <FiUser className="h-3.5 w-3.5 text-indigo-600" />
                                 </div>
 
-                                {/* Compact Activity Card */}
                                 <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
                                   
-                                  {/* Top Row: Name, Status, Time */}
                                   <div className="flex justify-between items-center mb-1.5 gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      {/* Status Pill moved next to name */}
                                       <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                                         entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
                                         entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700' :
@@ -1848,7 +1738,6 @@ const StaffDashboard = () => {
                                     </span>
                                   </div>
                                   
-                                  {/* Bottom Row: Service, Info, Actions */}
                                   <div className="flex justify-between items-end gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
@@ -1873,7 +1762,6 @@ const StaffDashboard = () => {
                                       )}
                                     </div>
                                     
-                                    {/* Action Button moved into flow */}
                                     {(entry.tokenId || entry.tracking_id) && (
                                       <button 
                                         onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
@@ -1901,6 +1789,248 @@ const StaffDashboard = () => {
               
             </div>
           </div>
+
+          {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
+          <div id="perf-details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
+
+            {/* 3a: MONTHLY & DAILY TARGET METER */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
+                <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
+                Target (+10% Growth)
+              </h3>
+              
+              {performanceLoading ? (
+                <div className="h-24 bg-gray-200 animate-pulse rounded"></div>
+              ) : (
+                <div>
+                  {/* --- MONTHLY PROGRESS --- */}
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium">Month Achieved</p>
+                      <p className="text-xl font-black text-gray-900">
+                        {formatCurrency(performance.currentAchieved)}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-gray-500 font-medium">Month Target</p>
+                      <p className="text-lg font-bold text-gray-900">
+                        {formatCurrency(performance.monthlyTarget)}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <div className="w-full bg-gray-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
+                    <div 
+                      className={`h-full rounded-full transition-all duration-1000 ${
+                        performance.targetProgress >= 100 ? 'bg-emerald-500' :
+                        performance.targetProgress >= 50 ? 'bg-amber-400' : 
+                        'bg-rose-500'
+                      }`}
+                      style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
+                    ></div>
+                  </div>
+                  <p className="text-[10px] font-bold text-gray-500 text-right mb-4">
+                    {performance.targetProgress.toFixed(1)}% Completed
+                  </p>
+
+                  <div className="border-t border-gray-100 mb-4"></div>
+
+                  {/* --- DAILY PROGRESS --- */}
+                  <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-50">
+                    <div className="flex justify-between items-center mb-2">
+                      <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                        <FiActivity className="h-3 w-3 text-indigo-600" />
+                        Today's Goal
+                      </h4>
+                      <span className="text-xs font-bold text-indigo-700">
+                        {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
+                      </span>
+                    </div>
+                    
+                    <div className="w-full bg-indigo-100/50 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'
+                        }`}
+                        style={{ 
+                          width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` 
+                        }}
+                      ></div>
+                    </div>
+                    {performance.todayAchieved >= performance.dailyTarget && performance.dailyTarget > 0 && (
+                       <p className="text-[10px] font-bold text-emerald-600 mt-1.5 flex items-center gap-1">
+                         <FiCheckCircle className="h-3 w-3" /> Daily target met!
+                       </p>
+                    )}
+                  </div>
+                  {/* --- PREVIOUS MONTHS --- */}
+                  {targetHistory.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-gray-100">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-xs font-bold text-gray-700">Previous months</h4>
+                        {targetStreak >= 2 && (
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                            🔥 {targetStreak} months in a row
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex gap-2 overflow-x-auto pb-1">
+                        {[...targetHistory].reverse().map((h) => {
+                          const met = h.percent >= 100;
+                          return (
+                            <div
+                              key={h.month}
+                              title={`Target ${formatCurrency(h.target)} · Achieved ${formatCurrency(h.achieved)}`}
+                              className={`flex-shrink-0 rounded-lg px-2.5 py-1.5 text-center border ${
+                                met ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
+                                    : 'bg-rose-50 border-rose-200 text-rose-700'
+                              }`}
+                            >
+                              <p className="text-[10px] font-medium">
+                                {new Date(h.month).toLocaleString('en-IN', { month: 'short' })}
+                              </p>
+                              <p className="text-xs font-bold">
+                                {met ? '✓' : '✗'} {Math.round(h.percent || 0)}%
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {lastMonth && (
+                        <p className="text-[11px] text-gray-500 mt-2">
+                          Last month:{' '}
+                          {lastMonth.percent >= 100
+                            ? <span className="font-semibold text-emerald-600">target achieved 🎉</span>
+                            : <span className="font-semibold text-rose-600">
+                                {formatCurrency(Math.max(lastMonth.target - lastMonth.achieved, 0))} short of target
+                              </span>}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 3b: PERFORMANCE SCORE CARD */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-semibold text-gray-900 text-sm flex items-center">
+                  <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
+                  Performance Score
+                </h3>
+                <div className="relative group">
+                  <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
+                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
+                    Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
+                  </div>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="relative inline-block">
+                  <svg className="w-32 h-32">
+                    <circle className="text-gray-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
+                    <circle
+                      className="transition-all duration-1000"
+                      strokeWidth="12"
+                      strokeDasharray={339.292}
+                      strokeDashoffset={339.292 * (1 - (performanceLoading ? 0 : performance.incentiveScore / 100))}
+                      strokeLinecap="round"
+                      stroke={`url(#gradient)`}
+                      fill="transparent"
+                      r="54"
+                      cx="64"
+                      cy="64"
+                    />
+                    <defs>
+                      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor={performance.incentiveScore >= 80 ? '#10B981' : performance.incentiveScore >= 60 ? '#F59E0B' : '#EF4444'} />
+                        <stop offset="100%" stopColor={performance.incentiveScore >= 80 ? '#059669' : performance.incentiveScore >= 60 ? '#D97706' : '#DC2626'} />
+                      </linearGradient>
+                    </defs>
+                  </svg>
+                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
+                    <p className="text-2xl font-bold text-gray-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
+                    <p className="text-xs text-gray-500">
+                      {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 3c: PERFORMANCE METRICS */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
+                <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                Performance Metrics
+              </h3>
+              {performanceLoading ? (
+                <div className="space-y-3">
+                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex justify-between mb-1 text-sm">
+                      <span className="text-gray-600">Completion Rate</span>
+                      <span className="font-medium text-gray-900">{performance.completionRate}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1 text-sm">
+                      <span className="text-gray-600">Avg Transaction Value</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full"
+                        style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between mb-1 text-sm">
+                      <span className="text-gray-600">Customer Satisfaction</span>
+                      <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-purple-600 h-2 rounded-full"
+                        style={{ width: `${(performance.avgRating / 5) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-gray-100">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Collection Rate</span>
+                      <span className="font-medium text-gray-900">{performance.collectionRate}%</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span className="text-gray-600">Total Revenue</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(performance.totalCollected)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm mt-2">
+                      <span className="text-gray-600">Total Services</span>
+                      <span className="font-medium text-gray-900">{performance.totalServices}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
         </motion.div>
       </div>
       {/* Cancel Modal */}
