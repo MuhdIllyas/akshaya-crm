@@ -818,7 +818,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            🎉 Introducing Knowledge Hub!! 🧠 A live notification engine 🔔, staff mentions across the system 🗣️, service cards in messenger 💼, and notes in messenger 📝🚀
+            🎯 New monthly target set! 📊 Track progress live, ✅ meet your daily goal. Let's hit it! 🚀
           </div>
         </div>
       </div>
