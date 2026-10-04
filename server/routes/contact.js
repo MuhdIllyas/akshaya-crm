@@ -1,6 +1,6 @@
 import express from 'express';
 // Import the new function from your existing email service
-import { sendContactEnquiryEmail } from '../utiles/emailService.js';
+import { sendContactEnquiryEmail } from '../utils/emailService.js';
 
 const router = express.Router();
 
