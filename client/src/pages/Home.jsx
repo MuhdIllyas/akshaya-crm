@@ -56,6 +56,7 @@ const Navbar = () => {
             <a href="#workflow" className={`text-sm font-semibold hover:text-teal-500 transition-colors ${scrolled ? 'text-gray-700' : 'text-gray-200'}`}>Workflow</a>
             <a href="#finances" className={`text-sm font-semibold hover:text-teal-500 transition-colors ${scrolled ? 'text-gray-700' : 'text-gray-200'}`}>Finances</a>
             <a href="#multi-centre" className={`text-sm font-semibold hover:text-teal-500 transition-colors ${scrolled ? 'text-gray-700' : 'text-gray-200'}`}>Multi-Centre</a>
+            <Link to="/contact" className={`text-sm font-semibold hover:text-teal-500 transition-colors ${scrolled ? 'text-gray-700' : 'text-gray-200'}`}>Contact Us</Link>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -604,19 +605,26 @@ const Home = () => {
             Bring your customers, service bookings, staff, WhatsApp notifications, and finances together into one intelligent platform.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button 
-              onClick={() => navigate('/login')} 
-              className="px-8 py-4 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
-            >
-              Sign In to Sahayi
-            </button>
-            <button 
-              onClick={() => navigate('/login')} 
-              className="px-8 py-4 bg-white/20 hover:bg-white/30 text-navy-900 font-bold rounded-xl border border-navy-900/10 transition-all"
-            >
-              Book Service Online
-            </button>
-          </div>
+  <button 
+    onClick={() => navigate('/login')} 
+    className="px-8 py-4 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
+  >
+    Sign In to Sahayi
+  </button>
+  <button 
+    onClick={() => navigate('/login')} 
+    className="px-8 py-4 bg-white/20 hover:bg-white/30 text-navy-900 font-bold rounded-xl border border-navy-900/10 transition-all"
+  >
+    Book Service Online
+  </button>
+  {/* NEW CONTACT BUTTON */}
+  <Link 
+    to="/contact" 
+    className="px-8 py-4 bg-white hover:bg-gray-50 text-teal-600 font-bold rounded-xl shadow-md transition-all transform hover:-translate-y-0.5"
+  >
+    Contact Sales
+  </Link>
+</div>
         </div>
       </section>
 
@@ -651,6 +659,7 @@ const Home = () => {
               <h4 className="text-white font-bold mb-4 uppercase tracking-wider text-sm">Company</h4>
               <ul className="space-y-3 text-sm">
                 <li><a href="#" className="hover:text-teal-400 transition-colors">About Us</a></li>
+                <li><Link to="/contact" className="hover:text-teal-400 transition-colors">Contact Support</Link></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Contact Support</a></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Privacy Policy</a></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Terms of Service</a></li>
