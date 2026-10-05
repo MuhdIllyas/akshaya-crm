@@ -5,8 +5,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
-  FiClock, FiFileText
+  FiLayers, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
+  FiSettings, FiFolder
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 
@@ -82,359 +82,260 @@ const Navbar = () => {
 };
 
 // ---------------------------------------------------------------------
-// Interactive Hero Animation Component
+// Interactive 11-Stage Flow Animation Component (Big & Unboxed)
 // ---------------------------------------------------------------------
 const HeroAnimation = () => {
   const [activeStage, setActiveStage] = useState(0);
 
   const stages = [
     { id: 0, title: "Customer", icon: FiUsers },
-    { id: 1, title: "Service", icon: FiLayers },
-    { id: 2, title: "Staff", icon: FiBriefcase },
-    { id: 3, title: "Payment", icon: FiCreditCard },
-    { id: 4, title: "WhatsApp", icon: FaWhatsapp },
-    { id: 5, title: "Analytics", icon: FiPieChart },
+    { id: 1, title: "Service Request", icon: FiLayers },
+    { id: 2, title: "Token", icon: FiHash },
+    { id: 3, title: "Staff", icon: FiBriefcase },
+    { id: 4, title: "Documents", icon: FiFolder },
+    { id: 5, title: "Processing", icon: FiSettings },
+    { id: 6, title: "Payment", icon: FiCreditCard },
+    { id: 7, title: "Wallets", icon: FiDollarSign },
+    { id: 8, title: "WhatsApp", icon: FaWhatsapp },
+    { id: 9, title: "Review", icon: FiStar },
+    { id: 10, title: "Analytics", icon: FiPieChart },
   ];
 
   useEffect(() => {
     const timer = setInterval(() => {
       setActiveStage((prev) => (prev + 1) % stages.length);
-    }, 3500); // Change stage every 3.5 seconds
+    }, 2800); // Transitions every 2.8 seconds
     return () => clearInterval(timer);
   }, [stages.length]);
 
   return (
-    <div className="relative perspective-1000 w-full max-w-md mx-auto lg:ml-auto">
-      {/* Container */}
-      <div className="bg-navy-800 rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col h-[400px]">
+    <div className="flex items-center w-full h-[600px] relative mt-10 lg:mt-0">
+      
+      {/* LEFT: Sleek Vertical Timeline */}
+      <div className="w-[120px] sm:w-[150px] shrink-0 h-[500px] flex flex-col justify-between relative z-10">
+        {/* Background faded line */}
+        <div className="absolute left-[15px] top-2 bottom-2 w-[2px] bg-white/10 rounded-full" />
         
-        {/* Header: Progress Bar */}
-        <div className="bg-navy-900/80 px-6 py-4 border-b border-white/5">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-teal-400 font-bold text-xs uppercase tracking-wider">One Customer Journey</span>
-            <div className="flex gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></div>
-              <div className="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
+        {/* Glowing active progress line */}
+        <motion.div
+          className="absolute left-[15px] top-2 w-[2px] bg-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.8)] rounded-full"
+          animate={{ height: `${(activeStage / (stages.length - 1)) * 100}%` }}
+          transition={{ duration: 0.6, ease: "easeInOut" }}
+        />
+
+        {stages.map((stage, idx) => {
+          const isActive = idx === activeStage;
+          const isPassed = idx < activeStage;
+          return (
+            <div key={stage.id} className="flex items-center gap-4 group cursor-default">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${
+                isActive 
+                  ? 'bg-teal-400 border-teal-400 text-navy-900 shadow-[0_0_20px_rgba(45,212,191,0.6)] scale-125' 
+                  : isPassed 
+                    ? 'bg-navy-900 border-teal-500/50 text-teal-400' 
+                    : 'bg-navy-900 border-white/10 text-white/20'
+              }`}>
+                <stage.icon className={`transition-all duration-500 ${isActive ? 'w-4 h-4' : 'w-3 h-3'}`} />
+              </div>
+              <span className={`text-xs sm:text-sm font-bold transition-all duration-500 whitespace-nowrap ${
+                isActive ? 'text-white scale-105 origin-left' : isPassed ? 'text-white/60' : 'text-white/20'
+              }`}>
+                {stage.title}
+              </span>
             </div>
-          </div>
-          
-          <div className="flex justify-between items-center relative">
-            {/* Connecting line */}
-            <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/5 -z-0 -translate-y-1/2"></div>
-            
-            {stages.map((stage, index) => {
-              const Icon = stage.icon;
-              const isActive = index === activeStage;
-              const isPassed = index < activeStage;
-              return (
-                <div key={stage.id} className="relative z-10 flex flex-col items-center">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
-                    isActive ? 'bg-teal-500 text-navy-900 scale-110 shadow-[0_0_15px_rgba(20,184,166,0.5)]' : 
-                    isPassed ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 
-                    'bg-navy-700 text-navy-400 border border-white/5'
-                  }`}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Body: Animated Stage Cards */}
-        <div className="flex-1 relative bg-gradient-to-b from-navy-800 to-navy-900 flex items-center justify-center p-6 overflow-hidden">
-          <AnimatePresence mode="wait">
-            
-            {/* Stage 0: Customer */}
-            {activeStage === 0 && (
-              <motion.div key="stage0" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-lg text-center">
-                  <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
-                    <FiUsers className="text-blue-400 h-8 w-8" />
-                  </div>
-                  <h3 className="text-white font-bold text-lg">Muhammed Illyas</h3>
-                  <p className="text-navy-200 text-sm mt-1">New Application Request</p>
-                  <div className="mt-4 inline-flex items-center px-3 py-1 bg-white/5 rounded-full text-xs text-navy-100 border border-white/10">
-                    <FiSmartphone className="mr-1.5" /> Logged into Citizen Portal
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Stage 1: Service/Token */}
-            {activeStage === 1 && (
-              <motion.div key="stage1" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
-                <div className="bg-gradient-to-br from-indigo-500/20 to-purple-500/20 backdrop-blur-md rounded-2xl p-6 border border-indigo-500/30 shadow-lg text-center">
-                  <div className="inline-flex items-center px-3 py-1 bg-indigo-500/30 text-indigo-300 text-xs font-bold rounded-full mb-4">
-                    SERVICE INITIATED
-                  </div>
-                  <h3 className="text-white font-bold text-xl mb-1">Passport Application</h3>
-                  <p className="text-navy-200 text-sm mb-6">Standard Processing</p>
-                  
-                  <div className="bg-navy-900/60 rounded-xl p-4 border border-white/10 border-dashed">
-                    <p className="text-xs text-navy-300 uppercase tracking-widest mb-1">Generated Token</p>
-                    <p className="text-3xl font-black text-teal-400 tracking-wider">A-104</p>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Stage 2: Staff */}
-            {activeStage === 2 && (
-              <motion.div key="stage2" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-lg">
-                  <div className="flex items-center gap-3 mb-5 border-b border-white/10 pb-4">
-                    <div className="w-10 h-10 bg-teal-500/20 rounded-full flex items-center justify-center border border-teal-500/30">
-                      <FiBriefcase className="text-teal-400 h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-bold text-sm">Assigned to Staff</h3>
-                      <p className="text-navy-300 text-xs">Counter 03 • Sarah</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-navy-200 flex items-center"><FiCheckCircle className="text-green-400 mr-2" /> Documents Verified</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-navy-200 flex items-center"><FiCheckCircle className="text-green-400 mr-2" /> Application Filed</span>
-                    </div>
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="text-white font-bold flex items-center"><span className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin mr-2"></span> Processing Payment...</span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Stage 3: Payment */}
-            {activeStage === 3 && (
-              <motion.div key="stage3" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full">
-                <div className="bg-gradient-to-br from-green-500/20 to-teal-500/20 backdrop-blur-md rounded-2xl p-6 border border-green-500/30 shadow-lg text-center relative overflow-hidden">
-                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-green-500/20 rounded-full blur-2xl"></div>
-                  
-                  <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)]">
-                    <FiCheckCircle className="text-white h-8 w-8" />
-                  </div>
-                  <h3 className="text-white font-bold text-lg mb-1">Payment Received</h3>
-                  <p className="text-3xl font-black text-green-400 my-3">₹1,500</p>
-                  
-                  <div className="mt-4 pt-4 border-t border-green-500/20 flex justify-between text-xs text-navy-200">
-                    <span>Added to: Cash Wallet</span>
-                    <span>Ref: TXN-8932</span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Stage 4: WhatsApp */}
-            {activeStage === 4 && (
-              <motion.div key="stage4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
-                <div className="bg-[#128C7E]/20 backdrop-blur-md rounded-2xl p-5 border border-[#128C7E]/30 shadow-lg">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-8 h-8 bg-[#25D366] rounded-full flex items-center justify-center">
-                      <FaWhatsapp className="text-white h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-white font-bold text-sm">Akshaya Centre</h3>
-                      <p className="text-navy-300 text-xs">Automated Update</p>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-[#056162] rounded-tr-xl rounded-b-xl p-3 shadow-sm relative">
-                    <p className="text-white text-sm leading-relaxed">
-                      Dear Muhammed,<br/><br/>
-                      Your Passport Application has been successfully processed. Total amount paid: ₹1,500. <br/><br/>
-                      Track status here: bit.ly/track
-                    </p>
-                    <span className="text-[10px] text-teal-200/60 absolute bottom-2 right-3">10:42 AM</span>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-            {/* Stage 5: Analytics */}
-            {activeStage === 5 && (
-              <motion.div key="stage5" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
-                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-lg">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-white font-bold text-sm flex items-center">
-                      <FiPieChart className="mr-2 text-teal-400" /> Centre Analytics Updated
-                    </h3>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="bg-navy-900/60 rounded-lg p-3 flex justify-between items-center border border-white/5">
-                      <span className="text-xs text-navy-200">Daily Revenue</span>
-                      <span className="font-bold text-green-400 flex items-center">↑ ₹1,500</span>
-                    </div>
-                    <div className="bg-navy-900/60 rounded-lg p-3 flex justify-between items-center border border-white/5">
-                      <span className="text-xs text-navy-200">Completed Services</span>
-                      <span className="font-bold text-white">42 <span className="text-teal-500 ml-1">(+1)</span></span>
-                    </div>
-                    <div className="bg-navy-900/60 rounded-lg p-3 flex justify-between items-center border border-white/5">
-                      <span className="text-xs text-navy-200">Customer Rating</span>
-                      <div className="flex text-amber-400 text-xs">
-                        <FiStar className="fill-current" /><FiStar className="fill-current" /><FiStar className="fill-current" /><FiStar className="fill-current" /><FiStar className="fill-current" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
-            )}
-
-          </AnimatePresence>
-        </div>
-        
-        {/* Footer info */}
-        <div className="bg-navy-900 px-6 py-3 text-center border-t border-white/5">
-          <p className="text-xs text-navy-400 font-medium tracking-wide">THE AKSHAYA SAHAYI ECOSYSTEM</p>
-        </div>
+          );
+        })}
       </div>
+
+      {/* RIGHT: Massive Floating Card Visuals */}
+      <div className="flex-1 relative h-[500px] flex items-center justify-center pl-4 sm:pl-8 perspective-1000">
+        <AnimatePresence mode="wait">
+          
+          {/* Card Base Styling (Glassmorphism, Floating, Big) */}
+          {activeStage === 0 && (
+            <motion.div key="stage0" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-blue-500/30 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FiUsers className="w-20 h-20 text-blue-400 mb-6 drop-shadow-lg" />
+              <h3 className="text-3xl font-black text-white mb-2">Customer Walk-in</h3>
+              <p className="text-navy-200 text-lg">Muhammed Illyas</p>
+              <div className="mt-8 px-5 py-2 bg-blue-500/20 text-blue-300 rounded-full text-sm font-bold border border-blue-500/30">ID: CUST-8492</div>
+            </motion.div>
+          )}
+
+          {activeStage === 1 && (
+            <motion.div key="stage1" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-purple-500/30 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FiLayers className="w-20 h-20 text-purple-400 mb-6 drop-shadow-lg" />
+              <h3 className="text-3xl font-black text-white mb-2">Service Request</h3>
+              <p className="text-navy-200 text-lg">Passport Application</p>
+              <div className="mt-8 px-5 py-2 bg-purple-500/20 text-purple-300 rounded-full text-sm font-bold border border-purple-500/30">Standard Processing</div>
+            </motion.div>
+          )}
+
+          {activeStage === 2 && (
+            <motion.div key="stage2" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-indigo-500/30 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="border-4 border-dashed border-indigo-400/50 p-6 rounded-3xl mb-6 shadow-[0_0_30px_rgba(99,102,241,0.2)]">
+                <FiHash className="w-16 h-16 text-indigo-400" />
+              </div>
+              <h3 className="text-5xl font-black text-indigo-300 tracking-widest mb-3 drop-shadow-lg">A-104</h3>
+              <p className="text-navy-200 text-lg">Token Generated</p>
+            </motion.div>
+          )}
+
+          {activeStage === 3 && (
+            <motion.div key="stage3" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-teal-500/30 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FiBriefcase className="w-20 h-20 text-teal-400 mb-6 drop-shadow-lg" />
+              <h3 className="text-3xl font-black text-white mb-2">Staff Assigned</h3>
+              <p className="text-navy-200 text-lg">Counter 03 • Sarah</p>
+              <div className="mt-8 px-5 py-2 bg-teal-500/20 text-teal-300 rounded-full text-sm font-bold border border-teal-500/30">Status: Serving</div>
+            </motion.div>
+          )}
+
+          {activeStage === 4 && (
+            <motion.div key="stage4" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <FiFolder className="w-20 h-20 text-amber-400 mb-8 drop-shadow-lg" />
+              <h3 className="text-3xl font-black text-white mb-6">Documents Ready</h3>
+              <div className="flex flex-col gap-3 w-full text-left">
+                <span className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center text-white font-medium shadow-inner"><FiCheckCircle className="text-green-400 mr-3 text-xl"/> Aadhaar Uploaded</span>
+                <span className="bg-white/5 border border-white/10 p-4 rounded-xl flex items-center text-white font-medium shadow-inner"><FiCheckCircle className="text-green-400 mr-3 text-xl"/> Photo Verified</span>
+              </div>
+            </motion.div>
+          )}
+
+          {activeStage === 5 && (
+            <motion.div key="stage5" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-pink-500/30 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FiSettings className="w-24 h-24 text-pink-400 mb-6 drop-shadow-lg animate-spin-slow" />
+              <h3 className="text-3xl font-black text-white mb-2">Processing</h3>
+              <p className="text-navy-200 text-lg">Filing on Govt Portal...</p>
+              <div className="w-full h-2.5 bg-white/10 rounded-full mt-8 overflow-hidden shadow-inner">
+                 <motion.div initial={{ width: "0%" }} animate={{ width: "75%" }} transition={{ duration: 2, ease: "easeOut" }} className="h-full bg-pink-400 rounded-full shadow-[0_0_10px_rgba(244,114,182,0.8)]"></motion.div>
+              </div>
+            </motion.div>
+          )}
+
+          {activeStage === 6 && (
+            <motion.div key="stage6" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-green-500/20 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center mb-6 border border-green-500/30 shadow-[0_0_30px_rgba(34,197,94,0.3)]">
+                <FiCreditCard className="w-12 h-12 text-green-400 drop-shadow-lg" />
+              </div>
+              <p className="text-navy-200 text-lg uppercase tracking-wider mb-2">Payment Collected</p>
+              <h3 className="text-5xl font-black text-green-400 drop-shadow-md">₹1,500</h3>
+            </motion.div>
+          )}
+
+          {activeStage === 7 && (
+            <motion.div key="stage7" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-emerald-500/30 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FiDollarSign className="w-20 h-20 text-emerald-400 mb-6 drop-shadow-lg" />
+              <h3 className="text-3xl font-black text-white mb-2">Wallet Updated</h3>
+              <p className="text-navy-200 text-lg">Cash Account</p>
+              <div className="mt-8 px-6 py-2.5 bg-emerald-500/20 text-emerald-300 rounded-xl text-base font-bold border border-emerald-500/30 shadow-inner">+ ₹1,500 Logged</div>
+            </motion.div>
+          )}
+
+          {activeStage === 8 && (
+            <motion.div key="stage8" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-[#25D366]/20 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FaWhatsapp className="w-20 h-20 text-[#25D366] mb-8 drop-shadow-lg animate-pulse" />
+              <div className="bg-[#056162] p-5 rounded-2xl rounded-tl-none w-full text-left relative shadow-2xl border border-white/10">
+                <p className="text-white text-base leading-relaxed">Your Passport application is complete. Receipt attached.</p>
+                <span className="text-xs text-white/50 absolute bottom-2 right-3">✓✓</span>
+              </div>
+              <p className="text-navy-200 mt-8 font-bold tracking-wide uppercase">Customer Notified</p>
+            </motion.div>
+          )}
+
+          {activeStage === 9 && (
+            <motion.div key="stage9" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="flex gap-2 mb-8">
+                {[1,2,3,4,5].map(i => (
+                  <motion.div key={i} initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: i * 0.1, type: 'spring' }}>
+                    <FiStar className="w-10 h-10 text-yellow-400 fill-current drop-shadow-[0_0_10px_rgba(250,204,21,0.6)]" />
+                  </motion.div>
+                ))}
+              </div>
+              <h3 className="text-3xl font-black text-white mb-4">5-Star Review</h3>
+              <p className="text-navy-200 text-lg italic bg-white/5 p-4 rounded-xl shadow-inner border border-white/10">"Very fast and helpful service!"</p>
+            </motion.div>
+          )}
+
+          {activeStage === 10 && (
+            <motion.div key="stage10" initial={{ opacity: 0, scale: 0.8, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm bg-white/5 backdrop-blur-2xl border border-white/10 rounded-[2.5rem] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center text-center">
+              <div className="absolute -inset-0.5 bg-gradient-to-br from-blue-500/30 to-transparent rounded-[2.5rem] blur-xl opacity-50 -z-10"></div>
+              <FiPieChart className="w-20 h-20 text-blue-400 mb-8 drop-shadow-lg" />
+              <h3 className="text-3xl font-black text-white mb-6">Analytics Synced</h3>
+              <div className="flex flex-col gap-3 w-full">
+                <div className="flex justify-between items-center text-base text-navy-100 bg-white/5 border border-white/10 p-4 rounded-xl shadow-inner">
+                  <span>Daily Revenue</span> <span className="text-green-400 font-bold">↑ ₹1,500</span>
+                </div>
+                <div className="flex justify-between items-center text-base text-navy-100 bg-white/5 border border-white/10 p-4 rounded-xl shadow-inner">
+                  <span>Completed</span> <span className="text-blue-400 font-bold">+1</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </div>
+
     </div>
   );
 };
 
 // ---------------------------------------------------------------------
-// Main Page Component
+// Main App / Homepage Component
 // ---------------------------------------------------------------------
 const Home = () => {
   return (
     <div className="min-h-screen bg-gray-50 font-sans selection:bg-teal-500 selection:text-white overflow-hidden">
       <Navbar />
 
-      {/* 1. HERO SECTION */}
-      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-navy-900 overflow-hidden">
-        {/* Background Gradients */}
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-teal-500/20 blur-[120px] rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+      {/* 1. HERO SECTION (Massive Unboxed Animation) */}
+      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-navy-900 overflow-hidden min-h-screen flex items-center">
+        {/* Deep Glowing Backgrounds */}
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-teal-500/20 blur-[150px] rounded-full pointer-events-none"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[150px] rounded-full pointer-events-none"></div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-4 items-center">
             
-            {/* Hero Copy */}
-            <motion.div initial="hidden" animate="visible" variants={staggerContainer}>
-              <motion.div variants={fadeUp} className="inline-flex items-center px-4 py-2 bg-white/5 border border-white/10 rounded-full mb-6 backdrop-blur-sm">
+            {/* Hero Copy (Left Column) */}
+            <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="pr-0 lg:pr-10">
+              <motion.div variants={fadeUp} className="inline-flex items-center px-4 py-2 bg-white/5 border border-white/10 rounded-full mb-6 backdrop-blur-sm shadow-xl">
                 <span className="flex h-2 w-2 rounded-full bg-teal-400 mr-2 animate-pulse"></span>
-                <span className="text-xs font-bold tracking-wider text-teal-300 uppercase">Unified e-Governance Platform</span>
+                <span className="text-xs font-bold tracking-wider text-teal-300 uppercase">One Customer. One Complete Journey.</span>
               </motion.div>
               
               <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-6">
-                Run Your Entire <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-400">Akshaya Centre</span> From One Platform.
+                Run Your Entire <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-400 drop-shadow-sm">Akshaya Centre</span> From One Platform.
               </motion.h1>
               
-              <motion.p variants={fadeUp} className="text-lg text-navy-200 mb-8 max-w-xl leading-relaxed">
-                Empower citizens to book services online, while bringing your operations, staff, WhatsApp notifications, accounting, and multi-centre analytics together seamlessly.
+              <motion.p variants={fadeUp} className="text-lg text-navy-200 mb-10 max-w-xl leading-relaxed">
+                Watch how a single service seamlessly moves from customer booking, through staff processing and payments, directly into automated WhatsApp updates and accounting analytics.
               </motion.p>
               
               <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4">
-                <Link to="/login" className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-navy-900 font-bold rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] transition-all flex items-center justify-center group">
+                <Link to="/login" className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-navy-900 font-bold rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.4)] transition-all flex items-center justify-center group text-lg">
                   Book Service <FiArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
                 </Link>
-                <Link to="/login" className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 transition-all flex items-center justify-center">
+                <Link to="/login" className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 transition-all flex items-center justify-center text-lg backdrop-blur-md">
                   Sign In
                 </Link>
               </motion.div>
-
-              <motion.div variants={fadeUp} className="mt-10 flex flex-wrap items-center gap-6 text-sm text-navy-300 font-medium">
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Self Registration</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Online Booking</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Live Tracking</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> WhatsApp Updates</span>
-              </motion.div>
             </motion.div>
 
-            {/* Interactive Customer Journey Animation */}
+            {/* Interactive Unboxed Animation (Right Column) */}
             <motion.div 
-              initial={{ opacity: 0, x: 50 }} 
-              animate={{ opacity: 1, x: 0 }} 
-              transition={{ duration: 0.8, delay: 0.2 }}
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              transition={{ duration: 1, delay: 0.2 }}
+              className="relative w-full"
             >
               <HeroAnimation />
             </motion.div>
-          </div>
-        </div>
-      </section>
 
-      {/* 11. SIGNATURE SECTION: EVERYTHING CONNECTED */}
-      <section id="workflow" className="py-24 bg-white relative">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={fadeUp} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Everything Works Together.</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">Citizen registers or books online → service application created → staff processes it → payment collected → WhatsApp delivers real-time notifications → accounting records the money → management sees real-time performance.</p>
-          </motion.div>
-
-          {/* Connected Workflow Visual */}
-          <div className="relative py-10">
-            <div className="flex flex-col items-center">
-              
-              {/* Level 1: Customer */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-navy-50 border border-navy-100 rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-sm">
-                <FiUsers className="text-navy-600 h-5 w-5" />
-                <span className="font-bold text-navy-900 text-sm">CUSTOMER (ONLINE / WALKIN)</span>
-              </motion.div>
-              
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2"></div>
-              
-              {/* Level 2: Services & Bookings */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-teal-500 text-white rounded-xl p-4 flex items-center gap-3 w-72 justify-center z-10 relative shadow-md">
-                <FiLayers className="h-5 w-5" />
-                <span className="font-bold tracking-wider text-sm">SERVICES &amp; BOOKINGS</span>
-              </motion.div>
-
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
-              </div>
-
-              {/* Level 3: Ops Row */}
-              <div className="grid grid-cols-3 gap-4 md:gap-12 w-full max-w-3xl z-10 relative">
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiBriefcase className="mx-auto text-blue-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">STAFF</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-blue-100 w-full text-center">ATTENDANCE</div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiCreditCard className="mx-auto text-green-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">PAYMENT</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-green-50 text-green-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-green-100 w-full text-center">WALLET</div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiMessageCircle className="mx-auto text-teal-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">WHATSAPP</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-teal-50 text-teal-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-teal-100 w-full text-center">NOTIFICATIONS</div>
-                </motion.div>
-              </div>
-
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
-              </div>
-
-              {/* Level 4: Analytics */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.5 }} className="bg-navy-900 text-white rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-lg">
-                <FiPieChart className="h-5 w-5 text-teal-400" />
-                <span className="font-bold tracking-wider">ANALYTICS</span>
-              </motion.div>
-
-              <div className="h-6 border-l-2 border-navy-900 my-1"></div>
-              <motion.div initial={{ opacity: 0, scale: 0.8 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.6 }} className="text-center">
-                <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-navy-900 to-teal-600 text-xl tracking-tight uppercase">
-                  Business Insights
-                </span>
-              </motion.div>
-            </div>
           </div>
         </div>
       </section>
@@ -519,7 +420,6 @@ const Home = () => {
               <h3 className="text-lg font-bold text-gray-900 mb-2">Calendar &amp; Tasks</h3>
               <p className="text-gray-600 text-sm leading-relaxed mb-4">Schedule appointments, track centre holidays and government deadlines, set task reminders, and coordinate staff work.</p>
             </motion.div>
-
           </div>
         </div>
       </section>
@@ -567,7 +467,6 @@ const Home = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             
-            {/* Visual Dashboard for Teams */}
             <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="bg-gray-50 rounded-3xl p-6 border border-gray-200 shadow-inner">
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-navy-900 text-white p-4 font-bold flex justify-between items-center">
@@ -603,7 +502,6 @@ const Home = () => {
               </div>
             </motion.div>
 
-            {/* Copy */}
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={staggerContainer}>
               <motion.h2 variants={fadeUp} className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Turn Staff Activity Into Business Insights.</motion.h2>
               <motion.p variants={fadeUp} className="text-gray-600 text-lg mb-8">Know exactly who is working, what applications they are handling, and how much value they generate for the centre.</motion.p>
@@ -640,7 +538,6 @@ const Home = () => {
                 </motion.div>
               </div>
             </motion.div>
-            
           </div>
         </div>
       </section>
@@ -655,13 +552,10 @@ const Home = () => {
 
           <div className="flex justify-center mb-12">
             <div className="flex flex-col items-center w-full max-w-4xl">
-              {/* Super Admin */}
               <div className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl shadow-lg z-10 flex flex-col items-center">
                 <span>SUPERADMIN</span>
                 <span className="text-[10px] font-normal text-navy-300 mt-0.5 uppercase tracking-wide">Network Control</span>
               </div>
-              
-              {/* Branching Lines */}
               <div className="w-full flex justify-center mt-[-2px]">
                 <div className="w-px h-8 bg-gray-300"></div>
               </div>
@@ -670,8 +564,6 @@ const Home = () => {
                 <div className="w-px h-8 bg-gray-300"></div>
                 <div className="w-px h-8 bg-gray-300 hidden sm:block"></div>
               </div>
-
-              {/* Centres */}
               <div className="w-full flex justify-center gap-4 sm:gap-16">
                 <div className="flex flex-col items-center">
                   <div className="bg-teal-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
@@ -683,7 +575,6 @@ const Home = () => {
                   <div className="w-px h-4 bg-gray-300"></div>
                   <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
-                
                 <div className="flex flex-col items-center">
                   <div className="bg-blue-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
                     <span>Centre B</span>
@@ -694,7 +585,6 @@ const Home = () => {
                   <div className="w-px h-4 bg-gray-300"></div>
                   <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
-
                 <div className="hidden sm:flex flex-col items-center">
                   <div className="bg-purple-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
                     <span>Centre C</span>
