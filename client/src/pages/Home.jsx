@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
-  FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle, FiFileText,
+  FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
   FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
   FiMapPin, FiPhone, FiMail, FiArrowDown, FiRefreshCw, FiClock, FiSettings, FiUser
 } from 'react-icons/fi';
