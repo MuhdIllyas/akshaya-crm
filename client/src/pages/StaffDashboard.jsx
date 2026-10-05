@@ -1,2078 +1,1603 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
+import React, { useState, useEffect, useMemo, useRef } from 'react'; 
 import { 
-  FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
-  FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
-  FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign, FiGlobe,
-  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink
+  FiUser, FiUserCheck, FiCalendar, FiTarget, 
+  FiBarChart2, FiPercent, FiBriefcase, FiDollarSign,
+  FiTrendingUp, FiCheckCircle, FiAward, FiUsers,
+  FiArrowLeft, FiX, FiFilter, FiDownload, FiMoreVertical,
+  FiActivity, FiStar, FiClock, FiTrendingDown, FiSearch,
+  FiChevronRight, FiRefreshCw, FiEye, FiFileText
 } from 'react-icons/fi';
-import { getCategories, getTokens } from '/src/services/serviceService';
-import { getWalletsForCentre } from '@/services/walletService';
-import { postAttendance } from '/src/services/salaryService';
-import QuickServiceModal from '@/components/QuickServiceModal';
-import api from '@/services/serviceService';
-import { socket } from '@/services/socket';
+import { motion, AnimatePresence } from 'framer-motion';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
+import StaffTargetsPanel from "./StaffTargetsPanel";
+import StaffTargetHistory from "./StaffTargetHistory";
 
-// Helper functions
-const formatCurrency = (amount) => {
-  if (amount === undefined || amount === null) return '₹0';
-  return `₹${Number(amount).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-};
+// Local-date formatter (YYYY-MM-DD). toISOString() converts to UTC, which shifts
+// the date back by a day in IST (e.g. 1 Oct 00:00 IST -> 30 Sep).
+const toLocalISO = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-const formatDate = (date) => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-};
+const formatINR = (value) =>
+  Number(value || 0).toLocaleString("en-IN");
 
-// Stat Card Component
-const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
+// Compact StatCard Component (same as WalletsSection)
+const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 p-5"
+    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer p-3"
+    onClick={onClick}
   >
     <div className="flex items-center justify-between">
       <div>
-        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
-        {loading ? (
-          <div className="h-8 w-20 bg-gray-200 animate-pulse rounded"></div>
-        ) : (
-          <p className="font-bold text-gray-900 text-2xl">{value}</p>
-        )}
-        {subtitle && <p className="text-gray-500 text-sm mt-1">{subtitle}</p>}
+        <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
+        <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+        <div className="flex items-center">
+          <p className="text-gray-500 text-xs">{subtitle}</p>
+          {trend && (
+            <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+              {trend > 0 ? <FiTrendingUp className="mr-1" /> : <FiTrendingDown className="mr-1" />}
+              {Math.abs(trend)}%
+            </span>
+          )}
+        </div>
       </div>
-      <div className={`rounded-xl ${color} p-3`}>
-        <Icon className="text-white h-6 w-6" />
+      <div className={`rounded-lg ${color} p-2`}>
+        <Icon className="text-white h-4 w-4" />
       </div>
     </div>
   </motion.div>
 );
 
-const StaffDashboard = () => {
-  const navigate = useNavigate();
-  const [tokens, setTokens] = useState([]);
-  const [categories, setCategories] = useState([]);
-  const [recentServiceEntries, setRecentServiceEntries] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [todayAttendance, setTodayAttendance] = useState(null);
-  const [attendanceLoading, setAttendanceLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [activeDate, setActiveDate] = useState('today');
-  const [activeView, setActiveView] = useState('active');
-  const [workspaceTab, setWorkspaceTab] = useState('tokens');
-  const staffId = localStorage.getItem('id')?.trim();
-  const centreId = localStorage.getItem('centre_id')?.trim();
-  const [showQuickService, setShowQuickService] = useState(false);
-  const [wallets, setWallets] = useState([]);
-  const [onlineBookings, setOnlineBookings] = useState([]);
-  const [processingBookings, setProcessingBookings] = useState([]);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
+// Updated InfoTooltip component with proper positioning
+const InfoTooltip = ({ content, placement = "top", children }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const tooltipRef = useRef(null);
 
-  // Period state (same as StaffPerformance)
-  const [period, setPeriod] = useState('month');
-  const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [performanceLoading, setPerformanceLoading] = useState(false);
-
-  // Performance metrics from backend
-  const [performance, setPerformance] = useState({
-    completionRate: 0,
-    avgTransactionValue: 0,
-    customerSatisfaction: 'N/A',
-    totalServices: 0,
-    totalCollected: 0,
-    collectionRate: 0,
-    incentiveScore: 0,
-    avgRating: 0,
-    totalReviews: 0,
-    monthlyTarget: 0,
-    currentAchieved: 0,
-    dailyTarget: 0,
-    todayAchieved: 0,
-    targetProgress: 0,
-    targetHistory: [] ,
-  });
-
-  // Cancel modal state
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelTokenData, setCancelTokenData] = useState(null);
-  const [cancelReason, setCancelReason] = useState('');
-  const [cancelling, setCancelling] = useState(false);
-
-  // --- Tasks & Events State ---
-  const [myTasks, setMyTasks] = useState([]);
-  const [upcomingEvents, setUpcomingEvents] = useState([]);
-
-  // Dynamic Auto-Cycling States
-  const [activeEventTab, setActiveEventTab] = useState('All');
-  const [isEventsHovered, setIsEventsHovered] = useState(false);
-
-  const getEventDayLabel = (dateStr) => {
-    const date = new Date(dateStr);
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
-    return date.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  // Application Tracking State
-  const [trackingStats, setTrackingStats] = useState({ total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
-  const [trackingEntries, setTrackingEntries] = useState([]);
-  const [statView, setStatView] = useState('applications'); 
-  const [activeAppView, setActiveAppView] = useState('active');
-
-  // --- Welcome banner state ---
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const staffName = localStorage.getItem('username') || 'Staff';
-  const staffInitials = staffName
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || 'ST';
-
-  // Photo Formatting
-  const [imageError, setImageError] = useState(false);
-  const rawPhoto = localStorage.getItem('photo') ;
-  
-  let staffPhotoUrl = null;
-  if (rawPhoto && rawPhoto !== 'null' && rawPhoto !== 'undefined') {
-    staffPhotoUrl = rawPhoto.startsWith('http') || rawPhoto.startsWith('data:image') 
-      ? rawPhoto 
-      : `${import.meta.env.VITE_API_URL}${rawPhoto}`;
-  }
-
-  const fetchTrackingData = useCallback(async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      // Explicitly pass the staffId to force the backend to return ONLY this user's data
-      const [statsRes, entriesRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats?staff=${staffId}`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/entries?staff=${staffId}&limit=100`, { headers })
-      ]);
-
-      if (!statsRes.ok) throw new Error('Failed to fetch tracking stats');
-      if (!entriesRes.ok) throw new Error('Failed to fetch tracking entries');
-
-      const statsData = await statsRes.json();
-      const entriesData = await entriesRes.json();
-
-      setTrackingStats(statsData || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
-      
-      // The /entries endpoint wraps the array inside a 'data' property
-      const entries = entriesData.data || [];
-      setTrackingEntries(entries);
-    } catch (err) {
-      console.error('Error fetching tracking data:', err);
-    }
-  }, [staffId]); // Added staffId to dependencies
-
-  // Update clock every minute
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
-    return () => clearInterval(timer);
-  }, []);
-
-  const getGreeting = () => {
-    const hour = currentTime.getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 17) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  const formatCurrentTime = (date) =>
-    date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
-  const formatCurrentDate = (date) =>
-    date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
-
-  // --- Socket global listeners ---
-  useEffect(() => {
-    const onConnectError = (error) => {
-      if (error.message === 'Socket authentication failed') {
-        toast.error('Session expired. Please login again.');
+    const handleClickOutside = (event) => {
+      if (tooltipRef.current && !tooltipRef.current.contains(event.target)) {
+        setIsVisible(false);
       }
     };
 
-    socket.on('connect_error', onConnectError);
-
+    if (isVisible) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
     return () => {
-      socket.off('connect_error', onConnectError);
+      document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, []);
-
-
-  // --- Refresh tokens (unchanged) ---
-  const refreshTokens = useCallback(async () => {
-    try {
-      const tokensRes = await getTokens(centreId, 'all');
-      setTokens(tokensRes.data || []);
-      setLastUpdated(new Date());
-    } catch (err) {
-      console.error('Error refreshing tokens:', err);
-    }
-  }, [centreId]);
-
-  // --- Fetch Entire Workspace (Hybrid BFF) ---
-  const fetchWorkspaceInit = useCallback(async () => {
-    try {
-      setPerformanceLoading(true);
-      const token = localStorage.getItem('token');
-      let params = new URLSearchParams();
-      
-      if (period === 'custom' && customDateRange.from && customDateRange.to) {
-        params.append('from', customDateRange.from);
-        params.append('to', customDateRange.to);
-        params.append('period', 'custom');
-      } else {
-        params.append('period', period);
-      }
-      
-      const response = await fetch(
-        `${import.meta.env.VITE_API_URL}/api/staffperformance/workspace-init?${params.toString()}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      
-      if (!response.ok) throw new Error('Failed to fetch workspace data');
-      
-      const result = await response.json();
-      const { performance: perfData, tasks, events, recentActivity, onlinePending, onlineProcessing, todayAttendance: att } = result.data;
-
-      setTodayAttendance(att);
-      
-      // 1. Set Performance
-      setPerformance({
-        completionRate: perfData.summary.collection_rate || 0,
-        avgTransactionValue: perfData.summary.avg_transaction_value || 0,
-        customerSatisfaction: perfData.ratings?.avg_rating ? `${perfData.ratings.avg_rating}/5` : 'N/A',
-        totalServices: perfData.summary.total_services || 0,
-        totalCollected: perfData.summary.total_collected || 0,
-        collectionRate: perfData.summary.collection_rate || 0,
-        incentiveScore: perfData.summary.incentive_score || 0,
-        avgRating: perfData.ratings?.avg_rating || 0,
-        totalReviews: perfData.ratings?.total_reviews || 0,
-
-        monthlyTarget: perfData.target?.monthly_target || 0,
-        currentAchieved: perfData.target?.current_achieved || 0,
-        dailyTarget: perfData.target?.daily_target || 0,
-        todayAchieved: perfData.target?.today_achieved || 0, 
-        targetProgress: perfData.target?.progress_percentage || 0,
-        targetHistory: perfData.target?.history || [],
-      });
-
-      // 2. Set Tasks & Events with STRICT isolation
-      // Only keep tasks assigned strictly to this staff member
-      setMyTasks(tasks || []);
-      
-      const validEvents = (events || [])
-        .filter(e => {
-          if (!e.assigned_to) return true;
-          return String(e.assigned_to) === String(staffId);
-        })
-        // 🔥 Flip 'a' and 'b' to sort in descending order (largest dates first)
-        .sort((a, b) => new Date(b.date || b.start_datetime) - new Date(a.date || a.start_datetime));
-      setUpcomingEvents(validEvents);
-
-      // 3. Set Activities & Bookings
-      setRecentServiceEntries(recentActivity || []);
-      setOnlineBookings(onlinePending || []);
-      setProcessingBookings(onlineProcessing || []);
-
-    } catch (err) {
-      console.error('Error fetching workspace:', err);
-      toast.error('Failed to load workspace data');
-    } finally {
-      setPerformanceLoading(false);
-    }
-  }, [period, customDateRange]);
-
-  // --- Auto-cycle Events Tabs ---
-  useEffect(() => {
-    if (isEventsHovered || upcomingEvents.length === 0) return;
-    const tabs = ['All', 'Tasks', 'Deliveries', 'Expiries', 'Days'];
-    
-    const interval = setInterval(() => {
-      setActiveEventTab(prev => {
-        const currentIndex = tabs.indexOf(prev);
-        return tabs[(currentIndex + 1) % tabs.length];
-      });
-    }, 5000); // Rotates every 5 seconds
-    
-    return () => clearInterval(interval);
-  }, [isEventsHovered, upcomingEvents.length]);
-
-  const handleCompleteTask = async (taskId) => {
-    try {
-      const tasksUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-      await api.patch(`/${taskId}/status`, { status: 'completed' }, { baseURL: tasksUrl });
-      toast.success('Task completed!');
-      fetchWorkspaceInit(); // 👈 And this here!
-    } catch (err) {
-      toast.error('Failed to complete task');
-    }
-  };
-
-  // 🔥 Navigation Handler for Calendar Events
-  const handleViewService = (event) => {
-    const eventIdStr = String(event.id || "");
-    let targetTrackingId;
-    
-    // 1. FOR EXPIRIES
-    if (eventIdStr.startsWith("expiry-")) {
-      targetTrackingId = event.tracking_id; 
-    } 
-    // 2. FOR DELIVERIES
-    else if (eventIdStr.startsWith("delivery-")) {
-      targetTrackingId = eventIdStr.replace("delivery-", ""); 
-    } 
-    // 3. FALLBACK FOR CUSTOM TASKS
-    else if (event.tracking_id) {
-      targetTrackingId = event.tracking_id;
-    }
-
-    if (targetTrackingId) {
-      navigate(`/dashboard/staff/track_service/${targetTrackingId}`); 
-    } else {
-      toast.error("Cannot open: No tracking steps exist for this service yet.");
-    }
-  };
-
-  // Load wallets (unchanged)
-  useEffect(() => {
-    getWalletsForCentre().then(setWallets).catch(() => toast.error('Failed to load wallets'));
-  }, []);
-
-  // Initial data fetch
-  useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        if (!staffId || !centreId) throw new Error('Missing staff or centre ID');
-        
-        // Load the 3 main pillars concurrently
-        await Promise.all([
-          getCategories().then(res => setCategories(res.data || [])),
-          refreshTokens(),
-          fetchWorkspaceInit(),
-          fetchTrackingData()
-        ]);
-        
-      } catch (err) {
-        setError('Failed to load dashboard data: ' + (err.response?.data?.error || err.message));
-        toast.error('Failed to load dashboard data');
-      } finally {
-        setLoading(false);
-      }
-    };
-    
-    fetchData();
-  }, [staffId, centreId, refreshTokens, fetchWorkspaceInit]);
-
-  const isMounted = useRef(false);
-
-  // Refetch when period changes
-  useEffect(() => {
-    if (isMounted.current && !loading) {
-      fetchWorkspaceInit();
-    } else if (!loading) {
-      isMounted.current = true;
-    }
-  }, [period, customDateRange, fetchWorkspaceInit, loading]);
-
-  // --- Socket events (unchanged) ---
-  useEffect(() => {
-    const onTokenUpdate = (data) => {
-      setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
-      refreshTokens();
-    };
-    const onCentreTokenUpdate = (data) => {
-      setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
-      refreshTokens();
-    };
-    const onNewToken = (data) => {
-      toast.info(data.message || 'New token created');
-      refreshTokens();
-    };
-    const onTokenReassigned = (data) => {
-      toast.info(data.message || 'Token reassigned');
-      refreshTokens();
-    };
-    const onServiceEntryCreated = async (data) => {
-      const entryStaffId = String(data.staff_id || '').trim();
-      if (!entryStaffId || entryStaffId === String(staffId).trim()) {
-        await refreshTokens();
-        await fetchWorkspaceInit();
-      }
-    };
-
-    socket.on('tokenUpdate', onTokenUpdate);
-    socket.on(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
-    socket.on('newToken', onNewToken);
-    socket.on('tokenReassigned', onTokenReassigned);
-    socket.on('serviceEntryCreated', onServiceEntryCreated);
-
-    return () => {
-      socket.off('tokenUpdate', onTokenUpdate);
-      socket.off(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
-      socket.off('newToken', onNewToken);
-      socket.off('tokenReassigned', onTokenReassigned);
-      socket.off('serviceEntryCreated', onServiceEntryCreated);
-    };
-  }, [centreId, staffId, refreshTokens, fetchWorkspaceInit]);
-
-  // --- Helper functions (unchanged) ---
-  const getCategoryName = (id) => categories.find(c => c.id === id)?.name || 'N/A';
-  const getSubcategoryName = (catId, subId) => {
-    const cat = categories.find(c => c.id === catId);
-    return cat?.subcategories?.find(s => s.id === subId)?.name || 'N/A';
-  };
-  const shortenTokenId = (tokenId) => tokenId ? `#${tokenId.split('-').pop()}` : 'N/A';
-  const handleStartService = async (tokenId, tokenStaffId, tokenStatus) => {
-    try {
-      if (!tokenStaffId || tokenStaffId === 'null' || tokenStaffId === '') {
-        await api.put(`/token/${tokenId}/assign`, { staffId });
-      }
-      if (tokenStatus === 'pending') {
-        await api.put(`/token/${tokenId}/status`, { status: 'in-progress' });
-      }
-      navigate(`/dashboard/staff/token/${tokenId}/service`);
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to start service. Someone else might have already taken it.');
-      refreshTokens(); 
-    }
-  };
-  const openCancelModal = (token) => {
-    setCancelTokenData({ tokenId: token.tokenId, customerName: token.customerName || 'Customer' });
-    setCancelReason('');
-    setShowCancelModal(true);
-  };
-
-  const handleCancelConfirm = async () => {
-    if (!cancelTokenData) return;
-    setCancelling(true);
-    try {
-      await api.put(`/tokens/${cancelTokenData.tokenId}/cancel`, { 
-        reason: cancelReason.trim() || null 
-      });
-      toast.success(`Token ${cancelTokenData.tokenId} cancelled successfully`);
-      setShowCancelModal(false);
-      setCancelTokenData(null);
-      setCancelReason('');
-      refreshTokens(); // Refresh the list to remove the token
-    } catch (err) {
-      console.error(err);
-      toast.error(err.response?.data?.error || 'Failed to cancel token');
-    } finally {
-      setCancelling(false);
-    }
-  };
-  const handleViewDetails = (tokenId, trackingId) => {
-    if (trackingId) {
-      navigate(`/dashboard/staff/track_service/${trackingId}`);
-    } else if (tokenId) {
-      // Fallback just in case it's a legacy token without a tracking entry
-      navigate(`/dashboard/staff/token/${tokenId}/details`);
-    } else {
-      toast.info("No tracking details available for this quick service.");
-    }
-  };
-  const formatTime = (dateString) => new Date(dateString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  const formatDateUI = (dateString) => {
-    const date = new Date(dateString);
-    const today = new Date();
-    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    if (date.toDateString() === today.toDateString()) return 'Today';
-    if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-  };
-
-  // Token filtering optimized with useMemo
-  const { activeTokens, completedTokens, campaignTokens, statusCounts } = useMemo(() => {
-    const localStaff = String(staffId).trim();
-
-    const active = tokens.filter(t => {
-      const tokenStaff = String(t.staffId || '').trim();
-      const isAssignedToMe = tokenStaff === localStaff;
-      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.status !== 'cancelled';
-    });
-
-    const completed = tokens.filter(t => {
-      const tokenStaff = String(t.staffId || '').trim();
-      return tokenStaff === localStaff && t.status === 'completed' && t.type !== 'campaign';
-    });
-
-    const campaign = tokens.filter(t => {
-      const tokenStaff = String(t.staffId || '').trim();
-      const isAssignedToMe = tokenStaff === localStaff;
-      const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      return (isAssignedToMe || isUnassigned) && t.type === 'campaign' && t.status !== 'cancelled';
-    });
-
-    return {
-      activeTokens: active,
-      completedTokens: completed,
-      campaignTokens: campaign,
-      statusCounts: {
-        pending: active.filter(t => t.status === 'pending').length,
-        inProgress: active.filter(t => t.status === 'in-progress' || t.status === 'processing').length,
-        completed: completed.length,
-        campaign: campaign.length,
-        total: active.length + completed.length
-      }
-    };
-  }, [tokens, staffId]);
-
-  const filteredTokens = useMemo(() => {
-    let source = activeView === 'active' ? activeTokens : activeView === 'completed' ? completedTokens : campaignTokens;
-    
-    // 1. Calculate search string ONCE outside the loop (Performance)
-    const searchLower = searchQuery.toLowerCase().trim();
-    
-    // 2. Safely calculate Dates ONCE outside the loop
-    const todayObj = new Date();
-    todayObj.setHours(0, 0, 0, 0); // Normalize today to midnight
-    
-    const yesterdayObj = new Date(todayObj);
-    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-    
-    const weekAgoObj = new Date(todayObj);
-    weekAgoObj.setDate(weekAgoObj.getDate() - 7);
-
-    const todayStr = todayObj.toDateString();
-    const yesterdayStr = yesterdayObj.toDateString();
-
-    return source.filter(token => {
-      // 3. Safe string conversion to prevent crashes if a number is passed
-      const matchesSearch = !searchLower || 
-                            String(token.customerName || '').toLowerCase().includes(searchLower) ||
-                            String(token.tokenId || '').toLowerCase().includes(searchLower) ||
-                            String(token.phone || '').toLowerCase().includes(searchLower);
-
-      // 4. Accurate date matching ignoring the exact hour/minute
-      const tokenDateObj = new Date(token.createdAt);
-      tokenDateObj.setHours(0, 0, 0, 0);
-      const tokenDateStr = tokenDateObj.toDateString();
-
-      const matchesDate = activeDate === 'today' ? tokenDateStr === todayStr :
-                          activeDate === 'yesterday' ? tokenDateStr === yesterdayStr :
-                          activeDate === 'week' ? tokenDateObj >= weekAgoObj : 
-                          true; // Fallback for 'all'
-
-      return matchesSearch && matchesDate;
-    });
-  }, [activeTokens, completedTokens, campaignTokens, activeView, searchQuery, activeDate]);
-
-  const groupedTokens = useMemo(() => {
-    const grouped = {};
-    filteredTokens.forEach(token => {
-      const date = new Date(token.createdAt).toDateString();
-      if (!grouped[date]) grouped[date] = [];
-      grouped[date].push(token);
-    });
-    return Object.entries(grouped)
-      .sort(([a], [b]) => new Date(b) - new Date(a))
-      .reduce((acc, [date, arr]) => ({ ...acc, [date]: arr.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)) }), {});
-  }, [filteredTokens]);
-
-  const groupedRecentActivities = useMemo(() => {
-    return recentServiceEntries.reduce((acc, entry) => {
-      const date = new Date(entry.created_at).toDateString();
-      if (!acc[date]) acc[date] = [];
-      acc[date].push(entry);
-      return acc;
-    }, {});
-  }, [recentServiceEntries]);
-
-  const filteredApplications = useMemo(() => {
-    let source = trackingEntries;
-    
-    // 1. Filter by Tab View
-    if (activeAppView === 'active') {
-      source = source.filter(app => ['pending', 'in_progress', 'resubmit'].includes(app.status));
-    } else if (activeAppView === 'completed') {
-      source = source.filter(app => ['completed', 'paid'].includes(app.status));
-    } else if (activeAppView === 'delayed') {
-      source = source.filter(app => ['rejected', 'delayed'].includes(app.status));
-    }
-
-    // 2. Filter by Search Query (Seamless integration with the top search bar)
-    const searchLower = searchQuery.toLowerCase().trim();
-    if (searchLower) {
-      source = source.filter(app => 
-        String(app.customer_name || '').toLowerCase().includes(searchLower) ||
-        String(app.application_number || '').toLowerCase().includes(searchLower) ||
-        String(app.phone || '').toLowerCase().includes(searchLower)
-      );
-    }
-
-    return source;
-  }, [trackingEntries, activeAppView, searchQuery]);
-
-  const handleTakeWork = async (bookingId) => {
-    try {
-      await api.put(`/customer-services/${bookingId}/take`);
-      toast.success('Work assigned to you');
-      await fetchWorkspaceInit(); // 👈 Just call this to refresh everything!
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Already taken by another staff');
-    }
-  };
-
-  const handleQuickPunch = async () => {
-    try {
-      setAttendanceLoading(true);
-      const isPunchOut = todayAttendance && todayAttendance.punch_in && !todayAttendance.punch_out;
-      
-      // Get exact current time formatted for Asia/Kolkata to match backend validation perfectly
-      const now = new Date();
-      const formattedDate = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }); // YYYY-MM-DD
-      const formattedTime = now.toLocaleTimeString('en-GB', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-        timeZone: 'Asia/Kolkata'
-      }); // HH:mm
-      
-      // Send the exact payload the backend expects
-      await postAttendance({
-        punch_type: isPunchOut ? 'out' : 'in',
-        date: formattedDate,
-        time: formattedTime
-      });
-      
-      toast.success(`Successfully punched ${isPunchOut ? 'out' : 'in'}`);
-      await fetchWorkspaceInit(); // Instantly refresh the dashboard!
-    } catch (err) {
-      console.error('Attendance Punch Error:', err.response?.data || err.message);
-      toast.error(err.response?.data?.error || 'Failed to update attendance');
-    } finally {
-      setAttendanceLoading(false);
-    }
-  };
-
-  const handleStartOnlineService = (booking) => {
-    setProcessingBookings(prev => prev.filter(b => b.id !== booking.id));
-    navigate(`/dashboard/staff/online-service/${booking.id}`, {
-      state: {
-        customerServiceId: booking.id,
-        customerName: booking.customer_name,
-        phone: booking.phone,
-        categoryId: booking.service_id,
-        subcategoryId: booking.subcategory_id
-      }
-    });
-  };
-
-  const getStatusBadgeColor = (status) => {
-    switch(status) {
-      case 'completed': return 'bg-green-100 text-green-800';
-      case 'in-progress': case 'processing': return 'bg-blue-100 text-blue-800';
-      case 'pending': return 'bg-amber-100 text-amber-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
-  };
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'completed': return <FiCheckCircle className="h-4 w-4 text-green-500" />;
-      case 'in-progress': case 'processing': return <FiPlayCircle className="h-4 w-4 text-blue-500" />;
-      case 'pending': return <FiClock className="h-4 w-4 text-amber-500" />;
-      default: return null;
-    }
-  };
-
-  // history is newest-first; only months that had a real target count
-  const targetHistory = (performance.targetHistory || []).filter(h => h.target > 0);
-  const lastMonth = targetHistory[0];
-  const targetStreak = (() => {
-    let n = 0;
-    for (const h of targetHistory) { if (h.percent >= 100) n++; else break; }
-    return n;
-  })();
-
-  // ── STEP 1: derived values (Glance strip) ────────────────────────────
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  // Tasks tile
-  const overdueTasks = myTasks.filter(t => t.due_date && new Date(t.due_date) < todayStart);
-  const nextTask = [...myTasks]
-    .filter(t => t.due_date)
-    .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0] || null;
-
-  // Next event tile (upcomingEvents is sorted newest-first, so pick the nearest future one)
-  const nextEvent = upcomingEvents
-    .map(e => ({ ...e, _d: new Date(e.date || e.start_datetime) }))
-    .filter(e => !isNaN(e._d) && e._d >= todayStart)
-    .sort((a, b) => a._d - b._d)[0] || null;
-
-  // Score tile
-  const scoreLabel =
-    performance.incentiveScore >= 80 ? 'Excellent' :
-    performance.incentiveScore >= 60 ? 'Good' :
-    performance.incentiveScore >= 40 ? 'Average' : 'Needs improvement';
-  const scoreColor =
-    performance.incentiveScore >= 80 ? 'bg-emerald-500' :
-    performance.incentiveScore >= 60 ? 'bg-amber-400' : 'bg-rose-500';
-
-  const barColor = (p) => (p >= 100 ? 'bg-emerald-500' : p >= 50 ? 'bg-amber-400' : 'bg-rose-500');
-  const scrollToPerf = () =>
-    document.getElementById('perf-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  if (loading) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center"><div className="w-12 h-12 border-3 border-gray-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="text-gray-600">Loading dashboard...</p></div>
-    </div>
-  );
-  if (error) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-lg p-8 max-w-md w-full border border-gray-200 text-center">
-        <FiAlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
-        <h3 className="text-lg font-semibold text-gray-900 mb-2">Data Loading Error</h3>
-        <p className="text-gray-600 mb-6">{error}</p>
-        <button onClick={() => window.location.reload()} className="px-6 py-3 bg-blue-700 text-white rounded-lg hover:bg-blue-800">Try Again</button>
-      </div>
-    </div>
-  );
-
-  // Find the wallet assigned to the logged-in staff member
-  const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
+  }, [isVisible]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-
-      {/* ===== DARK BLUE WELCOME BANNER ===== */}
-      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
-            <div className="flex-1">
-              <div className="flex items-start gap-4 mb-3">
-                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold flex-shrink-0 overflow-hidden shadow-sm">
-                  {staffPhotoUrl && !imageError ? (
-                    <img 
-                      src={staffPhotoUrl} 
-                      alt="Profile" 
-                      className="w-full h-full object-cover"
-                      onError={() => setImageError(true)} 
-                    />
-                  ) : (
-                    staffInitials
-                  )}
-                </div>
-                <div>
-                  <h2 className="text-2xl font-bold">
-                    {getGreeting()}, {staffName}!
-                  </h2>
-                  <p className="text-white/80 text-lg mt-0.5">
-                    Welcome back to your workspace.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-6">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 bg-green-400 rounded-full"></span>
-                  <span>Online</span>
-                </div>
-                <button
-                  onClick={() => navigate('/dashboard/my-profile')}
-                  className="underline hover:text-white/80"
-                >
-                  View Profile
-                </button>
-              </div>
-              <div>
-                <p className="text-xs uppercase tracking-wider text-white/70 mb-2 font-semibold">Quick Actions</p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => navigate('/dashboard/staff/token')}
-                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
-                  >
-                    New Token
-                  </button>
-                  <button
-                    onClick={() => setShowQuickService(true)}
-                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
-                  >
-                    Quick Service
-                  </button>
-                  <button
-                    onClick={() => navigate('/dashboard/staff/performance')}
-                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
-                  >
-                    View Reports
-                  </button>
-                </div>
-              </div>
-            </div>
-            <div className="md:text-right">
-              <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
-              <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
-            </div>
-          </div>
-          <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            🎯 New monthly target set! 📊 Track progress live, ✅ meet your daily goal. Let's hit it! 🚀
-          </div>
-        </div>
-      </div>
-
-      {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
+    <div 
+      ref={tooltipRef}
+      className="relative inline-block"
+      onMouseEnter={() => setIsVisible(true)}
+      onMouseLeave={() => setIsVisible(false)}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children || <FiEye className="h-3 w-3 text-gray-400 cursor-pointer hover:text-gray-600" />}
+      
       <AnimatePresence>
-        {!loading && (
+        {isVisible && (
           <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className={`border-l-4 shadow-sm ${
-              !todayAttendance || !todayAttendance.punch_in 
-                ? 'bg-rose-50 border-rose-500' 
-                : (!todayAttendance.punch_out 
-                    ? 'bg-emerald-50 border-emerald-500' 
-                    : 'bg-amber-50 border-amber-500')
-            }`}
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className={`absolute z-[100] ${placement === 'top' ? 'bottom-full left-0 mb-2' : 'top-full left-0 mt-2'} min-w-[240px] max-w-[280px]`}
+            style={{
+              left: '50%',
+              transform: 'translateX(-50%)',
+            }}
           >
-            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                {!todayAttendance || !todayAttendance.punch_in ? (
-                  <>
-                    <div className="p-2 bg-rose-100 rounded-full">
-                      <FiAlertCircle className="h-5 w-5 text-rose-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-rose-900">You haven't punched in yet!</h3>
-                      <p className="text-xs text-rose-700 mt-0.5">Please punch in to start tracking your hours for today.</p>
-                    </div>
-                  </>
-                ) : !todayAttendance.punch_out ? (
-                  <>
-                    <div className="p-2 bg-emerald-100 rounded-full">
-                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
-                      <p className="text-xs text-emerald-700 mt-0.5">
-                        Since {new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="p-2 bg-amber-100 rounded-full">
-                      <FiClock className="h-5 w-5 text-amber-600" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
-                      <p className="text-xs text-amber-700 mt-0.5">
-                        Punched out at {new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}. Remember to punch back in!
-                      </p>
-                    </div>
-                  </>
-                )}
-              </div>
-              <button
-                onClick={handleQuickPunch}
-                disabled={attendanceLoading}
-                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
-                  !todayAttendance || !todayAttendance.punch_in 
-                    ? 'bg-rose-600 hover:bg-rose-700' 
-                    : (!todayAttendance.punch_out 
-                        ? 'bg-gray-800 hover:bg-gray-900' 
-                        : 'bg-amber-600 hover:bg-amber-700')
-                }`}
-              >
-                {attendanceLoading ? 'Processing...' : (!todayAttendance || !todayAttendance.punch_in ? 'Punch In Now' : (!todayAttendance.punch_out ? 'Punch Out' : 'Punch Back In'))}
-              </button>
+            <div className="relative bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl">
+              {content}
+              <div 
+                className={`absolute w-3 h-3 bg-gray-900 transform rotate-45 ${placement === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2' : '-top-1.5 left-1/2 -translate-x-1/2'}`}
+              />
             </div>
           </motion.div>
         )}
       </AnimatePresence>
-      {/* ========================================= */}
-      
-      {/* Original Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="px-6 py-6">
-          <div className="flex items-center justify-between flex-wrap gap-4">
-            <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
-                <FiTrendingUp className="text-white h-6 w-6" />
-              </div>
-              <div>
-                <h1 className="font-bold text-gray-900 text-2xl">Service Dashboard</h1>
-                <p className="text-gray-600 text-sm">Manage tokens, track services, and view performance</p>
-              </div>
-            </div>
-            <div className="flex items-center space-x-3">
-              {/* Period Selector */}
-              <div className="relative">
-                <button
-                  onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <FiCalendar className="h-4 w-4 text-gray-500" />
-                  <span className="text-sm">
-                    {period === 'today' && 'Today'}
-                    {period === 'week' && 'This Week'}
-                    {period === 'month' && 'This Month'}
-                    {period === 'quarter' && 'This Quarter'}
-                    {period === 'year' && 'This Year'}
-                    {period === 'custom' && 'Custom Range'}
-                  </span>
-                  <FiChevronRight className="h-4 w-4 text-gray-500 transform rotate-90" />
-                </button>
-                
-                <AnimatePresence>
-                  {showDatePicker && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setShowDatePicker(false)} />
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
-                      >
-                        <div className="p-3">
-                          <button
-                            onClick={() => { setPeriod('today'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'today' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            Today
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('week'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'week' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Week
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('month'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'month' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Month
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('quarter'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'quarter' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Quarter
-                          </button>
-                          <button
-                            onClick={() => { setPeriod('year'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'year' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
-                          >
-                            This Year
-                          </button>
-                          <div className="border-t border-gray-200 my-2"></div>
-                          <div className="space-y-2">
-                            <input
-                              type="date"
-                              value={customDateRange.from}
-                              onChange={(e) => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                              placeholder="From Date"
-                            />
-                            <input
-                              type="date"
-                              value={customDateRange.to}
-                              onChange={(e) => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                              placeholder="To Date"
-                            />
-                            <button
-                              onClick={() => { setPeriod('custom'); setShowDatePicker(false); }}
-                              className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
-                            >
-                              Apply
-                            </button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </>
-                  )}
-                </AnimatePresence>
-              </div>
-              
-              <span className="text-xs text-gray-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
-              <button
-                onClick={refreshTokens}
-                className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-                title="Refresh"
-              >
-                <FiRefreshCw className="h-4 w-4 text-gray-600" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="p-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="max-w-7xl mx-auto">
-          
-          {/* Floating Action Button */}
-          <button
-            onClick={() => setShowQuickService(true)}
-            className="fixed bottom-8 right-8 bg-blue-700 text-white p-4 rounded-full shadow-lg hover:bg-blue-800 transition-all z-20"
-          >
-            <FiPlus className="h-6 w-6" />
-          </button>
-
-          {/* Search & Filter Bar + Wallet Pill */}
-          <div className="flex flex-wrap gap-4 mb-6 items-center">
-            <div className="relative flex-1 max-w-md">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search by token, customer name, or phone..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <select value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2.5">
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="week">This Week</option>
-              <option value="all">All Time</option>
-            </select>
-
-            {/* ----- Ultra‑Compact Wallet Pill ----- */}
-            {myWallet && (
-              <motion.div
-                whileHover={{ y: -1 }}
-                className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-              >
-                <div className="p-1 bg-indigo-100 rounded-full">
-                  <FiBriefcase className="h-3.5 w-3.5 text-indigo-600" />
-                </div>
-                <span className="text-sm font-medium text-gray-700">
-                  {myWallet.name}
-                </span>
-                <span className="text-sm font-bold text-gray-900">
-                  {formatCurrency(myWallet.balance)}
-                </span>
-              </motion.div>
-            )}
-          </div>
-
-          {/* Stats Toggle Header */}
-          <div className="flex items-center justify-between mb-4 mt-2">
-            <h3 className="text-lg font-bold text-gray-900">Overview Metrics</h3>
-            <div className="bg-gray-100 p-1 rounded-lg inline-flex">
-              <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
-              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
-            </div>
-          </div>
-
-          {/* Stats Row */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-            {statView === 'applications' ? (
-              <>
-                <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-gray-600" />
-                <StatCard title="Pending" value={trackingStats.pending || 0} icon={FiClock} color="bg-amber-500" />
-                <StatCard title="In Progress" value={trackingStats.in_progress || 0} icon={FiPlayCircle} color="bg-blue-500" />
-                <StatCard title="Completed" value={trackingStats.completed || 0} icon={FiCheckCircle} color="bg-green-500" />
-                <StatCard title="Delayed" value={trackingStats.delayed || 0} icon={FiAlertCircle} color="bg-rose-500" />
-              </>
-            ) : (
-              <>
-                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
-                <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
-                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
-                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
-                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
-              </>
-            )}
-          </div>
-
-          {/* ===== STEP 2: GLANCE STRIP ===== */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr] gap-4 mb-6">
-
-            {/* Target */}
-            <div
-              onClick={scrollToPerf}
-              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-gray-600 flex items-center">
-                  <FiTarget className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                  Target (+10% Growth)
-                </p>
-                {!performanceLoading && performance.monthlyTarget > 0 && (
-                  <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
-                    {performance.targetProgress.toFixed(0)}%
-                  </span>
-                )}
-              </div>
-
-              {performanceLoading ? (
-                <div className="h-14 bg-gray-200 animate-pulse rounded" />
-              ) : performance.monthlyTarget > 0 ? (
-                <>
-                  <div className="flex justify-between items-baseline text-sm mb-1">
-                    <span className="font-black text-gray-900">{formatCurrency(performance.currentAchieved)}</span>
-                    <span className="text-xs text-gray-500">of {formatCurrency(performance.monthlyTarget)}</span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
-                         style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
-                  </div>
-
-                  <div className="flex justify-between text-[11px] text-gray-500 mt-2.5 mb-1">
-                    <span>Today's goal</span>
-                    <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-600' : ''}>
-                      {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                      style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-gray-400 py-3">No target set for this month yet</p>
-              )}
-            </div>
-
-            {/* Score */}
-            <div
-              onClick={scrollToPerf}
-              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
-            >
-              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
-                <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                Performance score
-              </p>
-              {performanceLoading ? (
-                <div className="h-14 bg-gray-200 animate-pulse rounded" />
-              ) : (
-                <>
-                  <p className="text-2xl font-black text-gray-900">{performance.incentiveScore}%</p>
-                  <p className="text-[11px] text-gray-500 mb-2">{scoreLabel}</p>
-                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
-                    <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
-                  </div>
-                </>
-              )}
-            </div>
-
-            {/* Tasks */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
-                <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                Pending tasks
-              </p>
-              <p className="text-2xl font-black text-gray-900">{myTasks.length}</p>
-              {overdueTasks.length > 0 ? (
-                <p className="text-[11px] font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
-              ) : nextTask ? (
-                <p className="text-[11px] text-gray-500 mt-1 truncate" title={nextTask.title}>
-                  Next: {nextTask.title}
-                </p>
-              ) : (
-                <p className="text-[11px] text-emerald-600 mt-1">All clear</p>
-              )}
-            </div>
-
-            {/* Next event */}
-            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
-                <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
-                Next event
-              </p>
-              {nextEvent ? (
-                <>
-                  <p className="text-sm font-bold text-gray-900 line-clamp-2" title={nextEvent.title}>{nextEvent.title}</p>
-                  <p className="text-[11px] text-gray-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
-                </>
-              ) : (
-                <p className="text-xs text-gray-400">Nothing upcoming</p>
-              )}
-            </div>
-          </div>
-
-          {/* Two‑Column Layout */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
-            
-            {/* Left Column – Unified Workspace */}
-            <div className="xl:col-span-2 flex flex-col gap-6">
-              
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[850px]">
-                
-                {/* Master Workspace Tabs */}
-                <div className="flex p-3 border-b border-gray-200 bg-gray-50/80 gap-2 overflow-x-auto hide-scrollbar">
-                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
-                    <FiUsers className="h-4 w-4" />
-                    Walk-in Tokens
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>{statusCounts.total}</span>
-                  </button>
-                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
-                    <FiGlobe className="h-4 w-4" />
-                    Online Queue
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{onlineBookings.length}</span>
-                  </button>
-                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
-                    <FiPlayCircle className="h-4 w-4" />
-                    My Online Work
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
-                  </button>
-                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-purple-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
-                    <FiTarget className="h-4 w-4" />
-                    Applications
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{trackingStats.total || 0}</span>
-                  </button>
-                </div>
-
-                {/* Workspace Content */}
-                <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 sm:p-6">
-                  
-                  {/* TAB 1: TOKENS */}
-                  {workspaceTab === 'tokens' && (
-                    <div className="space-y-4">
-                      {/* Sub-Tabs for Tokens */}
-                      <div className="flex gap-2 border-b border-gray-200 pb-3">
-                        {['active', 'completed', 'campaign'].map(tab => (
-                          <button
-                            key={tab}
-                            onClick={() => setActiveView(tab)}
-                            className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors ${
-                              activeView === tab ? 'bg-gray-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
-                            }`}
-                          >
-                            {tab}
-                          </button>
-                        ))}
-                      </div>
-
-                      {Object.keys(groupedTokens).length === 0 ? (
-                        <div className="text-center py-16 text-gray-400">
-                          <FiPlayCircle className="mx-auto h-12 w-12 mb-3 opacity-30"/>
-                          <p className="font-medium">No tokens found</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-6">
-                          {Object.entries(groupedTokens).map(([date, dateTokens]) => (
-                            <div key={date}>
-                              <div className="flex items-center gap-2 mb-3 pl-1">
-                                <FiCalendar className="h-4 w-4 text-indigo-500" />
-                                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">{formatDateUI(date)}</h3>
-                                <div className="h-px bg-gray-200 flex-1 ml-2"></div>
-                              </div>
-                              <div className="grid grid-cols-1 gap-3">
-                                {dateTokens.map(token => {
-                                  const isAssignedToMe = String(token.staffId || '').trim() === String(staffId).trim();
-                                  const isUnassigned = !token.staffId || token.staffId === 'null';
-                                  
-                                  return (
-                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all group">
-                                      <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
-                                          activeView === 'completed' ? 'bg-green-50 text-green-700 border border-green-100' :
-                                          activeView === 'campaign' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-                                          'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                                        }`}>
-                                          {shortenTokenId(token.tokenId)}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                          <div className="flex items-center gap-2 mb-0.5">
-                                            <h4 className="font-bold text-gray-900 text-sm truncate">{token.customerName || 'Customer'}</h4>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
-                                              {token.status?.replace('-', ' ')}
-                                            </span>
-                                            {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Mine</span>}
-                                          </div>
-                                          <p className="text-xs text-gray-500 truncate flex items-center gap-2">
-                                            <span className="font-medium text-gray-700">{getCategoryName(token.categoryId)}</span>
-                                            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                                            <span>{formatTime(token.createdAt)}</span>
-                                            {token.phone && <><span className="w-1 h-1 bg-gray-300 rounded-full"></span><span>{token.phone}</span></>}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      
-                                      <div className="flex items-center gap-2 pl-3 shrink-0">
-                                        {(activeView === 'active' || activeView === 'campaign') && (token.status === 'pending' || token.status === 'in-progress') && (isAssignedToMe || isUnassigned) && (
-                                          <>
-                                            <button 
-                                              onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
-                                              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
-                                            >
-                                              <FiPlayCircle className="h-3.5 w-3.5" /> {token.status === 'pending' ? 'Start' : 'Resume'}
-                                            </button>
-                                            <button 
-                                              onClick={() => openCancelModal(token)} 
-                                              className="p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors"
-                                              title="Cancel Token"
-                                            >
-                                              <FiXCircle className="h-4 w-4" />
-                                            </button>
-                                          </>
-                                        )}
-                                        {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
-                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
-                                            <FiBarChart2 className="h-3.5 w-3.5" /> Details
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* TAB 2: ONLINE QUEUE */}
-                  {workspaceTab === 'queue' && (
-                    <div className="space-y-3">
-                      {onlineBookings.length === 0 ? (
-                        <div className="text-center py-16 text-gray-400">
-                          <FiGlobe className="mx-auto h-12 w-12 mb-3 opacity-30"/>
-                          <p className="font-medium">No pending online bookings</p>
-                        </div>
-                      ) : (
-                        onlineBookings.map(booking => (
-                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-blue-100 rounded-xl hover:shadow-md transition-all group">
-                            <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
-                              <div className="min-w-0">
-                                <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
-                                <p className="text-xs text-gray-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                                <p className="text-[10px] text-gray-400 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
-                              </div>
-                            </div>
-                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm shrink-0 transition-colors">
-                              Take Work
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-
-                  {/* TAB 3: MY ONLINE WORK */}
-                  {workspaceTab === 'processing' && (
-                    <div className="space-y-3">
-                      {processingBookings.length === 0 ? (
-                        <div className="text-center py-16 text-gray-400">
-                          <FiCheckSquare className="mx-auto h-12 w-12 mb-3 opacity-30"/>
-                          <p className="font-medium">No active online work</p>
-                        </div>
-                      ) : (
-                        processingBookings.map(booking => (
-                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-emerald-100 rounded-xl hover:shadow-md transition-all group">
-                            <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
-                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Assigned to you</span>
-                                </div>
-                                <p className="text-xs text-gray-500 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                                <p className="text-[10px] text-gray-400 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
-                              </div>
-                            </div>
-                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
-                              <FiPlayCircle className="h-4 w-4" /> Start
-                            </button>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                
-                  {/* TAB 4: APPLICATIONS TRACKING */}
-                  {workspaceTab === 'applications' && (
-                    <div className="space-y-4">
-                      
-                      {/* Sub-Tabs for Applications */}
-                      <div className="flex gap-2 border-b border-gray-200 pb-3">
-                        {['active', 'completed', 'delayed'].map(tab => {
-                          // Calculate counts based on global stats for the badges
-                          let count = 0;
-                          if (tab === 'active') count = (trackingStats.pending || 0) + (trackingStats.in_progress || 0);
-                          if (tab === 'completed') count = (trackingStats.completed || 0);
-                          if (tab === 'delayed') count = (trackingStats.delayed || 0);
-
-                          return (
-                            <button
-                              key={tab}
-                              onClick={() => setActiveAppView(tab)}
-                              className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
-                                activeAppView === tab ? 'bg-purple-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
-                              }`}
-                            >
-                              {tab}
-                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeAppView === tab ? 'bg-white/20' : 'bg-gray-200 text-gray-500'}`}>
-                                {count}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-
-                      {/* Application List */}
-                      <div className="space-y-3">
-                        {filteredApplications.length === 0 ? (
-                          <div className="text-center py-16 text-gray-400">
-                            <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
-                            <p className="font-medium">No {activeAppView} applications found</p>
-                          </div>
-                        ) : (
-                          filteredApplications.map(app => (
-                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
-                              <div className="flex items-center gap-4 min-w-0">
-                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
-                                  activeAppView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                                  activeAppView === 'delayed' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-                                  'bg-purple-50 text-purple-700 border border-purple-100'
-                                }`}>
-                                  {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                                      app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                      app.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
-                                      app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                      app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
-                                      app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
-                                      'bg-gray-100 text-gray-700'
-                                    }`}>
-                                      {app.status?.replace('_', ' ')}
-                                    </span>
-                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
-                                      {app.progress}%
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-gray-500 truncate flex items-center gap-2">
-                                    <span className="font-medium">{app.service_name}</span>
-                                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
-                                    <span>{app.current_step || 'Submitted'}</span>
-                                  </p>
-                                  <p className="text-[10px] text-gray-400 mt-1 font-mono">
-                                    Last updated: {new Date(app.updated_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
-                                  </p>
-                                </div>
-                              </div>
-                              <button 
-                                onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
-                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
-                              >
-                                <FiBarChart2 className="h-4 w-4" /> Track
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column – Tasks & Events (Performance cards moved out) */}
-            <div className="space-y-6">
-
-              {/* ===== MY TASKS ===== */}
-              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                    <FiCheckSquare className="h-4 w-4 mr-2 text-indigo-600" />
-                    My Pending Tasks
-                  </h3>
-                  <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-0.5 rounded-full">
-                    {myTasks.length}
-                  </span>
-                </div>
-                
-                {myTasks.length === 0 ? (
-                  <div className="text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                    <p className="text-sm text-gray-500">No pending tasks! 🎉</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
-                    {myTasks.map(task => (
-                      <div key={task.id} className="flex gap-3 items-start p-3 border border-gray-100 rounded-lg bg-gray-50 hover:bg-white transition shadow-sm">
-                        <button 
-                          onClick={() => handleCompleteTask(task.id)}
-                          className="mt-0.5 text-gray-400 hover:text-emerald-500 transition-colors"
-                          title="Mark as complete"
-                        >
-                          <FiCheckCircle className="h-5 w-5" />
-                        </button>
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-800">{task.title}</p>
-                          {task.due_date && (
-                            <p className="text-xs text-rose-500 mt-1 flex items-center gap-1 font-medium">
-                              <FiClock className="h-3 w-3" /> Due {getEventDayLabel(task.due_date)}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
-              <div 
-                className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
-                onMouseEnter={() => setIsEventsHovered(true)}
-                onMouseLeave={() => setIsEventsHovered(false)}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                    <FiCalendar className="h-4 w-4 mr-2 text-indigo-600" />
-                    Upcoming Calendar
-                  </h3>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 flex items-center gap-1">
-                    {isEventsHovered ? <FiClock className="text-amber-500" /> : <FiPlayCircle className="text-emerald-500 animate-pulse" />}
-                    {isEventsHovered ? 'Paused' : 'Auto'}
-                  </span>
-                </div>
-
-                {/* Event Tabs */}
-                <div className="flex gap-2 mb-4 overflow-x-auto hide-scrollbar pb-1">
-                  {['All', 'Tasks', 'Deliveries', 'Expiries', 'Days'].map(tab => {
-                    const count = upcomingEvents.filter(e => {
-                      const displayKey = e.event_type || e.type;
-                      if (tab === 'All') return true;
-                      if (tab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
-                      if (tab === 'Deliveries') return e.source === 'service_delivery';
-                      if (tab === 'Expiries') return e.source === 'service_expiry';
-                      if (tab === 'Days') return ['working', 'holiday', 'weekend'].includes(displayKey);
-                      return false;
-                    }).length;
-
-                    return (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveEventTab(tab)}
-                        className={`text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
-                          activeEventTab === tab 
-                            ? 'bg-indigo-600 text-white shadow-md' 
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {tab} 
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeEventTab === tab ? 'bg-white/20' : 'bg-gray-200'}`}>
-                          {count}
-                        </span>
-                      </button>
-                    )
-                  })}
-                </div>
-                
-                {/* Dynamic Event Feed */}
-                <motion.div 
-                  key={activeEventTab}
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                  className="space-y-3 max-h-60 overflow-y-auto pr-1"
-                >
-                  {(() => {
-                    const filteredEvents = upcomingEvents.filter(e => {
-                      const displayKey = e.event_type || e.type;
-                      if (activeEventTab === 'All') return true;
-                      if (activeEventTab === 'Tasks') return e.source === 'task' || displayKey === 'task' || displayKey === 'deadline';
-                      if (activeEventTab === 'Deliveries') return e.source === 'service_delivery';
-                      if (activeEventTab === 'Expiries') return e.source === 'service_expiry';
-                      if (activeEventTab === 'Days') return ['working', 'holiday', 'weekend'].includes(displayKey);
-                      return false;
-                    });
-
-                    if (filteredEvents.length === 0) {
-                      return (
-                        <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
-                          <p className="text-sm text-gray-500">No {activeEventTab.toLowerCase()} scheduled.</p>
-                        </div>
-                      );
-                    }
-
-                    return filteredEvents.map(event => {
-                      const dayLabel = getEventDayLabel(event.date || event.start_datetime);
-                      const isToday = dayLabel === 'Today';
-                      const isTomorrow = dayLabel === 'Tomorrow';
-                      
-                      const displayKey = event.event_type || event.type;
-                      
-                      let Icon = FiCalendar;
-                      let typeColor = 'text-indigo-600 bg-indigo-50 border-indigo-100';
-                      let badgeLabel = 'Event';
-                      
-                      if (event.source === 'service_delivery') {
-                        Icon = FiBriefcase;
-                        typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
-                        badgeLabel = 'Delivery';
-                      } else if (event.source === 'service_expiry') {
-                        Icon = FiAlertCircle;
-                        typeColor = 'text-rose-600 bg-rose-50 border-rose-100';
-                        badgeLabel = 'Expiry';
-                      } else if (event.source === 'task' || displayKey === 'task' || displayKey === 'deadline') {
-                        Icon = FiCheckSquare;
-                        typeColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
-                        badgeLabel = 'Task';
-                      } else if (displayKey === 'working' || displayKey === 'start') {
-                        Icon = FiBriefcase;
-                        typeColor = 'text-green-600 bg-green-50 border-green-100';
-                        badgeLabel = displayKey === 'working' ? 'Working Day' : 'Start';
-                      } else if (displayKey === 'holiday') {
-                        Icon = FiStar;
-                        typeColor = 'text-red-600 bg-red-50 border-red-100';
-                        badgeLabel = 'Holiday';
-                      } else if (displayKey === 'weekend') {
-                        Icon = FiClock; 
-                        typeColor = 'text-gray-600 bg-gray-50 border-gray-200';
-                        badgeLabel = 'Weekend';
-                      } else if (displayKey === 'announcement') {
-                        Icon = FiInfo;
-                        typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
-                        badgeLabel = 'Announcement';
-                      }
-
-                      return (
-                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-lg border ${typeColor} shadow-sm transition-all hover:shadow-md group`}>
-                          <div className={`mt-0.5 p-1.5 rounded-md bg-white shadow-sm shrink-0`}>
-                            <Icon className="h-4 w-4" />
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-gray-900 truncate" title={event.title}>{event.title}</p>
-                            {event.description && <p className="text-xs text-gray-600 truncate mt-0.5">{event.description}</p>}
-                            <div className="flex items-center justify-between mt-1.5">
-                              <p className="text-xs font-medium flex items-center gap-1">
-                                <FiClock className="h-3 w-3" />
-                                <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-600 font-bold' : 'text-gray-600'}`}>
-                                  {dayLabel}
-                                </span>
-                              </p>
-                              <span className="text-[9px] uppercase tracking-wider font-bold opacity-70">
-                                {badgeLabel}
-                              </span>
-                            </div>
-                          </div>
-                          
-                          <div className="shrink-0 flex flex-col items-center justify-center self-stretch ml-1">
-                            <button
-                              onClick={() => handleViewService(event)}
-                              className="p-2 bg-white/60 hover:bg-white rounded-full shadow-sm text-gray-500 hover:text-indigo-600 transition-all border border-black/5 opacity-80 hover:opacity-100"
-                              title="Go to Service Tracking"
-                            >
-                              <FiExternalLink className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </motion.div>
-              </div>
-
-              {/* Recent Activity (Compact Version) */}
-              <div className="bg-white rounded-xl border border-gray-200">
-                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
-                  <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
-                    {recentServiceEntries.length} items
-                  </span>
-                </div>
-                <div className="p-4 overflow-y-auto max-h-[500px]">
-                  {Object.keys(groupedRecentActivities).length > 0 ? (
-                    <div className="space-y-6">
-                      {Object.entries(groupedRecentActivities).map(([date, entries]) => (
-                        <div key={date} className="relative">
-                          
-                          {/* Compact Date Sticky Header */}
-                          <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
-                            <div className="p-1 bg-gray-100 rounded text-gray-500">
-                              <FiCalendar className="h-3 w-3" />
-                            </div>
-                            <h4 className="text-[10px] font-bold text-gray-800 uppercase tracking-widest">
-                              {formatDateUI(date)}
-                            </h4>
-                            <div className="h-px bg-gray-200 flex-1 ml-1"></div>
-                          </div>
-
-                          {/* Compact Timeline Entries */}
-                          <div className="space-y-2.5 relative">
-                            {entries.map((entry, index) => (
-                              <div key={entry.id} className="group relative flex gap-3">
-                                {index !== entries.length - 1 && (
-                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
-                                )}
-                                
-                                <div className="w-8 h-8 mt-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
-                                  <FiUser className="h-3.5 w-3.5 text-indigo-600" />
-                                </div>
-
-                                <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
-                                  
-                                  <div className="flex justify-between items-center mb-1.5 gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
-                                      
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
-                                        entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
-                                        entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700' :
-                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
-                                        'bg-gray-50 text-gray-700'
-                                      }`}>
-                                        {entry.status?.replace('-', ' ')}
-                                      </span>
-                                    </div>
-                                    
-                                    <span className="text-[10px] font-medium text-gray-400 shrink-0">
-                                      {formatTime(entry.created_at)}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex justify-between items-end gap-2">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
-                                        {getCategoryName(entry.category)}
-                                      </p>
-                                      
-                                      {entry.tokenId && (
-                                        <span className="text-[10px] text-gray-400 font-mono font-bold before:content-['•'] before:mr-1.5">
-                                          {shortenTokenId(entry.tokenId)}
-                                        </span>
-                                      )}
-                                      
-                                      {entry.workSource === 'online' && (
-                                        <span className="text-[9px] text-blue-600 font-bold uppercase border border-blue-100 bg-blue-50 px-1 rounded flex items-center gap-0.5 ml-1">
-                                          <FiGlobe className="h-2 w-2" /> Online
-                                        </span>
-                                      )}
-                                      {entry.is_edited && (
-                                        <span className="text-[9px] text-gray-500 font-bold uppercase border border-gray-200 bg-gray-50 px-1 rounded ml-1">
-                                          Edited
-                                        </span>
-                                      )}
-                                    </div>
-                                    
-                                    {(entry.tokenId || entry.tracking_id) && (
-                                      <button 
-                                        onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                        className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
-                                      >
-                                        Details <FiChevronRight className="h-3 w-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-gray-400">
-                      <FiActivity className="h-8 w-8 mb-2 opacity-20" />
-                      <p className="text-sm font-medium">No recent activity</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-              
-            </div>
-          </div>
-
-          {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-          <div id="perf-details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
-
-            {/* 3a: MONTHLY & DAILY TARGET METER */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-              <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
-                Target (+10% Growth)
-              </h3>
-              
-              {performanceLoading ? (
-                <div className="h-24 bg-gray-200 animate-pulse rounded"></div>
-              ) : (
-                <div>
-                  {/* --- MONTHLY PROGRESS --- */}
-                  <div className="flex justify-between items-end mb-2">
-                    <div>
-                      <p className="text-xs text-gray-500 font-medium">Month Achieved</p>
-                      <p className="text-xl font-black text-gray-900">
-                        {formatCurrency(performance.currentAchieved)}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-gray-500 font-medium">Month Target</p>
-                      <p className="text-lg font-bold text-gray-900">
-                        {formatCurrency(performance.monthlyTarget)}
-                      </p>
-                    </div>
-                  </div>
-                  
-                  <div className="w-full bg-gray-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
-                    <div 
-                      className={`h-full rounded-full transition-all duration-1000 ${
-                        performance.targetProgress >= 100 ? 'bg-emerald-500' :
-                        performance.targetProgress >= 50 ? 'bg-amber-400' : 
-                        'bg-rose-500'
-                      }`}
-                      style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
-                    ></div>
-                  </div>
-                  <p className="text-[10px] font-bold text-gray-500 text-right mb-4">
-                    {performance.targetProgress.toFixed(1)}% Completed
-                  </p>
-
-                  <div className="border-t border-gray-100 mb-4"></div>
-
-                  {/* --- DAILY PROGRESS --- */}
-                  <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-50">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
-                        <FiActivity className="h-3 w-3 text-indigo-600" />
-                        Today's Goal
-                      </h4>
-                      <span className="text-xs font-bold text-indigo-700">
-                        {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                      </span>
-                    </div>
-                    
-                    <div className="w-full bg-indigo-100/50 rounded-full h-2 overflow-hidden">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-1000 ${
-                          performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'
-                        }`}
-                        style={{ 
-                          width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` 
-                        }}
-                      ></div>
-                    </div>
-                    {performance.todayAchieved >= performance.dailyTarget && performance.dailyTarget > 0 && (
-                       <p className="text-[10px] font-bold text-emerald-600 mt-1.5 flex items-center gap-1">
-                         <FiCheckCircle className="h-3 w-3" /> Daily target met!
-                       </p>
-                    )}
-                  </div>
-                  {/* --- PREVIOUS MONTHS --- */}
-                  {targetHistory.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-gray-100">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-bold text-gray-700">Previous months</h4>
-                        {targetStreak >= 2 && (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                            🔥 {targetStreak} months in a row
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="flex gap-2 overflow-x-auto pb-1">
-                        {[...targetHistory].reverse().map((h) => {
-                          const met = h.percent >= 100;
-                          return (
-                            <div
-                              key={h.month}
-                              title={`Target ${formatCurrency(h.target)} · Achieved ${formatCurrency(h.achieved)}`}
-                              className={`flex-shrink-0 rounded-lg px-2.5 py-1.5 text-center border ${
-                                met ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
-                                    : 'bg-rose-50 border-rose-200 text-rose-700'
-                              }`}
-                            >
-                              <p className="text-[10px] font-medium">
-                                {new Date(h.month).toLocaleString('en-IN', { month: 'short' })}
-                              </p>
-                              <p className="text-xs font-bold">
-                                {met ? '✓' : '✗'} {Math.round(h.percent || 0)}%
-                              </p>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      {lastMonth && (
-                        <p className="text-[11px] text-gray-500 mt-2">
-                          Last month:{' '}
-                          {lastMonth.percent >= 100
-                            ? <span className="font-semibold text-emerald-600">target achieved 🎉</span>
-                            : <span className="font-semibold text-rose-600">
-                                {formatCurrency(Math.max(lastMonth.target - lastMonth.achieved, 0))} short of target
-                              </span>}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 3b: PERFORMANCE SCORE CARD */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                  <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
-                  Performance Score
-                </h3>
-                <div className="relative group">
-                  <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
-                    Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
-                  </div>
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="relative inline-block">
-                  <svg className="w-32 h-32">
-                    <circle className="text-gray-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
-                    <circle
-                      className="transition-all duration-1000"
-                      strokeWidth="12"
-                      strokeDasharray={339.292}
-                      strokeDashoffset={339.292 * (1 - (performanceLoading ? 0 : performance.incentiveScore / 100))}
-                      strokeLinecap="round"
-                      stroke={`url(#gradient)`}
-                      fill="transparent"
-                      r="54"
-                      cx="64"
-                      cy="64"
-                    />
-                    <defs>
-                      <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stopColor={performance.incentiveScore >= 80 ? '#10B981' : performance.incentiveScore >= 60 ? '#F59E0B' : '#EF4444'} />
-                        <stop offset="100%" stopColor={performance.incentiveScore >= 80 ? '#059669' : performance.incentiveScore >= 60 ? '#D97706' : '#DC2626'} />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                    <p className="text-2xl font-bold text-gray-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
-                    <p className="text-xs text-gray-500">
-                      {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* 3c: PERFORMANCE METRICS */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
-                Performance Metrics
-              </h3>
-              {performanceLoading ? (
-                <div className="space-y-3">
-                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Completion Rate</span>
-                      <span className="font-medium text-gray-900">{performance.completionRate}%</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Avg Transaction Value</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-gray-600">Customer Satisfaction</span>
-                      <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-purple-600 h-2 rounded-full"
-                        style={{ width: `${(performance.avgRating / 5) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-gray-100">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">Collection Rate</span>
-                      <span className="font-medium text-gray-900">{performance.collectionRate}%</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-2">
-                      <span className="text-gray-600">Total Revenue</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(performance.totalCollected)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm mt-2">
-                      <span className="text-gray-600">Total Services</span>
-                      <span className="font-medium text-gray-900">{performance.totalServices}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-        </motion.div>
-      </div>
-      {/* Cancel Modal */}
-        {showCancelModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
-              <p className="text-gray-600 mb-4">
-                Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenId}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
-              </p>
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
-                <textarea 
-                  value={cancelReason} 
-                  onChange={(e) => setCancelReason(e.target.value)} 
-                  rows="3" 
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500" 
-                  placeholder="e.g., customer requested, duplicate entry..." 
-                />
-              </div>
-              <div className="flex gap-3 justify-end">
-                <button 
-                  onClick={() => setShowCancelModal(false)} 
-                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
-                >
-                  No, Keep Token
-                </button>
-                <button 
-                  onClick={handleCancelConfirm} 
-                  disabled={cancelling} 
-                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50"
-                >
-                  {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      <QuickServiceModal open={showQuickService} onClose={() => setShowQuickService(false)} wallets={wallets} />
     </div>
   );
 };
 
-export default StaffDashboard;
+// StaffPerformanceCard Component - Updated to match WalletCard style with ratings
+const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
+  const collectionProgress = staff.expectedAmount > 0 ? (staff.collectedAmount / staff.expectedAmount) * 100 : 0;
+
+  return (
+    <motion.div
+      whileHover={{ y: -2 }}
+      className={`bg-white rounded-lg border hover:shadow-md transition-all duration-200 cursor-pointer p-3 relative hover:z-30 ${
+        isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'
+      }`}
+      onClick={onClick}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <div className="flex items-center space-x-2">
+          <div className="relative">
+            <div className="bg-indigo-500 rounded-lg flex items-center justify-center w-8 h-8">
+              <FiUser className="text-white h-4 w-4" />
+            </div>
+            {rank <= 3 && (
+              <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                rank === 1 ? 'bg-amber-500' : 
+                rank === 2 ? 'bg-gray-500' : 
+                'bg-orange-600'
+              }`}>
+                {rank}
+              </div>
+            )}
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-semibold text-gray-900 text-xs truncate">{staff.name}</h3>
+            <p className="text-gray-500 text-xs">{staff.role}</p>
+          </div>
+        </div>
+        <FiChevronRight className="h-4 w-4 text-gray-400" />
+      </div>
+
+      {/* Revenue */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-gray-600 text-xs">Revenue</span>
+          <span className="font-bold text-emerald-700 text-sm">₹{formatINR(staff.revenueCollected)}</span>
+        </div>
+      </div>
+
+      {/* Performance Score */}
+      <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold mb-2 ${
+        staff.collectionRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+        staff.collectionRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200' :
+        'bg-rose-50 text-rose-700 border-rose-200'
+      }`}>
+        {staff.collectionRate}% Collection Rate
+      </div>
+
+      {/* Key Metrics */}
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <div className="text-center p-2 bg-gray-50 rounded">
+          <div className="text-xs text-gray-600 mb-1">Services</div>
+          <div className="font-semibold text-gray-900 text-sm">{staff.servicesCompleted}</div>
+        </div>
+        <div className="text-center p-2 bg-gray-50 rounded">
+          <div className="text-xs text-gray-600 mb-1">Avg Tx</div>
+          <div className="font-semibold text-gray-900 text-sm">₹{formatINR(staff.avgTransaction)}</div>
+        </div>
+        <div className="text-center p-2 bg-gray-50 rounded">
+          <div className="flex items-center justify-center space-x-1 text-xs text-gray-600 mb-1">
+            <span>Incentive</span>
+            <InfoTooltip
+              placement="top"
+              content={
+                <div className="space-y-2">
+                  <p className="font-semibold text-white">
+                    Incentive Readiness Score (0–100)
+                  </p>
+                  <div className="space-y-1">
+                    <p>• <b>50%</b> Collection discipline</p>
+                    <p>• <b>30%</b> Revenue efficiency (₹ / day)</p>
+                    <p>• <b>20%</b> Consistency (active days)</p>
+                  </div>
+                  <p className="text-gray-300 text-xs mt-1">
+                    Based on completed services & received payments
+                  </p>
+                </div>
+              }
+            />
+          </div>
+          <div className="font-semibold text-gray-900 text-sm">{staff.incentiveScore}%</div>
+        </div>
+      </div>
+
+      {/* Collection Progress */}
+      <div className="space-y-1.5">
+        <div className="flex justify-between text-xs">
+          <span className="text-gray-500">Collected</span>
+          <span className="text-gray-500">Expected</span>
+        </div>
+        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+          <div 
+            className={`h-full rounded-full ${
+              collectionProgress >= 90 ? 'bg-emerald-500' :
+              collectionProgress >= 70 ? 'bg-amber-500' : 'bg-rose-500'
+            }`}
+            style={{ width: `${collectionProgress}%` }}
+          />
+        </div>
+        <div className="flex justify-between text-xs">
+          <span className="font-medium text-emerald-600">₹{formatINR(staff.collectedAmount)}</span>
+          <span className="font-medium text-blue-600">₹{formatINR(staff.expectedAmount)}</span>
+        </div>
+      </div>
+
+      {/* Target Progress */}
+      {staff.monthlyTarget > 0 && (
+        <div className="pt-2 border-t border-gray-100 mt-2">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-gray-500 flex items-center"><FiTarget className="h-3 w-3 mr-1" />Target</span>
+            <span className={`font-semibold ${staff.targetPercent >= 100 ? "text-emerald-600" : "text-gray-700"}`}>
+              {staff.targetPercent.toFixed(0)}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className={`h-full ${staff.targetPercent >= 100 ? "bg-emerald-500" : staff.targetPercent >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                style={{ width: `${Math.min(staff.targetPercent, 100)}%` }} />
+          </div>
+          <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(staff.targetAchieved)} / ₹{formatINR(staff.monthlyTarget)}</p>
+        </div>
+      )}
+      
+      {staff.pendingAmount > 0 && (
+        <div className="flex items-center justify-between text-xs text-rose-600 pt-2 border-t border-gray-100 mt-2">
+          <span>Pending</span>
+          <span className="font-medium">₹{formatINR(staff.pendingAmount)}</span>
+        </div>
+      )}
+
+      {/* Add Ratings Info */}
+      {staff.totalReviews > 0 && (
+        <div className="flex items-center justify-between text-xs border-t border-gray-100 pt-2 mt-2">
+          <div className="flex items-center text-yellow-600">
+            <FiStar className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+            <span className="font-medium">{staff.avgStaffRating.toFixed(1)}</span>
+          </div>
+          <span className="text-gray-500">{staff.totalReviews} {staff.totalReviews === 1 ? 'review' : 'reviews'}</span>
+        </div>
+      )}
+    </motion.div>
+  );
+};
+
+// Shows ONE staff's last 6 months inside the side panel.
+const StaffTargetTab = ({ staffId }) => {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${staffId}/target-history?months=6`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setRows(res.ok ? await res.json() : []);
+      } catch { setRows([]); }
+    })();
+  }, [staffId]);
+
+  if (!rows) return <p className="text-xs text-gray-400">Loading…</p>;
+  if (rows.length === 0) return <p className="text-xs text-gray-400">No target history yet</p>;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+        <FiTarget className="h-3 w-3 mr-2 text-indigo-600" /> Target History (+10% Growth)
+      </h3>
+      <div className="space-y-3">
+        {rows.map((r) => {
+          const pct = Number(r.achievement_percent || 0);
+          const open = r.status === "active";
+          const hasTarget = Number(r.target_amount) > 0;
+          return (
+            <div key={r.month}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="font-medium text-gray-700">
+                  {new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric" })}
+                </span>
+                <span className={!hasTarget ? "text-gray-400" : open ? "text-blue-600" : pct >= 100 ? "text-emerald-600" : "text-rose-600"}>
+                  {!hasTarget ? "No target" : open ? `In progress · ${pct.toFixed(0)}%` : pct >= 100 ? `✓ Achieved · ${pct.toFixed(0)}%` : `✗ Missed · ${pct.toFixed(0)}%`}
+                </span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full ${pct >= 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                     style={{ width: `${Math.min(pct, 100)}%` }} />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(r.achieved_amount)} / ₹{formatINR(r.target_amount)}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// StaffDetailsPanel Component - Updated to match WalletDetailsPanel style with ratings
+const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingDistribution, onClose }) => {
+  const [activeTab, setActiveTab] = useState('performance');
+
+  const tabs = [
+    { id: 'performance', label: 'Performance', icon: FiTrendingUp },
+    { id: 'categories', label: 'Categories', icon: FiBriefcase },
+    { id: 'efficiency', label: 'Efficiency', icon: FiActivity },
+    { id: 'targets', label: 'Targets', icon: FiTarget }
+  ];
+
+  return (
+    <>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+      />
+      
+      <motion.div
+        initial={{ x: '100%' }}
+        animate={{ x: 0 }}
+        exit={{ x: '100%' }}
+        transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+        className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-sm"
+      >
+        {/* Header */}
+        <div className="border-b border-gray-200">
+          <div className="flex items-center justify-between p-4">
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <FiArrowLeft className="h-4 w-4 text-gray-600" />
+              </button>
+              <div>
+                <h2 className="text-base font-bold text-gray-900">{staff.name}</h2>
+                <p className="text-xs text-gray-600">{staff.role}</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <FiX className="h-4 w-4 text-gray-600" />
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex px-4 border-b border-gray-200">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center px-3 py-2 border-b-2 text-xs font-medium transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-indigo-500 text-indigo-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                <tab.icon className="h-3 w-3 mr-1" />
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-4 space-y-4">
+            {/* Performance Score - Fixed tooltip positioning */}
+            <div className="bg-white border border-gray-200 rounded-lg p-4 relative">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1 min-w-0 mr-2">
+                  <div className="flex items-center space-x-2 mb-1">
+                    <h3 className="font-semibold text-gray-900 text-sm truncate">
+                      Incentive Readiness
+                    </h3>
+                    <div className="relative">
+                      <InfoTooltip
+                        placement="bottom"
+                        content={
+                          <div className="space-y-2">
+                            <p className="font-semibold text-white">
+                              How this score is calculated
+                            </p>
+                            <div className="space-y-1">
+                              <p>• <b>50%</b> Collection discipline</p>
+                              <p>• <b>30%</b> Revenue efficiency (₹ / day)</p>
+                              <p>• <b>20%</b> Consistency (active days)</p>
+                            </div>
+                            <p className="text-gray-300 text-xs mt-1">
+                              Based only on completed services & received payments
+                            </p>
+                          </div>
+                        }
+                      />
+                    </div>
+                  </div>
+                  <p className="text-gray-500 text-xs truncate">
+                    Performance-based incentive eligibility
+                  </p>
+                </div>
+                <div className={`inline-flex flex-col px-3 py-2 border rounded-lg shrink-0 ${
+                  staff.incentiveScore >= 80 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' :
+                  staff.incentiveScore >= 60 ? 'border-amber-200 bg-amber-50 text-amber-800' :
+                  'border-rose-200 bg-rose-50 text-rose-800'
+                }`}>
+                  <span className="font-bold text-lg">{staff.incentiveScore}%</span>
+                  <span className="text-xs">
+                    {staff.incentiveScore >= 80 ? 'Excellent' :
+                     staff.incentiveScore >= 60 ? 'Good' : 'Needs Improvement'}
+                  </span>
+                </div>
+              </div>
+              
+              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${
+                    staff.incentiveScore >= 80 ? 'bg-emerald-500' :
+                    staff.incentiveScore >= 60 ? 'bg-amber-500' : 'bg-rose-500'
+                  }`}
+                  style={{ width: `${staff.incentiveScore}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Revenue Details */}
+            <div className="space-y-3">
+              <h3 className="font-semibold text-gray-900 text-sm">Revenue Details</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center mb-1">
+                    <FiDollarSign className="h-3 w-3 text-blue-600 mr-1" />
+                    <span className="text-xs font-medium text-gray-700">Total Revenue</span>
+                  </div>
+                  <div className="font-bold text-gray-900 text-sm">₹{formatINR(staff.revenueCollected)}</div>
+                </div>
+                <div className="border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center mb-1">
+                    <FiBriefcase className="h-3 w-3 text-purple-600 mr-1" />
+                    <span className="text-xs font-medium text-gray-700">Service Charge</span>
+                  </div>
+                  <div className="font-bold text-gray-900 text-sm">₹{formatINR(staff.serviceCharge)}</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Collection Stats */}
+            <div className="border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-gray-900 text-sm mb-3">Collection Stats</h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600 text-xs">Collection Rate</span>
+                  <span className={`font-bold text-xs ${
+                    staff.collectionRate >= 90 ? 'text-emerald-600' :
+                    staff.collectionRate >= 70 ? 'text-amber-600' : 'text-rose-600'
+                  }`}>
+                    {staff.collectionRate}%
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600 text-xs">Avg. Transaction</span>
+                  <span className="font-bold text-gray-900 text-xs">₹{formatINR(staff.avgTransaction)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-gray-600 text-xs">Services Completed</span>
+                  <span className="font-bold text-gray-900 text-xs">{staff.servicesCompleted}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Ratings Section */}
+            {(activeTab === 'performance' || activeTab === 'efficiency') && staff.totalReviews > 0 && (
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+                  <FiStar className="h-3 w-3 mr-2 text-yellow-500" />
+                  Customer Ratings
+                </h3>
+                
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <div className="flex items-center">
+                      <span className="text-2xl font-bold text-gray-900 mr-2">{staff.avgStaffRating.toFixed(1)}</span>
+                      <div className="flex">
+                        {[1,2,3,4,5].map(star => (
+                          <FiStar
+                            key={star}
+                            className={`h-4 w-4 ${
+                              star <= Math.round(staff.avgStaffRating)
+                                ? 'fill-yellow-400 text-yellow-400'
+                                : 'text-gray-300'
+                            }`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">Based on {staff.totalReviews} reviews</p>
+                  </div>
+                </div>
+                
+                {/* Rating Breakdown */}
+                {ratingDistribution && ratingDistribution.length > 0 && (
+                  <div className="space-y-2">
+                    {[5,4,3,2,1].map(rating => {
+                      const ratingData = ratingDistribution.find(r => Number(r.staff_rating) === rating);
+                      const count = ratingData ? Number(ratingData.count) : 0;
+                      const total = ratingDistribution.reduce((sum, r) => sum + Number(r.count), 0);
+                      const percentage = total > 0 ? (count / total) * 100 : 0;
+                      
+                      return (
+                        <div key={rating} className="flex items-center text-xs">
+                          <span className="w-8 text-gray-600">{rating}★</span>
+                          <div className="flex-1 mx-2">
+                            <div className="w-full bg-gray-200 rounded-full h-1.5">
+                              <div
+                                className="bg-yellow-400 h-1.5 rounded-full"
+                                style={{ width: `${percentage}%` }}
+                              />
+                            </div>
+                          </div>
+                          <span className="w-8 text-right text-gray-500">
+                            {Math.round(percentage)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Category Strength */}
+            {activeTab === 'categories' && (
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 text-sm mb-3">Category-wise Strength</h3>
+                {loadingCategories ? (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                  </div>
+                ) : categoryStrength.length === 0 ? (
+                  <p className="text-sm text-gray-500">No data for this period</p>
+                ) : (
+                  <div className="space-y-2">
+                    {categoryStrength.map((c) => {
+                      const totalRevenue = categoryStrength.reduce(
+                        (sum, x) => sum + Number(x.revenue),
+                        0
+                      );
+
+                      const percent =
+                        totalRevenue > 0
+                          ? Math.round((c.revenue / totalRevenue) * 100)
+                          : 0;
+
+                      return (
+                        <div key={c.service_id}>
+                          <div className="flex justify-between text-xs mb-1">
+                            <span className="font-medium text-gray-700">
+                              {c.service_name}
+                            </span>
+                            <span className="text-gray-500">
+                              ₹{Number(c.revenue).toLocaleString("en-IN")}
+                            </span>
+                          </div>
+
+                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                            <div
+                              className="bg-indigo-600 h-1.5 rounded-full"
+                              style={{ width: `${percent}%` }}
+                            />
+                          </div>
+
+                          <div className="text-xs text-gray-500 mt-1">
+                            {c.applications} apps • Profit ₹
+                            {Number(c.profit).toLocaleString("en-IN")}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Efficiency Metrics */}
+            {activeTab === 'efficiency' && (
+              <div className="border border-gray-200 rounded-lg p-4">
+                <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+                  <FiActivity className="h-3 w-3 mr-2 text-green-600" />
+                  Efficiency Metrics
+                </h3>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-green-50 rounded p-2 border border-green-200">
+                    <p className="text-xs text-green-700">Active Days</p>
+                    <p className="font-bold text-green-900 text-sm">
+                      {staff.activeDays}
+                    </p>
+                  </div>
+
+                  <div className="bg-blue-50 rounded p-2 border border-blue-200">
+                    <p className="text-xs text-blue-700">Revenue / Day</p>
+                    <p className="font-bold text-blue-900 text-sm">
+                      ₹{formatINR(staff.revenuePerDay)}
+                    </p>
+                  </div>
+
+                  <div className="bg-amber-50 rounded p-2 border border-amber-200">
+                    <p className="text-xs text-amber-700">Profit / Day</p>
+                    <p className="font-bold text-amber-900 text-sm">
+                      ₹{formatINR(staff.profitPerDay)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Staff Targets */}
+            {activeTab === 'targets' && <StaffTargetTab staffId={staff.id} />}
+          </div>
+        </div>
+      </motion.div>
+    </>
+  );
+};
+
+// Main Staff Performance Section Component - Updated with trainee view toggle and revenue breakdown table
+const StaffPerformanceSection = ({ 
+  data, 
+  showCharts, 
+  timePeriod, 
+  setTimePeriod,
+  selectedStaff: externalSelectedStaff,
+  setSelectedStaff: externalSetSelectedStaff,
+  setActiveSection,
+  centreId,
+  // Props for superadmin mode
+  ratingDistribution: externalRatingDistribution,
+  loadingReviews: externalLoadingReviews,
+  isSuperAdmin = false
+}) => {
+  const [internalSelectedStaff, setInternalSelectedStaff] = useState(null);
+  const selectedStaff = externalSelectedStaff ?? internalSelectedStaff;
+  const setSelectedStaff = externalSetSelectedStaff ?? setInternalSelectedStaff;
+
+  const [staffPerformance, setStaffPerformance] = useState([]);
+  const [traineePerformance, setTraineePerformance] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingTrainee, setLoadingTrainee] = useState(false);
+  const [categoryStrength, setCategoryStrength] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [fromDate, setFromDate] = useState(null);
+  const [toDate, setToDate] = useState(null);
+
+  // Date picker state lives here (not inside the picker) so re-renders can't close it
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState('');
+  const [draftTo, setDraftTo] = useState('');
+
+  const openDatePicker = () => {
+    setDraftFrom(fromDate || '');
+    setDraftTo(toDate || '');
+    setIsDatePickerOpen(true);
+  };
+  const draftInvalid = !draftFrom || !draftTo || draftFrom > draftTo;
+  const applyDraft = () => {
+    if (draftInvalid) return;
+    setFromDate(draftFrom);
+    setToDate(draftTo);
+    setIsDatePickerOpen(false);
+  };
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('revenue'); // 'revenue', 'rate', 'incentive'
+  const [staffMode, setStaffMode] = useState('permanent'); // 'permanent' or 'trainee'
+  
+  // Review states - use props if provided (superadmin), otherwise use internal state
+  const [internalReviewSummary, setInternalReviewSummary] = useState(null);
+  const [internalRatingDistribution, setInternalRatingDistribution] = useState([]);
+  const [internalLoadingReviews, setInternalLoadingReviews] = useState(false);
+
+  const reviewSummary = isSuperAdmin ? null : internalReviewSummary; // Superadmin doesn't need summary cards
+  const ratingDistribution = externalRatingDistribution || internalRatingDistribution;
+  const loadingReviews = externalLoadingReviews !== undefined ? externalLoadingReviews : internalLoadingReviews;
+
+  //Staff Targets
+  const [showTargets, setShowTargets] = useState(false);
+  const [targetMap, setTargetMap] = useState({});
+
+  // Cards show the target of the month that `toDate` falls in (targets are monthly,
+  // the date picker is free-range — so the card is labelled by month, not by range).
+  useEffect(() => {
+    if (!toDate) return;
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const params = new URLSearchParams({ month: toDate.slice(0, 7) });
+        if (centreId) params.append("centreId", centreId);
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff-targets?${params}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const rows = res.ok ? await res.json() : [];
+        setTargetMap(Object.fromEntries(rows.map((r) => [String(r.staff_id), r])));
+      } catch { setTargetMap({}); }
+    })();
+  }, [centreId, toDate]);
+
+  // Date range picker component
+  const renderDateRangePicker = () => {
+    const todayStr = toLocalISO(new Date());
+
+    const quickRanges = [
+      { label: 'This Month', getDates: () => {
+        const now = new Date();
+        return { from: toLocalISO(new Date(now.getFullYear(), now.getMonth(), 1)), to: toLocalISO(now) };
+      }},
+      { label: 'Last Quarter', getDates: () => {            // (label kept as-is; it is the CURRENT quarter to date)
+        const now = new Date();
+        const q = Math.floor(now.getMonth() / 3) * 3;
+        return { from: toLocalISO(new Date(now.getFullYear(), q, 1)), to: toLocalISO(now) };
+      }},
+      { label: 'This Year', getDates: () => {
+        const now = new Date();
+        return { from: toLocalISO(new Date(now.getFullYear(), 0, 1)), to: toLocalISO(now) };
+      }},
+    ];
+
+    return (
+      <div className="relative">
+        <button
+          onClick={() => (isDatePickerOpen ? setIsDatePickerOpen(false) : openDatePicker())}
+          className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+        >
+          <FiCalendar className="h-4 w-4 mr-2 text-gray-500" />
+          {fromDate && toDate ? `${fromDate} to ${toDate}` : 'Select Date Range'}
+          <FiChevronRight className="h-4 w-4 ml-2 text-gray-500 transform rotate-90" />
+        </button>
+
+        <AnimatePresence>
+          {isDatePickerOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setIsDatePickerOpen(false)} />
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 10 }}
+                className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-80"
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="font-medium text-gray-900 text-sm">Date Range</h4>
+                    <button onClick={() => setIsDatePickerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3 mb-2">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
+                      <input
+                        type="date"
+                        value={draftFrom}
+                        max={draftTo || todayStr}
+                        onChange={(e) => setDraftFrom(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">To</label>
+                      <input
+                        type="date"
+                        value={draftTo}
+                        min={draftFrom || undefined}
+                        max={todayStr}
+                        onChange={(e) => setDraftTo(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {draftFrom && draftTo && draftFrom > draftTo && (
+                    <p className="text-xs text-rose-600 mb-2">"From" must be on or before "To"</p>
+                  )}
+
+                  <div className="flex justify-end gap-2 mb-4">
+                    <button
+                      onClick={() => setIsDatePickerOpen(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={applyDraft}
+                      disabled={draftInvalid}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Apply
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Quick Select</p>
+                    <div className="space-y-2">
+                      {quickRanges.map((range) => (
+                        <button
+                          key={range.label}
+                          onClick={() => {
+                            const dates = range.getDates();
+                            setFromDate(dates.from);
+                            setToDate(dates.to);
+                            setIsDatePickerOpen(false);
+                          }}
+                          className="w-full px-3 py-2 text-left text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                        >
+                          {range.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  };
+
+  // Fetch functions
+  const fetchStaffPerformance = async (from, to, centreId) => {
+    const token = localStorage.getItem("token");
+
+    const params = new URLSearchParams({ from, to });
+    if (centreId) params.append("centreId", centreId);
+
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/staffreport/staff-performance?${params.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch staff performance");
+    }
+
+    return res.json();
+  };
+
+  const fetchTraineePerformance = async (from, to, centreId) => {
+    const token = localStorage.getItem("token");
+
+    const params = new URLSearchParams({ from, to });
+    if (centreId) params.append("centreId", centreId);
+
+    const res = await fetch(
+      `${import.meta.env.VITE_API_URL}/api/staffreport/trainee-performance?${params.toString()}`,
+      {
+        headers: { Authorization: `Bearer ${token}` },
+      }
+    );
+
+    if (!res.ok) {
+      throw new Error("Failed to fetch trainee performance");
+    }
+
+    return res.json();
+  };
+
+  // Fetch review summary (for dashboard cards) - only for non-superadmin
+  const fetchReviewSummary = async () => {
+    if (isSuperAdmin) return;
+    
+    try {
+      setInternalLoadingReviews(true);
+      const token = localStorage.getItem("token");
+      const params = new URLSearchParams();
+      if (centreId) params.append("centreId", centreId);
+      if (fromDate && toDate) {
+        params.append("from", fromDate);
+        params.append("to", toDate);
+      }
+      
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/staffreport/review-summary?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      
+      if (!res.ok) throw new Error("Failed to fetch review summary");
+      
+      const data = await res.json();
+      setInternalReviewSummary(data);
+    } catch (err) {
+      console.error("Review summary error:", err);
+    } finally {
+      setInternalLoadingReviews(false);
+    }
+  };
+
+  // Fetch rating distribution (for charts) - only for non-superadmin
+  const fetchRatingDistribution = async () => {
+    if (isSuperAdmin) return;
+    
+    try {
+      setInternalLoadingReviews(true);
+      const token = localStorage.getItem("token");
+      
+      const params = new URLSearchParams();
+      if (centreId) params.append("centreId", centreId);
+      if (fromDate && toDate) {
+        params.append("from", fromDate);
+        params.append("to", toDate);
+      }
+      
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/staffreport/rating-distribution?${params.toString()}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
+      
+      if (!res.ok) throw new Error("Failed to fetch rating distribution");
+      
+      const data = await res.json();
+      setInternalRatingDistribution(data);
+    } catch (err) {
+      console.error("Rating distribution error:", err);
+      setInternalRatingDistribution([]);
+    } finally {
+      setInternalLoadingReviews(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!fromDate || !toDate) return;
+    loadStaffPerformance(fromDate, toDate);
+    loadTraineePerformance(fromDate, toDate);
+  }, [fromDate, toDate]);
+
+  useEffect(() => {
+    if (!selectedStaff || !fromDate || !toDate) return;
+
+    const fetchCategoryStrength = async () => {
+      try {
+        setLoadingCategories(true);
+        const token = localStorage.getItem("token");
+
+        const params = new URLSearchParams({
+          from: fromDate,
+          to: toDate,
+        });
+
+        if (centreId) params.append("centreId", centreId);
+
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${selectedStaff.id}/category-strength?${params.toString()}`,
+          {
+            headers: { Authorization: `Bearer ${token}` },
+          }
+        );
+
+        const data = await res.json();
+        setCategoryStrength(data);
+      } catch (err) {
+        console.error("Failed to load category strength", err);
+        setCategoryStrength([]);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    fetchCategoryStrength();
+  }, [selectedStaff, fromDate, toDate]);
+
+  useEffect(() => {
+    const now = new Date();
+    let from;
+
+    if (timePeriod === "monthly") {
+      from = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (timePeriod === "quarterly") {
+      const q = Math.floor(now.getMonth() / 3) * 3;
+      from = new Date(now.getFullYear(), q, 1);
+    } else {
+      from = new Date(now.getFullYear(), 0, 1);
+    }
+
+    setFromDate(toLocalISO(from));
+    setToDate(toLocalISO(now));
+  }, [timePeriod]);
+
+  // Fetch review data when centreId or date range changes (for non-superadmin)
+  useEffect(() => {
+    if (!isSuperAdmin && fromDate && toDate) {
+      fetchReviewSummary();
+      fetchRatingDistribution();
+    }
+  }, [isSuperAdmin, centreId, fromDate, toDate]);
+
+  const transformStaffRows = (rows) => {
+    return rows.map((row) => {
+      const incentiveScore = Number(row.incentive_score ?? 0);
+      const expected = Number(row.expected_amount);
+      const collected = Number(row.collected_amount);
+
+      return {
+        id: row.staff_id,
+        name: row.staff_name,
+        role: "Staff",
+
+        expectedAmount: expected,
+        collectedAmount: collected,
+        pendingAmount: Math.max(expected - collected, 0),
+
+        collectionRate:
+          expected > 0
+            ? Math.round((collected / expected) * 100)
+            : 100,
+
+        revenueCollected: collected,
+        serviceCharge: Number(row.service_charge_earned),
+        servicesCompleted: Number(row.services_completed),
+        avgTransaction: Number(row.avg_ticket_size || 0),
+        incentiveScore: incentiveScore,
+
+        // Review data
+        totalReviews: Number(row.total_reviews || 0),
+        avgStaffRating: Number(row.avg_staff_rating || 0),
+
+        // Efficiency metrics
+        activeDays: Number(row.active_days || 0),
+        revenuePerDay: Number(row.revenue_per_day || 0),
+        profitPerDay: Number(row.profit_per_day || 0),
+
+        // Placeholders
+        achievement: 0,
+        monthlyTarget: 0,
+        todayCollection: 0,
+      };
+    });
+  };
+
+  const loadStaffPerformance = async (from, to) => {
+    try {
+      setLoading(true);
+      const rows = await fetchStaffPerformance(from, to, centreId);
+      setStaffPerformance(transformStaffRows(rows));
+    } catch (err) {
+      console.error("Staff performance load failed", err);
+      setStaffPerformance([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTraineePerformance = async (from, to) => {
+    try {
+      setLoadingTrainee(true);
+      const rows = await fetchTraineePerformance(from, to, centreId);
+      setTraineePerformance(transformStaffRows(rows));
+    } catch (err) {
+      console.error("Trainee performance load failed", err);
+      setTraineePerformance([]);
+    } finally {
+      setLoadingTrainee(false);
+    }
+  };
+
+  // Derive the set of trainee IDs to exclude from permanent view
+  const traineeIds = useMemo(() => new Set(traineePerformance.map(s => s.id)), [traineePerformance]);
+  
+  const permanentStaff = useMemo(() => {
+    return staffPerformance.filter(s => !traineeIds.has(s.id));
+  }, [staffPerformance, traineeIds]);
+
+  // Active dataset based on toggle
+  const activeData = useMemo(
+    () =>
+      (staffMode === "permanent" ? permanentStaff : traineePerformance).map((s) => {
+        const t = targetMap[String(s.id)];
+        return {
+          ...s,
+          monthlyTarget: Number(t?.target_amount || 0),
+          targetAchieved: Number(t?.achieved_amount || 0),
+          targetPercent: Number(t?.achievement_percent || 0),
+        };
+      }),
+    [staffMode, permanentStaff, traineePerformance, targetMap]
+  );
+
+  // Filter and sort active data
+  const filteredAndSortedStaff = useMemo(() => {
+    let result = [...activeData];
+    
+    if (searchQuery) {
+      result = result.filter(staff => 
+        staff.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+    
+    result.sort((a, b) => {
+      switch (sortBy) {
+        case 'rate':
+          return b.collectionRate - a.collectionRate;
+        case 'incentive':
+          return b.incentiveScore - a.incentiveScore;
+        case 'services':
+          return b.servicesCompleted - a.servicesCompleted;
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'revenue':
+        default:
+          return b.revenueCollected - a.revenueCollected;
+      }
+    });
+    
+    return result;
+  }, [activeData, sortBy, searchQuery]);
+
+  // Summary stats
+  const summaryStats = useMemo(() => {
+    if (activeData.length === 0) return null;
+    
+    const totalRevenue = activeData.reduce((sum, s) => sum + s.revenueCollected, 0);
+    const avgRate = Math.round(activeData.reduce((sum, s) => sum + s.collectionRate, 0) / activeData.length);
+    const totalServices = activeData.reduce((sum, s) => sum + s.servicesCompleted, 0);
+    const avgIncentive = Math.round(activeData.reduce((sum, s) => sum + s.incentiveScore, 0) / activeData.length);
+    
+    return { totalRevenue, avgRate, totalServices, avgIncentive };
+  }, [activeData]);
+
+  // Combined revenue breakdown for Quick View table (permanent + trainees)
+  const revenueBreakdownData = useMemo(() => {
+    const permanent = permanentStaff.map(s => ({ ...s, type: 'Permanent' }));
+    const trainees = traineePerformance.map(s => ({ ...s, type: 'Trainee' }));
+    return [...permanent, ...trainees];
+  }, [permanentStaff, traineePerformance]);
+
+  const revenueGrandTotal = useMemo(() => {
+    const totalRevenue = revenueBreakdownData.reduce((sum, s) => sum + s.revenueCollected, 0);
+    const totalServiceCharge = revenueBreakdownData.reduce((sum, s) => sum + s.serviceCharge, 0);
+    const totalDeptCharge = totalRevenue - totalServiceCharge;
+    return { totalRevenue, totalDeptCharge, totalServiceCharge };
+  }, [revenueBreakdownData]);
+
+  // Custom Tooltip for charts
+  const CustomTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
+          <p className="font-semibold text-gray-900 text-sm mb-2">{label}</p>
+          {payload.map((item, index) => (
+            <div key={index} className="flex items-center justify-between mb-1">
+              <div className="flex items-center">
+                <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: item.color }}></div>
+                <span className="text-gray-600 text-xs">{item.name}</span>
+              </div>
+              <span className="font-bold text-gray-900 text-xs">
+                {item.name.includes('Revenue') || item.name.includes('Transaction') ? `₹${formatINR(item.value)}` : item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const isLoading = staffMode === 'permanent' ? loading : loadingTrainee;
+
+  return (
+    <>
+      <div className="mb-6">
+        {/* Header Section */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 flex items-center">
+              <FiUserCheck className="h-5 w-5 mr-2 text-indigo-600" />
+              Staff Performance
+            </h2>
+            <p className="text-gray-600 text-sm mt-1">Revenue collection and performance metrics</p>
+          </div>
+          <button
+            onClick={() => {
+              if (staffMode === 'permanent') loadStaffPerformance(fromDate, toDate);
+              else loadTraineePerformance(fromDate, toDate);
+            }}
+            className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          >
+            <FiRefreshCw className={`h-4 w-4 mr-2 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
+            Refresh
+          </button>
+
+          <button
+            onClick={() => setShowTargets((v) => !v)}
+            className={`flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              showTargets ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <FiTarget className="h-4 w-4 mr-2" /> Targets
+          </button>
+        </div>
+
+        {/* Staff Type Toggle */}
+        <div className="mb-4">
+          <div className="inline-flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setStaffMode('permanent')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                staffMode === 'permanent'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiUser className="h-4 w-4 mr-2 inline" />
+              Permanent Staff
+            </button>
+            <button
+              onClick={() => setStaffMode('trainee')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+                staffMode === 'trainee'
+                  ? 'bg-white text-indigo-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <FiUsers className="h-4 w-4 mr-2 inline" />
+              Trainees ({traineePerformance.length})
+            </button>
+          </div>
+        </div>
+
+        {/* Controls */}
+        <div className="flex flex-wrap gap-3 mb-4 items-end">
+          {renderDateRangePicker()}
+          
+          <select
+            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
+            value={timePeriod}
+            onChange={(e) => setTimePeriod(e.target.value)}
+          >
+            <option value="monthly">This Month</option>
+            <option value="quarterly">This Quarter</option>
+            <option value="yearly">This Year</option>
+          </select>
+          
+          <div className="flex items-center space-x-3">
+            <div className="relative">
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Search staff..."
+                className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
+            >
+              <option value="revenue">Sort by Revenue</option>
+              <option value="rate">Sort by Collection Rate</option>
+              <option value="incentive">Sort by Incentive</option>
+              <option value="services">Sort by Services</option>
+              <option value="name">Sort by Name</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Summary Stats */}
+        {summaryStats && (
+          <div className="grid gap-3 mb-4 grid-cols-2 md:grid-cols-4">
+            <StatCard
+              title="Total Revenue"
+              value={`₹${formatINR(summaryStats.totalRevenue)}`}
+              subtitle="All staff combined"
+              icon={FiDollarSign}
+              color="bg-indigo-600"
+              trend={8.5}
+            />
+            <StatCard
+              title="Avg Collection Rate"
+              value={`${summaryStats.avgRate}%`}
+              subtitle="Average across staff"
+              icon={FiPercent}
+              color="bg-emerald-600"
+              trend={2.3}
+            />
+            <StatCard
+              title="Total Services"
+              value={summaryStats.totalServices}
+              subtitle="Services completed"
+              icon={FiBriefcase}
+              color="bg-blue-600"
+              trend={12.7}
+            />
+            <StatCard
+              title="Avg Incentive Score"
+              value={`${summaryStats.avgIncentive}%`}
+              subtitle="Performance rating"
+              icon={FiAward}
+              color="bg-amber-600"
+              trend={-1.2}
+            />
+          </div>
+        )}
+
+        {/* Review Stats Cards - Only show for non-superadmin and permanent staff mode */}
+        {!isSuperAdmin && staffMode === 'permanent' && reviewSummary && (
+          <div className="grid gap-3 mb-4 grid-cols-3">
+            <StatCard
+              title="Total Reviews"
+              value={reviewSummary.total_reviews || 0}
+              subtitle="Customer feedback received"
+              icon={FiStar}
+              color="bg-purple-600"
+            />
+            <StatCard
+              title="Avg Service Rating"
+              value={reviewSummary.avg_service_rating ? Number(reviewSummary.avg_service_rating).toFixed(1) : '0.0'}
+              subtitle="Out of 5"
+              icon={FiAward}
+              color="bg-pink-600"
+            />
+            <StatCard
+              title="Avg Staff Rating"
+              value={reviewSummary.avg_staff_rating ? Number(reviewSummary.avg_staff_rating).toFixed(1) : '0.0'}
+              subtitle="Out of 5"
+              icon={FiUserCheck}
+              color="bg-indigo-600"
+            />
+          </div>
+        )}
+
+        {/* Charts Section */}
+        {showCharts && filteredAndSortedStaff.length > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+            {/* Revenue vs Services */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">Revenue vs Services</h3>
+                  <p className="text-gray-500 text-xs">Top performers</p>
+                </div>
+                <FiBarChart2 className="h-4 w-4 text-indigo-600" />
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={filteredAndSortedStaff.slice(0, 6)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => `₹${value/1000}k`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="revenueCollected" name="Revenue" fill="#6366F1" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="servicesCompleted" name="Services" fill="#10B981" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Collection Performance */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">Collection Performance</h3>
+                  <p className="text-gray-500 text-xs">Rate vs Incentive</p>
+                </div>
+                <FiTrendingUp className="h-4 w-4 text-indigo-600" />
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <LineChart data={filteredAndSortedStaff.slice(0, 6)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => `${value}%`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line type="monotone" dataKey="collectionRate" name="Collection Rate" stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="incentiveScore" name="Incentive Score" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Avg Transaction Size */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">Avg. Transaction Size</h3>
+                  <p className="text-gray-500 text-xs">Ticket size comparison</p>
+                </div>
+                <FiDollarSign className="h-4 w-4 text-indigo-600" />
+              </div>
+              <ResponsiveContainer width="100%" height={200}>
+                <BarChart data={filteredAndSortedStaff.slice(0, 6)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <XAxis 
+                    dataKey="name" 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
+                  />
+                  <YAxis 
+                    tick={{ fontSize: 11 }}
+                    tickFormatter={(value) => `₹${value/1000}k`}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Bar dataKey="avgTransaction" name="Avg. Transaction" fill="#F59E0B" radius={[2, 2, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* Rating Distribution */}
+            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <h3 className="font-semibold text-gray-900 text-sm">Rating Distribution</h3>
+                  <p className="text-gray-500 text-xs">Staff performance ratings</p>
+                </div>
+                <FiStar className="h-4 w-4 text-yellow-500" />
+              </div>
+              
+              {loadingReviews ? (
+                <div className="flex items-center justify-center h-[200px]">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                </div>
+              ) : ratingDistribution.length === 0 ? (
+                <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">
+                  No rating data available
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {[5,4,3,2,1].map(rating => {
+                    const ratingData = ratingDistribution.find(r => Number(r.staff_rating) === rating);
+                    const count = ratingData ? Number(ratingData.count) : 0;
+                    const total = ratingDistribution.reduce((sum, r) => sum + Number(r.count), 0);
+                    const percentage = total > 0 ? (count / total) * 100 : 0;
+                    
+                    return (
+                      <div key={rating} className="space-y-1">
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center">
+                            <span className="font-medium text-gray-700">{rating} ★</span>
+                          </div>
+                          <span className="text-gray-500">{count} reviews</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              rating >= 4 ? 'bg-emerald-500' :
+                              rating >= 3 ? 'bg-amber-500' : 'bg-rose-500'
+                            }`}
+                            style={{ width: `${percentage}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {showTargets && (
+          <>
+            <StaffTargetsPanel centreId={centreId} />
+            <StaffTargetHistory centreId={centreId} />
+          </>
+        )}
+
+        {/* ========== NEW: Revenue Breakdown Quick View Table ========== */}
+        {revenueBreakdownData.length > 0 && (
+          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+            <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+              <FiDollarSign className="h-4 w-4 mr-2 text-indigo-600" />
+              Quick View: Revenue Breakdown
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200">
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Staff Name</th>
+                    <th className="text-left py-2 px-3 font-medium text-gray-600">Type</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Total Revenue</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Dept. Charges</th>
+                    <th className="text-right py-2 px-3 font-medium text-gray-600">Service Charges (Profit)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {revenueBreakdownData.map((staff, idx) => {
+                    const deptCharge = staff.revenueCollected - staff.serviceCharge;
+                    return (
+                      <tr key={staff.id} className={idx % 2 === 0 ? 'bg-gray-50' : ''}>
+                        <td className="py-2 px-3 font-medium text-gray-900">{staff.name}</td>
+                        <td className="py-2 px-3">
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            staff.type === 'Permanent' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
+                          }`}>
+                            {staff.type}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(staff.revenueCollected)}</td>
+                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(deptCharge)}</td>
+                        <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(staff.serviceCharge)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-gray-300 font-semibold bg-gray-100">
+                    <td className="py-2 px-3 text-gray-900" colSpan={2}>Grand Total</td>
+                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalRevenue)}</td>
+                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalDeptCharge)}</td>
+                    <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(revenueGrandTotal.totalServiceCharge)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Staff Performance Grid */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="font-semibold text-gray-900 text-sm">
+              {staffMode === 'permanent' ? 'Permanent Staff' : 'Trainee'} Performance {filteredAndSortedStaff.length > 0 && `(${filteredAndSortedStaff.length})`}
+            </h3>
+            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+              Showing {staffMode === 'permanent' ? 'top performers' : 'all trainees'} by {sortBy}
+            </span>
+          </div>
+
+          {isLoading && (
+            <div className="flex items-center justify-center py-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-2"></div>
+                <p className="text-gray-600 text-sm">Loading {staffMode === 'permanent' ? 'staff' : 'trainee'} performance…</p>
+              </div>
+            </div>
+          )}
+
+          {!isLoading && filteredAndSortedStaff.length === 0 && (
+            <div className="text-center py-8 border border-gray-200 rounded-lg bg-white">
+              <FiUser className="h-10 w-10 mx-auto mb-3 text-gray-300" />
+              <p className="text-gray-600 text-sm mb-1">No {staffMode === 'permanent' ? 'staff' : 'trainees'} found</p>
+              <p className="text-gray-500 text-xs">Try adjusting your filters or search criteria</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {filteredAndSortedStaff.map((staff, index) => (
+              <StaffPerformanceCard
+                key={staff.id}
+                staff={staff}
+                rank={index + 1}
+                isSelected={selectedStaff?.id === staff.id}
+                onClick={() => setSelectedStaff(staff)}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Staff Details Panel */}
+      <AnimatePresence>
+        {selectedStaff && (
+          <StaffDetailsPanel
+            staff={selectedStaff}
+            categoryStrength={categoryStrength}
+            loadingCategories={loadingCategories}
+            ratingDistribution={ratingDistribution}
+            onClose={() => setSelectedStaff(null)}
+          />
+        )}
+      </AnimatePresence>
+    </>
+  );
+};
+
+export default StaffPerformanceSection;
