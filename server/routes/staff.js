@@ -280,7 +280,10 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
 // Get all staff (for reportsTo dropdown and other uses)
 router.get("/all", authMiddleware(["admin", "superadmin"]), async (req, res) => {
   try {
-    const centreId = req.user.role === "admin" ? req.user.centre_id : req.query.centre_id;
+    const centreParam = req.query.centre_id ?? req.query.centreId;
+    const centreId = req.user.role === "admin"
+      ? req.user.centre_id
+      : (centreParam && centreParam !== "all" ? centreParam : null);  
     const roleFilter = req.query.role ? req.query.role.split(",") : null;
     let query = `
       SELECT 

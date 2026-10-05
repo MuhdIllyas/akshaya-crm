@@ -3,17 +3,17 @@ import { Resend } from 'resend';
 // Initialize Resend with your API Key
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export const sendReportEmail = async (recipients, subject, textBody, attachments) => {
+export const sendReportEmail = async (recipients, subject, textBody, attachments, htmlBody) => {
   try {
     // 1. Properly destructure the response to catch Resend API errors
     const { data, error } = await resend.emails.send({
-      from: 'Akshaya Sahayi Reports <admin@akshayasahayi.com>', 
-      // 2. Put your own email in the 'to' field, and hide the recipients in 'bcc'
-      to: ['admin@akshayasahayi.com'], 
-      bcc: recipients, 
-      subject: subject,
+      from: 'Akshaya Sahayi Reports <admin@akshayasahayi.com>',
+      to: ['admin@akshayasahayi.com'],
+      bcc: recipients,
+      subject,
       text: textBody,
-      attachments: attachments 
+      ...(htmlBody ? { html: htmlBody } : {}),
+      attachments
     });
 
     // 3. Catch validation/delivery errors returned by Resend

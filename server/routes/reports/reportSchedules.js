@@ -28,19 +28,21 @@ router.get('/', async (req, res) => {
         const result = await pool.query(`
             SELECT 
                 rs.*,
-                (
-                    -- 👇 This subquery fetches the exact emails of the users in those roles
-                    SELECT array_agg(s.email)
-                    FROM staff s
-                    WHERE s.role = ANY(rs.recipient_roles) 
-                    AND s.status = 'Active'
-                    -- If schedule belongs to a centre, only email that centre's admins
-                    AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id)
-                ) as resolved_emails
+                CASE
+                    WHEN COALESCE(cardinality(rs.specific_emails), 0) > 0 
+                        THEN rs.specific_emails
+                    ELSE (
+                        SELECT array_agg(DISTINCT s.email)
+                        FROM staff s
+                        WHERE s.role = ANY(rs.recipient_roles) 
+                        AND s.status = 'Active'
+                        AND s.email IS NOT NULL AND s.email <> ''
+                        AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id OR s.role = 'superadmin')
+                    )
+                END as resolved_emails
             FROM report_schedules rs 
             ORDER BY rs.created_at DESC
         `);
-        
         res.json(result.rows);
     } catch (error) {
         console.error('Error fetching schedules:', error);
@@ -52,21 +54,22 @@ router.get('/', async (req, res) => {
 // 2. CREATE A NEW SCHEDULE
 // ==========================================
 router.post('/', async (req, res) => {
-    const { name, report_ids, frequency, run_time, recipient_roles, centre_id } = req.body;
+    const { name, report_ids, frequency, run_time, recipient_roles, specific_emails, centre_id } = req.body;
 
     try {
         const result = await pool.query(`
             INSERT INTO report_schedules 
-            (name, report_ids, frequency, run_time, recipient_roles, centre_id) 
-            VALUES ($1, $2, $3, $4, $5, $6) 
+            (name, report_ids, frequency, run_time, recipient_roles, specific_emails, centre_id) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7) 
             RETURNING *
         `, [
             name, 
             report_ids, 
             frequency, 
             run_time, 
-            recipient_roles, 
-            centre_id || null // null means it applies globally
+            recipient_roles || [], 
+            specific_emails || [],
+            centre_id || null
         ]);
 
         res.status(201).json(result.rows[0]);

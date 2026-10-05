@@ -2278,7 +2278,7 @@ export const getQuickMetrics = async (targetCentreId) => {
   try {
     const [finRes, staffTotRes, staffPresRes, srvRes, pendRes] =
       await Promise.all([
-        // 1 & 2. Collection & Expenses
+        // 1 & 2. Collection, Service Charges & Expenses
         client.query(
           `
           SELECT 
@@ -2289,6 +2289,13 @@ export const getQuickMetrics = async (targetCentreId) => {
               WHERE se.created_at::date = $1
               ${!isAll ? 'AND s.centre_id = $2' : ''}
             ) AS collection,
+            (
+              SELECT COALESCE(SUM(se.service_charges), 0)
+              FROM service_entries se
+              JOIN staff s ON se.staff_id = s.id
+              WHERE se.created_at::date = $1
+              ${!isAll ? 'AND s.centre_id = $2' : ''}
+            ) AS service_charges,
             (
               SELECT COALESCE(SUM(amount), 0)
               FROM expenses
@@ -2312,9 +2319,6 @@ export const getQuickMetrics = async (targetCentreId) => {
         ),
 
         // 4. Present Staff Today
-        // IMPORTANT:
-        // Count each staff member only once, even if they have
-        // multiple punch-in / punch-out sessions today.
         client.query(
           `
           SELECT COUNT(DISTINCT a.staff_id) AS present
@@ -2370,15 +2374,16 @@ export const getQuickMetrics = async (targetCentreId) => {
       ]);
 
     const collection = Number(finRes.rows[0].collection);
+    const serviceCharges = Number(finRes.rows[0].service_charges);
     const expenses = Number(finRes.rows[0].expenses);
 
     return {
       collection,
+      serviceCharges,
       expenses,
-      profit: collection - expenses,
+      // ✅ Profit = service charges earned - expenses (not total collection)
+      profit: serviceCharges - expenses,
 
-      // One staff = one attendance count,
-      // regardless of how many sessions they have today.
       attendancePresent: Number(staffPresRes.rows[0].present),
       attendanceTotal: Number(staffTotRes.rows[0].total),
       servicesCount: Number(srvRes.rows[0].count),

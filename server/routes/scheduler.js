@@ -5,7 +5,7 @@ import generateRecurringTasks from "../controllers/recurringTaskService.js";
 
 // 👇 NEW: Automated Reports 👇
 import { getReportData } from '../routes/reports/analyticsService.js';
-import { buildPDF } from '../utils/exportBuilder.js';
+import { buildPDF, buildEmailHTML } from '../utils/pdfReportBuilder.js';
 import { sendReportEmail } from '../utils/emailService.js';
 import { calculateHours, recalculateDayDeviation } from './salary.js';
 
@@ -119,10 +119,9 @@ const checkAndRunSchedules = async () => {
             if (emails.length > 0) {
                 console.log(`[CRON] 📧 Sending "${schedule.name}" to ${emails.length} recipients...`);
                 
-                // Get yesterday's date string for the report data
-                const yest = new Date(istDate);
-                yest.setDate(yest.getDate() - 1);
-                const yesterdayStr = yest.toISOString().split('T')[0];
+                // 👇 Calculate TODAY'S date in IST safely
+                const today = new Date();
+                const todayStr = today.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
                 // 👇 BULLETPROOF ARRAY PARSER 👇
                 let parsedReportIds = schedule.report_ids;
@@ -144,26 +143,28 @@ const checkAndRunSchedules = async () => {
                     continue; 
                 }
 
-                // 👇 FETCH DATA WITH THE CORRECT OBJECT STRUCTURE 👇
+                // 👇 FETCH DATA WITH TODAY'S DATE 👇
                 const data = await getReportData({
-                    targetCentreId: schedule.centre_id || 'all',
-                    fromDate: yesterdayStr,
-                    toDate: yesterdayStr,
-                    period: 'daily',
-                    staffId: 'all',
+                    targetCentreId: schedule.centre_id === 'all' ? null : (schedule.centre_id || null),
+                    fromDate: todayStr,
+                    toDate: todayStr,
+                    period: 'custom',  // Keeps backend from defaulting to an empty 00:00 boundary
+                    staffId: null,     // Fixes zero-row returns from the string "all"
                     reportIds: parsedReportIds
                 });
 
                 // Build the PDF
-                const pdfBuffer = await buildPDF(data, parsedReportIds);
+                const pdfBuffer = await buildPDF(data, parsedReportIds, { title: schedule.name });
+                const htmlBody = buildEmailHTML(data, parsedReportIds, schedule.name);
 
-                // Send via Resend/Email Service
-                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${yesterdayStr}.pdf`;
+                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${todayStr}.pdf`;
+
                 await sendReportEmail(
-                    emails, 
-                    `${schedule.name} - ${yesterdayStr}`, 
-                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya Sahayi`, 
-                    [{ filename: fileName, content: pdfBuffer }]
+                    emails,
+                    `${schedule.name} - ${todayStr}`,
+                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${todayStr}.\n\n- Akshaya Sahayi`,
+                    [{ filename: fileName, content: pdfBuffer }],
+                    htmlBody
                 );
             } else {
                 console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No active emails found for roles: ${schedule.recipient_roles}`);
@@ -217,26 +218,21 @@ cron.schedule('55 23 * * *', async () => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    
-    // This single query finds all active staff on a working day who have NO attendance record
-    // for today (whether present, leave, or otherwise) and marks them absent.
+
     const result = await client.query(`
+      WITH today AS (
+        SELECT (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date AS d
+      )
       INSERT INTO attendance (staff_id, date, status, created_at)
-      SELECT s.id, CURRENT_DATE, 'absent', NOW()
-      FROM staff s
+      SELECT s.id, t.d, 'absent', NOW()
+      FROM staff s, today t
       WHERE s.status = 'Active'
-        -- 1. Ensure today is an official working day for their specific centre
         AND EXISTS (
           SELECT 1 FROM calendar_events ce 
-          WHERE ce.centre_id = s.centre_id 
-            AND ce.date = CURRENT_DATE 
-            AND ce.type = 'working'
+          WHERE ce.centre_id = s.centre_id AND ce.date = t.d AND ce.type = 'working'
         )
-        -- 2. Ensure they don't already have an attendance record for today
         AND NOT EXISTS (
-          SELECT 1 FROM attendance a 
-          WHERE a.staff_id = s.id 
-            AND a.date = CURRENT_DATE
+          SELECT 1 FROM attendance a WHERE a.staff_id = s.id AND a.date = t.d
         )
       RETURNING id;
     `);
@@ -249,6 +245,8 @@ cron.schedule('55 23 * * *', async () => {
   } finally {
     client.release();
   }
+}, {
+  timezone: 'Asia/Kolkata'   // ✅
 });
 
 // ==========================================
