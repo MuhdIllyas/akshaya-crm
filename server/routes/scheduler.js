@@ -5,7 +5,7 @@ import generateRecurringTasks from "../controllers/recurringTaskService.js";
 
 // 👇 NEW: Automated Reports 👇
 import { getReportData } from '../routes/reports/analyticsService.js';
-import { buildPDF } from '../utils/exportBuilder.js';
+import { buildPDF, buildEmailHTML } from '../utils/pdfReportBuilder.js';
 import { sendReportEmail } from '../utils/emailService.js';
 import { calculateHours, recalculateDayDeviation } from './salary.js';
 
@@ -155,15 +155,15 @@ const checkAndRunSchedules = async () => {
                 });
 
                 // Build the PDF
-                const pdfBuffer = await buildPDF(data, parsedReportIds);
+                const pdfBuffer = await buildPDF(data, parsedReportIds, { title: schedule.name });
+                const htmlBody = buildEmailHTML(data, parsedReportIds, schedule.name);
 
-                // Send via Resend/Email Service
-                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${yesterdayStr}.pdf`;
                 await sendReportEmail(
-                    emails, 
-                    `${schedule.name} - ${yesterdayStr}`, 
-                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya Sahayi`, 
-                    [{ filename: fileName, content: pdfBuffer }]
+                    emails,
+                    `${schedule.name} - ${yesterdayStr}`,
+                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya Sahayi`,
+                    [{ filename: fileName, content: pdfBuffer }],
+                    htmlBody
                 );
             } else {
                 console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No active emails found for roles: ${schedule.recipient_roles}`);
