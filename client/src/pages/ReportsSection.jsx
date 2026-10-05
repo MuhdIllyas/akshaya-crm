@@ -241,7 +241,7 @@ const ScheduledReportCard = ({ schedule, onToggle, onDelete }) => {
                 <div className="min-w-0">
                     <p className="font-medium text-gray-900 text-sm truncate">{schedule.name}</p>
                     <p className="text-xs text-gray-500 capitalize">
-                        {schedule.frequency} • {schedule.recipient_roles?.join(', ')}
+                        {schedule.frequency}{schedule.recipient_roles?.length ? ` • ${schedule.recipient_roles.join(', ')}` : ' • Custom emails'}
                     </p>
                     <div className="flex items-center mt-1 text-[10px] text-gray-400 font-mono" title={emails.join(', ')}>
                         <FiUserCheck className="mr-1 h-3 w-3 shrink-0" />
