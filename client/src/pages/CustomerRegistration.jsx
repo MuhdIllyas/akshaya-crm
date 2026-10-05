@@ -6,7 +6,7 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  FiUser, FiMail, FiPhone, FiMapPin, FiLock, 
+  FiUser, FiMail, FiPhone, FiMapPin, FiLock, FiShield,
   FiCheck, FiAlertCircle, FiHome, FiHash, FiArrowRight, FiArrowLeft
 } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
