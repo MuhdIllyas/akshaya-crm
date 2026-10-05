@@ -102,9 +102,9 @@ router.post("/generate", async (req, res) => {
     } = req.body;
 
     // 1. Security Check: Admin/Staff can only request their own centre
-    const targetCentreId = req.user.role === 'superadmin' && centreId !== 'all' 
-      ? centreId 
-      : req.user.centre_id;
+    const targetCentreId = req.user.role === 'superadmin'
+        ? (centreId === 'all' ? null : centreId)
+        : req.user.centre_id;
 
     // 2. Fetch Data from the Master Orchestrator (analyticsService.js)
     // We pass the raw parameters. The service will figure out the SQL.
