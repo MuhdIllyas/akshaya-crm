@@ -29,13 +29,16 @@ router.get('/', async (req, res) => {
             SELECT 
                 rs.*,
                 (
-                    -- 👇 This subquery fetches the exact emails of the users in those roles
-                    SELECT array_agg(s.email)
+                    SELECT array_agg(DISTINCT s.email)
                     FROM staff s
                     WHERE s.role = ANY(rs.recipient_roles) 
                     AND s.status = 'Active'
-                    -- If schedule belongs to a centre, only email that centre's admins
-                    AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id)
+                    AND s.email IS NOT NULL AND s.email <> ''
+                    AND (
+                        rs.centre_id IS NULL 
+                        OR s.centre_id = rs.centre_id 
+                        OR s.role = 'superadmin'   -- ✅ superadmins are global
+                    )
                 ) as resolved_emails
             FROM report_schedules rs 
             ORDER BY rs.created_at DESC
