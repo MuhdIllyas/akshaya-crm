@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
-  FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle, FiSettings,
+  FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
   FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
   FiMapPin, FiPhone, FiMail, FiRefreshCw, FiUser, FiFileText, FiClock
 } from 'react-icons/fi';
@@ -146,7 +146,7 @@ const CinematicHero = () => {
         <AnimatePresence mode="wait">
           
           {activeStage === 0 && (
-            <motion.div key="stage0" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg flex flex-col sm:flex-row gap-6 items-center justify-center">
+            <motion.div key="stage0" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg flex flex-col sm:flex-row gap-6 items-center justify-center px-4">
               <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center w-full relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
                 <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 border border-blue-500/30"><FiUser className="w-8 h-8 text-blue-400" /></div>
@@ -165,12 +165,12 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 1 && (
-            <motion.div key="stage1" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg bg-navy-800/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden">
+            <motion.div key="stage1" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg px-4 sm:px-0 bg-navy-800/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden">
               <div className="bg-navy-900 px-6 py-4 border-b border-white/5 flex items-center justify-between">
                 <span className="text-white font-bold text-sm">Staff Dashboard Queue</span>
                 <FiLayers className="text-teal-400" />
               </div>
-              <div className="p-6 flex gap-4 w-full">
+              <div className="p-6 flex flex-col sm:flex-row gap-4 w-full">
                 <div className="flex-1 bg-navy-900/50 p-4 rounded-xl border border-white/5">
                   <h4 className="text-xs text-blue-400 mb-3 font-bold flex items-center"><FiUser className="mr-1.5"/> WALK-IN TOKENS</h4>
                   <div className="bg-white/10 p-4 rounded-lg border border-white/10 shadow-inner mb-3">
@@ -190,7 +190,7 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 2 && (
-            <motion.div key="stage2" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center">
+            <motion.div key="stage2" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center px-4 sm:px-0">
               <div className="w-full bg-white/5 backdrop-blur-2xl border border-teal-500/30 rounded-3xl p-8 shadow-[0_30px_60px_rgba(20,184,166,0.15)] flex flex-col items-center relative z-10">
                 <div className="w-20 h-20 bg-teal-500/20 rounded-full flex items-center justify-center mb-4 border border-teal-500/40">
                   <FiBriefcase className="w-10 h-10 text-teal-400" />
@@ -200,7 +200,8 @@ const CinematicHero = () => {
                 <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: 0 }} animate={{ width: "20%" }} transition={{ duration: 1 }} className="h-full bg-teal-400"></motion.div></div>
               </div>
               
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -30, x: 60, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-10 right-[-20%] bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-72 text-left z-20">
+              {/* WhatsApp Popup FIXED for small screens */}
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -20, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-16 right-0 sm:-right-6 bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-64 sm:w-72 text-left z-30">
                 <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Automated Message</span></div>
                 <p className="text-sm leading-relaxed">Hi Muhammed, we have received your Passport Renewal request and our staff has just started processing it. 🚀</p>
               </motion.div>
@@ -208,7 +209,7 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 3 && (
-            <motion.div key="stage3" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center">
+            <motion.div key="stage3" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center px-4 sm:px-0">
               <div className="w-full bg-white/5 backdrop-blur-2xl border border-blue-500/30 rounded-3xl p-8 shadow-[0_30px_60px_rgba(59,130,246,0.15)] flex flex-col items-center relative z-10">
                 <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 border border-blue-500/40">
                   <FiSettings className="w-10 h-10 text-blue-400 animate-spin-slow" />
@@ -218,7 +219,8 @@ const CinematicHero = () => {
                 <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: "20%" }} animate={{ width: "70%" }} transition={{ duration: 1 }} className="h-full bg-blue-400"></motion.div></div>
               </div>
               
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -30, x: 60, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-10 right-[-20%] bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-72 text-left z-20">
+              {/* WhatsApp Popup FIXED */}
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -20, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-16 right-0 sm:-right-6 bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-64 sm:w-72 text-left z-30">
                 <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Automated Update</span></div>
                 <p className="text-sm leading-relaxed">Update: Your documents have been successfully verified! We are now filing your application on the portal.</p>
               </motion.div>
@@ -226,7 +228,7 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 4 && (
-            <motion.div key="stage4" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-md flex flex-col items-center">
+            <motion.div key="stage4" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-md flex flex-col items-center px-4 sm:px-0">
               <div className="flex flex-col items-center w-full">
                 
                 <motion.div initial={{ y: -20 }} animate={{ y: 0 }} className="w-full bg-emerald-500/20 backdrop-blur-xl border border-emerald-500/40 rounded-2xl p-6 shadow-2xl flex items-center justify-between z-20 relative overflow-hidden">
@@ -255,7 +257,7 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 5 && (
-            <motion.div key="stage5" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center">
+            <motion.div key="stage5" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center px-4 sm:px-0">
               <div className="w-full bg-white/5 backdrop-blur-2xl border border-green-500/30 rounded-3xl p-8 shadow-[0_30px_60px_rgba(34,197,94,0.15)] flex flex-col items-center relative z-10">
                 <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.5)]">
                   <FiCheckCircle className="w-10 h-10 text-white" />
@@ -265,7 +267,8 @@ const CinematicHero = () => {
                 <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: "70%" }} animate={{ width: "100%" }} transition={{ duration: 0.5 }} className="h-full bg-green-400"></motion.div></div>
               </div>
               
-              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -30, x: 60, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-10 right-[-20%] bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-72 text-left z-20">
+              {/* WhatsApp Popup FIXED */}
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -20, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-16 right-0 sm:-right-6 bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-64 sm:w-72 text-left z-30">
                 <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Service Complete</span></div>
                 <p className="text-sm leading-relaxed mb-3">Your Passport Renewal is successfully completed! Thank you for choosing us.</p>
                 <div className="bg-white/10 p-2 rounded flex items-center border border-white/20"><FiFileText className="mr-2 text-red-300"/> <span className="text-xs font-bold">Receipt_O-405.pdf</span></div>
@@ -274,16 +277,16 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 6 && (
-            <motion.div key="stage6" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] p-6 overflow-hidden">
+            <motion.div key="stage6" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] p-6 overflow-hidden px-4 sm:px-6">
               <h3 className="text-xl font-bold text-white mb-6 flex items-center"><FiPieChart className="mr-3 text-pink-400"/> Admin Command Centre</h3>
               
               <div className="grid grid-cols-2 gap-4">
-                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="bg-navy-900/60 p-4 rounded-2xl border border-white/5">
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="col-span-2 sm:col-span-1 bg-navy-900/60 p-4 rounded-2xl border border-white/5">
                   <p className="text-xs text-navy-300 mb-1 font-bold uppercase tracking-wider">Today's Revenue</p>
                   <p className="text-2xl font-black text-emerald-400 flex items-center"><FiTrendingUp className="mr-2 w-5 h-5"/> ₹12,400</p>
                 </motion.div>
                 
-                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="bg-navy-900/60 p-4 rounded-2xl border border-white/5">
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="col-span-2 sm:col-span-1 bg-navy-900/60 p-4 rounded-2xl border border-white/5">
                   <p className="text-xs text-navy-300 mb-1 font-bold uppercase tracking-wider">Staff Leaderboard</p>
                   <div className="flex justify-between items-center"><span className="text-white font-bold text-sm">1. Sarah</span> <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold">18 Services</span></div>
                 </motion.div>
@@ -300,7 +303,7 @@ const CinematicHero = () => {
           )}
 
           {activeStage === 7 && (
-            <motion.div key="stage7" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center text-center">
+            <motion.div key="stage7" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center text-center px-4 sm:px-0">
               
               <div className="flex gap-2 mb-8">
                 {[1,2,3,4,5].map(i => (
@@ -451,7 +454,7 @@ const ContactSection = () => {
                   </div>
                   <div>
                     <p className="text-sm text-navy-200 font-medium mb-1">Email</p>
-                    <p className="font-semibold text-sm">admin@akshayasahayi.com</p>
+                    <p className="font-semibold text-sm">support@akshayasahayi.com</p>
                   </div>
                 </div>
                 <div className="flex items-start">
@@ -800,14 +803,25 @@ const Home = () => {
                     <p className="text-sm text-gray-600 mt-1">Create multiple teams, assign staff, measure exact team revenue, track team expenses, and analyze overall team profit.</p>
                   </div>
                 </motion.div>
+                
+                <motion.div variants={fadeUp} className="flex gap-4">
+                  <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                    <FiTarget className="h-6 w-6" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-gray-900">Staff Targets &amp; Incentives</h4>
+                    <p className="text-sm text-gray-600 mt-1">Set clear staff targets, monitor completion rates, and calculate performance-based incentives automatically.</p>
+                  </div>
+                </motion.div>
               </div>
             </motion.div>
+            
           </div>
         </div>
       </section>
 
       {/* 6. MULTI-CENTRE MANAGEMENT */}
-      <section id="multi-centre" className="py-24 bg-gray-50 border-b border-gray-200">
+      <section id="multi-centre" className="py-24 bg-gray-50 border-y border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">One Business. Multiple Centres. One Control Panel.</h2>
@@ -820,6 +834,7 @@ const Home = () => {
                 <span>SUPERADMIN</span>
                 <span className="text-[10px] font-normal text-navy-300 mt-0.5 uppercase tracking-wide">Network Control</span>
               </div>
+              
               <div className="w-full flex justify-center mt-[-2px]">
                 <div className="w-px h-8 bg-gray-300"></div>
               </div>
@@ -828,6 +843,7 @@ const Home = () => {
                 <div className="w-px h-8 bg-gray-300"></div>
                 <div className="w-px h-8 bg-gray-300 hidden sm:block"></div>
               </div>
+
               <div className="w-full flex justify-center gap-4 sm:gap-16">
                 <div className="flex flex-col items-center">
                   <div className="bg-teal-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
@@ -839,6 +855,7 @@ const Home = () => {
                   <div className="w-px h-4 bg-gray-300"></div>
                   <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
+                
                 <div className="flex flex-col items-center">
                   <div className="bg-blue-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
                     <span>Centre B</span>
@@ -849,6 +866,7 @@ const Home = () => {
                   <div className="w-px h-4 bg-gray-300"></div>
                   <div className="bg-gray-100 text-gray-600 px-4 py-1 rounded text-xs">Centre Staff</div>
                 </div>
+
                 <div className="hidden sm:flex flex-col items-center">
                   <div className="bg-purple-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
                     <span>Centre C</span>
@@ -920,7 +938,6 @@ const Home = () => {
               <ul className="space-y-3 text-sm">
                 <li><button onClick={() => navigate('/login')} className="hover:text-teal-400 transition-colors">Service Booking Portal</button></li>
                 <li><a href="#features" className="hover:text-teal-400 transition-colors">WhatsApp Integration</a></li>
-                <li><a href="#features" className="hover:text-teal-400 transition-colors">Staff Companion App</a></li>
                 <li><a href="#features" className="hover:text-teal-400 transition-colors">Token Management</a></li>
                 <li><a href="#finances" className="hover:text-teal-400 transition-colors">Accounting &amp; Wallets</a></li>
               </ul>
