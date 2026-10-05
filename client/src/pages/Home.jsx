@@ -660,7 +660,6 @@ const Home = () => {
               <ul className="space-y-3 text-sm">
                 <li><a href="#" className="hover:text-teal-400 transition-colors">About Us</a></li>
                 <li><Link to="/contact" className="hover:text-teal-400 transition-colors">Contact Support</Link></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Contact Support</a></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Privacy Policy</a></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Terms of Service</a></li>
               </ul>
