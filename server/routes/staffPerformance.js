@@ -3,6 +3,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { logActivity } from '../utils/activityLogger.js';
+import { ensureTargets, refreshActive } from '../utils/staffTargets.js';
 
 const router = express.Router();
 
@@ -1432,6 +1433,9 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       return eventDateFilter.replace(/\{col\}/g, colName);
     };
 
+    await ensureTargets(client, { staffId });   // this month's row, no-op once it exists
+    await refreshActive(client, { staffId });   // closes any finished month for this staff only
+
     // Fire ALL queries concurrently in PostgreSQL
     const [
       performanceRes,
@@ -1443,7 +1447,9 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       onlineProcessingRes,
       deliveriesRes,
       expiriesRes,
-      todayAttendanceRes
+      todayAttendanceRes,
+      targetRes,
+      targetHistoryRes
     ] = await Promise.all([
       // 1. Performance Summary
       client.query(`
@@ -1582,8 +1588,33 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
         WHERE staff_id = $1 AND date = CURRENT_DATE
         ORDER BY id DESC
         LIMIT 1
-      `, [staffId])
+      `, [staffId]),
 
+      // 11. Target (frozen snapshot) + live achieved/today
+      client.query(`
+        SELECT
+          t.target_amount AS monthly_target,
+          COALESCE((SELECT SUM(se.service_charges) FROM service_entries se
+                    WHERE se.staff_id = $1 AND se.status = 'completed'
+                      AND se.created_at >= date_trunc('month', CURRENT_DATE)), 0) AS current_service_charge,
+          COALESCE((SELECT SUM(se.service_charges) FROM service_entries se
+                    WHERE se.staff_id = $1 AND se.status = 'completed'
+                      AND se.created_at >= CURRENT_DATE), 0) AS today_service_charge
+        FROM staff_monthly_targets t
+        WHERE t.staff_id = $1
+          AND t.month = date_trunc('month', CURRENT_DATE)::date
+      `, [staffId]),
+
+      // 12. Closed-month target history (last 6)
+      client.query(`
+        SELECT month, target_amount, achieved_amount, achievement_percent
+        FROM staff_monthly_targets
+        WHERE staff_id = $1
+          AND status = 'closed'
+          AND month < date_trunc('month', CURRENT_DATE)::date
+        ORDER BY month DESC
+        LIMIT 6
+      `, [staffId])
     ]);
 
     // --- FORMAT DYNAMIC EVENTS ---
@@ -1647,6 +1678,18 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
       (avgRating * 4) // 5 * 4 = 20
     ));
 
+    // Target Calculations
+    const targetRow = targetRes.rows[0] || { avg_service_charge: 0, monthly_target: 0, current_service_charge: 0, today_service_charge: 0 };
+    const monthlyTarget = parseFloat(targetRow.monthly_target) || 0;
+    const currentAchieved = parseFloat(targetRow.current_service_charge) || 0;
+    const todayAchieved = parseFloat(targetRow.today_service_charge) || 0;
+    
+    // Calculate daily target based on days in the current month
+    const today = new Date();
+    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const dailyTarget = monthlyTarget > 0 ? Math.round(monthlyTarget / daysInMonth) : 0;
+    const progressPercentage = monthlyTarget > 0 ? (currentAchieved / monthlyTarget) * 100 : 0;
+
     res.json({
       success: true,
       data: {
@@ -1658,6 +1701,19 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
             collection_rate: collectionRate,
             avg_transaction_value: avgTransactionValue,
             incentive_score: incentiveScore
+          },
+          target: { 
+            monthly_target: monthlyTarget,
+            current_achieved: currentAchieved,
+            daily_target: dailyTarget,
+            today_achieved: todayAchieved,
+            progress_percentage: progressPercentage,
+            history: targetHistoryRes.rows.map(r => ({
+              month: r.month,
+              target: parseFloat(r.target_amount),
+              achieved: parseFloat(r.achieved_amount),
+              percent: r.achievement_percent === null ? null : parseFloat(r.achievement_percent)
+            }))
           },
           ratings: {
             avg_rating: avgRating.toFixed(1),

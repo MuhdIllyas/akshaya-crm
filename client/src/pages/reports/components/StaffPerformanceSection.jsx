@@ -9,6 +9,13 @@ import {
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
+import StaffTargetsPanel from "./StaffTargetsPanel";
+import StaffTargetHistory from "./StaffTargetHistory";
+
+// Local-date formatter (YYYY-MM-DD). toISOString() converts to UTC, which shifts
+// the date back by a day in IST (e.g. 1 Oct 00:00 IST -> 30 Sep).
+const toLocalISO = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
 const formatINR = (value) =>
   Number(value || 0).toLocaleString("en-IN");
@@ -207,6 +214,23 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
           <span className="font-medium text-blue-600">₹{formatINR(staff.expectedAmount)}</span>
         </div>
       </div>
+
+      {/* Target Progress */}
+      {staff.monthlyTarget > 0 && (
+        <div className="pt-2 border-t border-gray-100 mt-2">
+          <div className="flex justify-between text-xs mb-1">
+            <span className="text-gray-500 flex items-center"><FiTarget className="h-3 w-3 mr-1" />Target</span>
+            <span className={`font-semibold ${staff.targetPercent >= 100 ? "text-emerald-600" : "text-gray-700"}`}>
+              {staff.targetPercent.toFixed(0)}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+            <div className={`h-full ${staff.targetPercent >= 100 ? "bg-emerald-500" : staff.targetPercent >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                style={{ width: `${Math.min(staff.targetPercent, 100)}%` }} />
+          </div>
+          <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(staff.targetAchieved)} / ₹{formatINR(staff.monthlyTarget)}</p>
+        </div>
+      )}
       
       {staff.pendingAmount > 0 && (
         <div className="flex items-center justify-between text-xs text-rose-600 pt-2 border-t border-gray-100 mt-2">
@@ -229,6 +253,58 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
   );
 };
 
+// Shows ONE staff's last 6 months inside the side panel.
+const StaffTargetTab = ({ staffId }) => {
+  const [rows, setRows] = useState(null);
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff/${staffId}/target-history?months=6`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setRows(res.ok ? await res.json() : []);
+      } catch { setRows([]); }
+    })();
+  }, [staffId]);
+
+  if (!rows) return <p className="text-xs text-gray-400">Loading…</p>;
+  if (rows.length === 0) return <p className="text-xs text-gray-400">No target history yet</p>;
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4">
+      <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
+        <FiTarget className="h-3 w-3 mr-2 text-indigo-600" /> Target History (+10% Growth)
+      </h3>
+      <div className="space-y-3">
+        {rows.map((r) => {
+          const pct = Number(r.achievement_percent || 0);
+          const open = r.status === "active";
+          const hasTarget = Number(r.target_amount) > 0;
+          return (
+            <div key={r.month}>
+              <div className="flex justify-between text-xs mb-1">
+                <span className="font-medium text-gray-700">
+                  {new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric" })}
+                </span>
+                <span className={!hasTarget ? "text-gray-400" : open ? "text-blue-600" : pct >= 100 ? "text-emerald-600" : "text-rose-600"}>
+                  {!hasTarget ? "No target" : open ? `In progress · ${pct.toFixed(0)}%` : pct >= 100 ? `✓ Achieved · ${pct.toFixed(0)}%` : `✗ Missed · ${pct.toFixed(0)}%`}
+                </span>
+              </div>
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className={`h-full ${pct >= 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+                     style={{ width: `${Math.min(pct, 100)}%` }} />
+              </div>
+              <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(r.achieved_amount)} / ₹{formatINR(r.target_amount)}</p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // StaffDetailsPanel Component - Updated to match WalletDetailsPanel style with ratings
 const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingDistribution, onClose }) => {
   const [activeTab, setActiveTab] = useState('performance');
@@ -236,7 +312,8 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
   const tabs = [
     { id: 'performance', label: 'Performance', icon: FiTrendingUp },
     { id: 'categories', label: 'Categories', icon: FiBriefcase },
-    { id: 'efficiency', label: 'Efficiency', icon: FiActivity }
+    { id: 'efficiency', label: 'Efficiency', icon: FiActivity },
+    { id: 'targets', label: 'Targets', icon: FiTarget }
   ];
 
   return (
@@ -547,6 +624,9 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 </div>
               </div>
             )}
+
+            {/* Staff Targets */}
+            {activeTab === 'targets' && <StaffTargetTab staffId={staff.id} />}
           </div>
         </div>
       </motion.div>
@@ -581,6 +661,24 @@ const StaffPerformanceSection = ({
   const [loadingCategories, setLoadingCategories] = useState(false);
   const [fromDate, setFromDate] = useState(null);
   const [toDate, setToDate] = useState(null);
+
+  // Date picker state lives here (not inside the picker) so re-renders can't close it
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [draftFrom, setDraftFrom] = useState('');
+  const [draftTo, setDraftTo] = useState('');
+
+  const openDatePicker = () => {
+    setDraftFrom(fromDate || '');
+    setDraftTo(toDate || '');
+    setIsDatePickerOpen(true);
+  };
+  const draftInvalid = !draftFrom || !draftTo || draftFrom > draftTo;
+  const applyDraft = () => {
+    if (draftInvalid) return;
+    setFromDate(draftFrom);
+    setToDate(draftTo);
+    setIsDatePickerOpen(false);
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('revenue'); // 'revenue', 'rate', 'incentive'
   const [staffMode, setStaffMode] = useState('permanent'); // 'permanent' or 'trainee'
@@ -594,36 +692,53 @@ const StaffPerformanceSection = ({
   const ratingDistribution = externalRatingDistribution || internalRatingDistribution;
   const loadingReviews = externalLoadingReviews !== undefined ? externalLoadingReviews : internalLoadingReviews;
 
+  //Staff Targets
+  const [showTargets, setShowTargets] = useState(false);
+  const [targetMap, setTargetMap] = useState({});
+
+  // Cards show the target of the month that `toDate` falls in (targets are monthly,
+  // the date picker is free-range — so the card is labelled by month, not by range).
+  useEffect(() => {
+    if (!toDate) return;
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const params = new URLSearchParams({ month: toDate.slice(0, 7) });
+        if (centreId) params.append("centreId", centreId);
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/staffreport/staff-targets?${params}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const rows = res.ok ? await res.json() : [];
+        setTargetMap(Object.fromEntries(rows.map((r) => [String(r.staff_id), r])));
+      } catch { setTargetMap({}); }
+    })();
+  }, [centreId, toDate]);
+
   // Date range picker component
-  const DateRangePicker = () => {
-    const [isOpen, setIsOpen] = useState(false);
-    
+  const renderDateRangePicker = () => {
+    const todayStr = toLocalISO(new Date());
+
     const quickRanges = [
       { label: 'This Month', getDates: () => {
         const now = new Date();
-        const from = new Date(now.getFullYear(), now.getMonth(), 1);
-        const to = new Date();
-        return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+        return { from: toLocalISO(new Date(now.getFullYear(), now.getMonth(), 1)), to: toLocalISO(now) };
       }},
-      { label: 'Last Quarter', getDates: () => {
+      { label: 'Last Quarter', getDates: () => {            // (label kept as-is; it is the CURRENT quarter to date)
         const now = new Date();
         const q = Math.floor(now.getMonth() / 3) * 3;
-        const from = new Date(now.getFullYear(), q, 1);
-        const to = new Date();
-        return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+        return { from: toLocalISO(new Date(now.getFullYear(), q, 1)), to: toLocalISO(now) };
       }},
       { label: 'This Year', getDates: () => {
         const now = new Date();
-        const from = new Date(now.getFullYear(), 0, 1);
-        const to = new Date();
-        return { from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) };
+        return { from: toLocalISO(new Date(now.getFullYear(), 0, 1)), to: toLocalISO(now) };
       }},
     ];
 
     return (
       <div className="relative">
         <button
-          onClick={() => setIsOpen(!isOpen)}
+          onClick={() => (isDatePickerOpen ? setIsDatePickerOpen(false) : openDatePicker())}
           className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
         >
           <FiCalendar className="h-4 w-4 mr-2 text-gray-500" />
@@ -632,9 +747,9 @@ const StaffPerformanceSection = ({
         </button>
 
         <AnimatePresence>
-          {isOpen && (
+          {isDatePickerOpen && (
             <>
-              <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+              <div className="fixed inset-0 z-40" onClick={() => setIsDatePickerOpen(false)} />
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -644,18 +759,19 @@ const StaffPerformanceSection = ({
                 <div className="p-4">
                   <div className="flex items-center justify-between mb-4">
                     <h4 className="font-medium text-gray-900 text-sm">Date Range</h4>
-                    <button onClick={() => setIsOpen(false)} className="text-gray-400 hover:text-gray-600">
+                    <button onClick={() => setIsDatePickerOpen(false)} className="text-gray-400 hover:text-gray-600">
                       <FiX className="h-4 w-4" />
                     </button>
                   </div>
-                  
-                  <div className="grid grid-cols-2 gap-3 mb-4">
+
+                  <div className="grid grid-cols-2 gap-3 mb-2">
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
                       <input
                         type="date"
-                        value={fromDate || ''}
-                        onChange={(e) => setFromDate(e.target.value)}
+                        value={draftFrom}
+                        max={draftTo || todayStr}
+                        onChange={(e) => setDraftFrom(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
@@ -663,14 +779,36 @@ const StaffPerformanceSection = ({
                       <label className="block text-xs font-medium text-gray-700 mb-1">To</label>
                       <input
                         type="date"
-                        value={toDate || ''}
-                        onChange={(e) => setToDate(e.target.value)}
+                        value={draftTo}
+                        min={draftFrom || undefined}
+                        max={todayStr}
+                        onChange={(e) => setDraftTo(e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
                       />
                     </div>
                   </div>
 
-                  <div className="space-y-2 mb-4">
+                  {draftFrom && draftTo && draftFrom > draftTo && (
+                    <p className="text-xs text-rose-600 mb-2">"From" must be on or before "To"</p>
+                  )}
+
+                  <div className="flex justify-end gap-2 mb-4">
+                    <button
+                      onClick={() => setIsDatePickerOpen(false)}
+                      className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={applyDraft}
+                      disabled={draftInvalid}
+                      className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      Apply
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
                     <p className="text-xs font-medium text-gray-700">Quick Select</p>
                     <div className="space-y-2">
                       {quickRanges.map((range) => (
@@ -680,7 +818,7 @@ const StaffPerformanceSection = ({
                             const dates = range.getDates();
                             setFromDate(dates.from);
                             setToDate(dates.to);
-                            setIsOpen(false);
+                            setIsDatePickerOpen(false);
                           }}
                           className="w-full px-3 py-2 text-left text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
                         >
@@ -848,8 +986,6 @@ const StaffPerformanceSection = ({
 
   useEffect(() => {
     const now = new Date();
-    const to = now.toISOString().slice(0, 10);
-
     let from;
 
     if (timePeriod === "monthly") {
@@ -861,8 +997,8 @@ const StaffPerformanceSection = ({
       from = new Date(now.getFullYear(), 0, 1);
     }
 
-    setFromDate(from.toISOString().slice(0, 10));
-    setToDate(to);
+    setFromDate(toLocalISO(from));
+    setToDate(toLocalISO(now));
   }, [timePeriod]);
 
   // Fetch review data when centreId or date range changes (for non-superadmin)
@@ -950,7 +1086,19 @@ const StaffPerformanceSection = ({
   }, [staffPerformance, traineeIds]);
 
   // Active dataset based on toggle
-  const activeData = staffMode === 'permanent' ? permanentStaff : traineePerformance;
+  const activeData = useMemo(
+    () =>
+      (staffMode === "permanent" ? permanentStaff : traineePerformance).map((s) => {
+        const t = targetMap[String(s.id)];
+        return {
+          ...s,
+          monthlyTarget: Number(t?.target_amount || 0),
+          targetAchieved: Number(t?.achieved_amount || 0),
+          targetPercent: Number(t?.achievement_percent || 0),
+        };
+      }),
+    [staffMode, permanentStaff, traineePerformance, targetMap]
+  );
 
   // Filter and sort active data
   const filteredAndSortedStaff = useMemo(() => {
@@ -1054,6 +1202,15 @@ const StaffPerformanceSection = ({
             <FiRefreshCw className={`h-4 w-4 mr-2 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
             Refresh
           </button>
+
+          <button
+            onClick={() => setShowTargets((v) => !v)}
+            className={`flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
+              showTargets ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+            }`}
+          >
+            <FiTarget className="h-4 w-4 mr-2" /> Targets
+          </button>
         </div>
 
         {/* Staff Type Toggle */}
@@ -1086,7 +1243,7 @@ const StaffPerformanceSection = ({
 
         {/* Controls */}
         <div className="flex flex-wrap gap-3 mb-4 items-end">
-          <DateRangePicker />
+          {renderDateRangePicker()}
           
           <select
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
@@ -1325,6 +1482,13 @@ const StaffPerformanceSection = ({
               )}
             </div>
           </div>
+        )}
+
+        {showTargets && (
+          <>
+            <StaffTargetsPanel centreId={centreId} />
+            <StaffTargetHistory centreId={centreId} />
+          </>
         )}
 
         {/* ========== NEW: Revenue Breakdown Quick View Table ========== */}

@@ -74,8 +74,12 @@ import ContinueApplication from './components/ContinueApplication';
 import ApplicationDocuments from './components/ApplicationDocuments';
 import ConfirmationPage from './components/ConfirmationPage';
 import ViewServiceDetails from './components/ViewServiceDetails';
+
+//Public Pages
 import PublicReview from './components/PublicReview';
 import PublicTrackingPage from './pages/PublicTrackingPage';
+import AadhaarDocu from './pages/AadhaarDocu';
+import Contact from './pages/Contact';
 
 // ---------------------------------------------------------------------
 // Protected Route Component (FIXED - No toasts, no retry logic)
@@ -257,13 +261,23 @@ const App = () => {
         style={{ zIndex: 999999 }}
       />
       <Routes>
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="/home" element={<Home />} />
+        {/* 1. CORE PUBLIC ROUTES */}
+        {/* Make the Home page the true root of your website */}
+        <Route path="/" element={<Home />} />
+        
+        {/* Optional: If anyone has bookmarked /home, push them to the root */}
+        <Route path="/home" element={<Navigate to="/" replace />} />
+
+        {/* 2. AUTH & PUBLIC SERVICES */}
         <Route path="/login" element={<Login />} />
+        <Route path="/contact" element={<Contact />} />
+        <Route path="/aadhaar-docufinder" element={<AadhaarDocu />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />
+        
+        {/* 3. DYNAMIC PUBLIC PAGES */}
         <Route path="/review/:token" element={<PublicReview />} />
         <Route path="/track/:trackingId" element={<PublicTrackingPage />} />
-        <Route path="/print" element={<SelfServicePrint />} /> 
+        <Route path="/print" element={<SelfServicePrint />} />
 
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<DashboardLayout />}>
@@ -565,7 +579,7 @@ const App = () => {
             element={<CustomerProtectedRoute><CustomerProfile /></CustomerProtectedRoute>}
           />
         </Route>
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </NotificationProvider>
   );

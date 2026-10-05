@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import pool from "../../db.js";
+import { ensureTargets, refreshActive, normalizeMonth } from "../../utils/staffTargets.js";
 
 const router = express.Router();
 
@@ -508,6 +509,106 @@ router.get("/rating-distribution", async (req, res) => {
   } catch (err) {
     console.error("Rating distribution error:", err);
     res.status(500).json({ error: "Failed to fetch rating distribution" });
+  }
+});
+
+/* =========================================================
+   3️⃣ STAFF MONTHLY TARGETS (+10% growth) — snapshot table
+   GET /staff-targets?month=YYYY-MM&centreId=
+========================================================= */
+router.get("/staff-targets", async (req, res) => {
+  try {
+    const month = normalizeMonth(req.query.month); // null => current month
+    if (req.query.month && !month) {
+      return res.status(400).json({ error: "Invalid or future month" });
+    }
+ 
+    let centreId = null;
+    if (req.user.role === "admin") centreId = req.user.centre_id;
+    if (req.user.role === "superadmin" && req.query.centreId) centreId = Number(req.query.centreId);
+ 
+    // Past months with no rows yet (before this feature existed) are back-filled here, then frozen.
+    await ensureTargets(pool, { month, centreId });
+    await refreshActive(pool, { centreId });
+ 
+    const { rows } = await pool.query(
+      `
+      SELECT
+        t.id, t.staff_id, s.name AS staff_name, s.employment_type,
+        t.month, t.baseline_amount, t.growth_percent, t.target_amount,
+        t.achieved_amount, t.achievement_percent, t.status,
+        GREATEST(t.target_amount - t.achieved_amount, 0) AS remaining_amount
+      FROM staff_monthly_targets t
+      JOIN staff s ON s.id = t.staff_id
+      WHERE t.month = COALESCE($1::date, date_trunc('month', CURRENT_DATE)::date)
+        AND ($2::int IS NULL OR t.centre_id = $2::int)
+      ORDER BY t.achievement_percent DESC NULLS LAST, s.name
+      `,
+      [month, centreId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Staff targets error:", err);
+    res.status(500).json({ error: "Failed to fetch staff targets" });
+  }
+});
+ 
+/* GET /staff/:staffId/target-history?months=6  → achievement trend for one staff */
+router.get("/staff/:staffId/target-history", async (req, res) => {
+  try {
+    const months = Math.min(Math.max(Number(req.query.months) || 6, 1), 24);
+    let centreId = null;
+    if (req.user.role === "admin") centreId = req.user.centre_id;
+    if (req.user.role === "superadmin" && req.query.centreId) centreId = Number(req.query.centreId);
+ 
+    const { rows } = await pool.query(
+      `
+      SELECT month, baseline_amount, target_amount, achieved_amount, achievement_percent, status
+      FROM staff_monthly_targets
+      WHERE staff_id::text = $1
+        AND ($2::int IS NULL OR centre_id = $2::int)
+      ORDER BY month DESC
+      LIMIT $3
+      `,
+      [req.params.staffId, centreId, months]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Target history error:", err);
+    res.status(500).json({ error: "Failed to fetch target history" });
+  }
+});
+ 
+/* =========================================================
+   GET /staff-targets/history?months=12&centreId=
+   One row per staff per month (closed + current) → used by the history grid
+========================================================= */
+router.get("/staff-targets/history", async (req, res) => {
+  try {
+    const months = Math.min(Math.max(Number(req.query.months) || 12, 1), 36);
+    let centreId = null;
+    if (req.user.role === "admin") centreId = req.user.centre_id;
+    if (req.user.role === "superadmin" && req.query.centreId) centreId = Number(req.query.centreId);
+ 
+    await ensureTargets(pool, { centreId });   // current month row
+    await refreshActive(pool, { centreId });   // closes any finished months
+ 
+    const { rows } = await pool.query(
+      `
+      SELECT t.staff_id, s.name AS staff_name, s.employment_type, t.month,
+             t.target_amount, t.achieved_amount, t.achievement_percent, t.status, t.source
+      FROM staff_monthly_targets t
+      JOIN staff s ON s.id = t.staff_id
+      WHERE t.month > date_trunc('month', CURRENT_DATE)::date - ($1::int * INTERVAL '1 month')
+        AND ($2::int IS NULL OR t.centre_id = $2::int)
+      ORDER BY s.name, t.month
+      `,
+      [months, centreId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Target history grid error:", err);
+    res.status(500).json({ error: "Failed to fetch target history" });
   }
 });
 

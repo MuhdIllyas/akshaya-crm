@@ -468,7 +468,7 @@ const DashboardLayout = () => {
 
           {!isCollapsed && (
             <div className="px-4">
-              <p className="text-blue-200 text-xs text-center">© 2025 Business Management System</p>
+              <p className="text-blue-200 text-xs text-center">© 2026 Business Management System</p>
               <p className="text-blue-200 text-xs text-center mt-1">All rights reserved</p>
             </div>
           )}
