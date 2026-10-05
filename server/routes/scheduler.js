@@ -119,10 +119,9 @@ const checkAndRunSchedules = async () => {
             if (emails.length > 0) {
                 console.log(`[CRON] 📧 Sending "${schedule.name}" to ${emails.length} recipients...`);
                 
-                // Get yesterday's date string for the report data
-                const yest = new Date(istDate);
-                yest.setDate(yest.getDate() - 1);
-                const yesterdayStr = yest.toISOString().split('T')[0];
+                // 👇 Calculate TODAY'S date in IST safely
+                const today = new Date();
+                const todayStr = today.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
                 // 👇 BULLETPROOF ARRAY PARSER 👇
                 let parsedReportIds = schedule.report_ids;
@@ -144,14 +143,13 @@ const checkAndRunSchedules = async () => {
                     continue; 
                 }
 
-                // 👇 FETCH DATA WITH THE CORRECT OBJECT STRUCTURE 👇
+                // 👇 FETCH DATA WITH TODAY'S DATE 👇
                 const data = await getReportData({
-                    // FIX 1: Normalize 'all' or undefined database values to null to prevent the Postgres integer syntax error
                     targetCentreId: schedule.centre_id === 'all' ? null : (schedule.centre_id || null),
-                    fromDate: yesterdayStr,
-                    toDate: yesterdayStr,
-                    period: 'daily',
-                    staffId: 'all', 
+                    fromDate: todayStr,
+                    toDate: todayStr,
+                    period: 'custom',  // Keeps backend from defaulting to an empty 00:00 boundary
+                    staffId: null,     // Fixes zero-row returns from the string "all"
                     reportIds: parsedReportIds
                 });
 
@@ -159,13 +157,12 @@ const checkAndRunSchedules = async () => {
                 const pdfBuffer = await buildPDF(data, parsedReportIds, { title: schedule.name });
                 const htmlBody = buildEmailHTML(data, parsedReportIds, schedule.name);
 
-                // FIX 2: Declare the missing fileName variable before sending the email
-                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${yesterdayStr}.pdf`;
+                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${todayStr}.pdf`;
 
                 await sendReportEmail(
                     emails,
-                    `${schedule.name} - ${yesterdayStr}`,
-                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${yesterdayStr}.\n\n- Akshaya Sahayi`,
+                    `${schedule.name} - ${todayStr}`,
+                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${todayStr}.\n\n- Akshaya Sahayi`,
                     [{ filename: fileName, content: pdfBuffer }],
                     htmlBody
                 );
