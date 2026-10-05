@@ -146,17 +146,21 @@ const checkAndRunSchedules = async () => {
 
                 // 👇 FETCH DATA WITH THE CORRECT OBJECT STRUCTURE 👇
                 const data = await getReportData({
-                    targetCentreId: schedule.centre_id || 'all',
+                    // FIX 1: Normalize 'all' or undefined database values to null to prevent the Postgres integer syntax error
+                    targetCentreId: schedule.centre_id === 'all' ? null : (schedule.centre_id || null),
                     fromDate: yesterdayStr,
                     toDate: yesterdayStr,
                     period: 'daily',
-                    staffId: 'all',
+                    staffId: 'all', 
                     reportIds: parsedReportIds
                 });
 
                 // Build the PDF
                 const pdfBuffer = await buildPDF(data, parsedReportIds, { title: schedule.name });
                 const htmlBody = buildEmailHTML(data, parsedReportIds, schedule.name);
+
+                // FIX 2: Declare the missing fileName variable before sending the email
+                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${yesterdayStr}.pdf`;
 
                 await sendReportEmail(
                     emails,
