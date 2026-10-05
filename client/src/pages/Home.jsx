@@ -1,12 +1,14 @@
 // src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget
+  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
+  FiMapPin, FiPhone, FiMail, FiArrowDown, FiRefreshCw, FiClock, FiSettings, FiUser
 } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 
 // ---------------------------------------------------------------------
 // Animation Variants
@@ -80,299 +82,399 @@ const Navbar = () => {
 };
 
 // ---------------------------------------------------------------------
-// Main Page Component
+// INTERACTIVE CINEMATIC HERO (The 8-Stage Flow)
+// ---------------------------------------------------------------------
+const CinematicHero = () => {
+  const [activeStage, setActiveStage] = useState(0);
+
+  const stages = [
+    { id: 0, title: "Omnichannel Booking", icon: FiUsers },
+    { id: 1, title: "Smart Queueing", icon: FiLayers },
+    { id: 2, title: "Processing & WA", icon: FiBriefcase },
+    { id: 3, title: "Status Updates", icon: FiRefreshCw },
+    { id: 4, title: "Payments & Wallets", icon: FiCreditCard },
+    { id: 5, title: "Service Completed", icon: FiCheckCircle },
+    { id: 6, title: "Admin Overview", icon: FiPieChart },
+    { id: 7, title: "Happy Customers", icon: FiStar },
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveStage((prev) => (prev + 1) % stages.length);
+    }, 4500); // 4.5 seconds per stage so users can read the UI/WhatsApp messages
+    return () => clearInterval(timer);
+  }, [stages.length]);
+
+  return (
+    <div className="flex flex-col lg:flex-row items-center w-full h-[650px] relative mt-10 lg:mt-0">
+      
+      {/* LEFT: Sleek Vertical Timeline */}
+      <div className="hidden sm:flex w-[180px] shrink-0 h-[550px] flex-col justify-between relative z-10">
+        <div className="absolute left-[15px] top-2 bottom-2 w-[2px] bg-white/10 rounded-full" />
+        <motion.div
+          className="absolute left-[15px] top-2 w-[2px] bg-teal-400 shadow-[0_0_10px_rgba(45,212,191,0.8)] rounded-full"
+          animate={{ height: `${(activeStage / (stages.length - 1)) * 100}%` }}
+          transition={{ duration: 0.6, ease: "easeInOut" }}
+        />
+
+        {stages.map((stage, idx) => {
+          const isActive = idx === activeStage;
+          const isPassed = idx < activeStage;
+          return (
+            <div key={stage.id} className="flex items-center gap-4 group cursor-default">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${
+                isActive 
+                  ? 'bg-teal-400 border-teal-400 text-navy-900 shadow-[0_0_20px_rgba(45,212,191,0.6)] scale-125' 
+                  : isPassed 
+                    ? 'bg-navy-900 border-teal-500/50 text-teal-400' 
+                    : 'bg-navy-900 border-white/10 text-white/20'
+              }`}>
+                <stage.icon className={`transition-all duration-500 ${isActive ? 'w-4 h-4' : 'w-3 h-3'}`} />
+              </div>
+              <span className={`text-xs sm:text-sm font-bold transition-all duration-500 whitespace-nowrap ${
+                isActive ? 'text-white scale-105 origin-left shadow-sm' : isPassed ? 'text-white/60' : 'text-white/20'
+              }`}>
+                {stage.title}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* RIGHT: Massive Cinematic Unboxed Cards */}
+      <div className="flex-1 relative h-[550px] w-full flex items-center justify-center lg:pl-8 perspective-1000">
+        <AnimatePresence mode="wait">
+          
+          {/* Stage 0: Omnichannel Booking */}
+          {activeStage === 0 && (
+            <motion.div key="stage0" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg flex flex-col sm:flex-row gap-6 items-center justify-center">
+              <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center w-full relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-blue-500"></div>
+                <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 border border-blue-500/30"><FiUser className="w-8 h-8 text-blue-400" /></div>
+                <h3 className="text-xl font-bold text-white mb-1">Walk-in Visit</h3>
+                <p className="text-navy-200 text-sm text-center">Customer arrives at the desk</p>
+                <div className="mt-4 px-4 py-1.5 bg-blue-500/20 text-blue-300 rounded-full text-xs font-bold border border-blue-500/30">Service: Aadhaar Update</div>
+              </div>
+              <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-2xl flex flex-col items-center w-full relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-purple-500"></div>
+                <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mb-4 border border-purple-500/30"><FiSmartphone className="w-8 h-8 text-purple-400" /></div>
+                <h3 className="text-xl font-bold text-white mb-1">Online Portal</h3>
+                <p className="text-navy-200 text-sm text-center">Customer books from phone</p>
+                <div className="mt-4 px-4 py-1.5 bg-purple-500/20 text-purple-300 rounded-full text-xs font-bold border border-purple-500/30">Service: Passport Renewal</div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stage 1: Smart Queueing (Dashboard) */}
+          {activeStage === 1 && (
+            <motion.div key="stage1" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg bg-navy-800/80 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] overflow-hidden">
+              <div className="bg-navy-900 px-6 py-4 border-b border-white/5 flex items-center justify-between">
+                <span className="text-white font-bold text-sm">Staff Dashboard Queue</span>
+                <FiLayers className="text-teal-400" />
+              </div>
+              <div className="p-6 flex gap-4 w-full">
+                <div className="flex-1 bg-navy-900/50 p-4 rounded-xl border border-white/5">
+                  <h4 className="text-xs text-blue-400 mb-3 font-bold flex items-center"><FiUser className="mr-1.5"/> WALK-IN TOKENS</h4>
+                  <div className="bg-white/10 p-4 rounded-lg border border-white/10 shadow-inner mb-3">
+                    <div className="flex justify-between items-center mb-1"><span className="text-white font-bold">W-102</span><span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded">Waiting</span></div>
+                    <p className="text-xs text-navy-200">Aadhaar Update</p>
+                  </div>
+                </div>
+                <div className="flex-1 bg-navy-900/50 p-4 rounded-xl border border-white/5">
+                  <h4 className="text-xs text-purple-400 mb-3 font-bold flex items-center"><FiSmartphone className="mr-1.5"/> ONLINE TOKENS</h4>
+                  <div className="bg-white/10 p-4 rounded-lg border border-white/10 shadow-inner">
+                    <div className="flex justify-between items-center mb-1"><span className="text-white font-bold">O-405</span><span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded">Waiting</span></div>
+                    <p className="text-xs text-navy-200">Passport Renewal</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stage 2: Processing & WA */}
+          {activeStage === 2 && (
+            <motion.div key="stage2" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center">
+              <div className="w-full bg-white/5 backdrop-blur-2xl border border-teal-500/30 rounded-3xl p-8 shadow-[0_30px_60px_rgba(20,184,166,0.15)] flex flex-col items-center relative z-10">
+                <div className="w-20 h-20 bg-teal-500/20 rounded-full flex items-center justify-center mb-4 border border-teal-500/40">
+                  <FiBriefcase className="w-10 h-10 text-teal-400" />
+                </div>
+                <h3 className="text-2xl font-black text-white mb-1">Staff Takes Ticket</h3>
+                <p className="text-teal-200 font-bold mb-4">Processing O-405</p>
+                <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: 0 }} animate={{ width: "20%" }} transition={{ duration: 1 }} className="h-full bg-teal-400"></motion.div></div>
+              </div>
+              
+              {/* WhatsApp Popup */}
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -30, x: 60, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-10 right-[-20%] bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-72 text-left z-20">
+                <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Automated Message</span></div>
+                <p className="text-sm leading-relaxed">Hi Muhammed, we have received your Passport Renewal request and our staff has just started processing it. 🚀</p>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Stage 3: Status Updates & WA */}
+          {activeStage === 3 && (
+            <motion.div key="stage3" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center">
+              <div className="w-full bg-white/5 backdrop-blur-2xl border border-blue-500/30 rounded-3xl p-8 shadow-[0_30px_60px_rgba(59,130,246,0.15)] flex flex-col items-center relative z-10">
+                <div className="w-20 h-20 bg-blue-500/20 rounded-full flex items-center justify-center mb-4 border border-blue-500/40">
+                  <FiSettings className="w-10 h-10 text-blue-400 animate-spin-slow" />
+                </div>
+                <h3 className="text-2xl font-black text-white mb-1">Status Updated</h3>
+                <p className="text-blue-200 font-bold mb-4">Documents Verified</p>
+                <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: "20%" }} animate={{ width: "70%" }} transition={{ duration: 1 }} className="h-full bg-blue-400"></motion.div></div>
+              </div>
+              
+              {/* WhatsApp Popup */}
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -30, x: 60, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-10 right-[-20%] bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-72 text-left z-20">
+                <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Automated Update</span></div>
+                <p className="text-sm leading-relaxed">Update: Your documents have been successfully verified! We are now filing your application on the portal.</p>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Stage 4: Payments & Wallets */}
+          {activeStage === 4 && (
+            <motion.div key="stage4" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-md flex flex-col items-center">
+              <div className="flex flex-col items-center w-full">
+                
+                {/* Payment Card */}
+                <motion.div initial={{ y: -20 }} animate={{ y: 0 }} className="w-full bg-emerald-500/20 backdrop-blur-xl border border-emerald-500/40 rounded-2xl p-6 shadow-2xl flex items-center justify-between z-20 relative overflow-hidden">
+                  <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 to-transparent"></div>
+                  <div className="relative z-10">
+                    <p className="text-emerald-200 font-bold text-xs uppercase tracking-wider mb-1">Payment Received</p>
+                    <h3 className="text-4xl font-black text-emerald-400">₹1,500</h3>
+                  </div>
+                  <FiCreditCard className="w-12 h-12 text-emerald-400/50 relative z-10" />
+                </motion.div>
+
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 40, opacity: 1 }} transition={{ delay: 0.6 }} className="w-[2px] bg-emerald-500/50 my-2 shadow-[0_0_10px_rgba(16,185,129,1)]"></motion.div>
+
+                {/* Wallet Card */}
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1 }} className="w-11/12 bg-navy-800/90 backdrop-blur-xl border border-white/10 rounded-2xl p-5 shadow-2xl flex items-center justify-between z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-navy-900 rounded-lg border border-white/5 flex items-center justify-center"><FiBookOpen className="text-white/50 w-5 h-5"/></div>
+                    <div>
+                      <p className="text-white font-bold text-sm mb-0.5">UPI Wallet Ledger</p>
+                      <p className="text-emerald-400 text-xs font-bold">+ ₹1,500 Logged & Reconciled</p>
+                    </div>
+                  </div>
+                </motion.div>
+
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stage 5: Service Completed */}
+          {activeStage === 5 && (
+            <motion.div key="stage5" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center">
+              <div className="w-full bg-white/5 backdrop-blur-2xl border border-green-500/30 rounded-3xl p-8 shadow-[0_30px_60px_rgba(34,197,94,0.15)] flex flex-col items-center relative z-10">
+                <div className="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mb-4 shadow-[0_0_30px_rgba(34,197,94,0.5)]">
+                  <FiCheckCircle className="w-10 h-10 text-white" />
+                </div>
+                <h3 className="text-2xl font-black text-white mb-1">Service Completed</h3>
+                <p className="text-green-200 font-bold mb-4">Transaction Closed</p>
+                <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: "70%" }} animate={{ width: "100%" }} transition={{ duration: 0.5 }} className="h-full bg-green-400"></motion.div></div>
+              </div>
+              
+              {/* WhatsApp Popup */}
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -30, x: 60, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-10 right-[-20%] bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-72 text-left z-20">
+                <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Service Complete</span></div>
+                <p className="text-sm leading-relaxed mb-3">Your Passport Renewal is successfully completed! Thank you for choosing us.</p>
+                <div className="bg-white/10 p-2 rounded flex items-center border border-white/20"><FiFileText className="mr-2 text-red-300"/> <span className="text-xs font-bold">Receipt_O-405.pdf</span></div>
+              </motion.div>
+            </motion.div>
+          )}
+
+          {/* Stage 6: Admin Overview */}
+          {activeStage === 6 && (
+            <motion.div key="stage6" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-lg bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.6)] p-6 overflow-hidden">
+              <h3 className="text-xl font-bold text-white mb-6 flex items-center"><FiPieChart className="mr-3 text-pink-400"/> Admin Command Centre</h3>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.2 }} className="bg-navy-900/60 p-4 rounded-2xl border border-white/5">
+                  <p className="text-xs text-navy-300 mb-1 font-bold uppercase tracking-wider">Today's Revenue</p>
+                  <p className="text-2xl font-black text-emerald-400 flex items-center"><FiTrendingUp className="mr-2 w-5 h-5"/> ₹12,400</p>
+                </motion.div>
+                
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.4 }} className="bg-navy-900/60 p-4 rounded-2xl border border-white/5">
+                  <p className="text-xs text-navy-300 mb-1 font-bold uppercase tracking-wider">Staff Leaderboard</p>
+                  <div className="flex justify-between items-center"><span className="text-white font-bold text-sm">1. Sarah</span> <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold">18 Services</span></div>
+                </motion.div>
+
+                <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.6 }} className="col-span-2 bg-navy-900/60 p-4 rounded-2xl border border-white/5 flex justify-between items-center">
+                  <div>
+                    <p className="text-xs text-navy-300 mb-1 font-bold uppercase tracking-wider">Accounting Status</p>
+                    <p className="text-sm font-bold text-white">All Ledgers Reconciled</p>
+                  </div>
+                  <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center border border-green-500/30"><FiCheckCircle className="text-green-400" /></div>
+                </motion.div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Stage 7: Happy Customers & Growth */}
+          {activeStage === 7 && (
+            <motion.div key="stage7" initial={{ opacity: 0, scale: 0.9, filter: 'blur(10px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 1.1, filter: 'blur(10px)' }} transition={{ duration: 0.5 }} className="absolute w-full max-w-sm flex flex-col items-center text-center">
+              
+              <div className="flex gap-2 mb-8">
+                {[1,2,3,4,5].map(i => (
+                  <motion.div key={i} initial={{ scale: 0, rotate: -45 }} animate={{ scale: 1, rotate: 0 }} transition={{ delay: i * 0.1, type: 'spring', stiffness: 200 }}>
+                    <FiStar className="w-12 h-12 text-yellow-400 fill-current drop-shadow-[0_0_15px_rgba(250,204,21,0.6)]" />
+                  </motion.div>
+                ))}
+              </div>
+              
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.8 }} className="bg-white/10 backdrop-blur-md rounded-2xl p-6 border border-white/10 shadow-2xl mb-8 relative">
+                <div className="absolute -top-3 -left-3 text-4xl text-white/20 font-serif">"</div>
+                <p className="text-white text-lg font-medium leading-relaxed z-10 relative">
+                  Loved the automated WhatsApp updates. I didn't even have to call the centre to check my status!
+                </p>
+                <p className="text-navy-300 text-sm mt-3 font-bold">— Muhammed I.</p>
+              </motion.div>
+
+              <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 1.2 }} className="px-6 py-2 bg-teal-500/20 text-teal-300 border border-teal-500/30 rounded-full font-bold flex items-center shadow-[0_0_20px_rgba(20,184,166,0.2)]">
+                <FiTrendingUp className="mr-2" /> Centre Growth +18%
+              </motion.div>
+
+            </motion.div>
+          )}
+
+        </AnimatePresence>
+      </div>
+
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
+// Main App / Homepage Container
 // ---------------------------------------------------------------------
 const Home = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen bg-gray-50 font-sans selection:bg-teal-500 selection:text-white overflow-hidden">
       <Navbar />
 
-      {/* 1. HERO SECTION */}
-      <section className="relative pt-32 pb-20 lg:pt-48 lg:pb-32 bg-navy-900 overflow-hidden">
+      {/* 1. HERO SECTION: Cinematic Journey */}
+      <section className="relative pt-32 pb-20 lg:pt-40 lg:pb-24 bg-navy-900 overflow-hidden min-h-screen flex items-center">
         {/* Background Gradients */}
-        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-teal-500/20 blur-[120px] rounded-full pointer-events-none"></div>
-        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[120px] rounded-full pointer-events-none"></div>
+        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-teal-500/20 blur-[150px] rounded-full pointer-events-none"></div>
+        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/20 blur-[150px] rounded-full pointer-events-none"></div>
 
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 w-full">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-4 items-center">
             
-            {/* Hero Copy */}
-            <motion.div initial="hidden" animate="visible" variants={staggerContainer}>
-              <motion.div variants={fadeUp} className="inline-flex items-center px-4 py-2 bg-white/5 border border-white/10 rounded-full mb-6 backdrop-blur-sm">
+            {/* Hero Copy (Left Column) */}
+            <motion.div initial="hidden" animate="visible" variants={staggerContainer} className="pr-0 lg:pr-10 text-center lg:text-left mt-8 lg:mt-0">
+              <motion.div variants={fadeUp} className="inline-flex items-center px-4 py-2 bg-white/5 border border-white/10 rounded-full mb-6 backdrop-blur-sm shadow-xl">
                 <span className="flex h-2 w-2 rounded-full bg-teal-400 mr-2 animate-pulse"></span>
-                <span className="text-xs font-bold tracking-wider text-teal-300 uppercase">Unified e-Governance Platform</span>
+                <span className="text-xs font-bold tracking-wider text-teal-300 uppercase">One Customer. One Complete Journey.</span>
               </motion.div>
               
               <motion.h1 variants={fadeUp} className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-white leading-tight mb-6">
-                Run Your Entire <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-400">Akshaya Centre</span> From One Platform.
+                Run Your Entire <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-blue-400 drop-shadow-sm">Akshaya Centre</span> From One Platform.
               </motion.h1>
               
-              <motion.p variants={fadeUp} className="text-lg text-navy-200 mb-8 max-w-xl leading-relaxed">
-                Empower citizens to book services online, while bringing your operations, staff, WhatsApp notifications, accounting, and multi-centre analytics together seamlessly.
+              <motion.p variants={fadeUp} className="text-lg text-navy-200 mb-10 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+                Watch how a single service seamlessly moves from customer booking, through staff processing and payments, directly into automated WhatsApp updates and accounting analytics.
               </motion.p>
               
-              <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4">
-                <Link to="/login" className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-navy-900 font-bold rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.3)] transition-all flex items-center justify-center group">
+              <motion.div variants={fadeUp} className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+                <button onClick={() => navigate('/login')} className="px-8 py-4 bg-teal-500 hover:bg-teal-400 text-navy-900 font-bold rounded-xl shadow-[0_0_20px_rgba(20,184,166,0.4)] transition-all flex items-center justify-center group text-lg">
                   Book Service <FiArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" />
-                </Link>
-                <Link to="/login" className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 transition-all flex items-center justify-center">
+                </button>
+                <button onClick={() => navigate('/login')} className="px-8 py-4 bg-white/5 hover:bg-white/10 text-white font-bold rounded-xl border border-white/10 transition-all flex items-center justify-center text-lg backdrop-blur-md">
                   Sign In
-                </Link>
-              </motion.div>
-
-              <motion.div variants={fadeUp} className="mt-10 flex flex-wrap items-center gap-6 text-sm text-navy-300 font-medium">
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Self Registration</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Online Booking</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> Live Tracking</span>
-                <span className="flex items-center"><FiCheckCircle className="text-teal-500 mr-2" /> WhatsApp Updates</span>
+                </button>
               </motion.div>
             </motion.div>
 
-            {/* Stylized Dashboard Preview */}
+            {/* Live Cinematic Feed (Right Column) */}
             <motion.div 
-              initial={{ opacity: 0, x: 50, rotateY: 15 }} 
-              animate={{ opacity: 1, x: 0, rotateY: 0 }} 
-              transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative perspective-1000"
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              transition={{ duration: 1, delay: 0.2 }}
+              className="relative w-full"
             >
-              <div className="bg-navy-800 rounded-2xl border border-white/10 shadow-2xl overflow-hidden transform rotate-1 hover:rotate-0 transition-transform duration-500">
-                {/* Header */}
-                <div className="bg-navy-900/50 px-6 py-4 border-b border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-500/20 rounded-lg flex items-center justify-center border border-teal-500/30">
-                      <FiActivity className="text-teal-400 h-4 w-4" />
-                    </div>
-                    <span className="text-white font-bold text-sm">Akshaya Sahayi Workspace</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
-                    <div className="w-3 h-3 rounded-full bg-amber-500/80"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
-                  </div>
-                </div>
-                
-                {/* Dashboard Stats */}
-                <div className="p-6">
-                  <div className="grid grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Revenue</p>
-                      <p className="text-white font-bold">₹48,250</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Wallets</p>
-                      <p className="text-white font-bold">₹1,24,500</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Staff</p>
-                      <p className="text-white font-bold">12 Active</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Online Bookings</p>
-                      <p className="text-white font-bold">29 New</p>
-                    </div>
-                  </div>
-
-                  {/* Mock Chart Area */}
-                  <div className="bg-white/5 rounded-xl border border-white/5 p-4 mb-6 relative overflow-hidden">
-                    <div className="flex justify-between items-center mb-4">
-                      <p className="text-sm font-semibold text-white">Service Volume & Bookings</p>
-                      <span className="text-xs text-teal-400 bg-teal-400/10 px-2 py-1 rounded-md">+24% this week</span>
-                    </div>
-                    <div className="h-24 flex items-end gap-2">
-                      {[40, 70, 45, 90, 65, 85, 110].map((h, i) => (
-                        <div key={i} className="flex-1 bg-gradient-to-t from-teal-500/20 to-teal-400 rounded-t-sm relative group" style={{ height: `${h}%` }}>
-                          <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Bottom Stats */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/20 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-blue-300 text-xs mb-1">Completed Services</p>
-                        <p className="text-white font-bold text-lg">186</p>
-                      </div>
-                      <FiLayers className="text-blue-400 h-6 w-6 opacity-50" />
-                    </div>
-                    <div className="bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/20 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-amber-300 text-xs mb-1">Pending Clearance</p>
-                        <p className="text-white font-bold text-lg">₹23,450</p>
-                      </div>
-                      <FiDollarSign className="text-amber-400 h-6 w-6 opacity-50" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <CinematicHero />
             </motion.div>
+
           </div>
         </div>
       </section>
 
-      {/* 11. SIGNATURE SECTION: EVERYTHING CONNECTED */}
-      <section id="workflow" className="py-24 bg-white relative">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, margin: "-100px" }} variants={fadeUp} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Everything Works Together.</h2>
-            <p className="text-lg text-gray-600 max-w-3xl mx-auto">Citizen registers or books online → service application created → staff processes it → payment collected → WhatsApp delivers real-time notifications → accounting records the money → management sees real-time performance.</p>
-          </motion.div>
-
-          {/* Connected Workflow Visual */}
-          <div className="relative py-10">
-            <div className="flex flex-col items-center">
-              
-              {/* Level 1: Customer */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-navy-50 border border-navy-100 rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-sm">
-                <FiUsers className="text-navy-600 h-5 w-5" />
-                <span className="font-bold text-navy-900 text-sm">CUSTOMER (ONLINE / WALKIN)</span>
-              </motion.div>
-              
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2"></div>
-              
-              {/* Level 2: Services & Bookings */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-teal-500 text-white rounded-xl p-4 flex items-center gap-3 w-72 justify-center z-10 relative shadow-md">
-                <FiLayers className="h-5 w-5" />
-                <span className="font-bold tracking-wider text-sm">SERVICES &amp; BOOKINGS</span>
-              </motion.div>
-
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
-              </div>
-
-              {/* Level 3: Ops Row */}
-              <div className="grid grid-cols-3 gap-4 md:gap-12 w-full max-w-3xl z-10 relative">
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiBriefcase className="mx-auto text-blue-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">STAFF</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-blue-50 text-blue-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-blue-100 w-full text-center">ATTENDANCE</div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiCreditCard className="mx-auto text-green-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">PAYMENT</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-green-50 text-green-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-green-100 w-full text-center">WALLET</div>
-                </motion.div>
-
-                <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="flex flex-col items-center">
-                  <div className="bg-white border-2 border-gray-100 rounded-xl p-3 w-full text-center shadow-sm">
-                    <FiMessageCircle className="mx-auto text-teal-500 h-5 w-5 mb-2" />
-                    <span className="font-bold text-gray-800 text-xs md:text-sm">WHATSAPP</span>
-                  </div>
-                  <div className="h-6 border-l-2 border-dashed border-gray-300 my-1"></div>
-                  <div className="bg-teal-50 text-teal-700 text-[10px] md:text-xs font-bold px-3 py-1 rounded-full border border-teal-100 w-full text-center">NOTIFICATIONS</div>
-                </motion.div>
-              </div>
-
-              <div className="h-8 border-l-2 border-dashed border-gray-300 my-2 relative">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 w-64 md:w-96 border-t-2 border-dashed border-gray-300"></div>
-              </div>
-
-              {/* Level 4: Analytics */}
-              <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.5 }} className="bg-navy-900 text-white rounded-xl p-4 flex items-center gap-3 w-64 justify-center z-10 relative shadow-lg">
-                <FiPieChart className="h-5 w-5 text-teal-400" />
-                <span className="font-bold tracking-wider">ANALYTICS</span>
-              </motion.div>
-
-              <div className="h-6 border-l-2 border-navy-900 my-1"></div>
-              <motion.div initial={{ opacity: 0, scale: 0.8 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.6 }} className="text-center">
-                <span className="font-black text-transparent bg-clip-text bg-gradient-to-r from-navy-900 to-teal-600 text-xl tracking-tight uppercase">
-                  Business Insights
-                </span>
-              </motion.div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 2. CORE FEATURES (Complete 8-Card Grid) */}
-      <section id="features" className="py-24 bg-gray-50 border-t border-gray-200">
+      {/* 2. CORE FEATURES GRID */}
+      <section id="features" className="py-24 bg-gray-50 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={fadeUp} className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">One Platform. Your Entire Centre.</h2>
-            <p className="text-lg text-gray-600 max-w-2xl mx-auto">Stop jumping between spreadsheets, physical paper tokens, and chat apps. Sahayi connects your operations.</p>
-          </motion.div>
+          <div className="text-center mb-16">
+            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Tools for Every Part of Your Centre.</h2>
+            <p className="text-lg text-gray-600 max-w-2xl mx-auto">From managing the front-desk queue to reconciling the backend accounts.</p>
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {/* Feature 1: WhatsApp */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-teal-50 text-teal-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-teal-500 group-hover:text-white transition-colors">
                 <FiMessageCircle className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">WhatsApp Business</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Meta-linked WhatsApp for customer conversations, automated service status updates, and payment reminders via templates.</p>
-            </motion.div>
+              <p className="text-gray-600 text-sm leading-relaxed">Meta-linked WhatsApp for customer conversations, automated updates, and payment reminders via templates.</p>
+            </div>
 
-            {/* Feature 2: Customer 360 & Online Booking */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-blue-600 group-hover:text-white transition-colors">
                 <FiUsers className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Customer Management</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Self-registration via WhatsApp OTP, online service booking, digital documents, payment history, and reviews all stored centrally.</p>
-            </motion.div>
+              <p className="text-gray-600 text-sm leading-relaxed">Self-registration via WhatsApp OTP, online service booking, payment history, and reviews stored centrally.</p>
+            </div>
 
-            {/* Feature 3: Service Operations */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.2 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-purple-600 group-hover:text-white transition-colors">
                 <FiLayers className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Service Operations</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Manage complete service catalogues, customer entries, staff allocations, and track pending vs completed service workflows.</p>
-            </motion.div>
+              <p className="text-gray-600 text-sm leading-relaxed">Manage complete service catalogues, customer entries, staff allocations, and track workflows.</p>
+            </div>
 
-            {/* Feature 4: Companion App */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.3 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-orange-50 text-orange-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-orange-500 group-hover:text-white transition-colors">
                 <FiSmartphone className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Companion App</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Staff mobile app for GPS attendance punch in-out, push notifications, instant customer lookup, quick calling, and daily tasks.</p>
-            </motion.div>
-
-            {/* Feature 5: Token Management */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.4 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+              <p className="text-gray-600 text-sm leading-relaxed">Staff mobile app for GPS attendance, push notifications, instant customer lookup, and daily tasks.</p>
+            </div>
+            
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                 <FiHash className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Token &amp; Queue</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Generate daily and campaign tokens. Manage queue status, assign staff dynamically, and send live WhatsApp queue alerts to customers.</p>
-            </motion.div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Token & Queue</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">Generate daily tokens, manage queue status, assign staff dynamically, and send live queue alerts.</p>
+            </div>
 
-            {/* Feature 6: Campaign Management */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.5 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-rose-600 group-hover:text-white transition-colors">
                 <FiTarget className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">Campaigns</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Create targeted service drives, issue campaign-specific tokens, track conversions, and broadcast WhatsApp updates effortlessly.</p>
-            </motion.div>
+              <p className="text-gray-600 text-sm leading-relaxed">Create targeted service drives, track conversions, and broadcast WhatsApp updates effortlessly.</p>
+            </div>
 
-            {/* Feature 7: Reviews & Feedback */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.6 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-amber-500 group-hover:text-white transition-colors">
                 <FiStar className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Reviews &amp; Feedback</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Collect post-service customer feedback automatically to measure citizen satisfaction, staff helpfulness, and service ratings.</p>
-            </motion.div>
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Reviews & Feedback</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">Collect post-service feedback automatically to measure citizen satisfaction and staff ratings.</p>
+            </div>
 
-            {/* Feature 8: Calendar & Tasks */}
-            <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.7 }} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 hover:shadow-xl transition-shadow group">
               <div className="w-12 h-12 bg-green-50 text-green-600 rounded-xl flex items-center justify-center mb-5 group-hover:bg-green-600 group-hover:text-white transition-colors">
                 <FiCalendar className="h-6 w-6" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Calendar &amp; Tasks</h3>
-              <p className="text-gray-600 text-sm leading-relaxed mb-4">Schedule appointments, track centre holidays and government deadlines, set task reminders, and coordinate staff work.</p>
-            </motion.div>
-
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Calendar & Tasks</h3>
+              <p className="text-gray-600 text-sm leading-relaxed">Schedule appointments, track government deadlines, set task reminders, and coordinate work.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -415,12 +517,10 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 4 & 5. STAFF & TEAMS */}
-      <section className="py-24 bg-white">
+      {/* 4. WORKFLOW / TEAMS */}
+      <section id="workflow" className="py-24 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
-            
-            {/* Visual Dashboard for Teams */}
             <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="bg-gray-50 rounded-3xl p-6 border border-gray-200 shadow-inner">
               <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="bg-navy-900 text-white p-4 font-bold flex justify-between items-center">
@@ -456,7 +556,6 @@ const Home = () => {
               </div>
             </motion.div>
 
-            {/* Copy */}
             <motion.div initial="hidden" whileInView="visible" viewport={{ once: true }} variants={staggerContainer}>
               <motion.h2 variants={fadeUp} className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Turn Staff Activity Into Business Insights.</motion.h2>
               <motion.p variants={fadeUp} className="text-gray-600 text-lg mb-8">Know exactly who is working, what applications they are handling, and how much value they generate for the centre.</motion.p>
@@ -481,25 +580,14 @@ const Home = () => {
                     <p className="text-sm text-gray-600 mt-1">Create multiple teams, assign staff, measure exact team revenue, track team expenses, and analyze overall team profit.</p>
                   </div>
                 </motion.div>
-                
-                <motion.div variants={fadeUp} className="flex gap-4">
-                  <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-                    <FiTarget className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-900">Staff Targets &amp; Incentives</h4>
-                    <p className="text-sm text-gray-600 mt-1">Set clear staff targets, monitor completion rates, and calculate performance-based incentives automatically.</p>
-                  </div>
-                </motion.div>
               </div>
             </motion.div>
-            
           </div>
         </div>
       </section>
 
-      {/* 10. MULTI-CENTRE MANAGEMENT */}
-      <section id="multi-centre" className="py-24 bg-gray-50 border-y border-gray-200">
+      {/* 5. MULTI-CENTRE MANAGEMENT */}
+      <section id="multi-centre" className="py-24 bg-gray-50 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">One Business. Multiple Centres. One Control Panel.</h2>
@@ -508,13 +596,11 @@ const Home = () => {
 
           <div className="flex justify-center mb-12">
             <div className="flex flex-col items-center w-full max-w-4xl">
-              {/* Super Admin */}
               <div className="bg-navy-900 text-white font-bold px-8 py-3 rounded-xl shadow-lg z-10 flex flex-col items-center">
                 <span>SUPERADMIN</span>
                 <span className="text-[10px] font-normal text-navy-300 mt-0.5 uppercase tracking-wide">Network Control</span>
               </div>
               
-              {/* Branching Lines */}
               <div className="w-full flex justify-center mt-[-2px]">
                 <div className="w-px h-8 bg-gray-300"></div>
               </div>
@@ -524,7 +610,6 @@ const Home = () => {
                 <div className="w-px h-8 bg-gray-300 hidden sm:block"></div>
               </div>
 
-              {/* Centres */}
               <div className="w-full flex justify-center gap-4 sm:gap-16">
                 <div className="flex flex-col items-center">
                   <div className="bg-teal-500 text-white font-bold px-6 py-2 rounded-lg shadow mb-3 z-10 text-sm flex flex-col items-center">
@@ -564,71 +649,52 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 12 & 13. WHY US & SECURITY */}
-      <section className="py-24 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">Built Around the Way Your Centre Actually Works.</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-              <FiShield className="h-8 w-8 text-teal-600 mb-4" />
-              <h3 className="font-bold text-gray-900 mb-2">Secure &amp; Role Based</h3>
-              <p className="text-sm text-gray-600">Strict access controls. Superadmins, Admins, Staff, and Customers only see what they are supposed to see.</p>
-            </div>
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-              <FiMessageCircle className="h-8 w-8 text-teal-600 mb-4" />
-              <h3 className="font-bold text-gray-900 mb-2">Connected Comms</h3>
-              <p className="text-sm text-gray-600">Customer booking updates, queue alerts, and staff coordination happen in a single, unbroken workflow.</p>
-            </div>
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-              <FiDollarSign className="h-8 w-8 text-teal-600 mb-4" />
-              <h3 className="font-bold text-gray-900 mb-2">Financial Control</h3>
-              <p className="text-sm text-gray-600">Stop leaking revenue. Track every rupee across wallets, service fees, online payments, and expenses.</p>
-            </div>
-            <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100">
-              <FiTrendingUp className="h-8 w-8 text-teal-600 mb-4" />
-              <h3 className="font-bold text-gray-900 mb-2">Business Visibility</h3>
-              <p className="text-sm text-gray-600">Understand your centre using real-time operational reports, citizen feedback ratings, and financial metrics.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 14. CTA SECTION */}
-      <section className="py-20 relative bg-teal-500 overflow-hidden">
+      {/* 6. FINAL CTA SECTION */}
+      <section className="py-24 relative bg-teal-500 overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-          <h2 className="text-3xl md:text-5xl font-extrabold text-navy-900 mb-6">Ready to Modernize Your Centre?</h2>
+          
+          <motion.div 
+            initial="hidden" 
+            whileInView="visible" 
+            viewport={{ once: true }} 
+            className="flex justify-center items-center gap-2 sm:gap-6 mb-8"
+          >
+            <motion.div variants={fadeUp} className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/30"><FiUsers className="text-white text-xl" /></motion.div>
+            <motion.div variants={fadeUp} className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/30"><FiLayers className="text-white text-xl" /></motion.div>
+            <motion.div variants={fadeUp} className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/30"><FiDollarSign className="text-white text-xl" /></motion.div>
+            <motion.div variants={fadeUp} className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center backdrop-blur-sm border border-white/30"><FaWhatsapp className="text-white text-xl" /></motion.div>
+          </motion.div>
+
+          <h2 className="text-4xl md:text-5xl font-extrabold text-navy-900 mb-6 tracking-tight">Ready to Modernize Your Centre?</h2>
           <p className="text-teal-900 text-lg mb-10 font-medium max-w-2xl mx-auto">
-            Bring your customers, service bookings, staff, WhatsApp notifications, and finances together into one intelligent platform.
+            Customers. Services. Staff. Finance. WhatsApp.<br />One connected platform.
           </p>
+          
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-  <button 
-    onClick={() => navigate('/login')} 
-    className="px-8 py-4 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
-  >
-    Sign In to Sahayi
-  </button>
-  <button 
-    onClick={() => navigate('/login')} 
-    className="px-8 py-4 bg-white/20 hover:bg-white/30 text-navy-900 font-bold rounded-xl border border-navy-900/10 transition-all"
-  >
-    Book Service Online
-  </button>
-  {/* NEW CONTACT BUTTON */}
-  <Link 
-    to="/contact" 
-    className="px-8 py-4 bg-white hover:bg-gray-50 text-teal-600 font-bold rounded-xl shadow-md transition-all transform hover:-translate-y-0.5"
-  >
-    Contact Sales
-  </Link>
-</div>
+            <button 
+              onClick={() => navigate('/login')} 
+              className="px-8 py-4 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
+            >
+              Sign In to Sahayi
+            </button>
+            <button 
+              onClick={() => navigate('/login')} 
+              className="px-8 py-4 bg-white/20 hover:bg-white/30 text-navy-900 font-bold rounded-xl border border-navy-900/10 transition-all"
+            >
+              Book Service Online
+            </button>
+            <Link 
+              to="/contact" 
+              className="px-8 py-4 bg-white hover:bg-gray-50 text-teal-600 font-bold rounded-xl shadow-md transition-all transform hover:-translate-y-0.5"
+            >
+              Contact Sales
+            </Link>
+          </div>
         </div>
       </section>
 
-      {/* 15. FOOTER */}
+      {/* 7. FOOTER */}
       <footer className="bg-navy-900 text-navy-200 py-16 border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
@@ -648,10 +714,9 @@ const Home = () => {
               <h4 className="text-white font-bold mb-4 uppercase tracking-wider text-sm">Product</h4>
               <ul className="space-y-3 text-sm">
                 <li><button onClick={() => navigate('/login')} className="hover:text-teal-400 transition-colors">Service Booking Portal</button></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">WhatsApp Integration</a></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Staff Companion App</a></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Token Management</a></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Accounting &amp; Wallets</a></li>
+                <li><a href="#features" className="hover:text-teal-400 transition-colors">WhatsApp Integration</a></li>
+                <li><a href="#features" className="hover:text-teal-400 transition-colors">Token Management</a></li>
+                <li><a href="#finances" className="hover:text-teal-400 transition-colors">Accounting &amp; Wallets</a></li>
               </ul>
             </div>
 
@@ -660,7 +725,6 @@ const Home = () => {
               <ul className="space-y-3 text-sm">
                 <li><a href="#" className="hover:text-teal-400 transition-colors">About Us</a></li>
                 <li><Link to="/contact" className="hover:text-teal-400 transition-colors">Contact Support</Link></li>
-                <li><a href="#" className="hover:text-teal-400 transition-colors">Contact Support</a></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Privacy Policy</a></li>
                 <li><a href="#" className="hover:text-teal-400 transition-colors">Terms of Service</a></li>
               </ul>
