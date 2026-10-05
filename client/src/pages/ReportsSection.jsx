@@ -3809,36 +3809,43 @@ const ReportsSection = () => {
         }
     }, [isSuper]);
 
-    // 👇 State and Fetch logic for Staff Dropdown 👇
-    const [staffList, setStaffList] = useState([]);
+        // 👇 State and Fetch logic for Staff Dropdown 👇
+        const [staffList, setStaffList] = useState([]);
+        useEffect(() => {
+            let cancelled = false;
 
-    useEffect(() => {
-        const fetchStaff = async () => {
-            try {
-                // If 'all' is selected, send 'all'. Otherwise, send the specific centre ID.
-                // This perfectly matches the route you used in SuperAdminAccountingSection!
-                const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/all?centreId=${selectedCentre}`, {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-                });
-                if (res.ok) {
+            const fetchStaff = async () => {
+                try {
+                    // Leave the param out entirely for "All Centres"
+                    const query = selectedCentre && selectedCentre !== 'all'
+                        ? `?centre_id=${selectedCentre}`
+                        : '';
+
+                    const res = await fetch(`${import.meta.env.VITE_API_URL}/api/staff/all${query}`, {
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                    });
+                    if (!res.ok || cancelled) return;
                     const data = await res.json();
+                    // Alphabetical, since the API returns newest-joined first
+                    data.sort((a, b) =>
+                        (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })
+                    );
                     setStaffList(data);
+                } catch (error) {
+                    console.error("Failed to fetch staff:", error);
                 }
-            } catch (error) {
-                console.error("Failed to fetch staff:", error);
-            }
-        };
+            };
+            fetchStaff();
+            return () => { cancelled = true; };
+        }, [selectedCentre]);
 
-        // Fetch staff immediately, and re-fetch anytime the selectedCentre changes
-        fetchStaff();
-    }, [selectedCentre]);
 
         // 👇 STATE & FETCH LOGIC FOR QUICK CARDS 👇
-    const [quickMetrics, setQuickMetrics] = useState({
-        collection: 0, expenses: 0, profit: 0, 
-        attendancePresent: 0, attendanceTotal: 0, 
-        servicesCount: 0, pendingAmount: 0, isLoading: true
-    });
+        const [quickMetrics, setQuickMetrics] = useState({
+            collection: 0, expenses: 0, profit: 0, 
+            attendancePresent: 0, attendanceTotal: 0, 
+            servicesCount: 0, pendingAmount: 0, isLoading: true
+        });
     
         useEffect(() => {
         const fetchQuickMetrics = async () => {
