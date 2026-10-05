@@ -6,7 +6,7 @@ import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
   FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
-  FiMapPin, FiPhone, FiMail, FiRefreshCw, FiUser, FiFileText, FiClock
+  FiMapPin, FiPhone, FiMail, FiRefreshCw, FiUser, FiFileText, FiClock, FiSettings
 } from 'react-icons/fi';
 import { FaWhatsapp } from 'react-icons/fa';
 
