@@ -75,10 +75,10 @@ const Contact = () => {
           </Link>
 
           <Link 
-            to="/login" 
+            to="/home" 
             className="flex items-center text-sm font-semibold text-gray-600 hover:text-teal-600 transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200"
           >
-            <FiArrowLeft className="mr-2" /> Back to Login
+            <FiArrowLeft className="mr-2" /> Back to Home
           </Link>
         </div>
 
