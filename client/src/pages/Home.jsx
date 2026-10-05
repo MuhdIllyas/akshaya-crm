@@ -159,7 +159,7 @@ const CinematicHero = () => {
                 <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mb-4 border border-purple-500/30"><FiSmartphone className="w-8 h-8 text-purple-400" /></div>
                 <h3 className="text-xl font-bold text-white mb-1">Online Portal</h3>
                 <p className="text-navy-200 text-sm text-center">Customer books from phone</p>
-                <div className="mt-4 px-4 py-1.5 bg-purple-500/20 text-purple-300 rounded-full text-xs font-bold border border-purple-500/30">Service: Passport Renewal</div>
+                <div className="mt-4 px-4 py-1.5 bg-purple-500/20 text-purple-300 rounded-full text-xs font-bold border border-purple-500/30">Service: Passport</div>
               </div>
             </motion.div>
           )}
