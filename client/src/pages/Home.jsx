@@ -1,12 +1,14 @@
 // src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
   FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
-  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget
+  FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
+  FiClock, FiFileText
 } from 'react-icons/fi';
+import { FaWhatsapp } from 'react-icons/fa';
 
 // ---------------------------------------------------------------------
 // Animation Variants
@@ -80,6 +82,222 @@ const Navbar = () => {
 };
 
 // ---------------------------------------------------------------------
+// Interactive Hero Animation Component
+// ---------------------------------------------------------------------
+const HeroAnimation = () => {
+  const [activeStage, setActiveStage] = useState(0);
+
+  const stages = [
+    { id: 0, title: "Customer", icon: FiUsers },
+    { id: 1, title: "Service", icon: FiLayers },
+    { id: 2, title: "Staff", icon: FiBriefcase },
+    { id: 3, title: "Payment", icon: FiCreditCard },
+    { id: 4, title: "WhatsApp", icon: FaWhatsapp },
+    { id: 5, title: "Analytics", icon: FiPieChart },
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setActiveStage((prev) => (prev + 1) % stages.length);
+    }, 3500); // Change stage every 3.5 seconds
+    return () => clearInterval(timer);
+  }, [stages.length]);
+
+  return (
+    <div className="relative perspective-1000 w-full max-w-md mx-auto lg:ml-auto">
+      {/* Container */}
+      <div className="bg-navy-800 rounded-3xl border border-white/10 shadow-2xl overflow-hidden flex flex-col h-[400px]">
+        
+        {/* Header: Progress Bar */}
+        <div className="bg-navy-900/80 px-6 py-4 border-b border-white/5">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-teal-400 font-bold text-xs uppercase tracking-wider">One Customer Journey</span>
+            <div className="flex gap-1.5">
+              <div className="w-2.5 h-2.5 rounded-full bg-red-500/80"></div>
+              <div className="w-2.5 h-2.5 rounded-full bg-amber-500/80"></div>
+              <div className="w-2.5 h-2.5 rounded-full bg-green-500/80"></div>
+            </div>
+          </div>
+          
+          <div className="flex justify-between items-center relative">
+            {/* Connecting line */}
+            <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-white/5 -z-0 -translate-y-1/2"></div>
+            
+            {stages.map((stage, index) => {
+              const Icon = stage.icon;
+              const isActive = index === activeStage;
+              const isPassed = index < activeStage;
+              return (
+                <div key={stage.id} className="relative z-10 flex flex-col items-center">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-500 ${
+                    isActive ? 'bg-teal-500 text-navy-900 scale-110 shadow-[0_0_15px_rgba(20,184,166,0.5)]' : 
+                    isPassed ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' : 
+                    'bg-navy-700 text-navy-400 border border-white/5'
+                  }`}>
+                    <Icon className="w-4 h-4" />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Body: Animated Stage Cards */}
+        <div className="flex-1 relative bg-gradient-to-b from-navy-800 to-navy-900 flex items-center justify-center p-6 overflow-hidden">
+          <AnimatePresence mode="wait">
+            
+            {/* Stage 0: Customer */}
+            {activeStage === 0 && (
+              <motion.div key="stage0" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-lg text-center">
+                  <div className="w-16 h-16 bg-blue-500/20 rounded-full flex items-center justify-center mx-auto mb-4 border border-blue-500/30">
+                    <FiUsers className="text-blue-400 h-8 w-8" />
+                  </div>
+                  <h3 className="text-white font-bold text-lg">Muhammed Illyas</h3>
+                  <p className="text-navy-200 text-sm mt-1">New Application Request</p>
+                  <div className="mt-4 inline-flex items-center px-3 py-1 bg-white/5 rounded-full text-xs text-navy-100 border border-white/10">
+                    <FiSmartphone className="mr-1.5" /> Logged into Citizen Portal
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Stage 1: Service/Token */}
+            {activeStage === 1 && (
+              <motion.div key="stage1" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
+                <div className="bg-gradient-to-br from-indigo-500/20 to-purple-500/20 backdrop-blur-md rounded-2xl p-6 border border-indigo-500/30 shadow-lg text-center">
+                  <div className="inline-flex items-center px-3 py-1 bg-indigo-500/30 text-indigo-300 text-xs font-bold rounded-full mb-4">
+                    SERVICE INITIATED
+                  </div>
+                  <h3 className="text-white font-bold text-xl mb-1">Passport Application</h3>
+                  <p className="text-navy-200 text-sm mb-6">Standard Processing</p>
+                  
+                  <div className="bg-navy-900/60 rounded-xl p-4 border border-white/10 border-dashed">
+                    <p className="text-xs text-navy-300 uppercase tracking-widest mb-1">Generated Token</p>
+                    <p className="text-3xl font-black text-teal-400 tracking-wider">A-104</p>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Stage 2: Staff */}
+            {activeStage === 2 && (
+              <motion.div key="stage2" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-lg">
+                  <div className="flex items-center gap-3 mb-5 border-b border-white/10 pb-4">
+                    <div className="w-10 h-10 bg-teal-500/20 rounded-full flex items-center justify-center border border-teal-500/30">
+                      <FiBriefcase className="text-teal-400 h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-bold text-sm">Assigned to Staff</h3>
+                      <p className="text-navy-300 text-xs">Counter 03 • Sarah</p>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-navy-200 flex items-center"><FiCheckCircle className="text-green-400 mr-2" /> Documents Verified</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-navy-200 flex items-center"><FiCheckCircle className="text-green-400 mr-2" /> Application Filed</span>
+                    </div>
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-white font-bold flex items-center"><span className="w-4 h-4 border-2 border-teal-500 border-t-transparent rounded-full animate-spin mr-2"></span> Processing Payment...</span>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Stage 3: Payment */}
+            {activeStage === 3 && (
+              <motion.div key="stage3" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="w-full">
+                <div className="bg-gradient-to-br from-green-500/20 to-teal-500/20 backdrop-blur-md rounded-2xl p-6 border border-green-500/30 shadow-lg text-center relative overflow-hidden">
+                  <div className="absolute -top-10 -right-10 w-32 h-32 bg-green-500/20 rounded-full blur-2xl"></div>
+                  
+                  <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-[0_0_30px_rgba(34,197,94,0.4)]">
+                    <FiCheckCircle className="text-white h-8 w-8" />
+                  </div>
+                  <h3 className="text-white font-bold text-lg mb-1">Payment Received</h3>
+                  <p className="text-3xl font-black text-green-400 my-3">₹1,500</p>
+                  
+                  <div className="mt-4 pt-4 border-t border-green-500/20 flex justify-between text-xs text-navy-200">
+                    <span>Added to: Cash Wallet</span>
+                    <span>Ref: TXN-8932</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Stage 4: WhatsApp */}
+            {activeStage === 4 && (
+              <motion.div key="stage4" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
+                <div className="bg-[#128C7E]/20 backdrop-blur-md rounded-2xl p-5 border border-[#128C7E]/30 shadow-lg">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-8 h-8 bg-[#25D366] rounded-full flex items-center justify-center">
+                      <FaWhatsapp className="text-white h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-white font-bold text-sm">Akshaya Centre</h3>
+                      <p className="text-navy-300 text-xs">Automated Update</p>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-[#056162] rounded-tr-xl rounded-b-xl p-3 shadow-sm relative">
+                    <p className="text-white text-sm leading-relaxed">
+                      Dear Muhammed,<br/><br/>
+                      Your Passport Application has been successfully processed. Total amount paid: ₹1,500. <br/><br/>
+                      Track status here: bit.ly/track
+                    </p>
+                    <span className="text-[10px] text-teal-200/60 absolute bottom-2 right-3">10:42 AM</span>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Stage 5: Analytics */}
+            {activeStage === 5 && (
+              <motion.div key="stage5" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full">
+                <div className="bg-white/10 backdrop-blur-md rounded-2xl p-5 border border-white/10 shadow-lg">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-bold text-sm flex items-center">
+                      <FiPieChart className="mr-2 text-teal-400" /> Centre Analytics Updated
+                    </h3>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="bg-navy-900/60 rounded-lg p-3 flex justify-between items-center border border-white/5">
+                      <span className="text-xs text-navy-200">Daily Revenue</span>
+                      <span className="font-bold text-green-400 flex items-center">↑ ₹1,500</span>
+                    </div>
+                    <div className="bg-navy-900/60 rounded-lg p-3 flex justify-between items-center border border-white/5">
+                      <span className="text-xs text-navy-200">Completed Services</span>
+                      <span className="font-bold text-white">42 <span className="text-teal-500 ml-1">(+1)</span></span>
+                    </div>
+                    <div className="bg-navy-900/60 rounded-lg p-3 flex justify-between items-center border border-white/5">
+                      <span className="text-xs text-navy-200">Customer Rating</span>
+                      <div className="flex text-amber-400 text-xs">
+                        <FiStar className="fill-current" /><FiStar className="fill-current" /><FiStar className="fill-current" /><FiStar className="fill-current" /><FiStar className="fill-current" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
+          </AnimatePresence>
+        </div>
+        
+        {/* Footer info */}
+        <div className="bg-navy-900 px-6 py-3 text-center border-t border-white/5">
+          <p className="text-xs text-navy-400 font-medium tracking-wide">THE AKSHAYA SAHAYI ECOSYSTEM</p>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------------------------------------------------------------------
 // Main Page Component
 // ---------------------------------------------------------------------
 const Home = () => {
@@ -128,84 +346,13 @@ const Home = () => {
               </motion.div>
             </motion.div>
 
-            {/* Stylized Dashboard Preview */}
+            {/* Interactive Customer Journey Animation */}
             <motion.div 
-              initial={{ opacity: 0, x: 50, rotateY: 15 }} 
-              animate={{ opacity: 1, x: 0, rotateY: 0 }} 
+              initial={{ opacity: 0, x: 50 }} 
+              animate={{ opacity: 1, x: 0 }} 
               transition={{ duration: 0.8, delay: 0.2 }}
-              className="relative perspective-1000"
             >
-              <div className="bg-navy-800 rounded-2xl border border-white/10 shadow-2xl overflow-hidden transform rotate-1 hover:rotate-0 transition-transform duration-500">
-                {/* Header */}
-                <div className="bg-navy-900/50 px-6 py-4 border-b border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-teal-500/20 rounded-lg flex items-center justify-center border border-teal-500/30">
-                      <FiActivity className="text-teal-400 h-4 w-4" />
-                    </div>
-                    <span className="text-white font-bold text-sm">Akshaya Sahayi Workspace</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <div className="w-3 h-3 rounded-full bg-red-500/80"></div>
-                    <div className="w-3 h-3 rounded-full bg-amber-500/80"></div>
-                    <div className="w-3 h-3 rounded-full bg-green-500/80"></div>
-                  </div>
-                </div>
-                
-                {/* Dashboard Stats */}
-                <div className="p-6">
-                  <div className="grid grid-cols-4 gap-4 mb-6">
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Revenue</p>
-                      <p className="text-white font-bold">₹48,250</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Wallets</p>
-                      <p className="text-white font-bold">₹1,24,500</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Staff</p>
-                      <p className="text-white font-bold">12 Active</p>
-                    </div>
-                    <div className="bg-white/5 rounded-xl p-3 border border-white/5">
-                      <p className="text-navy-300 text-xs mb-1">Online Bookings</p>
-                      <p className="text-white font-bold">29 New</p>
-                    </div>
-                  </div>
-
-                  {/* Mock Chart Area */}
-                  <div className="bg-white/5 rounded-xl border border-white/5 p-4 mb-6 relative overflow-hidden">
-                    <div className="flex justify-between items-center mb-4">
-                      <p className="text-sm font-semibold text-white">Service Volume & Bookings</p>
-                      <span className="text-xs text-teal-400 bg-teal-400/10 px-2 py-1 rounded-md">+24% this week</span>
-                    </div>
-                    <div className="h-24 flex items-end gap-2">
-                      {[40, 70, 45, 90, 65, 85, 110].map((h, i) => (
-                        <div key={i} className="flex-1 bg-gradient-to-t from-teal-500/20 to-teal-400 rounded-t-sm relative group" style={{ height: `${h}%` }}>
-                          <div className="absolute inset-0 bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Bottom Stats */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gradient-to-r from-blue-500/10 to-transparent border border-blue-500/20 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-blue-300 text-xs mb-1">Completed Services</p>
-                        <p className="text-white font-bold text-lg">186</p>
-                      </div>
-                      <FiLayers className="text-blue-400 h-6 w-6 opacity-50" />
-                    </div>
-                    <div className="bg-gradient-to-r from-amber-500/10 to-transparent border border-amber-500/20 rounded-xl p-4 flex items-center justify-between">
-                      <div>
-                        <p className="text-amber-300 text-xs mb-1">Pending Clearance</p>
-                        <p className="text-white font-bold text-lg">₹23,450</p>
-                      </div>
-                      <FiDollarSign className="text-amber-400 h-6 w-6 opacity-50" />
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <HeroAnimation />
             </motion.div>
           </div>
         </div>
@@ -605,26 +752,25 @@ const Home = () => {
             Bring your customers, service bookings, staff, WhatsApp notifications, and finances together into one intelligent platform.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-  <button 
-    onClick={() => navigate('/login')} 
-    className="px-8 py-4 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
-  >
-    Sign In to Sahayi
-  </button>
-  <button 
-    onClick={() => navigate('/login')} 
-    className="px-8 py-4 bg-white/20 hover:bg-white/30 text-navy-900 font-bold rounded-xl border border-navy-900/10 transition-all"
-  >
-    Book Service Online
-  </button>
-  {/* NEW CONTACT BUTTON */}
-  <Link 
-    to="/contact" 
-    className="px-8 py-4 bg-white hover:bg-gray-50 text-teal-600 font-bold rounded-xl shadow-md transition-all transform hover:-translate-y-0.5"
-  >
-    Contact Sales
-  </Link>
-</div>
+            <button 
+              onClick={() => navigate('/login')} 
+              className="px-8 py-4 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5"
+            >
+              Sign In to Sahayi
+            </button>
+            <button 
+              onClick={() => navigate('/login')} 
+              className="px-8 py-4 bg-white/20 hover:bg-white/30 text-navy-900 font-bold rounded-xl border border-navy-900/10 transition-all"
+            >
+              Book Service Online
+            </button>
+            <Link 
+              to="/contact" 
+              className="px-8 py-4 bg-white hover:bg-gray-50 text-teal-600 font-bold rounded-xl shadow-md transition-all transform hover:-translate-y-0.5"
+            >
+              Contact Sales
+            </Link>
+          </div>
         </div>
       </section>
 
