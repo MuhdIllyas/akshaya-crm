@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   FiMessageCircle, FiUsers, FiBriefcase, FiDollarSign, FiPieChart, 
-  FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle, FiSettings,
+  FiCalendar, FiShield, FiTrendingUp, FiStar, FiArrowRight, FiCheckCircle,
   FiLayers, FiActivity, FiCreditCard, FiBookOpen, FiSmartphone, FiHash, FiTarget,
   FiMapPin, FiPhone, FiMail, FiRefreshCw, FiUser, FiFileText, FiClock
 } from 'react-icons/fi';
@@ -200,7 +200,6 @@ const CinematicHero = () => {
                 <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: 0 }} animate={{ width: "20%" }} transition={{ duration: 1 }} className="h-full bg-teal-400"></motion.div></div>
               </div>
               
-              {/* WhatsApp Popup FIXED for small screens */}
               <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -20, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-16 right-0 sm:-right-6 bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-64 sm:w-72 text-left z-30">
                 <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Automated Message</span></div>
                 <p className="text-sm leading-relaxed">Hi Muhammed, we have received your Passport Renewal request and our staff has just started processing it. 🚀</p>
@@ -219,7 +218,6 @@ const CinematicHero = () => {
                 <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: "20%" }} animate={{ width: "70%" }} transition={{ duration: 1 }} className="h-full bg-blue-400"></motion.div></div>
               </div>
               
-              {/* WhatsApp Popup FIXED */}
               <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -20, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-16 right-0 sm:-right-6 bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-64 sm:w-72 text-left z-30">
                 <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Automated Update</span></div>
                 <p className="text-sm leading-relaxed">Update: Your documents have been successfully verified! We are now filing your application on the portal.</p>
@@ -267,7 +265,6 @@ const CinematicHero = () => {
                 <div className="w-full h-2 bg-navy-900 rounded-full overflow-hidden"><motion.div initial={{ width: "70%" }} animate={{ width: "100%" }} transition={{ duration: 0.5 }} className="h-full bg-green-400"></motion.div></div>
               </div>
               
-              {/* WhatsApp Popup FIXED */}
               <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: -20, opacity: 1 }} transition={{ delay: 0.8 }} className="absolute -bottom-16 right-0 sm:-right-6 bg-[#056162] text-white p-4 rounded-2xl rounded-tl-none shadow-2xl border border-[#128C7E]/50 w-64 sm:w-72 text-left z-30">
                 <div className="flex items-center gap-2 mb-2"><FaWhatsapp className="text-[#25D366] text-lg"/> <span className="text-xs font-bold text-gray-200">Service Complete</span></div>
                 <p className="text-sm leading-relaxed mb-3">Your Passport Renewal is successfully completed! Thank you for choosing us.</p>
@@ -332,152 +329,6 @@ const CinematicHero = () => {
       </div>
 
     </div>
-  );
-};
-
-// ---------------------------------------------------------------------
-// Contact Section Component
-// ---------------------------------------------------------------------
-const ContactSection = () => {
-  const [formData, setFormData] = useState({
-    name: '', centreName: '', phone: '', email: '', centres: '', interest: '', message: ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    console.log('Form submitted:', formData);
-    alert('Thank you! Your enquiry has been received. Our team will contact you shortly.');
-    setFormData({ name: '', centreName: '', phone: '', email: '', centres: '', interest: '', message: '' });
-  };
-
-  return (
-    <section id="contact" className="py-24 bg-gray-50 border-t border-gray-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <motion.h2 initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">
-            Let’s Build a Smarter Akshaya Centre
-          </motion.h2>
-          <motion.p initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.1 }} className="text-lg text-gray-600 max-w-2xl mx-auto">
-            Have questions about Akshaya Sahayi, pricing, onboarding, or setting up your centre? Send us a message and our team will get back to you.
-          </motion.p>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-          {/* Left Column: Form */}
-          <motion.div initial={{ opacity: 0, x: -30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="lg:col-span-2 bg-white rounded-3xl p-8 sm:p-10 shadow-lg border border-gray-100">
-            <div className="mb-8 border-b border-gray-100 pb-4">
-              <h3 className="text-xl font-bold text-gray-900 flex items-center">
-                <FiMail className="mr-3 text-teal-500" /> GET IN TOUCH
-              </h3>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Name *</label>
-                  <input type="text" required placeholder="Your full name" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Centre Name</label>
-                  <input type="text" placeholder="Your Akshaya Centre name" value={formData.centreName} onChange={(e) => setFormData({...formData, centreName: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Phone Number *</label>
-                  <input type="tel" required placeholder="WhatsApp/Contact number" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
-                  <input type="email" placeholder="Your email address" value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Centres</label>
-                  <input type="number" min="1" placeholder="e.g. 1" value={formData.centres} onChange={(e) => setFormData({...formData, centres: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all" />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Interested In</label>
-                  <select value={formData.interest} onChange={(e) => setFormData({...formData, interest: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all text-gray-700">
-                    <option value="">Select a topic...</option>
-                    <option value="Demo">Akshaya Sahayi Demo</option>
-                    <option value="WhatsApp">WhatsApp Integration</option>
-                    <option value="Customers">Customer Management</option>
-                    <option value="Tokens">Token & Campaign System</option>
-                    <option value="Finance">Finance & Accounts</option>
-                    <option value="Staff">Staff & Payroll</option>
-                    <option value="App">Companion App</option>
-                    <option value="Multi-Centre">Multi-Centre Management</option>
-                    <option value="Other">Other</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Message *</label>
-                <textarea required rows="4" placeholder="Tell us how we can help..." value={formData.message} onChange={(e) => setFormData({...formData, message: e.target.value})} className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-teal-500 focus:outline-none transition-all resize-none"></textarea>
-              </div>
-
-              <div className="pt-2">
-                <button type="submit" className="w-full sm:w-auto px-8 py-3.5 bg-navy-900 hover:bg-navy-800 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center">
-                  Send Enquiry <FiArrowRight className="ml-2" />
-                </button>
-              </div>
-            </form>
-          </motion.div>
-
-          {/* Right Column: Direct Contact */}
-          <motion.div initial={{ opacity: 0, x: 30 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} className="lg:col-span-1 space-y-6">
-            <div className="bg-navy-900 text-white rounded-3xl p-8 shadow-xl">
-              <h3 className="text-xl font-bold mb-6">Talk to us</h3>
-              <div className="space-y-6">
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FiPhone className="text-teal-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">Phone</p>
-                    <p className="font-semibold">+91 80865 15301</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FaWhatsapp className="text-green-400 text-lg" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-navy-300 uppercase tracking-wider mb-1">WhatsApp Support</p>
-                    <a href="https://wa.me/919633975301" target="_blank" rel="noreferrer" className="font-medium text-lg hover:text-green-400 transition-colors">
-                      +91 96339 75301
-                    </a>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FiMail className="text-teal-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">Email</p>
-                    <p className="font-semibold text-sm">support@akshayasahayi.com</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0 mr-4">
-                    <FiMapPin className="text-teal-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm text-navy-200 font-medium mb-1">Location</p>
-                    <p className="font-semibold text-sm leading-relaxed">Centre Park<br/>Malappuram, Kerala - 673638</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-10 pt-8 border-t border-white/10">
-                <button onClick={() => window.open('https://wa.me/919633975301', '_blank')} className="w-full py-3.5 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl transition-all shadow-md flex items-center justify-center">
-                  <FaWhatsapp className="mr-2 text-xl" /> Chat on WhatsApp
-                </button>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-    </section>
   );
 };
 
@@ -803,25 +654,14 @@ const Home = () => {
                     <p className="text-sm text-gray-600 mt-1">Create multiple teams, assign staff, measure exact team revenue, track team expenses, and analyze overall team profit.</p>
                   </div>
                 </motion.div>
-                
-                <motion.div variants={fadeUp} className="flex gap-4">
-                  <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
-                    <FiTarget className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-gray-900">Staff Targets &amp; Incentives</h4>
-                    <p className="text-sm text-gray-600 mt-1">Set clear staff targets, monitor completion rates, and calculate performance-based incentives automatically.</p>
-                  </div>
-                </motion.div>
               </div>
             </motion.div>
-            
           </div>
         </div>
       </section>
 
       {/* 6. MULTI-CENTRE MANAGEMENT */}
-      <section id="multi-centre" className="py-24 bg-gray-50 border-y border-gray-200">
+      <section id="multi-centre" className="py-24 bg-gray-50 border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="text-3xl md:text-4xl font-bold text-navy-900 mb-4">One Business. Multiple Centres. One Control Panel.</h2>
@@ -883,10 +723,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 7. CONTACT SECTION */}
-      <ContactSection />
-
-      {/* 8. FINAL CTA SECTION */}
+      {/* 7. FINAL CTA SECTION */}
       <section className="py-20 relative bg-teal-500 overflow-hidden">
         <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent"></div>
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
@@ -917,7 +754,7 @@ const Home = () => {
         </div>
       </section>
 
-      {/* 9. FOOTER */}
+      {/* 8. FOOTER */}
       <footer className="bg-navy-900 text-navy-200 py-16 border-t border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12 mb-12">
