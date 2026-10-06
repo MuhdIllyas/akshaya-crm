@@ -588,11 +588,36 @@ router.get('/wallet-reconciliations', async (req, res) => {
 
 // ========== WALLET RECONCILIATION ==========
 router.post('/wallet-reconcile', async (req, res) => {
+  // Superadmin view is read-only
+  if (req.user.role === 'superadmin') {
+    return res.status(403).json({ error: 'Superadmin access is read-only' });
+  }
+
+  const centreId = req.user.centre_id;
+  if (!centreId) {
+    return res.status(400).json({ error: 'No centre assigned to this user' });
+  }
+
+  const { reconciliations } = req.body;
+
+  if (!Array.isArray(reconciliations) || reconciliations.length === 0) {
+    return res.status(400).json({ error: 'reconciliations array is required' });
+  }
+
   const client = await req.db.connect();
 
   try {
-    const { reconciliations } = req.body;
     const userId = req.user.id;
+    const walletIds = [...new Set(reconciliations.map(r => Number(r.wallet_id)))];
+
+    // Every wallet must belong to the caller's centre
+    const own = await client.query(
+      `SELECT COUNT(*)::int AS n FROM wallets WHERE id = ANY($1::int[]) AND centre_id = $2`,
+      [walletIds, centreId]
+    );
+    if (own.rows[0].n !== walletIds.length) {
+      return res.status(403).json({ error: 'Invalid wallet for your centre' });
+    }
 
     await client.query('BEGIN');
 
@@ -612,7 +637,7 @@ router.post('/wallet-reconcile', async (req, res) => {
 
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error(err);
+    console.error('Wallet reconciliation error:', err);
     res.status(500).json({ error: 'Wallet reconciliation failed' });
   } finally {
     client.release();

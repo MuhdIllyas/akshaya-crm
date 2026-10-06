@@ -9,9 +9,58 @@ import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
-  FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown
+  FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown,
+  FiCheckCircle, FiXCircle, FiLoader
 } from "react-icons/fi";
-import CentreClosingLog from "@/components/Centreclosinglog"; 
+
+// ==========================================
+// ACCOUNTING CLOSING LOG HELPERS
+// ==========================================
+// Adjust the path if your accounting router is mounted somewhere else
+const CLOSING_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/all`;
+
+const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN")}`;
+
+const todayIST = () =>
+  new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+const getClosingView = (row) => {
+  if (row.status === "not_closed") {
+    return {
+      Icon: FiXCircle,
+      label: "Not closed",
+      detail: "No closing submitted",
+      wrap: "bg-rose-50 border-rose-200",
+      text: "text-rose-700",
+    };
+  }
+  if (row.status === "incomplete") {
+    return {
+      Icon: FiAlertCircle,
+      label: "Not fully closed",
+      detail: `Cash counted (${inr(row.actual_cash)}), closing not completed`,
+      wrap: "bg-amber-50 border-amber-200",
+      text: "text-amber-700",
+    };
+  }
+  const variance = Number(row.cash_variance || 0);
+  if (variance === 0) {
+    return {
+      Icon: FiCheckCircle,
+      label: "Closed",
+      detail: `Cash ${inr(row.actual_cash)} • no variance`,
+      wrap: "bg-emerald-50 border-emerald-200",
+      text: "text-emerald-700",
+    };
+  }
+  return {
+    Icon: FiAlertCircle,
+    label: "Closed with variance",
+    detail: `Cash ${inr(row.actual_cash)} • ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
+    wrap: "bg-rose-50 border-rose-200",
+    text: "text-rose-700",
+  };
+};
 
 // ==========================================
 // STAFF PERFORMANCE CHART (unchanged)
@@ -270,6 +319,12 @@ const SuperadminDashboard = () => {
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
 
+  // Accounting closing log (all centres)
+  const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
+  const [closingData, setClosingData] = useState({ date: "", rows: [] });
+  const [closingLoading, setClosingLoading] = useState(true);
+  const [closingError, setClosingError] = useState(false);
+
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
   };
@@ -309,6 +364,32 @@ const SuperadminDashboard = () => {
     };
     fetchDashboard();
   }, []);
+
+  // Fetch accounting closing log for all centres
+  useEffect(() => {
+    const controller = new AbortController();
+    setClosingLoading(true);
+    setClosingError(false);
+
+    axios
+      .get(CLOSING_ENDPOINT, {
+        params: closingDate ? { date: closingDate } : {},
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        signal: controller.signal,
+      })
+      .then((res) => {
+        setClosingData(res.data);
+        setClosingLoading(false);
+      })
+      .catch((err) => {
+        if (axios.isCancel(err)) return;
+        console.error("Closing log error:", err);
+        setClosingError(true);
+        setClosingLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [closingDate]);
 
   if (loading) {
     return (
@@ -355,6 +436,9 @@ const SuperadminDashboard = () => {
   const topStaffList = staff.topPerformers || [];
   const topTeamsList = teams.topTeams || [];
   const notifications = alerts;
+
+  const closingRows = closingData.rows || [];
+  const closedCount = closingRows.filter((r) => r.status === "closed").length;
 
   const MapView = () => {
     return (
@@ -689,7 +773,7 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Action Required */}
+      {/* Notifications & Accounting Closing Log */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
           <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
@@ -714,9 +798,71 @@ const SuperadminDashboard = () => {
           </div>
         </div>
 
-        {/* Centre Closing Logs */}
-        <CentreClosingLog />
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <div className="flex items-start justify-between mb-4 gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-700 flex items-center">
+                <span className="mr-2">📒</span> Accounting Closing Log
+              </h2>
+              {!closingLoading && !closingError && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {closedCount} of {closingRows.length} centres closed
+                </p>
+              )}
+            </div>
+            <input
+              type="date"
+              value={closingDate || closingData.date || ""}
+              max={todayIST()}
+              onChange={(e) => setClosingDate(e.target.value)}
+              className="border border-gray-300 rounded-lg px-2 py-1 text-xs text-gray-700"
+              aria-label="Accounting date"
+            />
+          </div>
 
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {closingLoading ? (
+              <div className="flex justify-center py-8">
+                <FiLoader className="animate-spin h-6 w-6 text-indigo-600" />
+              </div>
+            ) : closingError ? (
+              <div className="text-sm text-rose-600 p-4 text-center bg-rose-50 rounded-lg">
+                Could not load closing log.
+              </div>
+            ) : closingRows.length === 0 ? (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">
+                No centres found.
+              </div>
+            ) : (
+              closingRows.map((row) => {
+                const v = getClosingView(row);
+                return (
+                  <div key={row.centre_id} className={`p-3 rounded-lg border flex items-start space-x-3 ${v.wrap}`}>
+                    <v.Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${v.text}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-sm font-semibold text-gray-900 truncate">{row.centre_name}</p>
+                        <span className={`text-xs font-medium whitespace-nowrap ${v.text}`}>{v.label}</span>
+                      </div>
+                      <p className="text-xs text-gray-600 mt-0.5">{v.detail}</p>
+                      {row.status === "closed" && row.closed_at && (
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Closed {new Date(row.closed_at).toLocaleString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                          {row.closed_by_name ? ` by ${row.closed_by_name}` : ""}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Map View */}

@@ -17,6 +17,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import AdminExpenseEntry from './AdminExpenseEntry';
 
+// Today's date in IST (YYYY-MM-DD)
+const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
 // Compact StatCard Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
@@ -46,7 +49,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
 );
 
 // Nightly Accounting Checklist Component
-const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
+const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly = false }) => {
   const [checklist, setChecklist] = useState(
     existingData?.checklist || {
       incomeEntryVerified: false,
@@ -63,6 +66,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
   const [actualCashCount, setActualCashCount] = useState(existingData?.actualCashCount?.toString() || '');
 
   const handleChecklistToggle = (key) => {
+    if (readOnly) return;
     setChecklist(prev => ({
       ...prev,
       [key]: !prev[key]
@@ -72,6 +76,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
   const allCompleted = Object.values(checklist).every(item => item);
 
   const handleCompleteAccounting = async () => {
+    if (readOnly) return;
     if (!allCompleted) {
       toast.error('Please complete all checklist items');
       return;
@@ -173,6 +178,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
                 type="number"
                 value={closingCash}
                 onChange={(e) => setClosingCash(e.target.value)}
+                disabled={readOnly}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 placeholder="₹0.00"
               />
@@ -185,6 +191,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
                 type="number"
                 value={actualCashCount}
                 onChange={(e) => setActualCashCount(e.target.value)}
+                disabled={readOnly}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
                 placeholder="₹0.00"
               />
@@ -212,6 +219,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
+            disabled={readOnly}
             rows="2"
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
             placeholder="Enter any notes or observations..."
@@ -219,6 +227,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
         </div>
 
         {/* Complete Button */}
+        {!readOnly && (
         <div className="flex justify-end">
           <button
             onClick={handleCompleteAccounting}
@@ -234,13 +243,14 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData }) => {
             {existingData ? 'Update Nightly Accounting' : 'Complete Nightly Accounting'}
           </button>
         </div>
+        )}
       </div>
     </div>
   );
 };
 
 // Daily Summary Component
-const DailySummaryComponent = ({ summaryData, onUpdate }) => {
+const DailySummaryComponent = ({ summaryData, onUpdate, readOnly = false }) => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     derived: summaryData?.derived || {},
@@ -353,7 +363,7 @@ const calculateTotals = () => {
                 <span>Cancel</span>
               </button>
             </>
-          ) : (
+          ) : !readOnly ? (
             <button
               onClick={() => setEditing(true)}
               className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-1 text-sm"
@@ -361,7 +371,7 @@ const calculateTotals = () => {
               <FiEdit className="h-3 w-3" />
               <span>Edit Summary</span>
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 
@@ -1426,7 +1436,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
 };
 
 // Wallet Reconciliation Component
-const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
+const WalletReconciliation = ({ wallets, onRefreshWallets, date, centreId, isSuperAdmin = false, readOnly = false }) => {
   const [walletBalances, setWalletBalances] = useState({});
   const [historicalBookBalances, setHistoricalBookBalances] = useState({}); // 🔥 New state for history
   const [isReconciling, setIsReconciling] = useState(false);
@@ -1434,11 +1444,12 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
   useEffect(() => {
     const loadSavedBalances = async () => {
       try {
+        const params = new URLSearchParams({ date });
+        if (isSuperAdmin && centreId) params.append("centreId", centreId);
+
         const res = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconciliations?date=${date}`,
-          {
-            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-          }
+          `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconciliations?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
         );
         
         if (res.ok) {
@@ -1466,7 +1477,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
       setHistoricalBookBalances({});
       loadSavedBalances();
     }
-  }, [date]);
+  }, [date, centreId, isSuperAdmin]);
 
   // 🔥 Process wallets to guarantee UI perfectly matches the math
   const processedWallets = useMemo(() => {
@@ -1497,6 +1508,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
   };
 
   const handleReconcileWallets = async () => {
+    if (readOnly) return;
     setIsReconciling(true);
     try {
       // 🔥 Build payload explicitly from exactly what is displayed on screen
@@ -1637,7 +1649,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
           </h3>
           <div className="space-y-2">
             <button
-              onClick={onRefreshWallets}
+              onClick={() => onRefreshWallets(date)}
               className="w-full flex items-center justify-between p-2 hover:bg-blue-50 rounded transition-colors"
             >
               <div className="flex items-center space-x-2">
@@ -1647,6 +1659,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
               <FiChevronRight className="h-3 w-3 text-gray-400" />
             </button>
             
+            {!readOnly && (
             <button
               onClick={handleReconcileWallets}
               disabled={isReconciling}
@@ -1668,6 +1681,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
               </div>
               {!isReconciling && <FiChevronRight className="h-3 w-3 text-gray-400" />}
             </button>
+            )}
             
             <button className="w-full flex items-center justify-between p-2 hover:bg-amber-50 rounded transition-colors">
               <div className="flex items-center space-x-2">
@@ -1694,7 +1708,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
                   {wallets.length} wallets to reconcile
                 </span>
                 <button
-                  onClick={onRefreshWallets}
+                  onClick={() => onRefreshWallets(date)}
                   className="p-1 hover:bg-gray-200 rounded transition-colors"
                 >
                   <FiRefreshCw className="h-3 w-3 text-gray-600" />
@@ -1767,6 +1781,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
                               type="number"
                               value={wallet.displayActual}
                               onChange={e => handleBalanceChange(String(wallet.id), e.target.value)}
+                              disabled={readOnly}
                               className="pl-6 pr-2 py-1 border border-gray-300 rounded text-sm w-32 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                               placeholder="Actual"
                             />
@@ -1816,6 +1831,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
           </div>
 
           {/* Action Bar */}
+          {!readOnly && (
           <div className="border-t border-gray-200 bg-gray-50 p-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2 text-xs text-gray-600">
@@ -1845,6 +1861,7 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date }) => {
               </button>
             </div>
           </div>
+          )}
         </div>
       </div>
     </div>
@@ -1862,6 +1879,7 @@ const ExpenseManagement = ({
   onAddClick,
   wallets = [],
   onCorrect,
+  readOnly = false,
 }) => {
   const [newExpense, setNewExpense] = useState({
     description: '',
@@ -2026,6 +2044,7 @@ const ExpenseManagement = ({
                         minimumFractionDigits: 2
                       })}
                     </p>
+                    {!readOnly && (
                     <div className="flex space-x-1">
                       <button
                         onClick={() => onApprove(expense.id)}
@@ -2042,6 +2061,7 @@ const ExpenseManagement = ({
                         <span>Reject</span>
                       </button>
                     </div>
+                    )}
                   </div>
                 </motion.div>
               );
@@ -2372,7 +2392,7 @@ const AccountingSection = ({
   isSuperAdmin = false
 }) => {
   const [activeAccountingTab, setActiveAccountingTab] = useState('daily');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(todayIST());
   const [showAdminExpenseModal, setShowAdminExpenseModal] = useState(false);
 
   // Teams related state
@@ -2406,11 +2426,12 @@ const AccountingSection = ({
     amount: '',
     wallet_id: '',
     description: '',
-    date: new Date().toISOString().split('T')[0]
+    date: todayIST()
   });
 
   const handleMiscIncomeSubmit = async (e) => {
       e.preventDefault();
+      if (readOnly) return;
       try {
         const [year, month, day] = miscIncomeForm.date.split('-');
         const now = new Date();
@@ -2444,7 +2465,7 @@ const AccountingSection = ({
         
         toast.success('Misc Income recorded successfully!');
         setShowMiscIncomeModal(false);
-        setMiscIncomeForm({ amount: '', wallet_id: '', description: '', date: new Date().toISOString().split('T')[0] });
+        setMiscIncomeForm({ amount: '', wallet_id: '', description: '', date: todayIST() });
         
         handleRefreshAllData(); 
       } catch (err) {
@@ -2690,7 +2711,7 @@ const AccountingSection = ({
 
   useEffect(() => {
     if (activeAccountingTab === 'wallets') {
-      refreshWalletBookBalances();
+      refreshWalletBookBalances(date);
     }
   }, [activeAccountingTab, date]);
 
@@ -2811,6 +2832,7 @@ const AccountingSection = ({
   };
 
 const handleApproveExpense = async (expenseId) => {
+    if (readOnly) return;
     try {
       const approveRes = await fetch(
         `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/approve`,
@@ -2847,6 +2869,7 @@ const handleApproveExpense = async (expenseId) => {
   };
 
   const handleRejectExpense = async (expenseId) => {
+    if (readOnly) return;
     await fetch(
       `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/reject`,
       {
@@ -2864,6 +2887,7 @@ const handleApproveExpense = async (expenseId) => {
   };
 
   const handleCorrectExpense = async (expenseId, payload) => {
+    if (readOnly) return;
     try {
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/expense/${expenseId}/correct`,
@@ -2882,13 +2906,14 @@ const handleApproveExpense = async (expenseId) => {
       }
       toast.success('Expense corrected successfully');
       await fetchExpenses();
-      await refreshWalletBookBalances();
+      await refreshWalletBookBalances(date);
     } catch (error) {
       toast.error(error.message || 'Failed to correct expense');
     }
   };
 
   const handleAdminExpenseSubmit = async (payload) => {
+    if (readOnly) return;
     try {
       const res = await fetch(`${import.meta.env.VITE_API_URL}/api/expense?${buildQueryString()}`, {
         method: "POST",
@@ -2906,7 +2931,7 @@ const handleApproveExpense = async (expenseId) => {
       }
 
       await fetchExpenses();
-      await refreshWalletBookBalances();
+      await refreshWalletBookBalances(date);
       toast.success("Expense added successfully!");
       setShowAdminExpenseModal(false);
       
@@ -2916,6 +2941,7 @@ const handleApproveExpense = async (expenseId) => {
   };
 
   const handleUpdateDailySummary = async (summary) => {
+      if (readOnly) return;
       onUpdateAccounting('dailySummary', {
         ...accountingData.dailySummary,
         ...summary
@@ -2942,6 +2968,7 @@ const handleApproveExpense = async (expenseId) => {
     };
 
   const handleCompleteNightlyAccounting = async (payload) => {
+    if (readOnly) return;
     try {
       const openingBalance = accountingData.dailySummary?.derived?.openingBalance || 0;
       
@@ -3049,7 +3076,7 @@ const handleApproveExpense = async (expenseId) => {
         onUpdateAccounting('income', incomeData);
       }
 
-      await refreshWalletBookBalances();
+      await refreshWalletBookBalances(date);
 
       toast.success("All data refreshed!");
     } catch (error) {
@@ -3325,11 +3352,13 @@ const handleExportExcel = () => {
                   date={date}
                   onComplete={handleCompleteNightlyAccounting}
                   existingData={accountingData.nightlyAccounting?.[date]}
+                  readOnly={readOnly}
                 />
                 
                 <DailySummaryComponent
                   summaryData={accountingData.dailySummary}
                   onUpdate={handleUpdateDailySummary}
+                  readOnly={readOnly}
                 />
               </div>
             )}
@@ -3342,6 +3371,7 @@ const handleExportExcel = () => {
                     <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
                     Income & Collections
                   </h2>
+                  {!readOnly && (
                   <button
                     onClick={() => setShowMiscIncomeModal(true)}
                     className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center space-x-1 text-sm shadow-sm"
@@ -3349,6 +3379,7 @@ const handleExportExcel = () => {
                     <FiPlusCircle className="h-4 w-4" />
                     <span>Add Misc Income</span>
                   </button>
+                  )}
                 </div>
                 <IncomeViewComponent
                   transactions={accountingData.income || []}
@@ -3457,6 +3488,7 @@ const handleExportExcel = () => {
                     Expenses
                   </h2>
 
+                  {!readOnly && (
                   <button
                     onClick={() => setShowAdminExpenseModal(true)}
                     className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-1 text-sm"
@@ -3464,13 +3496,15 @@ const handleExportExcel = () => {
                     <FiPlusCircle className="h-4 w-4" />
                     <span>Add Expense</span>
                   </button>
+                  )}
                 </div>
 
                 <ExpenseManagement
                   expenses={expensesForCurrentDate}
                   onApprove={handleApproveExpense}
                   onReject={handleRejectExpense}
-                  onCorrect={handleCorrectExpense}
+                  onCorrect={readOnly ? undefined : handleCorrectExpense}
+                  readOnly={readOnly}
                   wallets={derivedWallets}
                   allowAdd={false}
                 />
@@ -3484,6 +3518,9 @@ const handleExportExcel = () => {
                 onReconcile={handleReconcileWallets}
                 onRefreshWallets={refreshWalletBookBalances}
                 date={date}
+                centreId={centreId}
+                isSuperAdmin={isSuperAdmin}
+                readOnly={readOnly}
               />
             )}
 
