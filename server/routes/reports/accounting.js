@@ -769,4 +769,61 @@ router.get('/nightly-close', async (req, res) => {
   }
 });
 
+// ========== NIGHTLY CLOSE STATUS - ALL CENTRES (SUPERADMIN DASHBOARD) ==========
+router.get('/nightly-close/all', async (req, res) => {
+  if (req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Superadmin access required' });
+  }
+
+  const client = await req.db.connect();
+
+  try {
+    const { date } = req.query; // optional, "YYYY-MM-DD"
+
+    const result = await client.query(
+      `
+      SELECT * FROM (
+        WITH target AS (
+          -- defaults to yesterday in IST
+          SELECT COALESCE($1::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 1) AS day
+        )
+        SELECT
+          c.id   AS centre_id,
+          c.name AS centre_name,
+          t.day::text AS accounting_date,
+          d.actual_cash,
+          d.cash_variance,
+          d.closed_at,
+          s.name AS closed_by_name,
+          CASE
+            WHEN d.centre_id IS NULL THEN 'not_closed'
+            WHEN d.checklist IS NULL THEN 'incomplete'   -- only actual cash was saved
+            ELSE 'closed'
+          END AS status
+        FROM centres c
+        CROSS JOIN target t
+        LEFT JOIN daily_accounting_closure d
+          ON d.centre_id = c.id AND d.accounting_date = t.day
+        LEFT JOIN staff s ON s.id = d.closed_by
+      ) x
+      ORDER BY
+        CASE x.status WHEN 'not_closed' THEN 0 WHEN 'incomplete' THEN 1 ELSE 2 END,
+        ABS(COALESCE(x.cash_variance, 0)) DESC,
+        x.centre_name
+      `,
+      [date || null]
+    );
+
+    res.json({
+      date: result.rows[0]?.accounting_date || date || null,
+      rows: result.rows
+    });
+  } catch (err) {
+    console.error('Nightly close (all centres) error:', err);
+    res.status(500).json({ error: 'Failed to load closing log' });
+  } finally {
+    client.release();
+  }
+});
+
 export default router;
