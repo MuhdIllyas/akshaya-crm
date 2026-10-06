@@ -11,6 +11,7 @@ import {
   FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
   FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown
 } from "react-icons/fi";
+import CentreClosingLog from "@/components/Centreclosinglog"; 
 
 // ==========================================
 // STAFF PERFORMANCE CHART (unchanged)
@@ -289,7 +290,7 @@ const SuperadminDashboard = () => {
           `${import.meta.env.VITE_API_URL}/api/analytics/superadmin/dashboard`,
           {
             params: {
-              modules: "stats,financials,leaderboards,health,alerts,activity,customers,staff,teams,wallets,insights",
+              modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
               timeframe: "custom",
               customStartDate: formatDate(startDate),
               customEndDate: formatDate(endDate)
@@ -332,7 +333,7 @@ const SuperadminDashboard = () => {
   const revenueChartData = chartData[revenueView] || [];
 
   // --- Operations ---
-  const { customers = {}, staff = {}, teams = {}, activity = {} } = operations;
+  const { customers = {}, staff = {}, teams = {} } = operations;
 
   // --- Leaderboards ---
   const { centres = {} } = leaderboards;
@@ -353,14 +354,7 @@ const SuperadminDashboard = () => {
 
   const topStaffList = staff.topPerformers || [];
   const topTeamsList = teams.topTeams || [];
-  const timeline = activity.timeline || [];
   const notifications = alerts;
-
-  const activities = timeline.map(item => ({
-    id: item.id || item.referenceId || `${item.type}-${item.createdAt}`,
-    action: `${item.type}: ${item.title}`,
-    time: new Date(item.createdAt).toLocaleString()
-  }));
 
   const MapView = () => {
     return (
@@ -695,7 +689,7 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Notifications & Activity Feed */}
+      {/* Action Required */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
           <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
@@ -720,23 +714,9 @@ const SuperadminDashboard = () => {
           </div>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-            <span className="mr-2">🕒</span> Live Activity Feed
-          </h2>
-          <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-            {activities.length > 0 ? (
-              activities.map((activity) => (
-                <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
-                  <span className="text-sm font-medium text-gray-800">{activity.action}</span>
-                  <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
-            )}
-          </div>
-        </div>
+        {/* Centre Closing Logs */}
+        <CentreClosingLog />
+
       </div>
 
       {/* Map View */}
