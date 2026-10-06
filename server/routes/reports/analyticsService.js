@@ -5,30 +5,31 @@ import pool from "../../db.js";
 // UTILS
 // ==========================================
 
-const getDateContext = () => {
-  const dateObj = new Date();
-  const today = dateObj.toISOString().split('T')[0];
-  const currentYear = dateObj.getFullYear();
-  const currentMonthStr = today.substring(0, 7);
-  const firstDayOfMonth = `${currentMonthStr}-01`;
-  
-  const yesterdayDate = new Date(dateObj);
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = yesterdayDate.toISOString().split('T')[0];
-  
-  const sevenDaysAgoDate = new Date(dateObj);
-  sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
-  const sevenDaysAgo = sevenDaysAgoDate.toISOString().split('T')[0];
+const TZ = "Asia/Kolkata";
 
-  return { 
-    today, 
-    yesterday, 
-    sevenDaysAgo, 
-    currentYear, 
-    currentMonthStr, 
-    firstDayOfMonth,
-    fromDate: today, 
-    toDate: today    
+// "YYYY-MM-DD" in IST
+const toISTDate = (d) => d.toLocaleDateString("en-CA", { timeZone: TZ });
+
+// shift a "YYYY-MM-DD" string by N days without timezone drift
+const shiftDate = (ymd, days) => {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().split("T")[0];
+};
+
+const getDateContext = () => {
+  const today = toISTDate(new Date());
+  const currentMonthStr = today.substring(0, 7);
+
+  return {
+    today,
+    yesterday: shiftDate(today, -1),
+    sevenDaysAgo: shiftDate(today, -6),
+    currentYear: Number(today.substring(0, 4)),
+    currentMonthStr,
+    firstDayOfMonth: `${currentMonthStr}-01`,
+    fromDate: today,
+    toDate: today,
   };
 };
 
@@ -219,8 +220,11 @@ const fetchActivityAnalytics = async (client, centreId, dates) => {
       ORDER BY wt.created_at DESC LIMIT 10
     `, [centreId]),
     client.query(`
-      SELECT actual_cash, cash_variance FROM daily_accounting_closure 
-      WHERE centre_id = $1 AND accounting_date = $2
+      SELECT actual_cash, cash_variance, closed_at
+      FROM daily_accounting_closure
+      WHERE centre_id = $1
+        AND accounting_date = $2
+        AND checklist IS NOT NULL
     `, [centreId, dates.yesterday])
   ]);
 
