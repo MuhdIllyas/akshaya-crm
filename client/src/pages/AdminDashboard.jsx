@@ -531,7 +531,9 @@ const LiveTransactionFeed = ({ transactions = [] }) => {
 };
 
 const NightlyCloseAlert = ({ closingData }) => {
-  if (!closingData || !closingData.data) {
+  const row = closingData?.data ?? closingData;
+
+  if (!row || row.cash_variance === undefined || row.cash_variance === null) {
     return (
       <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start space-x-3">
         <FiAlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
@@ -543,7 +545,7 @@ const NightlyCloseAlert = ({ closingData }) => {
     );
   }
 
-  const variance = Number(closingData.data.cash_variance || 0);
+  const variance = Number(row.cash_variance || 0);
   const isPerfect = variance === 0;
 
   return (
@@ -635,29 +637,23 @@ const AdminDashboard = () => {
           ...dashboardData.stats,
           monthlyRevenue: dashboardData.charts?.financialTrend?.revenueCollected?.[new Date().getMonth()] || 0
         });
-        
         setReviewStats(dashboardData.customerSatisfaction);
         setAttendanceData(dashboardData.charts.attendanceTrend);
-        setServices(dashboardData.charts.serviceStatus); 
-        
-        // 2. V3 Backend removed dailyRevenue to speed up queries, so we clear it
+        setServices(dashboardData.charts.serviceStatus);
         setDailyRevenueData([]);
         setDailyRevenueLabels([]);
-        
-        // 3. Map to the new V3 financialTrend array
         setMonthlyRevenueData(dashboardData.charts?.financialTrend?.revenueCollected || []);
-        
         setTopStaffData(dashboardData.lists.topStaff);
         setRecentTransactions(dashboardData.lists.recentTransactions);
         setYesterdayClosing(dashboardData.alerts.yesterdayClosing);
 
         // Generate Recent Activity Notification Feed
         const activities = [];
-        if (dashboardData.stats.todayRevenue > 0) {
+        if (dashboardData.stats.todayRevenueCollected > 0) {
           activities.push({
             icon: FiDollarSign,
             title: 'Revenue recorded',
-            description: `₹${dashboardData.stats.todayRevenue.toLocaleString('en-IN')} collected today`,
+            description: `₹${dashboardData.stats.todayRevenueCollected.toLocaleString('en-IN')} collected today`,
             time: 'Today',
             color: 'text-emerald-600',
             bg: 'bg-emerald-50'
@@ -991,7 +987,7 @@ const AdminDashboard = () => {
                     </span>
                    </div>
                    <div className="w-full bg-gray-200 rounded-full h-2">
-                     <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${stats.todayRevenue > 0 ? Math.max(0, Math.min((stats.todayProfit / stats.todayRevenue) * 100, 100)) : 0}%` }}></div>
+                     <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${stats.todayRevenueCollected > 0 ? Math.max(0, Math.min((stats.todayNetProfit / stats.todayRevenueCollected) * 100, 100)) : 0}%` }}></div>
                    </div>
                 </div>
              </div>

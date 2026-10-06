@@ -28,16 +28,8 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
         return { fromDate: today, toDate: today };
       });
 
-  if (!centreId) {
-    return (
-      <div className="bg-white p-6 rounded-lg border text-gray-600">
-        Select a centre to view transactions
-      </div>
-    );
-  }
-
-  useEffect(() => {
-    if (!centreId) return;
+    useEffect(() => {
+      if (!centreId) return;
 
     const controller = new AbortController();
     const signal = controller.signal;
@@ -84,6 +76,15 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
     // 🧹 Cleanup: cancel previous request
     return () => controller.abort();
 }, [centreId, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
+
+  // ✅ early return AFTER all hooks
+  if (!centreId) {
+    return (
+      <div className="bg-white p-6 rounded-lg border text-gray-600">
+        Select a centre to view transactions
+      </div>
+    );
+  }
 
   return (
     <TransactionsSection

@@ -43,14 +43,6 @@ const SuperAdminPendingPayments = ({ centreId, readOnly = true }) => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
-  if (!centreId) {
-    return (
-      <div className="bg-white p-6 rounded-lg border text-gray-600">
-        Select a centre to view pending payments
-      </div>
-    );
-  }
-
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -137,6 +129,14 @@ const SuperAdminPendingPayments = ({ centreId, readOnly = true }) => {
 
     fetchData();
   }, [centreId, filter, fromDate, toDate]);
+
+   if (!centreId) {
+    return (
+      <div className="bg-white p-6 rounded-lg border text-gray-600">
+        Select a centre to view pending payments
+      </div>
+    );
+  }
 
   const handleClearFilters = () => {
     setFromDate("");
