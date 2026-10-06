@@ -11,7 +11,6 @@ import {
   FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
   FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown
 } from "react-icons/fi";
-import CentreClosingLog from "@/components/Centreclosinglog";
 
 // ==========================================
 // STAFF PERFORMANCE CHART (unchanged)
@@ -290,7 +289,7 @@ const SuperadminDashboard = () => {
           `${import.meta.env.VITE_API_URL}/api/analytics/superadmin/dashboard`,
           {
             params: {
-              modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
+              modules: "stats,financials,leaderboards,health,alerts,activity,customers,staff,teams,wallets,insights",
               timeframe: "custom",
               customStartDate: formatDate(startDate),
               customEndDate: formatDate(endDate)
@@ -333,7 +332,7 @@ const SuperadminDashboard = () => {
   const revenueChartData = chartData[revenueView] || [];
 
   // --- Operations ---
-  const { customers = {}, staff = {}, teams = {} } = operations;
+  const { customers = {}, staff = {}, teams = {}, activity = {} } = operations;
 
   // --- Leaderboards ---
   const { centres = {} } = leaderboards;
@@ -354,7 +353,14 @@ const SuperadminDashboard = () => {
 
   const topStaffList = staff.topPerformers || [];
   const topTeamsList = teams.topTeams || [];
+  const timeline = activity.timeline || [];
   const notifications = alerts;
+
+  const activities = timeline.map(item => ({
+    id: item.id || item.referenceId || `${item.type}-${item.createdAt}`,
+    action: `${item.type}: ${item.title}`,
+    time: new Date(item.createdAt).toLocaleString()
+  }));
 
   const MapView = () => {
     return (
@@ -685,6 +691,50 @@ const SuperadminDashboard = () => {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Notifications & Activity Feed */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🔔</span> Action Required
+          </h2>
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {notifications.length > 0 ? (
+              notifications.map((notif) => (
+                <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
+                  notif.priority === "critical" ? "bg-red-50 border-red-500" :
+                  notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
+                }`}>
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
+                    <div className="text-gray-600 text-sm">{notif.message}</div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
+            )}
+          </div>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🕒</span> Live Activity Feed
+          </h2>
+          <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
+            {activities.length > 0 ? (
+              activities.map((activity) => (
+                <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
+                  <span className="text-sm font-medium text-gray-800">{activity.action}</span>
+                  <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
+                </div>
+              ))
+            ) : (
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
+            )}
           </div>
         </div>
       </div>
