@@ -689,29 +689,6 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      {/* Notifications & Activity Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <CentreClosingLog />
-
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-            <span className="mr-2">🕒</span> Live Activity Feed
-          </h2>
-          <div className="space-y-4 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-            {activities.length > 0 ? (
-              activities.map((activity) => (
-                <div key={activity.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0">
-                  <span className="text-sm font-medium text-gray-800">{activity.action}</span>
-                  <span className="text-xs text-gray-500 mt-1">{activity.time}</span>
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">No recent activities found.</div>
-            )}
-          </div>
-        </div>
-      </div>
-
       {/* Map View */}
       <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
         <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
