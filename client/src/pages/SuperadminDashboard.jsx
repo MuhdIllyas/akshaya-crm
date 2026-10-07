@@ -112,7 +112,7 @@ const getClosingView = (row) => {
 // STAFF PERFORMANCE CHART (unchanged)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
-  const [metric, setMetric] = useState('revenue');
+  const [metric, setMetric] = useState('serviceCharges');
 
   if (!staffData || staffData.length === 0) {
     return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
@@ -129,7 +129,7 @@ const StaffPerformanceChart = ({ staffData }) => {
         <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
           <p className="font-bold text-base mb-1">{data.name}</p>
           <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
-          <p className="text-blue-400 font-semibold">Revenue: {formatCurrency(data.revenue)}</p>
+          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
           <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
         </div>
       );
@@ -145,7 +145,7 @@ const StaffPerformanceChart = ({ staffData }) => {
           <p className="font-bold text-base mb-1">{data.name}</p>
           <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
           <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
-          <p className="text-blue-400 font-semibold">Revenue: {formatCurrency(data.revenue)}</p>
+          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
         </div>
       );
     }
@@ -162,12 +162,12 @@ const StaffPerformanceChart = ({ staffData }) => {
         <div className="flex flex-col gap-2">
           <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
             <button
-              onClick={() => setMetric('revenue')}
+              onClick={() => setMetric('serviceCharges')}
               className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'revenue' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+                metric === 'serviceCharges' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              Revenue
+              Service Charges
             </button>
             <button
               onClick={() => setMetric('servicesCompleted')}
@@ -203,12 +203,12 @@ const StaffPerformanceChart = ({ staffData }) => {
               />
               <YAxis
                 type="number"
-                dataKey="revenue"
-                name="Revenue"
+                dataKey="serviceCharges"
+                name="Service Charges"
                 tickFormatter={(val) => `₹${(val/1000)}k`}
                 tick={{ fontSize: 12 }}
               />
-              <ZAxis type="number" dataKey="revenue" range={[100, 500]} name="Volume" />
+              <ZAxis type="number" dataKey="serviceCharges" range={[100, 500]} name="Volume" />
               <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
               <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
             </ScatterChart>
@@ -228,7 +228,7 @@ const StaffPerformanceChart = ({ staffData }) => {
                 {staffData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={metric === 'revenue' ? '#3B82F6' : '#8B5CF6'}
+                    fill={metric === 'serviceCharges' ? '#3B82F6' : '#8B5CF6'}
                     className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
                   />
                 ))}
