@@ -11,8 +11,8 @@ import {
   FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
   FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown,
   FiCheckCircle, FiXCircle, FiLoader, FiCalendar, FiActivity, FiMap,
-  FiBell, FiStar, FiAward, FiTarget, FiClock, FiFileText, FiLayers,
-  FiLayout, FiPlus, FiMessageSquare, FiDownload, FiBarChart2
+  FiBell, FiStar, FiAward, FiTarget, FiFileText, FiLayers,
+  FiPlus, FiMessageSquare, FiDownload
 } from "react-icons/fi";
 
 // ==========================================
@@ -60,11 +60,11 @@ const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN")}`;
 const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
 const getClosingView = (row) => {
-  if (row.status === "not_closed") return { Icon: FiXCircle, label: "Not closed", detail: "No closing submitted", wrap: "bg-rose-50/50 border-rose-100", text: "text-rose-600" };
-  if (row.status === "incomplete") return { Icon: FiAlertCircle, label: "Incomplete", detail: `Cash counted (${inr(row.actual_cash)})`, wrap: "bg-amber-50/50 border-amber-100", text: "text-amber-600" };
+  if (row.status === "not_closed") return { Icon: FiXCircle, label: "Not closed", detail: "No closing submitted", wrap: "bg-rose-50 border-rose-200", text: "text-rose-700" };
+  if (row.status === "incomplete") return { Icon: FiAlertCircle, label: "Incomplete", detail: `Cash counted (${inr(row.actual_cash)})`, wrap: "bg-amber-50 border-amber-200", text: "text-amber-700" };
   const variance = Number(row.cash_variance || 0);
-  if (variance === 0) return { Icon: FiCheckCircle, label: "Closed", detail: `Cash ${inr(row.actual_cash)} • Matched`, wrap: "bg-emerald-50/50 border-emerald-100", text: "text-emerald-600" };
-  return { Icon: FiAlertCircle, label: "Closed w/ Variance", detail: `Cash ${inr(row.actual_cash)} • ${inr(variance)} ${variance < 0 ? "short" : "over"}`, wrap: "bg-rose-50/50 border-rose-100", text: "text-rose-600" };
+  if (variance === 0) return { Icon: FiCheckCircle, label: "Closed", detail: `Cash ${inr(row.actual_cash)} • Matched`, wrap: "bg-emerald-50 border-emerald-200", text: "text-emerald-700" };
+  return { Icon: FiAlertCircle, label: "Closed w/ Variance", detail: `Cash ${inr(row.actual_cash)} • ${inr(variance)} ${variance < 0 ? "short" : "over"}`, wrap: "bg-rose-50 border-rose-200", text: "text-rose-700" };
 };
 
 // ==========================================
@@ -80,11 +80,11 @@ const StaffPerformanceChart = ({ staffData }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-sm text-white p-4 rounded-xl shadow-2xl text-sm border border-slate-700/50 z-50">
+        <div className="bg-slate-900 text-white p-4 rounded-xl shadow-xl text-sm border border-slate-700 z-50">
           <p className="font-semibold text-base mb-1">{data.name}</p>
           <p className="text-slate-400 text-xs mb-3">{data.centre}</p>
           <div className="space-y-1">
-            <p className="flex justify-between gap-4"><span className="text-slate-300">Revenue:</span> <span className="text-blue-400 font-medium">{formatCurrency(data.serviceCharges)}</span></p>
+            <p className="flex justify-between gap-4"><span className="text-slate-300">Service Charges:</span> <span className="text-blue-400 font-medium">{formatCurrency(data.serviceCharges)}</span></p>
             <p className="flex justify-between gap-4"><span className="text-slate-300">Services:</span> <span className="text-purple-400 font-medium">{data.servicesCompleted}</span></p>
           </div>
         </div>
@@ -102,14 +102,14 @@ const StaffPerformanceChart = ({ staffData }) => {
           </h2>
           <p className="text-sm text-slate-500 mt-1">Ranked across all centres</p>
         </div>
-        <div className="flex bg-slate-100/80 p-1 rounded-xl border border-slate-200/50">
+        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
           {['serviceCharges', 'servicesCompleted', 'scatter'].map((m) => (
             <button
               key={m}
               onClick={() => setMetric(m)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${metric === m ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${metric === m ? 'bg-white text-indigo-600 shadow-sm border border-slate-200/50' : 'text-slate-500 hover:text-slate-700'}`}
             >
-              {m === 'serviceCharges' ? 'Revenue' : m === 'servicesCompleted' ? 'Volume' : 'Efficiency'}
+              {m === 'serviceCharges' ? 'Service Charges' : m === 'servicesCompleted' ? 'Applications' : 'Efficiency'}
             </button>
           ))}
         </div>
@@ -124,7 +124,7 @@ const StaffPerformanceChart = ({ staffData }) => {
               <YAxis type="number" dataKey="serviceCharges" name="Service Charges" tickFormatter={(val) => `₹${(val/1000)}k`} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} />
               <ZAxis type="number" dataKey="serviceCharges" range={[100, 500]} />
               <Tooltip content={<CustomTooltip />} cursor={{ strokeDasharray: '3 3', stroke: '#cbd5e1' }} />
-              <Scatter name="Staff" data={staffData} fill="#6366f1" opacity={0.8} />
+              <Scatter name="Staff" data={staffData} fill="#6366f1" opacity={0.9} />
             </ScatterChart>
           ) : (
             <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
@@ -162,7 +162,7 @@ const RevenueChart = ({ data, view }) => {
     if (active && payload && payload.length) {
       const item = payload[0].payload;
       return (
-        <div className="bg-slate-900/95 backdrop-blur-sm text-white p-3 rounded-xl shadow-xl text-sm border border-slate-700/50">
+        <div className="bg-slate-900 text-white p-3 rounded-xl shadow-xl text-sm border border-slate-700">
           <p className="font-semibold text-slate-300 mb-1">{formatLabel(item.label)}</p>
           <p className="text-white font-bold text-lg">{formatCurrency(item.value)}</p>
         </div>
@@ -180,15 +180,7 @@ const RevenueChart = ({ data, view }) => {
         <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dy={10} />
         <YAxis tickFormatter={(val) => `₹${(val/1000)}k`} tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} tickLine={false} dx={-10} />
         <Tooltip content={<CustomTooltip />} cursor={{ fill: '#f8fafc' }} />
-        <Bar dataKey="value" fill={getBarColor()} radius={[6, 6, 0, 0]} barSize={data.length > 6 ? 24 : Math.min(60, 80 / data.length)} animationDuration={800}>
-          {data.map((entry, index) => <Cell key={`cell-${index}`} fill={`url(#revenueGradient)`} className="hover:opacity-80 transition-opacity" />)}
-        </Bar>
-        <defs>
-          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={getBarColor()} stopOpacity={0.9} />
-            <stop offset="100%" stopColor={getBarColor()} stopOpacity={0.2} />
-          </linearGradient>
-        </defs>
+        <Bar dataKey="value" fill={getBarColor()} radius={[6, 6, 0, 0]} barSize={data.length > 6 ? 24 : Math.min(60, 80 / data.length)} animationDuration={800} />
       </BarChart>
     </ResponsiveContainer>
   );
@@ -197,16 +189,26 @@ const RevenueChart = ({ data, view }) => {
 // ==========================================
 // STAT CARD COMPONENT
 // ==========================================
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick }) => {
-  // Extract base color name (e.g., "blue" from "bg-blue-500") for dynamic styling
-  const baseColorMatch = color.match(/bg-([a-z]+)-/);
-  const baseColor = baseColorMatch ? baseColorMatch[1] : 'indigo';
+const StatCard = ({ title, value, icon: Icon, colorKey, subtitle, trend, onClick }) => {
+  // Tailwind Safelist Mapping (Prevents broken styles in production)
+  const colorMap = {
+    blue: { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-600', blob: 'bg-blue-500' },
+    purple: { bg: 'bg-purple-50', border: 'border-purple-100', text: 'text-purple-600', blob: 'bg-purple-500' },
+    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-600', blob: 'bg-emerald-500' },
+    indigo: { bg: 'bg-indigo-50', border: 'border-indigo-100', text: 'text-indigo-600', blob: 'bg-indigo-500' },
+    amber: { bg: 'bg-amber-50', border: 'border-amber-100', text: 'text-amber-600', blob: 'bg-amber-500' },
+    orange: { bg: 'bg-orange-50', border: 'border-orange-100', text: 'text-orange-600', blob: 'bg-orange-500' },
+    rose: { bg: 'bg-rose-50', border: 'border-rose-100', text: 'text-rose-600', blob: 'bg-rose-500' },
+    pink: { bg: 'bg-pink-50', border: 'border-pink-100', text: 'text-pink-600', blob: 'bg-pink-500' }
+  };
+
+  const theme = colorMap[colorKey] || colorMap.indigo;
 
   return (
     <motion.div
       whileHover={{ y: -4 }}
       onClick={onClick}
-      className={`bg-white rounded-2xl border border-slate-200/60 p-6 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 relative overflow-hidden ${onClick ? 'cursor-pointer hover:border-indigo-300/50' : ''}`}
+      className={`bg-white rounded-2xl border border-slate-200/60 p-6 shadow-sm hover:shadow-md transition-all duration-300 relative overflow-hidden ${onClick ? 'cursor-pointer hover:border-indigo-300' : ''}`}
     >
       <div className="flex items-start justify-between">
         <div className="flex-1 z-10">
@@ -222,12 +224,11 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick })
           </div>
           <p className="text-sm text-slate-400 mt-2 font-medium">{subtitle}</p>
         </div>
-        <div className={`p-3 rounded-xl bg-${baseColor}-50 border border-${baseColor}-100 z-10`}>
-          <Icon className={`h-6 w-6 text-${baseColor}-600`} />
+        <div className={`p-3 rounded-xl ${theme.bg} border ${theme.border} z-10`}>
+          <Icon className={`h-6 w-6 ${theme.text}`} />
         </div>
       </div>
-      {/* Decorative background blob */}
-      <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-[0.03] bg-${baseColor}-500 blur-xl pointer-events-none`} />
+      <div className={`absolute -right-6 -top-6 w-24 h-24 rounded-full opacity-[0.04] ${theme.blob} pointer-events-none`} />
     </motion.div>
   );
 }
@@ -327,15 +328,20 @@ const SuperadminDashboard = () => {
   const closingRows = closingData.rows || [];
   const closedCount = closingRows.filter((r) => r.status === "closed").length;
 
+  // Fully Restored 8 Global Metrics
   const kpiData = [
-    { title: "Total Centres", value: totalCentres, icon: FiHome, color: "bg-blue-500", subtitle: `+${newCentresThisMonth ?? 0} this month`, trend: newCentresThisMonth > 0 ? 5 : -2, onClick: () => navigate('/dashboard/superadmin/centremanagement') },
-    { title: "Total Staff", value: totalStaff, icon: FiUsers, color: "bg-purple-500", subtitle: `${admins ?? 0} Admins, ${staffCount ?? 0} Staff`, trend: 0, onClick: () => navigate('/dashboard/superadmin/staffmanagement') },
-    { title: "Total Customers", value: totalCustomers?.toLocaleString(), icon: FiUserCheck, color: "bg-emerald-500", subtitle: `+${customerGrowth ?? 0} this month`, trend: customerGrowth > 0 ? 8 : -3 },
-    { title: "Period Revenue", value: formatCurrency(monthlyRevenue), icon: FiTrendingUp, color: "bg-indigo-500", subtitle: "Selected range", trend: revenueGrowthPercent },
+    { title: "Total Centres", value: totalCentres, icon: FiHome, colorKey: "blue", subtitle: `+${newCentresThisMonth ?? 0} this month`, trend: newCentresThisMonth > 0 ? 5 : -2, onClick: () => navigate('/dashboard/superadmin/centremanagement') },
+    { title: "Total Staff", value: totalStaff, icon: FiUsers, colorKey: "purple", subtitle: `${admins ?? 0} Admins, ${staffCount ?? 0} Staff`, trend: 0, onClick: () => navigate('/dashboard/superadmin/staffmanagement') },
+    { title: "Customers", value: (totalCustomers || 0).toLocaleString(), icon: FiUserCheck, colorKey: "emerald", subtitle: `+${customerGrowth ?? 0} this month`, trend: customerGrowth > 0 ? 8 : -3 },
+    { title: "Today's Services", value: todayServices ?? 0, icon: FiShoppingBag, colorKey: "indigo", subtitle: "All centres", trend: 0 },
+    { title: "Today's Revenue", value: formatCurrency(todayRevenue), icon: FiDollarSign, colorKey: "amber", subtitle: "Live collection", trend: todayRevenue > 0 ? 12 : -5 },
+    { title: "Period Revenue", value: formatCurrency(monthlyRevenue), icon: FiTrendingUp, colorKey: "orange", subtitle: "vs previous", trend: revenueGrowthPercent },
+    { title: "Period Profit", value: formatCurrency(netProfit), icon: FiPieChart, colorKey: "rose", subtitle: "Selected range", trend: netProfit > 0 ? 6 : -2 },
+    { title: "Pending Payments", value: formatCurrency(health?.metrics?.pendingPaymentValue), icon: FiAlertCircle, colorKey: "pink", subtitle: `${health?.metrics?.pendingCustomers ?? 0} Customers`, trend: health?.metrics?.pendingCustomers > 5 ? 15 : -4 }
   ];
 
   const MapView = () => (
-    <div className="relative bg-slate-50 border border-slate-200/50 rounded-xl h-64 flex items-center justify-center overflow-hidden">
+    <div className="relative bg-slate-50 rounded-xl h-full min-h-[250px] flex items-center justify-center overflow-hidden border border-slate-200/50">
       <svg viewBox="0 0 200 200" className="w-full h-full opacity-60">
         <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#cbd5e1" strokeWidth="2" strokeLinejoin="round" />
         {centreList.map((centre) => {
@@ -343,11 +349,11 @@ const SuperadminDashboard = () => {
           const x = 40 + (centre.id * 30) % 140;
           const y = 40 + (centre.id * 20) % 120;
           return (
-            <motion.circle initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: Math.random() * 0.5 }} key={centre.id} cx={x} cy={y} r="5" fill={statusColor} stroke="#ffffff" strokeWidth="1.5" className="shadow-md" />
+            <motion.circle initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ delay: Math.random() * 0.5 }} key={centre.id} cx={x} cy={y} r="5" fill={statusColor} stroke="#ffffff" strokeWidth="1.5" className="shadow-sm" />
           );
         })}
       </svg>
-      <div className="absolute bottom-3 left-3 px-3 py-1 bg-white/80 backdrop-blur-md rounded-full text-xs font-medium text-slate-500 border border-slate-200/50 shadow-sm flex items-center gap-1.5">
+      <div className="absolute bottom-3 left-3 px-3 py-1.5 bg-white shadow-sm rounded-lg text-xs font-bold text-slate-600 border border-slate-200/50 flex items-center gap-2">
         <span className="w-2 h-2 rounded-full bg-emerald-500"></span> Active Nodes
       </div>
     </div>
@@ -366,13 +372,13 @@ const SuperadminDashboard = () => {
         </div>
         
         <div className="flex items-center gap-3">
-          {loading && <FiLoader className="animate-spin h-4 w-4 text-slate-400" />}
+          {loading && <FiLoader className="animate-spin h-5 w-5 text-indigo-500" />}
           <div className="relative">
             <FiCalendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4 pointer-events-none" />
             <select
               value={period}
               onChange={(e) => setPeriod(e.target.value)}
-              className="pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer appearance-none transition-colors"
+              className="pl-9 pr-8 py-2 bg-slate-50 hover:bg-slate-100 text-slate-700 text-sm font-medium rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 cursor-pointer appearance-none transition-colors shadow-sm"
             >
               {PERIOD_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
             </select>
@@ -382,7 +388,7 @@ const SuperadminDashboard = () => {
 
       <div className="p-4 lg:p-8 space-y-6 max-w-[1600px] mx-auto">
         
-        {/* Global KPI Cards */}
+        {/* Full Restored 8 KPI Cards Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {kpiData.map((kpi, index) => <StatCard key={index} {...kpi} />)}
         </div>
@@ -393,25 +399,25 @@ const SuperadminDashboard = () => {
             <FiActivity className="text-rose-500" /> Live Pulse
           </h2>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <div className="bg-indigo-50/50 border border-indigo-100 p-4 rounded-xl">
-              <p className="text-xs font-semibold text-indigo-600 uppercase tracking-wider mb-1">Live Revenue</p>
-              <p className="text-2xl font-bold text-indigo-900">{formatCurrency(todayRevenue)}</p>
+            <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+              <p className="text-xs font-bold text-indigo-600 uppercase tracking-wider mb-1">Live Revenue</p>
+              <p className="text-2xl font-black text-indigo-900">{formatCurrency(todayRevenue)}</p>
             </div>
-            <div className="bg-emerald-50/50 border border-emerald-100 p-4 rounded-xl">
-              <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wider mb-1">Completed</p>
-              <p className="text-2xl font-bold text-emerald-900">{todayServices ?? 0}</p>
+            <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100">
+              <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider mb-1">Completed</p>
+              <p className="text-2xl font-black text-emerald-900">{todayServices ?? 0}</p>
             </div>
-            <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-xl">
-              <p className="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">In Progress</p>
-              <p className="text-2xl font-bold text-blue-900">{inProgressServices ?? 0}</p>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <p className="text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">In Progress</p>
+              <p className="text-2xl font-black text-blue-900">{inProgressServices ?? 0}</p>
             </div>
-            <div className="bg-amber-50/50 border border-amber-100 p-4 rounded-xl">
-              <p className="text-xs font-semibold text-amber-600 uppercase tracking-wider mb-1">Delayed</p>
-              <p className="text-2xl font-bold text-amber-900">{delayedServices ?? 0}</p>
+            <div className="bg-amber-50 p-4 rounded-xl border border-amber-100">
+              <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">Delayed</p>
+              <p className="text-2xl font-black text-amber-900">{delayedServices ?? 0}</p>
             </div>
-            <div className="bg-rose-50/50 border border-rose-100 p-4 rounded-xl">
-              <p className="text-xs font-semibold text-rose-600 uppercase tracking-wider mb-1">Pending</p>
-              <p className="text-2xl font-bold text-rose-900">{pendingServices ?? 0}</p>
+            <div className="bg-rose-50 p-4 rounded-xl border border-rose-100">
+              <p className="text-xs font-bold text-rose-600 uppercase tracking-wider mb-1">Pending</p>
+              <p className="text-2xl font-black text-rose-900">{pendingServices ?? 0}</p>
             </div>
           </div>
         </div>
@@ -421,14 +427,14 @@ const SuperadminDashboard = () => {
           <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col h-full">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 tracking-tight">
-                <FiBarChart2 className="text-blue-500" /> Revenue Analytics
+                <FiTrendingUp className="text-blue-500" /> Revenue Analytics
               </h2>
               <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
                 {['revenue', 'profit', 'expenses'].map((view) => (
                   <button
                     key={view}
                     onClick={() => setRevenueView(view)}
-                    className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all capitalize ${revenueView === view ? "bg-white text-slate-800 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                    className={`px-4 py-1.5 text-sm font-medium rounded-lg transition-all capitalize ${revenueView === view ? "bg-white text-slate-800 shadow-sm border border-slate-200/50" : "text-slate-500 hover:text-slate-700"}`}
                   >
                     {view}
                   </button>
@@ -441,30 +447,30 @@ const SuperadminDashboard = () => {
           </div>
 
           <div className="bg-white p-0 rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden flex flex-col h-full">
-            <div className="p-6 border-b border-slate-100 bg-slate-50/30">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 tracking-tight">
                 <FiStar className="text-amber-500" /> Top Centres
               </h2>
             </div>
-            <div className="overflow-x-auto flex-1">
+            <div className="overflow-x-auto flex-1 bg-white">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50/80">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
                   <tr>
-                    <th className="px-5 py-3 font-semibold">Rank</th>
-                    <th className="px-5 py-3 font-semibold">Centre</th>
-                    <th className="px-5 py-3 font-semibold text-right">Profit</th>
+                    <th className="px-5 py-4 font-semibold">Rank</th>
+                    <th className="px-5 py-4 font-semibold">Centre</th>
+                    <th className="px-5 py-4 font-semibold text-right">Profit</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {centreList.slice(0, 5).map((centre, idx) => (
-                    <tr key={centre.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold ${idx === 0 ? 'bg-amber-100 text-amber-700' : idx === 1 ? 'bg-slate-200 text-slate-700' : idx === 2 ? 'bg-orange-100 text-orange-800' : 'text-slate-400'}`}>
+                    <tr key={centre.id} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-5 py-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs font-bold shadow-sm border ${idx === 0 ? 'bg-amber-100 text-amber-700 border-amber-200' : idx === 1 ? 'bg-slate-100 text-slate-600 border-slate-200' : idx === 2 ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-white text-slate-400 border-slate-200'}`}>
                           {idx + 1}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 font-medium text-slate-800 group-hover:text-indigo-600 transition-colors">{centre.name}</td>
-                      <td className="px-5 py-3.5 text-right font-medium text-emerald-600">{formatCurrency(centre.profit)}</td>
+                      <td className="px-5 py-4 font-bold text-slate-700 group-hover:text-indigo-600 transition-colors">{centre.name}</td>
+                      <td className="px-5 py-4 text-right font-bold text-emerald-600">{formatCurrency(centre.profit)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -475,22 +481,21 @@ const SuperadminDashboard = () => {
 
         {/* Financial & Performance Highlights */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Wallets */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60">
             <h2 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2 tracking-tight">
               <FiDollarSign className="text-emerald-500" /> Wallet Balances
             </h2>
             <div className="space-y-3">
-              <div className="flex justify-between items-center p-3.5 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-sm font-medium text-slate-600">Cash</span>
+              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-sm font-semibold text-slate-600">Cash</span>
                 <span className="text-base font-bold text-slate-800">{formatCurrency(walletCash)}</span>
               </div>
-              <div className="flex justify-between items-center p-3.5 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-sm font-medium text-slate-600">Bank</span>
+              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-sm font-semibold text-slate-600">Bank</span>
                 <span className="text-base font-bold text-slate-800">{formatCurrency(walletBank)}</span>
               </div>
-              <div className="flex justify-between items-center p-3.5 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-sm font-medium text-slate-600">Digital</span>
+              <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-sm font-semibold text-slate-600">Digital</span>
                 <span className="text-base font-bold text-slate-800">{formatCurrency(walletDigital)}</span>
               </div>
               <div className="flex justify-between items-center p-4 bg-indigo-50 rounded-xl border border-indigo-100 mt-4">
@@ -500,42 +505,41 @@ const SuperadminDashboard = () => {
             </div>
           </div>
 
-          {/* Extreme Performers */}
           <div className="lg:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-emerald-100">
-              <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-800 mb-5 flex items-center gap-2">
                 <FiTarget className="text-emerald-500" /> Best Metrics
               </h2>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
-                  <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Top Revenue</p>
-                  <p className="text-lg font-bold text-slate-800 mt-0.5">{best.revenue?.name || "N/A"}</p>
-                  <p className="text-sm text-slate-500">{formatCurrency(best.revenue?.value)}</p>
+                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide">Top Revenue</p>
+                  <p className="text-lg font-bold text-slate-800 mt-1">{best.revenue?.name || "N/A"}</p>
+                  <p className="text-sm font-medium text-slate-500">{formatCurrency(best.revenue?.value)}</p>
                 </div>
                 <div className="h-px bg-slate-100"></div>
                 <div>
-                  <p className="text-xs font-semibold text-emerald-600 uppercase tracking-wide">Top Rated</p>
-                  <p className="text-lg font-bold text-slate-800 mt-0.5">{best.rating?.name || "N/A"}</p>
-                  <p className="text-sm text-slate-500 flex items-center gap-1"><FiStar className="text-amber-400 fill-current" /> {best.rating?.value || 0}</p>
+                  <p className="text-xs font-bold text-emerald-600 uppercase tracking-wide">Top Rated</p>
+                  <p className="text-lg font-bold text-slate-800 mt-1">{best.rating?.name || "N/A"}</p>
+                  <p className="text-sm font-medium text-slate-500 flex items-center gap-1"><FiStar className="text-amber-400 fill-current" /> {best.rating?.value || 0}</p>
                 </div>
               </div>
             </div>
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-rose-100">
-              <h2 className="text-base font-bold text-slate-800 mb-4 flex items-center gap-2">
+              <h2 className="text-base font-bold text-slate-800 mb-5 flex items-center gap-2">
                 <FiAlertCircle className="text-rose-500" /> Needs Attention
               </h2>
-              <div className="space-y-4">
+              <div className="space-y-5">
                 <div>
-                  <p className="text-xs font-semibold text-rose-600 uppercase tracking-wide">Lowest Profit</p>
-                  <p className="text-lg font-bold text-slate-800 mt-0.5">{worst.revenue?.name || "N/A"}</p>
-                  <p className="text-sm text-slate-500">{formatCurrency(worst.revenue?.value)}</p>
+                  <p className="text-xs font-bold text-rose-600 uppercase tracking-wide">Lowest Profit</p>
+                  <p className="text-lg font-bold text-slate-800 mt-1">{worst.revenue?.name || "N/A"}</p>
+                  <p className="text-sm font-medium text-slate-500">{formatCurrency(worst.revenue?.value)}</p>
                 </div>
                 <div className="h-px bg-slate-100"></div>
                 <div>
-                  <p className="text-xs font-semibold text-rose-600 uppercase tracking-wide">Highest Delayed</p>
-                  <p className="text-lg font-bold text-slate-800 mt-0.5">{worst.delayed?.name || "N/A"}</p>
-                  <p className="text-sm text-slate-500">{worst.delayed?.value ?? "N/A"} issues</p>
+                  <p className="text-xs font-bold text-rose-600 uppercase tracking-wide">Highest Delayed</p>
+                  <p className="text-lg font-bold text-slate-800 mt-1">{worst.delayed?.name || "N/A"}</p>
+                  <p className="text-sm font-medium text-slate-500">{worst.delayed?.value ?? "N/A"} issues</p>
                 </div>
               </div>
             </div>
@@ -546,14 +550,14 @@ const SuperadminDashboard = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <StaffPerformanceChart staffData={topStaffList} />
           <div className="bg-white p-0 rounded-2xl shadow-sm border border-slate-200/60 overflow-hidden flex flex-col">
-            <div className="p-6 border-b border-slate-100 bg-slate-50/30">
+            <div className="p-6 border-b border-slate-100 bg-slate-50/50">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 tracking-tight">
                 <FiUsers className="text-purple-500" /> Top Teams Overview
               </h2>
             </div>
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto bg-white">
               <table className="w-full text-sm text-left">
-                <thead className="text-xs text-slate-500 uppercase bg-slate-50/80">
+                <thead className="text-xs text-slate-500 uppercase bg-slate-50 border-b border-slate-100">
                   <tr>
                     <th className="px-6 py-4 font-semibold">Team Name</th>
                     <th className="px-6 py-4 font-semibold text-right">Revenue</th>
@@ -562,10 +566,10 @@ const SuperadminDashboard = () => {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {topTeamsList.map((team, idx) => (
-                    <tr key={team.id || idx} className="hover:bg-slate-50/80 transition-colors">
-                      <td className="px-6 py-4 font-medium text-slate-800">{team.name}</td>
-                      <td className="px-6 py-4 text-right text-slate-600">{formatCurrency(team.revenue)}</td>
-                      <td className="px-6 py-4 text-right font-medium text-emerald-600">{formatCurrency(team.profit || 0)}</td>
+                    <tr key={team.id || idx} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-6 py-4 font-bold text-slate-700">{team.name}</td>
+                      <td className="px-6 py-4 text-right font-medium text-slate-600">{formatCurrency(team.revenue)}</td>
+                      <td className="px-6 py-4 text-right font-bold text-emerald-600">{formatCurrency(team.profit || 0)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -574,9 +578,8 @@ const SuperadminDashboard = () => {
           </div>
         </div>
 
-        {/* Logs & Actions Grid */}
+        {/* Logs & Map Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Notifications */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col h-[400px]">
             <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 tracking-tight">
               <FiBell className="text-amber-500" /> Action Required
@@ -584,10 +587,10 @@ const SuperadminDashboard = () => {
             <div className="flex-1 overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-slate-200">
               {notifications.length > 0 ? (
                 notifications.map((notif) => (
-                  <div key={notif.id} className={`p-4 rounded-xl flex gap-3 border ${notif.priority === "critical" ? "bg-rose-50/50 border-rose-100" : notif.priority === "warning" ? "bg-amber-50/50 border-amber-100" : "bg-blue-50/50 border-blue-100"}`}>
-                    <FiAlertCircle className={`mt-0.5 flex-shrink-0 ${notif.priority === "critical" ? "text-rose-500" : notif.priority === "warning" ? "text-amber-500" : "text-blue-500"}`} />
+                  <div key={notif.id} className={`p-4 rounded-xl flex gap-3 border ${notif.priority === "critical" ? "bg-rose-50 border-rose-200" : notif.priority === "warning" ? "bg-amber-50 border-amber-200" : "bg-blue-50 border-blue-200"}`}>
+                    <FiAlertCircle className={`mt-0.5 flex-shrink-0 ${notif.priority === "critical" ? "text-rose-600" : notif.priority === "warning" ? "text-amber-600" : "text-blue-600"}`} />
                     <div>
-                      <h4 className="text-sm font-semibold text-slate-800">{notif.title}</h4>
+                      <h4 className="text-sm font-bold text-slate-800">{notif.title}</h4>
                       <p className="text-xs text-slate-600 mt-1">{notif.message}</p>
                     </div>
                   </div>
@@ -595,13 +598,12 @@ const SuperadminDashboard = () => {
               ) : (
                 <div className="h-full flex flex-col items-center justify-center text-slate-400">
                   <FiCheckCircle className="h-8 w-8 mb-2 text-emerald-400" />
-                  <p className="text-sm">All caught up!</p>
+                  <p className="text-sm font-medium">All caught up!</p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Closing Log */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col h-[400px]">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 tracking-tight">
@@ -612,11 +614,11 @@ const SuperadminDashboard = () => {
                 value={closingDate || closingData.date || ""}
                 max={todayIST()}
                 onChange={(e) => setClosingDate(e.target.value)}
-                className="text-xs border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-600 focus:ring-1 focus:ring-indigo-500 outline-none"
+                className="text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 text-slate-700 font-medium focus:ring-2 focus:ring-indigo-500 outline-none"
               />
             </div>
             {!closingLoading && !closingError && (
-              <p className="text-xs text-slate-500 mb-3 font-medium bg-slate-50 py-1.5 px-3 rounded-lg inline-block">
+              <p className="text-xs text-slate-600 mb-3 font-bold bg-slate-100 py-1.5 px-3 rounded-lg inline-block">
                 {closedCount} of {closingRows.length} centres closed
               </p>
             )}
@@ -624,21 +626,21 @@ const SuperadminDashboard = () => {
               {closingLoading ? (
                  <div className="h-full flex items-center justify-center"><FiLoader className="animate-spin text-slate-400 h-6 w-6" /></div>
               ) : closingError ? (
-                 <p className="text-sm text-rose-500 p-4 bg-rose-50 rounded-lg text-center">Could not load closing log.</p>
+                 <p className="text-sm font-semibold text-rose-600 p-4 bg-rose-50 rounded-lg text-center">Could not load closing log.</p>
               ) : closingRows.length === 0 ? (
-                 <p className="text-sm text-slate-500 text-center mt-10">No records found.</p>
+                 <p className="text-sm font-medium text-slate-500 text-center mt-10">No records found.</p>
               ) : (
                 closingRows.map((row) => {
                   const v = getClosingView(row);
                   return (
                     <div key={row.centre_id} className={`p-3.5 rounded-xl border flex items-start gap-3 ${v.wrap}`}>
-                      <v.Icon className={`h-4 w-4 mt-0.5 flex-shrink-0 ${v.text}`} />
+                      <v.Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${v.text}`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-start">
-                          <p className="text-sm font-semibold text-slate-800 truncate pr-2">{row.centre_name}</p>
-                          <span className={`text-[10px] uppercase tracking-wider font-bold whitespace-nowrap ${v.text}`}>{v.label}</span>
+                          <p className="text-sm font-bold text-slate-800 truncate pr-2">{row.centre_name}</p>
+                          <span className={`text-[10px] uppercase tracking-wider font-black whitespace-nowrap ${v.text}`}>{v.label}</span>
                         </div>
-                        <p className="text-xs text-slate-600 mt-1">{v.detail}</p>
+                        <p className="text-xs font-medium text-slate-700 mt-1">{v.detail}</p>
                       </div>
                     </div>
                   );
@@ -647,33 +649,52 @@ const SuperadminDashboard = () => {
             </div>
           </div>
 
-          {/* Map + Quick Actions */}
-          <div className="flex flex-col gap-6 h-[400px]">
-            <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/60 flex-1 flex flex-col">
-              <h2 className="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
-                <FiMap className="text-blue-500" /> Network Map
-              </h2>
-              <div className="flex-1 rounded-xl overflow-hidden">
-                <MapView />
-              </div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 flex flex-col h-[400px]">
+            <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 tracking-tight">
+              <FiMap className="text-blue-500" /> Network Map
+            </h2>
+            <div className="flex-1">
+              <MapView />
             </div>
-            
-            <div className="bg-indigo-900 p-5 rounded-2xl shadow-md border border-indigo-800 text-white">
-              <h2 className="text-sm font-bold mb-3 flex items-center gap-2">
-                <FiLayout className="text-indigo-300" /> Quick Actions
-              </h2>
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={() => navigate('/dashboard/superadmin/centremanagement')} className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors border border-white/5">
-                  <FiPlus /> New Centre
-                </button>
-                <button onClick={() => navigate('/dashboard/superadmin/messenger')} className="flex items-center justify-center gap-1.5 py-2 px-3 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-medium transition-colors border border-white/5">
-                  <FiMessageSquare /> Broadcast
-                </button>
-                <button onClick={() => navigate('/dashboard/superadmin/analytics')} className="flex items-center justify-center gap-1.5 py-2 px-3 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-xs font-medium transition-colors border border-indigo-400/30 col-span-2">
-                  <FiDownload /> Export Master Report
-                </button>
-              </div>
-            </div>
+          </div>
+        </div>
+
+        {/* Quick Actions (Restored & Solid Colors) */}
+        <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/60 mt-4">
+          <h2 className="text-lg font-bold text-slate-800 mb-5 flex items-center gap-2 tracking-tight">
+            <FiLayers className="text-indigo-500" /> Quick Actions
+          </h2>
+          <div className="flex flex-wrap gap-4">
+            <button 
+              onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
+              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700 transition flex items-center shadow-sm"
+            >
+              <FiPlus className="mr-2" strokeWidth={3} /> Create Centre
+            </button>
+            <button 
+              onClick={() => navigate('/dashboard/superadmin/staffmanagement')} 
+              className="px-5 py-2.5 bg-purple-600 text-white text-sm font-bold rounded-xl hover:bg-purple-700 transition flex items-center shadow-sm"
+            >
+              <FiUsers className="mr-2" strokeWidth={3} /> Create Admin
+            </button>
+            <button 
+              onClick={() => navigate('/dashboard/superadmin/messenger')} 
+              className="px-5 py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 transition flex items-center shadow-sm"
+            >
+              <FiMessageSquare className="mr-2" strokeWidth={3} /> Broadcast
+            </button>
+            <button 
+              onClick={() => navigate('/dashboard/superadmin/analytics')} 
+              className="px-5 py-2.5 bg-rose-600 text-white text-sm font-bold rounded-xl hover:bg-rose-700 transition flex items-center shadow-sm"
+            >
+              <FiFileText className="mr-2" strokeWidth={3} /> Global Report
+            </button>
+            <button 
+              onClick={() => navigate('/dashboard/superadmin/analytics')} 
+              className="px-5 py-2.5 bg-slate-800 text-white text-sm font-bold rounded-xl hover:bg-slate-900 transition flex items-center shadow-sm"
+            >
+              <FiDownload className="mr-2" strokeWidth={3} /> Export Data
+            </button>
           </div>
         </div>
 
