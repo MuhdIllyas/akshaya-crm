@@ -6,17 +6,17 @@ import {
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
   FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown,
-  FiCheckCircle, FiXCircle, FiLoader, FiGrid, FiActivity, FiBell,
-  FiMenu, FiX, FiMapPin
+  FiCheckCircle, FiXCircle, FiLoader
 } from "react-icons/fi";
 
 // ==========================================
 // ACCOUNTING CLOSING LOG HELPERS
 // ==========================================
+// Adjust the path if your accounting router is mounted somewhere else
 const CLOSING_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/all`;
 
 // ==========================================
@@ -31,10 +31,11 @@ const PERIOD_OPTIONS = [
   { value: "year", label: "This Year" },
 ];
 
+// Returns { start, end } as "YYYY-MM-DD" (IST calendar dates)
 const getPeriodRange = (period) => {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const [y, m, d] = today.split("-").map(Number);
-  const fmt = (dt) => dt.toISOString().split("T")[0];
+  const fmt = (dt) => dt.toISOString().split("T")[0]; // dt is built with Date.UTC, so no timezone drift
 
   let start;
   switch (period) {
@@ -42,15 +43,16 @@ const getPeriodRange = (period) => {
       start = new Date(Date.UTC(y, m - 1, d));
       break;
     case "week": {
+      // week starts on Monday
       const base = new Date(Date.UTC(y, m - 1, d));
-      const dow = base.getUTCDay();
+      const dow = base.getUTCDay(); // 0 = Sunday
       start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
       break;
     }
-    case "3months":
+    case "3months": // current month + previous 2 full months
       start = new Date(Date.UTC(y, m - 1 - 2, 1));
       break;
-    case "6months":
+    case "6months": // current month + previous 5 full months
       start = new Date(Date.UTC(y, m - 1 - 5, 1));
       break;
     case "year":
@@ -74,9 +76,8 @@ const getClosingView = (row) => {
       Icon: FiXCircle,
       label: "Not closed",
       detail: "No closing submitted",
-      wrap: "bg-rose-50/80 border-rose-200",
-      chip: "bg-rose-100 text-rose-700",
-      icon: "text-rose-600",
+      wrap: "bg-rose-50 border-rose-200",
+      text: "text-rose-700",
     };
   }
   if (row.status === "incomplete") {
@@ -84,9 +85,8 @@ const getClosingView = (row) => {
       Icon: FiAlertCircle,
       label: "Not fully closed",
       detail: `Cash counted (${inr(row.actual_cash)}), closing not completed`,
-      wrap: "bg-amber-50/80 border-amber-200",
-      chip: "bg-amber-100 text-amber-700",
-      icon: "text-amber-600",
+      wrap: "bg-amber-50 border-amber-200",
+      text: "text-amber-700",
     };
   }
   const variance = Number(row.cash_variance || 0);
@@ -95,190 +95,42 @@ const getClosingView = (row) => {
       Icon: FiCheckCircle,
       label: "Closed",
       detail: `Cash ${inr(row.actual_cash)} • no variance`,
-      wrap: "bg-emerald-50/80 border-emerald-200",
-      chip: "bg-emerald-100 text-emerald-700",
-      icon: "text-emerald-600",
+      wrap: "bg-emerald-50 border-emerald-200",
+      text: "text-emerald-700",
     };
   }
   return {
     Icon: FiAlertCircle,
     label: "Closed with variance",
     detail: `Cash ${inr(row.actual_cash)} • ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
-    wrap: "bg-rose-50/80 border-rose-200",
-    chip: "bg-rose-100 text-rose-700",
-    icon: "text-rose-600",
+    wrap: "bg-rose-50 border-rose-200",
+    text: "text-rose-700",
   };
 };
 
 // ==========================================
-// SHARED UI PRIMITIVES
-// ==========================================
-const SectionCard = ({
-  title, subtitle, icon, action, children,
-  className = "", bodyClassName = "", tone = "default",
-}) => {
-  const toneRing =
-    tone === "indigo"
-      ? "ring-indigo-100"
-      : tone === "emerald"
-      ? "ring-emerald-100"
-      : tone === "rose"
-      ? "ring-rose-100"
-      : "ring-slate-200/70";
-
-  return (
-    <div
-      className={`group relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/50 ring-1 ${toneRing} transition-all duration-300 hover:shadow-lg hover:shadow-slate-200/70 ${className}`}
-    >
-      {(title || action) && (
-        <div className="flex items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
-          <div className="flex min-w-0 items-center gap-3">
-            {icon && (
-              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-100 to-slate-50 text-base ring-1 ring-slate-200/70">
-                {icon}
-              </span>
-            )}
-            <div className="min-w-0">
-              {title && (
-                <h2 className="truncate text-sm font-semibold tracking-tight text-slate-800">{title}</h2>
-              )}
-              {subtitle && <p className="truncate text-xs text-slate-500">{subtitle}</p>}
-            </div>
-          </div>
-          {action}
-        </div>
-      )}
-      <div className={`p-5 ${bodyClassName}`}>{children}</div>
-    </div>
-  );
-};
-
-const TrendPill = ({ trend }) => {
-  if (trend === undefined || trend === null || trend === 0) {
-    return (
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-1.5 py-0.5 text-[11px] font-semibold text-slate-500">
-        —
-      </span>
-    );
-  }
-  const up = trend > 0;
-  return (
-    <span
-      className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold ${
-        up ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-      }`}
-    >
-      {up ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
-      {Math.abs(trend)}%
-    </span>
-  );
-};
-
-// ==========================================
-// STAT CARD (compact, bento-friendly)
-// ==========================================
-const StatCard = ({
-  title, value, icon: Icon, gradient = "from-indigo-500 to-blue-500",
-  subtitle, trend, onClick, delay = 0, compact = false,
-}) => (
-  <motion.div
-    initial={{ opacity: 0, y: 10 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.35, delay, ease: "easeOut" }}
-    whileHover={{ y: -3 }}
-    whileTap={{ scale: 0.985 }}
-    onClick={onClick}
-    className={`group relative flex flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm shadow-slate-200/40 transition-all duration-300 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-200/70 ${
-      compact ? "p-4" : "p-5"
-    } ${onClick ? "cursor-pointer" : ""}`}
-  >
-    <div
-      className={`pointer-events-none absolute -right-8 -top-8 h-24 w-24 rounded-full bg-gradient-to-br ${gradient} opacity-[0.10] blur-2xl transition-opacity duration-300 group-hover:opacity-25`}
-    />
-    <div className={`absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r ${gradient} opacity-0 transition-opacity duration-300 group-hover:opacity-100`} />
-
-    <div className="relative flex items-start justify-between gap-3">
-      <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{title}</p>
-        <div className="mt-2 flex items-end gap-2">
-          <p className={`font-bold tracking-tight text-slate-900 ${compact ? "text-xl" : "text-2xl"}`}>{value}</p>
-          <div className="pb-0.5">
-            <TrendPill trend={trend} />
-          </div>
-        </div>
-        {subtitle && <p className="mt-1 truncate text-xs text-slate-500">{subtitle}</p>}
-      </div>
-      <div
-        className={`flex flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-md shadow-slate-200/80 transition-transform duration-300 group-hover:scale-110 ${
-          compact ? "h-9 w-9" : "h-11 w-11"
-        }`}
-      >
-        <Icon className={compact ? "h-4 w-4" : "h-5 w-5"} />
-      </div>
-    </div>
-  </motion.div>
-);
-
-// ==========================================
-// SIDEBAR NAV ITEM
-// ==========================================
-const NavItem = ({ id, label, icon: Icon, badge, active, onClick, badgeTone = "indigo" }) => {
-  const badgeColors =
-    badgeTone === "rose"
-      ? "bg-rose-100 text-rose-700"
-      : badgeTone === "amber"
-      ? "bg-amber-100 text-amber-700"
-      : "bg-indigo-100 text-indigo-700";
-
-  return (
-    <button
-      onClick={() => onClick(id)}
-      className={`group relative flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-        active
-          ? "bg-gradient-to-r from-indigo-50 to-blue-50 text-indigo-700 shadow-sm ring-1 ring-indigo-100"
-          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-      }`}
-    >
-      {active && (
-        <span className="absolute inset-y-2 left-0 w-1 rounded-r-full bg-gradient-to-b from-indigo-500 to-blue-500" />
-      )}
-      <Icon className={`h-4.5 w-4.5 flex-shrink-0 ${active ? "text-indigo-600" : "text-slate-400 group-hover:text-slate-600"}`} style={{ width: 18, height: 18 }} />
-      <span className="flex-1 truncate text-left">{label}</span>
-      {badge !== undefined && badge !== null && badge !== 0 && (
-        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${badgeColors}`}>
-          {badge}
-        </span>
-      )}
-    </button>
-  );
-};
-
-// ==========================================
-// STAFF PERFORMANCE CHART
+// STAFF PERFORMANCE CHART (unchanged)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
   const [metric, setMetric] = useState('serviceCharges');
 
   if (!staffData || staffData.length === 0) {
-    return (
-      <SectionCard title="Top Staff Performers" subtitle="Ranked across all centres" icon="👨‍💼">
-        <div className="py-10 text-center text-sm text-slate-400">No staff data available</div>
-      </SectionCard>
-    );
+    return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
   }
 
-  const formatCurrency = (amount) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+  };
 
   const BarTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="rounded-xl border border-white/10 bg-slate-900/95 p-3 text-sm shadow-2xl backdrop-blur">
-          <p className="mb-1 text-base font-bold text-white">{data.name}</p>
-          <p className="mb-2 text-xs text-slate-400">{data.centre}</p>
-          <p className="font-semibold text-blue-400">Service Charges: {formatCurrency(data.serviceCharges)}</p>
-          <p className="font-semibold text-purple-400">Services: {data.servicesCompleted}</p>
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base mb-1">{data.name}</p>
+          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
+          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
+          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
         </div>
       );
     }
@@ -289,79 +141,95 @@ const StaffPerformanceChart = ({ staffData }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="rounded-xl border border-white/10 bg-slate-900/95 p-3 text-sm shadow-2xl backdrop-blur">
-          <p className="mb-1 text-base font-bold text-white">{data.name}</p>
-          <p className="mb-2 text-xs text-slate-400">{data.centre}</p>
-          <p className="font-semibold text-purple-400">Services: {data.servicesCompleted}</p>
-          <p className="font-semibold text-blue-400">Service Charges: {formatCurrency(data.serviceCharges)}</p>
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base mb-1">{data.name}</p>
+          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
+          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
+          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
         </div>
       );
     }
     return null;
   };
 
-  const tabs = [
-    { key: 'serviceCharges', label: 'Charges', active: 'text-blue-600' },
-    { key: 'servicesCompleted', label: 'Apps', active: 'text-purple-600' },
-    { key: 'scatter', label: 'Efficiency', active: 'text-emerald-600' },
-  ];
-
   return (
-    <SectionCard
-      title="Top Staff Performers"
-      subtitle="Ranked across all centres"
-      icon="👨‍💼"
-      className="flex h-[460px] flex-col"
-      bodyClassName="flex flex-1 flex-col p-5 pt-4"
-      action={
-        <div className="flex rounded-xl bg-slate-100/90 p-1 ring-1 ring-slate-200/70">
-          {tabs.map((t) => (
+    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col h-[450px] transition-all hover:shadow-xl">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-700">👨‍💼 Top Staff Performers</h2>
+          <p className="text-xs text-gray-500">Ranked across all centres</p>
+        </div>
+        <div className="flex flex-col gap-2">
+          <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
             <button
-              key={t.key}
-              onClick={() => setMetric(t.key)}
-              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                metric === t.key ? `bg-white ${t.active} shadow-sm` : 'text-slate-500 hover:text-slate-700'
+              onClick={() => setMetric('serviceCharges')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                metric === 'serviceCharges' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {t.label}
+              Service Charges
             </button>
-          ))}
+            <button
+              onClick={() => setMetric('servicesCompleted')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Applications
+            </button>
+            <button
+              onClick={() => setMetric('scatter')}
+              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+                metric === 'scatter' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Efficiency
+            </button>
+          </div>
         </div>
-      }
-    >
-      <div className="min-h-0 w-full flex-1">
+      </div>
+
+      <div className="flex-1 w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           {metric === 'scatter' ? (
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
               <XAxis
-                type="number" dataKey="servicesCompleted" name="Applications"
-                tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false}
-                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12, fill: '#94a3b8' }}
+                type="number"
+                dataKey="servicesCompleted"
+                name="Applications"
+                tick={{ fontSize: 12 }}
+                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
               />
               <YAxis
-                type="number" dataKey="serviceCharges" name="Service Charges"
-                tickFormatter={(val) => `₹${(val / 1000)}k`}
-                tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false}
+                type="number"
+                dataKey="serviceCharges"
+                name="Service Charges"
+                tickFormatter={(val) => `₹${(val/1000)}k`}
+                tick={{ fontSize: 12 }}
               />
               <ZAxis type="number" dataKey="serviceCharges" range={[100, 500]} name="Volume" />
               <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-              <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.75} />
+              <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
             </ScatterChart>
           ) : (
-            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis
-                dataKey="name" type="category" axisLine={false} tickLine={false}
-                tick={{ fontSize: 12, fill: '#475569' }} width={110}
+                dataKey="name"
+                type="category"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#4B5563' }}
+                width={120}
               />
-              <Tooltip content={<BarTooltip />} cursor={{ fill: '#f1f5f9' }} />
-              <Bar dataKey={metric} radius={[0, 6, 6, 0]} barSize={18} animationDuration={1000}>
+              <Tooltip content={<BarTooltip />} cursor={{ fill: '#F3F4F6' }} />
+              <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
                 {staffData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
                     fill={metric === 'serviceCharges' ? '#3B82F6' : '#8B5CF6'}
-                    className="cursor-pointer transition-opacity duration-200 hover:opacity-80"
+                    className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
                   />
                 ))}
               </Bar>
@@ -369,20 +237,21 @@ const StaffPerformanceChart = ({ staffData }) => {
           )}
         </ResponsiveContainer>
       </div>
-    </SectionCard>
+    </div>
   );
 };
 
 // ==========================================
-// REVENUE CHART
+// REVENUE CHART COMPONENT (unchanged)
 // ==========================================
 const RevenueChart = ({ data, view }) => {
   if (!data || data.length === 0) {
-    return <div className="p-6 text-center text-sm text-slate-400">No revenue data available</div>;
+    return <div className="text-gray-500 text-sm p-4">No revenue data available</div>;
   }
 
-  const formatCurrency = (amount) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  };
 
   const formatLabel = (label) => {
     if (!label) return '';
@@ -398,9 +267,9 @@ const RevenueChart = ({ data, view }) => {
     if (active && payload && payload.length) {
       const item = payload[0].payload;
       return (
-        <div className="rounded-xl border border-white/10 bg-slate-900/95 p-3 text-sm shadow-2xl backdrop-blur">
-          <p className="text-base font-bold text-white">{formatLabel(item.label)}</p>
-          <p className="font-semibold text-blue-400">Value: {formatCurrency(item.value)}</p>
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base">{formatLabel(item.label)}</p>
+          <p className="text-blue-400 font-semibold">Value: {formatCurrency(item.value)}</p>
         </div>
       );
     }
@@ -416,29 +285,40 @@ const RevenueChart = ({ data, view }) => {
   return (
     <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
         <XAxis
-          dataKey="label" tickFormatter={formatLabel}
-          tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false}
+          dataKey="label"
+          tickFormatter={formatLabel}
+          tick={{ fontSize: 12, fill: '#6b7280' }}
+          axisLine={{ stroke: '#d1d5db' }}
+          tickLine={false}
         />
         <YAxis
-          tickFormatter={(val) => `₹${(val / 1000)}k`}
-          tick={{ fontSize: 12, fill: '#64748b' }} axisLine={{ stroke: '#e2e8f0' }} tickLine={false}
+          tickFormatter={(val) => `₹${(val/1000)}k`}
+          tick={{ fontSize: 12, fill: '#6b7280' }}
+          axisLine={{ stroke: '#d1d5db' }}
+          tickLine={false}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(15,23,42,0.04)' }} />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
         <Bar
-          dataKey="value" fill={getBarColor()} radius={[6, 6, 0, 0]}
+          dataKey="value"
+          fill={getBarColor()}
+          radius={[4, 4, 0, 0]}
           barSize={data.length > 6 ? 30 : Math.min(60, 80 / data.length)}
           animationDuration={800}
         >
           {data.map((entry, index) => (
-            <Cell key={`cell-${index}`} fill="url(#revenueGradient)" className="transition-opacity hover:opacity-80" />
+            <Cell
+              key={`cell-${index}`}
+              fill={`url(#revenueGradient)`}
+              className="hover:opacity-80 transition-opacity"
+            />
           ))}
         </Bar>
         <defs>
           <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={getBarColor()} stopOpacity={0.95} />
-            <stop offset="100%" stopColor={getBarColor()} stopOpacity={0.35} />
+            <stop offset="0%" stopColor={getBarColor()} stopOpacity={0.9} />
+            <stop offset="100%" stopColor={getBarColor()} stopOpacity={0.4} />
           </linearGradient>
         </defs>
       </BarChart>
@@ -447,48 +327,55 @@ const RevenueChart = ({ data, view }) => {
 };
 
 // ==========================================
-// MINI MAP
+// StatCard Component (matching Admin Dashboard)
 // ==========================================
-const MapView = ({ centreList }) => (
-  <div className="relative flex h-64 items-center justify-center overflow-hidden rounded-2xl bg-gradient-to-br from-slate-50 to-indigo-50/60 ring-1 ring-slate-200/70">
-    <svg viewBox="0 0 200 200" className="h-full w-full">
-      <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#94a3b8" strokeWidth="1.5" />
-      {centreList.map((centre) => {
-        const status = centre.healthStatus || { color: "gray" };
-        const color = status.color === "green" ? "#22c55e" : status.color === "yellow" ? "#eab308" : "#ef4444";
-        const x = 40 + (centre.id * 30) % 140;
-        const y = 40 + (centre.id * 20) % 120;
-        return <circle key={centre.id} cx={x} cy={y} r="6" fill={color} stroke="white" strokeWidth="2" />;
-      })}
-    </svg>
-    <div className="absolute bottom-3 left-3 rounded-full bg-white/80 px-3 py-1 text-[11px] font-semibold text-slate-600 shadow-sm backdrop-blur">
-      Kerala Map
+const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick }) => (
+  <motion.div
+    whileHover={{ y: -4, scale: 1.02 }}
+    onClick={onClick}
+    className={`bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer ${onClick ? 'hover:border-indigo-300' : ''}`}
+  >
+    <div className="flex items-center justify-between">
+      <div className="flex-1">
+        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
+        <div className="flex items-end space-x-2">
+          <p className="text-2xl font-bold text-gray-900">{value}</p>
+          {trend !== undefined && (
+            <div className={`flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-gray-500'}`}>
+              {trend > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
+              <span>{Math.abs(trend)}%</span>
+            </div>
+          )}
+        </div>
+        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+      </div>
+      <div className={`p-3 rounded-xl ${color} shadow-md`}>
+        <Icon className="h-6 w-6 text-white" />
+      </div>
     </div>
-  </div>
+  </motion.div>
 );
 
 // ==========================================
-// MAIN DASHBOARD
+// MAIN DASHBOARD COMPONENT
 // ==========================================
 const SuperadminDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
-  const [period, setPeriod] = useState("month");
-  const [activeSection, setActiveSection] = useState("overview");
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [period, setPeriod] = useState("month"); // default: This Month
 
-  // Closing log
-  const [closingDate, setClosingDate] = useState("");
+  // Accounting closing log (all centres)
+  const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
   const [closingData, setClosingData] = useState({ date: "", rows: [] });
   const [closingLoading, setClosingLoading] = useState(true);
   const [closingError, setClosingError] = useState(false);
 
-  const formatCurrency = (amount) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+  };
 
-  // Fetch dashboard
   useEffect(() => {
     const controller = new AbortController();
 
@@ -507,27 +394,29 @@ const SuperadminDashboard = () => {
               modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
               timeframe: "custom",
               customStartDate: start,
-              customEndDate: end,
+              customEndDate: end
             },
             headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
+            signal: controller.signal
           }
         );
 
         setDashboard(response.data);
         setLoading(false);
       } catch (err) {
-        if (axios.isCancel(err)) return;
+        if (axios.isCancel(err)) return; // superseded by a newer request
         console.error("Error fetching dashboard:", err);
         toast.error("Failed to load dashboard data.", { position: "top-right" });
         setLoading(false);
       }
     };
     fetchDashboard();
+
+    // cancel the previous request if the period changes quickly
     return () => controller.abort();
   }, [period]);
 
-  // Fetch closing log
+  // Fetch accounting closing log for all centres
   useEffect(() => {
     const controller = new AbortController();
     setClosingLoading(true);
@@ -553,51 +442,42 @@ const SuperadminDashboard = () => {
     return () => controller.abort();
   }, [closingDate]);
 
-  // ------- Loading skeleton -------
   if (loading && !dashboard) {
     return (
-      <div className="flex min-h-screen bg-slate-50">
-        <aside className="hidden w-64 border-r border-slate-200 bg-white lg:block">
-          <div className="space-y-3 p-4">
-            <div className="h-12 animate-pulse rounded-xl bg-slate-100" />
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-10 animate-pulse rounded-xl bg-slate-100" />
-            ))}
-          </div>
-        </aside>
-        <main className="mx-auto w-full max-w-[1400px] flex-1 space-y-6 p-6 lg:p-8">
-          <div className="h-14 animate-pulse rounded-2xl bg-white" />
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-6">
-            <div className="h-64 animate-pulse rounded-2xl bg-white lg:col-span-4 lg:row-span-2" />
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-28 animate-pulse rounded-2xl bg-white lg:col-span-1" />
-            ))}
-          </div>
-          <div className="flex items-center justify-center gap-2 py-4 text-slate-500">
-            <FiLoader className="h-4 w-4 animate-spin" />
-            <span className="text-sm font-medium">Loading Superadmin Dashboard…</span>
-          </div>
-        </main>
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 flex items-center justify-center min-h-[400px]">
+        <svg className="animate-spin h-8 w-8 text-indigo-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="text-gray-600 font-medium">Loading Superadmin Dashboard...</span>
       </div>
     );
   }
 
-  // ------- Destructure -------
   const { executive = {}, finance = {}, operations = {}, leaderboards = {} } = dashboard || {};
-  const { stats = {}, health = {}, alerts = [] } = executive;
+
+  // --- Executive ---
+  const { stats = {}, health = {}, alerts = [], insights = [] } = executive;
+
+  // --- Finance ---
   const { financials = {}, wallets = {} } = finance;
   const chartData = financials.charts || {};
   const revenueChartData = chartData[revenueView] || [];
+
+  // --- Operations ---
   const { customers = {}, staff = {}, teams = {} } = operations;
+
+  // --- Leaderboards ---
   const { centres = {} } = leaderboards;
   const centreList = centres.fullList || [];
   const best = centres.best || {};
   const worst = centres.worst || {};
 
+  // Direct access to pre‑computed fields
   const {
     totalCentres, totalStaff, totalCustomers, customerGrowth, revenueGrowthPercent,
     newCentresThisMonth, todayRevenue, todayServices, pendingServices, delayedServices,
-    inProgressServices, admins, staffCount,
+    inProgressServices, admins, staffCount
   } = stats;
 
   const { revenue: monthlyRevenue, profit: netProfit } = financials.totals || {};
@@ -610,562 +490,429 @@ const SuperadminDashboard = () => {
 
   const closingRows = closingData.rows || [];
   const closedCount = closingRows.filter((r) => r.status === "closed").length;
-  const unclosedCount = closingRows.length - closedCount;
-  const closeProgress = closingRows.length ? Math.round((closedCount / closingRows.length) * 100) : 0;
-  const opsAlertCount = (pendingServices || 0) + (delayedServices || 0);
 
-  // ------- Navigation config -------
-  const navItems = [
-    { id: "overview", label: "Overview", icon: FiGrid, badge: null },
-    { id: "centres", label: "Centres", icon: FiHome, badge: totalCentres },
-    { id: "finance", label: "Finance", icon: FiDollarSign, badge: null },
-    { id: "operations", label: "Operations", icon: FiActivity, badge: opsAlertCount, badgeTone: "amber" },
-    { id: "alerts", label: "Alerts & Closing", icon: FiBell, badge: notifications.length + unclosedCount, badgeTone: "rose" },
-  ];
-
-  const handleNav = (id) => {
-    setActiveSection(id);
-    setSidebarOpen(false);
-  };
-
-  const periodSelector = (
-    <div className="relative">
-      <select
-        value={period}
-        onChange={(e) => setPeriod(e.target.value)}
-        className="cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-2 pl-3.5 pr-9 text-sm font-medium text-slate-700 shadow-sm transition hover:border-indigo-300 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-        aria-label="Select period"
-      >
-        {PERIOD_OPTIONS.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400">▾</span>
-    </div>
-  );
-
-  const sectionTitle = {
-    overview: { title: "Overview", subtitle: "Live snapshot of the whole network" },
-    centres: { title: "Centres", subtitle: "Health, ranking & geography" },
-    finance: { title: "Finance", subtitle: "Revenue, profit & wallets" },
-    operations: { title: "Operations", subtitle: "Services, staff & teams" },
-    alerts: { title: "Alerts & Closing", subtitle: "Action items and daily close status" },
-  }[activeSection];
-
-  // ==========================================
-  // SECTION RENDERERS
-  // ==========================================
-
-  const OverviewSection = () => {
-    const kpiTiles = [
-      {
-        title: "Total Centres", value: totalCentres, icon: FiHome,
-        gradient: "from-blue-500 to-indigo-500",
-        subtitle: `+${newCentresThisMonth ?? 0} this month`,
-        trend: newCentresThisMonth > 0 ? 5 : -2,
-        onClick: () => navigate('/dashboard/superadmin/centremanagement'),
-      },
-      {
-        title: "Total Staff", value: totalStaff, icon: FiUsers,
-        gradient: "from-violet-500 to-purple-500",
-        subtitle: `${admins ?? 0} Admins · ${staffCount ?? 0} Staff`,
-        trend: 0,
-        onClick: () => navigate('/dashboard/superadmin/staffmanagement'),
-      },
-      {
-        title: "Customers", value: totalCustomers?.toLocaleString(), icon: FiUserCheck,
-        gradient: "from-emerald-500 to-teal-500",
-        subtitle: `+${customerGrowth ?? 0} this month`,
-        trend: customerGrowth > 0 ? 8 : -3,
-      },
-      {
-        title: "Today's Services", value: todayServices ?? 0, icon: FiShoppingBag,
-        gradient: "from-indigo-500 to-blue-500",
-        subtitle: "All centres",
-        trend: 0,
-      },
-    ];
-
-    const revenueTabs = [
-      { key: 'revenue', label: 'Revenue', active: 'text-blue-600' },
-      { key: 'profit', label: 'Profit', active: 'text-emerald-600' },
-      { key: 'expenses', label: 'Expenses', active: 'text-rose-600' },
-    ];
-
+  const MapView = () => {
     return (
-      <div className="space-y-6">
-        {/* BENTO HERO */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-6 lg:grid-rows-[auto_auto]">
-          {/* Hero: revenue chart */}
-          <div className="lg:col-span-4 lg:row-span-2">
-            <SectionCard
-              title="Revenue Analytics"
-              subtitle="Trend for the selected period"
-              icon="📈"
-              tone="indigo"
-              className="h-full flex flex-col"
-              bodyClassName="flex-1 p-5 pt-4"
-              action={
-                <div className="flex rounded-xl bg-slate-100/90 p-1 ring-1 ring-slate-200/70">
-                  {revenueTabs.map((t) => (
-                    <button
-                      key={t.key}
-                      onClick={() => setRevenueView(t.key)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 ${
-                        revenueView === t.key ? `bg-white ${t.active} shadow-sm` : 'text-slate-500 hover:text-slate-700'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              }
-            >
-              <RevenueChart data={revenueChartData} view={revenueView} />
-            </SectionCard>
-          </div>
-
-          {/* 4 KPI tiles */}
-          {kpiTiles.map((kpi, i) => (
-            <div key={i} className="lg:col-span-1">
-              <StatCard {...kpi} delay={i * 0.04} compact />
-            </div>
-          ))}
-        </div>
-
-        {/* SECONDARY ROW: leaderboard + live ops */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <SectionCard
-            title="Centre Leaderboard"
-            subtitle="Top 5 by profit"
-            icon="🏆"
-            className="lg:col-span-2"
-            bodyClassName="p-3 pt-2"
-          >
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
-                <thead>
-                  <tr className="text-left">
-                    <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Rank</th>
-                    <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Centre</th>
-                    <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Profit</th>
-                    <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Rating</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {centreList.slice(0, 5).map((centre, idx) => (
-                    <tr key={centre.id} className="cursor-pointer transition-colors hover:bg-slate-50/80">
-                      <td className="whitespace-nowrap px-3 py-3">
-                        <span
-                          className={`inline-flex h-7 w-7 items-center justify-center rounded-lg text-xs font-bold ${
-                            idx === 0 ? 'bg-amber-100 text-amber-700'
-                            : idx === 1 ? 'bg-slate-200 text-slate-700'
-                            : idx === 2 ? 'bg-orange-100 text-orange-700'
-                            : 'bg-slate-100 text-slate-500'
-                          }`}
-                        >
-                          {idx + 1}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 font-medium text-slate-800">{centre.name}</td>
-                      <td className="px-3 py-3 font-semibold text-emerald-600">{formatCurrency(centre.profit)}</td>
-                      <td className="px-3 py-3 text-slate-600">
-                        <span className="inline-flex items-center gap-1">
-                          {centre.rating || 0} <span className="text-amber-400">★</span>
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                  {centreList.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-400">No centres</td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Live Operations" subtitle="Today" icon="📋" bodyClassName="p-4">
-            <div className="space-y-3">
-              {[
-                { label: "Pending", value: pendingServices, tone: "from-rose-500 to-red-500", bg: "bg-rose-50/60 border-rose-200/70", text: "text-rose-900" },
-                { label: "In Progress", value: inProgressServices, tone: "from-blue-500 to-indigo-500", bg: "bg-blue-50/60 border-blue-200/70", text: "text-blue-900" },
-                { label: "Delayed", value: delayedServices, tone: "from-orange-500 to-amber-500", bg: "bg-orange-50/60 border-orange-200/70", text: "text-orange-900" },
-                { label: "Completed", value: todayServices, tone: "from-emerald-500 to-teal-500", bg: "bg-emerald-50/60 border-emerald-200/70", text: "text-emerald-900" },
-              ].map((row) => (
-                row.value !== undefined && (
-                  <div key={row.label} className={`flex items-center justify-between rounded-xl border ${row.bg} px-4 py-3`}>
-                    <div className="flex items-center gap-2">
-                      <span className={`h-1.5 w-1.5 rounded-full bg-gradient-to-r ${row.tone}`} />
-                      <span className="text-xs font-semibold text-slate-600">{row.label}</span>
-                    </div>
-                    <span className={`text-lg font-bold ${row.text}`}>{row.value}</span>
-                  </div>
-                )
-              ))}
-            </div>
-          </SectionCard>
-        </div>
+      <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
+        <svg viewBox="0 0 200 200" className="w-full h-full">
+          <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#94a3b8" />
+          {centreList.map((centre) => {
+            const status = centre.healthStatus || { color: "gray" };
+            const color = status.color === "green" ? "#22c55e" : status.color === "yellow" ? "#eab308" : "#ef4444";
+            const x = 40 + (centre.id * 30) % 140;
+            const y = 40 + (centre.id * 20) % 120;
+            return (
+              <circle key={centre.id} cx={x} cy={y} r="6" fill={color} stroke="white" strokeWidth="2" />
+            );
+          })}
+        </svg>
+        <div className="absolute bottom-2 left-2 text-xs text-gray-600">Kerala Map</div>
       </div>
     );
   };
 
-  const CentresSection = () => (
-    <div className="space-y-6">
-      <SectionCard title="Centre Health" subtitle="Live status across the network" icon="🏥">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+  // Prepare data for the new StatCards
+  const kpiData = [
+    {
+      title: "Total Centres",
+      value: totalCentres,
+      icon: FiHome,
+      color: "bg-blue-500",
+      subtitle: `+${newCentresThisMonth ?? 0} this month`,
+      trend: newCentresThisMonth > 0 ? 5 : -2,
+      onClick: () => navigate('/dashboard/superadmin/centremanagement')
+    },
+    {
+      title: "Total Staff",
+      value: totalStaff,
+      icon: FiUsers,
+      color: "bg-purple-500",
+      subtitle: `${admins ?? 0} Admins, ${staffCount ?? 0} Staff`,
+      trend: 0,
+      onClick: () => navigate('/dashboard/superadmin/staffmanagement')
+    },
+    {
+      title: "Customers",
+      value: totalCustomers?.toLocaleString(),
+      icon: FiUserCheck,
+      color: "bg-green-500",
+      subtitle: `+${customerGrowth ?? 0} this month`,
+      trend: customerGrowth > 0 ? 8 : -3,
+    },
+    {
+      title: "Today's Services",
+      value: todayServices ?? 0,
+      icon: FiShoppingBag,
+      color: "bg-indigo-500",
+      subtitle: "All centres",
+      trend: 0,
+    },
+    {
+      title: "Today's Revenue",
+      value: formatCurrency(todayRevenue),
+      icon: FiDollarSign,
+      color: "bg-yellow-500",
+      subtitle: "Live collection",
+      trend: todayRevenue > 0 ? 12 : -5,
+    },
+    {
+      title: "Period Revenue",
+      value: formatCurrency(monthlyRevenue),
+      icon: FiTrendingUp,
+      color: "bg-orange-500",
+      subtitle: `vs previous`,
+      trend: revenueGrowthPercent,
+    },
+    {
+      title: "Period Profit",
+      value: formatCurrency(netProfit),
+      icon: FiPieChart,
+      color: "bg-red-500",
+      subtitle: "Selected range",
+      trend: netProfit > 0 ? 6 : -2,
+    },
+    {
+      title: "Pending Payments",
+      value: formatCurrency(health?.metrics?.pendingPaymentValue),
+      icon: FiAlertCircle,
+      color: "bg-pink-500",
+      subtitle: `${health?.metrics?.pendingCustomers ?? 0} Customers`,
+      trend: health?.metrics?.pendingCustomers > 5 ? 15 : -4,
+    }
+  ];
+
+  return (
+    <div className="bg-gray-50 min-h-screen p-4 lg:p-8 space-y-8">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
+        <div className="flex items-center space-x-2">
+          {loading && <FiLoader className="animate-spin h-5 w-5 text-indigo-600" />}
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            aria-label="Select period"
+          >
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Global KPI Cards - using StatCard (matches Admin Dashboard) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {kpiData.map((kpi, index) => (
+          <StatCard key={index} {...kpi} />
+        ))}
+      </div>
+
+      {/* Revenue Analytics + Centre Performance */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-semibold text-gray-700">📈 Revenue Analytics</h2>
+            <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
+              <button
+                onClick={() => setRevenueView("revenue")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  revenueView === "revenue" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Revenue
+              </button>
+              <button
+                onClick={() => setRevenueView("profit")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  revenueView === "profit" ? "bg-white text-green-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Profit
+              </button>
+              <button
+                onClick={() => setRevenueView("expenses")}
+                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
+                  revenueView === "expenses" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                }`}
+              >
+                Expenses
+              </button>
+            </div>
+          </div>
+          <RevenueChart data={revenueChartData} view={revenueView} />
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Centre Leaderboard</h2>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                {centreList.slice(0, 5).map((centre, idx) => (
+                  <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
+                    </td>
+                    <td className="px-3 py-2 font-medium text-gray-800">{centre.name}</td>
+                    <td className="px-3 py-2 text-gray-600">{formatCurrency(centre.profit)}</td>
+                    <td className="px-3 py-2 text-gray-600">{centre.rating || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Centre Health */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {centreList.map((centre) => {
             const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
-            const dot =
-              status.color === "green" ? "bg-emerald-500"
-              : status.color === "yellow" ? "bg-amber-500"
-              : status.color === "gray" ? "bg-slate-400"
-              : "bg-rose-500";
             return (
-              <div
-                key={centre.id}
-                className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-200 hover:bg-white hover:shadow-md"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold text-slate-800">{centre.name}</div>
-                  <div className="mt-1.5 flex items-center gap-1.5 text-xs">
-                    <span className={`h-2 w-2 rounded-full ${dot}`} />
-                    <span className="font-medium text-slate-600">{status.icon} {status.label}</span>
-                  </div>
+              <div key={centre.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+                <div>
+                  <div className="font-medium text-gray-800">{centre.name}</div>
+                  <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold text-slate-800">{centre.rating || 0}</div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400">Rating</div>
+                  <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
+                  <div className="text-xs text-gray-500">Rating</div>
                 </div>
               </div>
             );
           })}
         </div>
-
         {health?.overallScore !== undefined && (
-          <div className="mt-5 border-t border-slate-100 pt-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-500">Overall Network Health Score</span>
-              <span className="text-sm font-bold text-slate-800">{health.overallScore}/100</span>
-            </div>
-            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-emerald-500 transition-all duration-700"
-                style={{ width: `${Math.min(100, Math.max(0, health.overallScore))}%` }}
-              />
-            </div>
+          <div className="mt-4 text-sm text-gray-600 border-t pt-3 flex items-center justify-between">
+            <span>Overall Network Health Score</span>
+            <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
           </div>
         )}
-      </SectionCard>
+      </div>
 
-      <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <SectionCard title="Best Performing Centres" subtitle="Top of the network" icon="🏆">
+      {/* Live Operations */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {pendingServices !== undefined && (
+          <div className="bg-red-50 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
+            <div className="text-2xl font-bold text-red-900 mt-1">{pendingServices}</div>
+          </div>
+        )}
+        {todayServices !== undefined && (
+          <div className="bg-green-50 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
+            <div className="text-2xl font-bold text-green-900 mt-1">{todayServices}</div>
+          </div>
+        )}
+        {delayedServices !== undefined && (
+          <div className="bg-orange-50 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
+            <div className="text-2xl font-bold text-orange-900 mt-1">{delayedServices}</div>
+          </div>
+        )}
+        {inProgressServices !== undefined && (
+          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all">
+            <div className="text-sm text-blue-800 font-medium">📋 In Progress</div>
+            <div className="text-2xl font-bold text-blue-900 mt-1">{inProgressServices}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Financial Health */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+            <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+            <div className="text-sm text-gray-600 mb-1">Bank</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
+          </div>
+          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
+            <div className="text-sm text-gray-600 mb-1">Digital</div>
+            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
+          </div>
+          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 hover:bg-indigo-100 transition-colors">
+            <div className="text-sm text-indigo-800 font-semibold mb-1">Total Wallets</div>
+            <div className="text-2xl font-bold text-indigo-900">{formatCurrency(walletTotal)}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Best & Worst Centres */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-emerald-700">Best Revenue</div>
-              <div className="truncate font-bold text-slate-800">{best.revenue?.name || "N/A"}</div>
-              <div className="mt-0.5 text-lg font-semibold text-emerald-700">{formatCurrency(best.revenue?.value)}</div>
+            <div className="bg-green-50 p-4 rounded-xl border border-green-100">
+              <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
+              <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
+              <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
             </div>
-            <div className="rounded-xl border border-blue-100 bg-gradient-to-br from-blue-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-blue-700">Best Profit</div>
-              <div className="truncate font-bold text-slate-800">{best.profit?.name || "N/A"}</div>
-              <div className="mt-0.5 text-lg font-semibold text-blue-700">{formatCurrency(best.profit?.value)}</div>
+            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
+              <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
+              <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
+              <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
             </div>
-            <div className="col-span-2 rounded-xl border border-amber-100 bg-gradient-to-br from-amber-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-amber-700">Best Rating</div>
-              <div className="flex items-end justify-between">
-                <div className="truncate font-bold text-slate-800">{best.rating?.name || "N/A"}</div>
-                <div className="text-lg font-bold text-amber-600">{best.rating?.value || 0} ★</div>
+            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
+              <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
+              <div className="flex justify-between items-end">
+                <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
+                <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
               </div>
             </div>
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard title="Worst Performing Centres" subtitle="Needs attention" icon="⚠️">
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-rose-700">Lowest Profit</div>
-              <div className="truncate font-bold text-slate-800">{worst.revenue?.name || "N/A"}</div>
-              <div className="mt-0.5 text-lg font-semibold text-rose-700">{formatCurrency(worst.revenue?.value)}</div>
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
+              <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
+              <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
             </div>
-            <div className="rounded-xl border border-rose-100 bg-gradient-to-br from-rose-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-rose-700">Highest Pending</div>
-              <div className="truncate font-bold text-slate-800">{worst.pending?.name || "N/A"}</div>
-              <div className="mt-0.5 text-lg font-semibold text-rose-700">
-                {worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}
-              </div>
+            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
+              <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
+              <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
+              <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
             </div>
-            <div className="rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-orange-700">Most Delayed</div>
-              <div className="truncate font-bold text-slate-800">{worst.delayed?.name || "N/A"}</div>
-              <div className="mt-0.5 text-lg font-semibold text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+              <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
+              <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
+              <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
             </div>
-            <div className="rounded-xl border border-orange-100 bg-gradient-to-br from-orange-50 to-white p-4">
-              <div className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-orange-700">Most Complaints</div>
-              <div className="truncate font-bold text-slate-800">{worst.complaints?.name || "N/A"}</div>
-              <div className="mt-0.5 text-lg font-semibold text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
+            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
+              <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
+              <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
+              <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
             </div>
           </div>
-        </SectionCard>
-      </div>
-
-      <SectionCard title="Centre Network Map" subtitle="Geographic distribution & health" icon="🗺️">
-        <MapView centreList={centreList} />
-      </SectionCard>
-    </div>
-  );
-
-  const FinanceSection = () => {
-    const moneyTiles = [
-      {
-        title: "Today's Revenue", value: formatCurrency(todayRevenue), icon: FiDollarSign,
-        gradient: "from-amber-500 to-orange-500", subtitle: "Live collection",
-        trend: todayRevenue > 0 ? 12 : -5,
-      },
-      {
-        title: "Period Revenue", value: formatCurrency(monthlyRevenue), icon: FiTrendingUp,
-        gradient: "from-orange-500 to-rose-500", subtitle: "vs previous",
-        trend: revenueGrowthPercent,
-      },
-      {
-        title: "Period Profit", value: formatCurrency(netProfit), icon: FiPieChart,
-        gradient: "from-rose-500 to-pink-500", subtitle: "Selected range",
-        trend: netProfit > 0 ? 6 : -2,
-      },
-      {
-        title: "Pending Payments",
-        value: formatCurrency(health?.metrics?.pendingPaymentValue),
-        icon: FiAlertCircle, gradient: "from-pink-500 to-fuchsia-500",
-        subtitle: `${health?.metrics?.pendingCustomers ?? 0} Customers`,
-        trend: health?.metrics?.pendingCustomers > 5 ? 15 : -4,
-      },
-    ];
-
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {moneyTiles.map((kpi, i) => (
-            <StatCard key={i} {...kpi} delay={i * 0.04} />
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <SectionCard title="Wallet Balances" subtitle="Cash, bank & digital" icon="💰">
-            <div className="space-y-3">
-              {[
-                { label: "Cash Wallet", value: walletCash, tone: "from-emerald-500 to-teal-500" },
-                { label: "Bank", value: walletBank, tone: "from-blue-500 to-indigo-500" },
-                { label: "Digital", value: walletDigital, tone: "from-violet-500 to-purple-500" },
-              ].map((w) => (
-                <div key={w.label} className="rounded-xl border border-slate-200/80 bg-slate-50/60 p-4 transition-all hover:bg-white hover:shadow-md">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full bg-gradient-to-r ${w.tone}`} />
-                      <span className="text-xs font-semibold text-slate-500">{w.label}</span>
-                    </div>
-                    <span className="text-lg font-bold text-slate-800">{formatCurrency(w.value)}</span>
-                  </div>
-                </div>
-              ))}
-              <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-semibold text-indigo-700">Total Wallets</span>
-                  <span className="text-2xl font-bold tracking-tight text-indigo-900">{formatCurrency(walletTotal)}</span>
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Revenue Trend" subtitle="Selected period" icon="📈" bodyClassName="p-5 pt-4">
-            <RevenueChart data={revenueChartData} view={revenueView} />
-          </SectionCard>
         </div>
       </div>
-    );
-  };
 
-  const OperationsSection = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        {[
-          { label: "Pending Services", value: pendingServices, emoji: "🕒", tone: "from-rose-500 to-red-500", bg: "bg-rose-50/70 border-rose-200/70", text: "text-rose-900" },
-          { label: "Completed Today", value: todayServices, emoji: "✅", tone: "from-emerald-500 to-teal-500", bg: "bg-emerald-50/70 border-emerald-200/70", text: "text-emerald-900" },
-          { label: "Delayed Services", value: delayedServices, emoji: "⏳", tone: "from-orange-500 to-amber-500", bg: "bg-orange-50/70 border-orange-200/70", text: "text-orange-900" },
-          { label: "In Progress", value: inProgressServices, emoji: "📋", tone: "from-blue-500 to-indigo-500", bg: "bg-blue-50/70 border-blue-200/70", text: "text-blue-900" },
-        ].map((item) => (
-          item.value !== undefined && (
-            <div
-              key={item.label}
-              className={`rounded-2xl border ${item.bg} p-4 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`h-1.5 w-1.5 rounded-full bg-gradient-to-r ${item.tone}`} />
-                <span className="text-xs font-semibold text-slate-600">{item.emoji} {item.label}</span>
-              </div>
-              <div className={`mt-1.5 text-2xl font-bold tracking-tight ${item.text}`}>{item.value}</div>
-            </div>
-          )
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {/* Top Staff & Teams */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <StaffPerformanceChart staffData={topStaffList} />
 
-        <SectionCard
-          title="Top Teams"
-          subtitle="Revenue, profit & expenses"
-          icon="👥"
-          bodyClassName="p-3 pt-2"
-        >
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left">
-                  <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Team</th>
-                  <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Revenue</th>
-                  <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Profit</th>
-                  <th className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">Expenses</th>
+            <table className="min-w-full divide-y divide-gray-200 text-sm">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100">
+              <tbody className="divide-y divide-gray-200 bg-white">
                 {topTeamsList.map((team, idx) => (
-                  <tr key={team.id || idx} className="transition-colors hover:bg-slate-50/80">
-                    <td className="whitespace-nowrap px-3 py-3.5 font-medium text-slate-900">{team.name}</td>
-                    <td className="whitespace-nowrap px-3 py-3.5 text-slate-600">{formatCurrency(team.revenue)}</td>
-                    <td className="whitespace-nowrap px-3 py-3.5 font-semibold text-emerald-600">{formatCurrency(team.profit || 0)}</td>
-                    <td className="whitespace-nowrap px-3 py-3.5 font-medium text-rose-500">{formatCurrency(team.expenses || 0)}</td>
+                  <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
+                    <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
                   </tr>
                 ))}
-                {topTeamsList.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-400">
-                      No team data available
-                    </td>
-                  </tr>
-                )}
               </tbody>
             </table>
           </div>
-        </SectionCard>
+        </div>
       </div>
-    </div>
-  );
 
-  const AlertsSection = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <SectionCard
-          title="Action Required"
-          subtitle={`${notifications.length} item${notifications.length === 1 ? "" : "s"} needing attention`}
-          icon="🔔"
-          bodyClassName="p-5 pt-4"
-        >
-          <div className="max-h-[420px] space-y-3 overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-300">
+      {/* Notifications & Accounting Closing Log */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
+            <span className="mr-2">🔔</span> Action Required
+          </h2>
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
             {notifications.length > 0 ? (
-              notifications.map((notif) => {
-                const tone =
-                  notif.priority === "critical"
-                    ? { bar: "bg-rose-500", bg: "bg-rose-50/70", ring: "border-rose-200/70", dot: "bg-rose-500" }
-                    : notif.priority === "warning"
-                    ? { bar: "bg-amber-500", bg: "bg-amber-50/70", ring: "border-amber-200/70", dot: "bg-amber-500" }
-                    : { bar: "bg-blue-500", bg: "bg-blue-50/70", ring: "border-blue-200/70", dot: "bg-blue-500" };
-                return (
-                  <div
-                    key={notif.id}
-                    className={`relative flex items-start gap-3 overflow-hidden rounded-xl border ${tone.ring} ${tone.bg} p-4 transition-all duration-200 hover:shadow-sm`}
-                  >
-                    <span className={`absolute inset-y-0 left-0 w-1 ${tone.bar}`} />
-                    <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${tone.dot}`} />
-                    <div className="flex-1">
-                      <div className="mb-0.5 text-sm font-semibold text-slate-800">{notif.title}</div>
-                      <div className="text-sm leading-relaxed text-slate-600">{notif.message}</div>
-                    </div>
+              notifications.map((notif) => (
+                <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
+                  notif.priority === "critical" ? "bg-red-50 border-red-500" :
+                  notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
+                }`}>
+                  <div className="flex-1">
+                    <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
+                    <div className="text-gray-600 text-sm">{notif.message}</div>
                   </div>
-                );
-              })
+                </div>
+              ))
             ) : (
-              <div className="rounded-xl bg-slate-50 p-6 text-center text-sm italic text-slate-400">
-                All caught up! No pending notifications.
-              </div>
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
             )}
           </div>
-        </SectionCard>
+        </div>
 
-        <SectionCard
-          title="Accounting Closing Log"
-          subtitle={
-            !closingLoading && !closingError
-              ? `${closedCount} of ${closingRows.length} centres closed`
-              : "Daily close status by centre"
-          }
-          icon="📒"
-          bodyClassName="p-5 pt-4"
-          action={
+        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+          <div className="flex items-start justify-between mb-4 gap-3">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-700 flex items-center">
+                <span className="mr-2">📒</span> Accounting Closing Log
+              </h2>
+              {!closingLoading && !closingError && (
+                <p className="text-xs text-gray-500 mt-1">
+                  {closedCount} of {closingRows.length} centres closed
+                </p>
+              )}
+            </div>
             <input
               type="date"
               value={closingDate || closingData.date || ""}
               max={todayIST()}
               onChange={(e) => setClosingDate(e.target.value)}
-              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-600 shadow-sm transition focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+              className="border border-gray-300 rounded-lg px-2 py-1 text-xs text-gray-700"
               aria-label="Accounting date"
             />
-          }
-        >
-          {!closingLoading && !closingError && closingRows.length > 0 && (
-            <div className="mb-4">
-              <div className="mb-1.5 flex items-center justify-between text-[11px] font-medium text-slate-500">
-                <span>Completion</span>
-                <span className="font-bold text-slate-700">{closeProgress}%</span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-700"
-                  style={{ width: `${closeProgress}%` }}
-                />
-              </div>
-            </div>
-          )}
+          </div>
 
-          <div className="max-h-[360px] space-y-3 overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-300">
+          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
             {closingLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100" />
-                ))}
+              <div className="flex justify-center py-8">
+                <FiLoader className="animate-spin h-6 w-6 text-indigo-600" />
               </div>
             ) : closingError ? (
-              <div className="rounded-xl bg-rose-50 p-4 text-center text-sm font-medium text-rose-600">
+              <div className="text-sm text-rose-600 p-4 text-center bg-rose-50 rounded-lg">
                 Could not load closing log.
               </div>
             ) : closingRows.length === 0 ? (
-              <div className="rounded-xl bg-slate-50 p-6 text-center text-sm italic text-slate-400">
+              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">
                 No centres found.
               </div>
             ) : (
               closingRows.map((row) => {
                 const v = getClosingView(row);
                 return (
-                  <div
-                    key={row.centre_id}
-                    className={`flex items-start gap-3 rounded-xl border p-3.5 transition-all duration-200 hover:shadow-sm ${v.wrap}`}
-                  >
-                    <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-white/80 ${v.icon}`}>
-                      <v.Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
+                  <div key={row.centre_id} className={`p-3 rounded-lg border flex items-start space-x-3 ${v.wrap}`}>
+                    <v.Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${v.text}`} />
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-2">
-                        <p className="truncate text-sm font-semibold text-slate-900">{row.centre_name}</p>
-                        <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${v.chip}`}>
-                          {v.label}
-                        </span>
+                        <p className="text-sm font-semibold text-gray-900 truncate">{row.centre_name}</p>
+                        <span className={`text-xs font-medium whitespace-nowrap ${v.text}`}>{v.label}</span>
                       </div>
-                      <p className="mt-1 text-xs text-slate-600">{v.detail}</p>
+                      <p className="text-xs text-gray-600 mt-0.5">{v.detail}</p>
                       {row.status === "closed" && row.closed_at && (
-                        <p className="mt-1 text-[11px] text-slate-400">
-                          Closed{" "}
-                          {new Date(row.closed_at).toLocaleString("en-IN", {
-                            day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                        <p className="text-[11px] text-gray-500 mt-0.5">
+                          Closed {new Date(row.closed_at).toLocaleString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
                           })}
                           {row.closed_by_name ? ` by ${row.closed_by_name}` : ""}
                         </p>
@@ -1176,191 +923,51 @@ const SuperadminDashboard = () => {
               })
             )}
           </div>
-        </SectionCard>
+        </div>
       </div>
 
-      <SectionCard title="Quick Actions" subtitle="Shortcuts to common tasks" icon="⚡">
+      {/* Map View */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
+        <MapView />
+      </div>
+
+      {/* Quick Actions */}
+      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
+        <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
-          <button
-            onClick={() => navigate('/dashboard/superadmin/centremanagement')}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-blue-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-300"
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
+            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition shadow-sm"
           >
-            <span>➕</span> Create Centre
+            + Create Centre
           </button>
-          <button
-            onClick={() => navigate('/dashboard/superadmin/centremanagement')}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-purple-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-purple-300"
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
+            className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center"
           >
-            <span>👤</span> Create Admin
+            <span className="mr-1">👤</span> Create Admin
           </button>
-          <button
-            onClick={() => navigate('/dashboard/superadmin/messenger')}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-emerald-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-emerald-300"
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/messenger')} 
+            className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center"
           >
-            <span>📢</span> Broadcast
+            <span className="mr-1">📢</span> Broadcast
           </button>
-          <button
-            onClick={() => navigate('/dashboard/superadmin/analytics')}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-rose-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-rose-300"
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/analytics')} 
+            className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center"
           >
-            <span>📊</span> Global Report
+            <span className="mr-1">📊</span> Global Report
           </button>
-          <button
-            onClick={() => navigate('/dashboard/superadmin/analytics')}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-slate-700 to-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-md shadow-slate-200 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-300"
+          <button 
+            onClick={() => navigate('/dashboard/superadmin/analytics')} 
+            className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center"
           >
-            <span>📤</span> Export Data
+            <span className="mr-1">📤</span> Export Data
           </button>
         </div>
-      </SectionCard>
-    </div>
-  );
-
-  // ==========================================
-  // FINAL RENDER — SPLIT WORKSPACE
-  // ==========================================
-  return (
-    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/40">
-
-      {/* ================= SIDEBAR (desktop) ================= */}
-      <aside className="sticky top-0 hidden h-screen w-64 flex-shrink-0 flex-col border-r border-slate-200/80 bg-white/80 backdrop-blur-xl lg:flex">
-        <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-5">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-lg shadow-lg shadow-indigo-200">
-            📊
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-bold tracking-tight text-slate-900">Superadmin</div>
-            <div className="truncate text-[11px] font-medium text-slate-500">Control Center</div>
-          </div>
-        </div>
-
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-          <p className="px-3 pb-2 pt-3 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Navigation
-          </p>
-          {navItems.map((item) => (
-            <NavItem
-              key={item.id}
-              {...item}
-              active={activeSection === item.id}
-              onClick={handleNav}
-            />
-          ))}
-        </nav>
-
-        <div className="border-t border-slate-100 p-3">
-          <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-blue-50 p-3 ring-1 ring-indigo-100">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Network Status</div>
-            <div className="mt-1 flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${unclosedCount > 0 ? "bg-amber-500" : "bg-emerald-500"} animate-pulse`} />
-              <span className="text-xs font-semibold text-slate-700">
-                {unclosedCount > 0 ? `${unclosedCount} closing pending` : "All centres closed"}
-              </span>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* ================= SIDEBAR (mobile drawer) ================= */}
-      <AnimatePresence>
-        {sidebarOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setSidebarOpen(false)}
-              className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden"
-            />
-            <motion.aside
-              initial={{ x: -280 }}
-              animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ type: "spring", damping: 24, stiffness: 260 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col border-r border-slate-200 bg-white lg:hidden"
-            >
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-5">
-                <div className="flex items-center gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-lg shadow-lg shadow-indigo-200">
-                    📊
-                  </span>
-                  <div>
-                    <div className="text-sm font-bold tracking-tight text-slate-900">Superadmin</div>
-                    <div className="text-[11px] font-medium text-slate-500">Control Center</div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSidebarOpen(false)}
-                  className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <FiX className="h-5 w-5" />
-                </button>
-              </div>
-              <nav className="flex-1 space-y-1 overflow-y-auto p-3">
-                {navItems.map((item) => (
-                  <NavItem
-                    key={item.id}
-                    {...item}
-                    active={activeSection === item.id}
-                    onClick={handleNav}
-                  />
-                ))}
-              </nav>
-            </motion.aside>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* ================= MAIN ================= */}
-      <main className="flex min-w-0 flex-1 flex-col">
-
-        {/* Header */}
-        <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-white/70 backdrop-blur-xl">
-          <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-4 py-3.5 lg:px-8">
-            <div className="flex min-w-0 items-center gap-3">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="rounded-xl border border-slate-200 bg-white p-2 text-slate-600 shadow-sm transition hover:bg-slate-50 lg:hidden"
-                aria-label="Open navigation"
-              >
-                <FiMenu className="h-4 w-4" />
-              </button>
-              <div className="min-w-0">
-                <h1 className="truncate text-base font-bold tracking-tight text-slate-900 lg:text-lg">
-                  {sectionTitle.title}
-                </h1>
-                <p className="truncate text-[11px] font-medium text-slate-500">
-                  {sectionTitle.subtitle}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {loading && <FiLoader className="h-4 w-4 animate-spin text-indigo-600" />}
-              {periodSelector}
-            </div>
-          </div>
-        </header>
-
-        {/* Section content */}
-        <div className="mx-auto w-full max-w-[1400px] flex-1 p-4 lg:p-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={activeSection}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              transition={{ duration: 0.25, ease: "easeOut" }}
-            >
-              {activeSection === "overview" && <OverviewSection />}
-              {activeSection === "centres" && <CentresSection />}
-              {activeSection === "finance" && <FinanceSection />}
-              {activeSection === "operations" && <OperationsSection />}
-              {activeSection === "alerts" && <AlertsSection />}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      </main>
+      </div>
     </div>
   );
 };
