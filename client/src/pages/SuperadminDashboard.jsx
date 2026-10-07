@@ -19,6 +19,52 @@ import {
 // Adjust the path if your accounting router is mounted somewhere else
 const CLOSING_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/all`;
 
+// ==========================================
+// PERIOD FILTER HELPERS
+// ==========================================
+const PERIOD_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "3months", label: "Last 3 Months" },
+  { value: "6months", label: "Last 6 Months" },
+  { value: "year", label: "This Year" },
+];
+
+// Returns { start, end } as "YYYY-MM-DD" (IST calendar dates)
+const getPeriodRange = (period) => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [y, m, d] = today.split("-").map(Number);
+  const fmt = (dt) => dt.toISOString().split("T")[0]; // dt is built with Date.UTC, so no timezone drift
+
+  let start;
+  switch (period) {
+    case "today":
+      start = new Date(Date.UTC(y, m - 1, d));
+      break;
+    case "week": {
+      // week starts on Monday
+      const base = new Date(Date.UTC(y, m - 1, d));
+      const dow = base.getUTCDay(); // 0 = Sunday
+      start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
+      break;
+    }
+    case "3months": // current month + previous 2 full months
+      start = new Date(Date.UTC(y, m - 1 - 2, 1));
+      break;
+    case "6months": // current month + previous 5 full months
+      start = new Date(Date.UTC(y, m - 1 - 5, 1));
+      break;
+    case "year":
+      start = new Date(Date.UTC(y, 0, 1));
+      break;
+    case "month":
+    default:
+      start = new Date(Date.UTC(y, m - 1, 1));
+  }
+  return { start: fmt(start), end: today };
+};
+
 const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN")}`;
 
 const todayIST = () =>
@@ -318,6 +364,7 @@ const SuperadminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
+  const [period, setPeriod] = useState("month"); // default: This Month
 
   // Accounting closing log (all centres)
   const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
@@ -330,16 +377,15 @@ const SuperadminDashboard = () => {
   };
 
   useEffect(() => {
+    const controller = new AbortController();
+
     const fetchDashboard = async () => {
       setLoading(true);
       try {
         const token = localStorage.getItem("token");
         if (!token) throw new Error("No token");
 
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setFullYear(startDate.getFullYear() - 1);
-        const formatDate = (d) => d.toISOString().split('T')[0];
+        const { start, end } = getPeriodRange(period);
 
         const response = await axios.get(
           `${import.meta.env.VITE_API_URL}/api/analytics/superadmin/dashboard`,
@@ -347,23 +393,28 @@ const SuperadminDashboard = () => {
             params: {
               modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
               timeframe: "custom",
-              customStartDate: formatDate(startDate),
-              customEndDate: formatDate(endDate)
+              customStartDate: start,
+              customEndDate: end
             },
-            headers: { Authorization: `Bearer ${token}` }
+            headers: { Authorization: `Bearer ${token}` },
+            signal: controller.signal
           }
         );
 
         setDashboard(response.data);
+        setLoading(false);
       } catch (err) {
+        if (axios.isCancel(err)) return; // superseded by a newer request
         console.error("Error fetching dashboard:", err);
         toast.error("Failed to load dashboard data.", { position: "top-right" });
-      } finally {
         setLoading(false);
       }
     };
     fetchDashboard();
-  }, []);
+
+    // cancel the previous request if the period changes quickly
+    return () => controller.abort();
+  }, [period]);
 
   // Fetch accounting closing log for all centres
   useEffect(() => {
@@ -391,7 +442,7 @@ const SuperadminDashboard = () => {
     return () => controller.abort();
   }, [closingDate]);
 
-  if (loading) {
+  if (loading && !dashboard) {
     return (
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 flex items-center justify-center min-h-[400px]">
         <svg className="animate-spin h-8 w-8 text-indigo-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -535,8 +586,18 @@ const SuperadminDashboard = () => {
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
-        <div className="flex space-x-2">
-          <span className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm">Last 12 months</span>
+        <div className="flex items-center space-x-2">
+          {loading && <FiLoader className="animate-spin h-5 w-5 text-indigo-600" />}
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            aria-label="Select period"
+          >
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
         </div>
       </div>
 
