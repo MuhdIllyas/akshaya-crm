@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import {
   BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, Cell, PieChart, Pie
+  Tooltip, ResponsiveContainer, Cell, PieChart, Pie, LabelList
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
 import {
@@ -14,7 +14,6 @@ import {
 // ==========================================
 // ACCOUNTING CLOSING LOG HELPERS
 // ==========================================
-// Adjust the path if your accounting router is mounted somewhere else
 const CLOSING_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/all`;
 
 // ==========================================
@@ -29,11 +28,10 @@ const PERIOD_OPTIONS = [
   { value: "year", label: "This Year" },
 ];
 
-// Returns { start, end } as "YYYY-MM-DD" (IST calendar dates)
 const getPeriodRange = (period) => {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const [y, m, d] = today.split("-").map(Number);
-  const fmt = (dt) => dt.toISOString().split("T")[0]; // dt is built with Date.UTC, so no timezone drift
+  const fmt = (dt) => dt.toISOString().split("T")[0];
 
   let start;
   switch (period) {
@@ -41,16 +39,15 @@ const getPeriodRange = (period) => {
       start = new Date(Date.UTC(y, m - 1, d));
       break;
     case "week": {
-      // week starts on Monday
       const base = new Date(Date.UTC(y, m - 1, d));
-      const dow = base.getUTCDay(); // 0 = Sunday
+      const dow = base.getUTCDay();
       start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
       break;
     }
-    case "3months": // current month + previous 2 full months
+    case "3months":
       start = new Date(Date.UTC(y, m - 1 - 2, 1));
       break;
-    case "6months": // current month + previous 5 full months
+    case "6months":
       start = new Date(Date.UTC(y, m - 1 - 5, 1));
       break;
     case "year":
@@ -67,6 +64,17 @@ const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN")}`;
 
 const todayIST = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
+// Short currency for chart labels — 1.2Cr / 4.5L / 32k
+const shortINR = (v) => {
+  const n = Number(v) || 0;
+  const s = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a >= 10000000) return `${s}₹${(a / 10000000).toFixed(1)}Cr`;
+  if (a >= 100000) return `${s}₹${(a / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `${s}₹${(a / 1000).toFixed(0)}k`;
+  return `${s}₹${a}`;
+};
 
 const getClosingView = (row) => {
   if (row.status === "not_closed") {
@@ -93,201 +101,18 @@ const getClosingView = (row) => {
 };
 
 // ==========================================
-// STAFF PERFORMANCE CHART (unchanged)
-// ==========================================
-const StaffPerformanceChart = ({ staffData }) => {
-  const [metric, setMetric] = useState('serviceCharges');
-
-  if (!staffData || staffData.length === 0) {
-    return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
-  }
-
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
-  };
-
-  const BarTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
-          <p className="font-bold text-base mb-1">{data.name}</p>
-          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
-          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
-          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const ScatterTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
-          <p className="font-bold text-base mb-1">{data.name}</p>
-          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
-          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
-          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  return (
-    <div className="flex h-[450px] flex-col rounded-xl border border-slate-200 bg-white p-5">
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h2 className="text-[15px] font-semibold text-slate-900">Top staff by service charges</h2>
-          <p className="text-xs text-gray-500">Ranked across all centres</p>
-        </div>
-        <div className="flex flex-col gap-2">
-          <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-            <button
-              onClick={() => setMetric('serviceCharges')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'serviceCharges' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Service Charges
-            </button>
-            <button
-              onClick={() => setMetric('servicesCompleted')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Applications
-            </button>
-            <button
-              onClick={() => setMetric('scatter')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'scatter' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Efficiency
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 w-full min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          {metric === 'scatter' ? (
-            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis
-                type="number"
-                dataKey="servicesCompleted"
-                name="Applications"
-                tick={{ fontSize: 12 }}
-                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
-              />
-              <YAxis
-                type="number"
-                dataKey="serviceCharges"
-                name="Service Charges"
-                tickFormatter={(val) => `₹${(val/1000)}k`}
-                tick={{ fontSize: 12 }}
-              />
-              <ZAxis type="number" dataKey="serviceCharges" range={[100, 500]} name="Volume" />
-              <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-              <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
-            </ScatterChart>
-          ) : (
-            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
-              <XAxis type="number" hide />
-              <YAxis
-                dataKey="name"
-                type="category"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: '#4B5563' }}
-                width={120}
-              />
-              <Tooltip content={<BarTooltip />} cursor={{ fill: '#F3F4F6' }} />
-              <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
-                {staffData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={metric === 'serviceCharges' ? '#3B82F6' : '#8B5CF6'}
-                    className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          )}
-        </ResponsiveContainer>
-      </div>
-    </div>
-  );
-};
-
-// ==========================================
-// REVENUE CHART COMPONENT (unchanged)
-// ==========================================
-const RevenueChart = ({ data, view }) => {
-  if (!data || data.length === 0) {
-    return <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
-  }
-
-  const fmt = (amount) =>
-    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
-
-  const formatLabel = (label) => {
-    if (!label) return '';
-    if (label.length === 7) {
-      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
-    }
-    if (label.length === 10) return label.slice(5);
-    return label;
-  };
-
-  const short = (v) => (v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${v / 1000}k` : `₹${v}`);
-  const color = view === 'profit' ? '#059669' : view === 'expenses' ? '#e11d48' : '#4f46e5';
-  const gid = `fill-${view}`;
-
-  const Tip = ({ active, payload }) =>
-    active && payload?.length ? (
-      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
-        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
-        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
-      </div>
-    ) : null;
-
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.95} />
-            <stop offset="100%" stopColor={color} stopOpacity={0.55} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={16} />
-        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
-        <Tooltip content={<Tip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
-        <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-
-// ==========================================
 // DESIGN PRIMITIVES
 // ==========================================
-const Panel = ({ title, hint, action, children, className = "" }) => (
+const Panel = ({ title, hint, summary, action, children, className = "" }) => (
   <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
     <div className="flex items-start justify-between gap-3 px-5 pt-4">
-      <div>
+      <div className="min-w-0">
         <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
         {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
       </div>
       {action}
     </div>
+    {summary && <div className="px-5 pt-3">{summary}</div>}
     <div className="flex-1 px-5 pb-5 pt-3">{children}</div>
   </section>
 );
@@ -328,13 +153,25 @@ const Sparkline = ({ data = [], color = "#4f46e5" }) => {
   );
 };
 
-const Kpi = ({ label, value, delta, note, spark, sparkColor, tone = "text-slate-900" }) => {
+// Small stat pill — for the glance strip
+const MiniStat = ({ label, value, hint }) => (
+  <div className="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5">
+    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+    <p className="mt-0.5 text-lg font-semibold tabular-nums leading-tight tracking-tight text-slate-900">
+      {value}
+    </p>
+    {hint && <p className="mt-0.5 truncate text-[11px] text-slate-500">{hint}</p>}
+  </div>
+);
+
+// KPI — label / hero number / context / sparkline
+const Kpi = ({ label, value, delta, note, context, spark, sparkColor, tone = "text-slate-900" }) => {
   const v = Number(delta);
   const hasDelta = Number.isFinite(v) && v !== 0;
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
         {hasDelta && (
           <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${v > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
             {v > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
@@ -343,7 +180,8 @@ const Kpi = ({ label, value, delta, note, spark, sparkColor, tone = "text-slate-
         )}
       </div>
       <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
-      <div className="mt-3 flex items-end justify-between gap-3">
+      {context && <p className="mt-1 text-xs text-slate-500">{context}</p>}
+      <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
         <p className="text-xs text-slate-500">{note}</p>
         {spark && <Sparkline data={spark} color={sparkColor} />}
       </div>
@@ -386,15 +224,21 @@ const StatusDonut = ({ items }) => {
         </div>
       </div>
       <ul className="flex-1 space-y-2 text-sm">
-        {items.map((i) => (
-          <li key={i.name} className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-slate-600">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: i.color }} />
-              {i.name}
-            </span>
-            <span className="font-semibold tabular-nums text-slate-900">{i.value ?? 0}</span>
-          </li>
-        ))}
+        {items.map((i) => {
+          const pct = total ? Math.round(((Number(i.value) || 0) / total) * 100) : 0;
+          return (
+            <li key={i.name} className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-slate-600">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: i.color }} />
+                {i.name}
+              </span>
+              <span className="flex items-baseline gap-2">
+                <span className="text-[11px] text-slate-400">{pct}%</span>
+                <span className="font-semibold tabular-nums text-slate-900">{i.value ?? 0}</span>
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -402,15 +246,23 @@ const StatusDonut = ({ items }) => {
 
 const HEALTH_HEX = { green: "#059669", yellow: "#d97706", red: "#e11d48" };
 
+// Centre profit chart — ranked, value-labelled
 const CentreProfitChart = ({ centres }) => {
-  const data = centres.map((c) => ({
-    name: c.name,
-    profit: Number(c.profit) || 0,
-    rating: c.rating || 0,
-    health: c.healthStatus?.label || "Unknown",
-    fill: HEALTH_HEX[c.healthStatus?.color] || "#94a3b8",
-  }));
+  const data = centres
+    .map((c) => ({
+      name: c.name,
+      profit: Number(c.profit) || 0,
+      rating: c.rating || 0,
+      health: c.healthStatus?.label || "Unknown",
+      fill: HEALTH_HEX[c.healthStatus?.color] || "#94a3b8",
+    }))
+    .sort((a, b) => b.profit - a.profit);
+
   if (data.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No centres yet.</p>;
+
+  // Prepend rank to Y axis labels
+  const rankedData = data.map((d, i) => ({ ...d, rankName: `${i + 1}.  ${d.name}` }));
+
   const Tip = ({ active, payload }) =>
     active && payload?.length ? (
       <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
@@ -419,40 +271,61 @@ const CentreProfitChart = ({ centres }) => {
         <p className="text-slate-300">Rating {payload[0].payload.rating}, {payload[0].payload.health}</p>
       </div>
     ) : null;
+
   return (
-    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 40)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 44)}>
+      <BarChart data={rankedData} layout="vertical" margin={{ top: 0, right: 56, left: 0, bottom: 0 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#e5e7eb" />
         <XAxis type="number" tickFormatter={(v) => `₹${v / 1000}k`} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-        <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12, fill: "#334155" }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="rankName" width={140} tick={{ fontSize: 12, fill: "#334155" }} axisLine={false} tickLine={false} />
         <Tooltip content={<Tip />} cursor={{ fill: "rgba(100,116,139,0.08)" }} />
         <Bar dataKey="profit" radius={[0, 4, 4, 0]} barSize={18}>
-          {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+          <LabelList
+            dataKey="profit"
+            position="right"
+            formatter={(v) => shortINR(v)}
+            style={{ fontSize: 11, fill: "#334155", fontWeight: 600 }}
+          />
+          {rankedData.map((d, i) => <Cell key={i} fill={d.fill} />)}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
   );
 };
 
+// Team bars — with rank + % of total
 const TeamBars = ({ teams }) => {
+  const totalRev = teams.reduce((a, t) => a + (Number(t.revenue) || 0), 0) || 1;
   const maxRev = Math.max(1, ...teams.map((t) => Number(t.revenue) || 0));
   if (teams.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No team data.</p>;
+
   return (
     <ul className="space-y-4">
       {teams.map((t, i) => {
         const rev = Number(t.revenue) || 0;
         const profit = Number(t.profit) || 0;
+        const pct = (rev / totalRev) * 100;
         return (
           <li key={t.id || i}>
             <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm font-medium text-slate-900">{t.name}</span>
-              <span className={`text-sm font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(profit)}</span>
+              <span className="flex min-w-0 items-baseline gap-2">
+                <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">
+                  {i + 1}
+                </span>
+                <span className="truncate text-sm font-medium text-slate-900">{t.name}</span>
+              </span>
+              <span className={`text-sm font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>
+                {money(profit)}
+              </span>
             </div>
             <div className="relative mt-1.5 h-2 rounded-full bg-slate-100">
               <div className="absolute inset-y-0 left-0 rounded-full bg-slate-300" style={{ width: `${(rev / maxRev) * 100}%` }} />
               <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${(Math.max(0, profit) / maxRev) * 100}%` }} />
             </div>
-            <p className="mt-1 text-xs text-slate-500">Revenue {money(rev)}, expenses {money(t.expenses || 0)}</p>
+            <div className="mt-1 flex items-baseline justify-between gap-3 text-xs text-slate-500">
+              <span>Revenue {money(rev)}, expenses {money(t.expenses || 0)}</span>
+              <span className="tabular-nums">{pct.toFixed(0)}% of total</span>
+            </div>
           </li>
         );
       })}
@@ -460,37 +333,244 @@ const TeamBars = ({ teams }) => {
   );
 };
 
-const HighlightRow = ({ label, name, value }) => (
-  <li className="flex items-baseline justify-between gap-3 py-2 text-sm">
+const HighlightRow = ({ label, name, value, tone = "text-slate-900" }) => (
+  <li className="flex items-baseline justify-between gap-3 py-2.5 text-sm">
     <span className="text-slate-500">{label}</span>
-    <span className="min-w-0 truncate text-right">
-      <span className="font-medium text-slate-900">{name || "N/A"}</span>
+    <span className="flex min-w-0 items-baseline gap-2">
+      <span className="truncate font-medium text-slate-700">{name || "N/A"}</span>
       {value !== undefined && value !== null && value !== "" && (
-        <span className="ml-2 tabular-nums text-slate-500">{value}</span>
+        <span className={`tabular-nums font-semibold ${tone}`}>{value}</span>
       )}
     </span>
   </li>
 );
 
 // ==========================================
-// MAIN DASHBOARD COMPONENT
+// STAFF PERFORMANCE CHART
+// ==========================================
+const StaffPerformanceChart = ({ staffData }) => {
+  const [metric, setMetric] = useState('serviceCharges');
+
+  if (!staffData || staffData.length === 0) {
+    return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
+  }
+
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+
+  // Summary stats
+  const totalCharges = staffData.reduce((a, s) => a + (Number(s.serviceCharges) || 0), 0);
+  const totalServices = staffData.reduce((a, s) => a + (Number(s.servicesCompleted) || 0), 0);
+  const avgCharges = staffData.length ? totalCharges / staffData.length : 0;
+  const topName = staffData[0]?.name || "—";
+
+  const BarTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base mb-1">{data.name}</p>
+          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
+          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
+          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  const ScatterTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
+          <p className="font-bold text-base mb-1">{data.name}</p>
+          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
+          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
+          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div className="flex h-[520px] flex-col rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex justify-between items-start mb-4">
+        <div>
+          <h2 className="text-[15px] font-semibold text-slate-900">Top staff</h2>
+          <p className="text-xs text-gray-500">Ranked across all centres</p>
+        </div>
+        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+          <button
+            onClick={() => setMetric('serviceCharges')}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+              metric === 'serviceCharges' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Charges
+          </button>
+          <button
+            onClick={() => setMetric('servicesCompleted')}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+              metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Apps
+          </button>
+          <button
+            onClick={() => setMetric('scatter')}
+            className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
+              metric === 'scatter' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Efficiency
+          </button>
+        </div>
+      </div>
+
+      {/* Summary stats */}
+      <div className="mb-4 grid grid-cols-3 gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total charges</p>
+          <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(totalCharges)}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total apps</p>
+          <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{totalServices}</p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Avg / staff</p>
+          <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(avgCharges)}</p>
+        </div>
+      </div>
+
+      <div className="flex-1 w-full min-h-0">
+        <ResponsiveContainer width="100%" height="100%">
+          {metric === 'scatter' ? (
+            <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis
+                type="number"
+                dataKey="servicesCompleted"
+                name="Applications"
+                tick={{ fontSize: 12 }}
+                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
+              />
+              <YAxis
+                type="number"
+                dataKey="serviceCharges"
+                name="Service Charges"
+                tickFormatter={(val) => `₹${(val / 1000)}k`}
+                tick={{ fontSize: 12 }}
+              />
+              <ZAxis type="number" dataKey="serviceCharges" range={[100, 500]} name="Volume" />
+              <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
+              <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
+            </ScatterChart>
+          ) : (
+            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 60, left: 10, bottom: 5 }}>
+              <XAxis type="number" hide />
+              <YAxis
+                dataKey="name"
+                type="category"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fontSize: 12, fill: '#4B5563' }}
+                width={110}
+              />
+              <Tooltip content={<BarTooltip />} cursor={{ fill: '#F3F4F6' }} />
+              <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={18} animationDuration={1000}>
+                <LabelList
+                  dataKey={metric}
+                  position="right"
+                  formatter={(v) => (metric === 'serviceCharges' ? shortINR(v) : v)}
+                  style={{ fontSize: 11, fill: "#334155", fontWeight: 600 }}
+                />
+                {staffData.map((entry, index) => (
+                  <Cell
+                    key={`cell-${index}`}
+                    fill={metric === 'serviceCharges' ? '#3B82F6' : '#8B5CF6'}
+                    className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          )}
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+};
+
+// ==========================================
+// REVENUE CHART
+// ==========================================
+const RevenueChart = ({ data, view }) => {
+  if (!data || data.length === 0) {
+    return <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
+  }
+
+  const fmt = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+
+  const formatLabel = (label) => {
+    if (!label) return '';
+    if (label.length === 7) {
+      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
+    }
+    if (label.length === 10) return label.slice(5);
+    return label;
+  };
+
+  const short = (v) => shortINR(v);
+  const color = view === 'profit' ? '#059669' : view === 'expenses' ? '#e11d48' : '#4f46e5';
+  const gid = `fill-${view}`;
+
+  const Tip = ({ active, payload }) =>
+    active && payload?.length ? (
+      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
+        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
+      </div>
+    ) : null;
+
+  return (
+    <ResponsiveContainer width="100%" height={280}>
+      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.55} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={16} />
+        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip content={<Tip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
+        <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+// ==========================================
+// MAIN DASHBOARD
 // ==========================================
 const SuperadminDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
-  const [period, setPeriod] = useState("month"); // default: This Month
+  const [period, setPeriod] = useState("month");
 
-  // Accounting closing log (all centres)
-  const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
+  const [closingDate, setClosingDate] = useState("");
   const [closingData, setClosingData] = useState({ date: "", rows: [] });
   const [closingLoading, setClosingLoading] = useState(true);
   const [closingError, setClosingError] = useState(false);
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
-  };
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -520,19 +600,16 @@ const SuperadminDashboard = () => {
         setDashboard(response.data);
         setLoading(false);
       } catch (err) {
-        if (axios.isCancel(err)) return; // superseded by a newer request
+        if (axios.isCancel(err)) return;
         console.error("Error fetching dashboard:", err);
         toast.error("Failed to load dashboard data.", { position: "top-right" });
         setLoading(false);
       }
     };
     fetchDashboard();
-
-    // cancel the previous request if the period changes quickly
     return () => controller.abort();
   }, [period]);
 
-  // Fetch accounting closing log for all centres
   useEffect(() => {
     const controller = new AbortController();
     setClosingLoading(true);
@@ -571,25 +648,16 @@ const SuperadminDashboard = () => {
   }
 
   const { executive = {}, finance = {}, operations = {}, leaderboards = {} } = dashboard || {};
-
-  // --- Executive ---
   const { stats = {}, health = {}, alerts = [], insights = [] } = executive;
-
-  // --- Finance ---
   const { financials = {}, wallets = {} } = finance;
   const chartData = financials.charts || {};
   const revenueChartData = chartData[revenueView] || [];
-
-  // --- Operations ---
   const { customers = {}, staff = {}, teams = {} } = operations;
-
-  // --- Leaderboards ---
   const { centres = {} } = leaderboards;
   const centreList = centres.fullList || [];
   const best = centres.best || {};
   const worst = centres.worst || {};
 
-  // Direct access to pre‑computed fields
   const {
     totalCentres, totalStaff, totalCustomers, customerGrowth, revenueGrowthPercent,
     newCentresThisMonth, todayRevenue, todayServices, pendingServices, delayedServices,
@@ -618,11 +686,11 @@ const SuperadminDashboard = () => {
   const walletSum = walletParts.reduce((a, p) => a + (Number(p.value) || 0), 0) || 1;
 
   const glance = [
-    { label: "Centres", value: totalCentres ?? centreList.length, note: `+${newCentresThisMonth ?? 0} this month` },
-    { label: "Staff", value: totalStaff ?? 0, note: `${admins ?? 0} admins` },
-    { label: "Customers", value: totalCustomers?.toLocaleString() ?? 0, note: `+${customerGrowth ?? 0} this month` },
-    { label: "Rating", value: avgRating ? `${Number(avgRating).toFixed(1)}/5` : "-", note: `${totalReviews ?? 0} reviews` },
-    { label: "Network health", value: health?.overallScore !== undefined ? `${health.overallScore}/100` : "-" },
+    { label: "Centres", value: totalCentres ?? centreList.length, hint: `+${newCentresThisMonth ?? 0} this month` },
+    { label: "Staff", value: totalStaff ?? 0, hint: `${admins ?? 0} admins` },
+    { label: "Customers", value: totalCustomers?.toLocaleString() ?? 0, hint: `+${customerGrowth ?? 0} this month` },
+    { label: "Rating", value: avgRating ? `${Number(avgRating).toFixed(1)}/5` : "—", hint: `${totalReviews ?? 0} reviews` },
+    { label: "Health", value: health?.overallScore !== undefined ? `${health.overallScore}/100` : "—", hint: "network score" },
   ];
 
   const revSpark = (chartData.revenue || []).map((d) => d.value);
@@ -631,6 +699,19 @@ const SuperadminDashboard = () => {
     ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
     : "";
   const healthCount = (color) => centreList.filter((c) => c.healthStatus?.color === color).length;
+  const greenN = healthCount("green");
+  const yellowN = healthCount("yellow");
+  const redN = healthCount("red");
+  const healthTotal = Math.max(1, greenN + yellowN + redN);
+
+  // Closing summary
+  const closingSummary = {
+    closed: closingRows.filter((r) => r.status === "closed" && Number(r.cash_variance || 0) === 0).length,
+    variance: closingRows.filter((r) => r.status === "closed" && Number(r.cash_variance || 0) !== 0).length,
+    incomplete: closingRows.filter((r) => r.status === "incomplete").length,
+    notClosed: closingRows.filter((r) => r.status === "not_closed").length,
+  };
+
   const btnPrimary =
     "inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2";
   const btnGhost =
@@ -676,38 +757,52 @@ const SuperadminDashboard = () => {
         </div>
       </div>
 
-      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        {glance.filter((g) => g.label !== "Network health").map((g) => (
-          <div key={g.label} className="flex items-baseline gap-1.5">
-            <dt className="text-slate-500">{g.label}</dt>
-            <dd className="font-semibold tabular-nums text-slate-900">{g.value}</dd>
-          </div>
+      {/* Glance strip — compact stat tiles */}
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        {glance.map((g) => (
+          <MiniStat key={g.label} {...g} />
         ))}
-      </dl>
+      </div>
 
       {/* KPIs */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" spark={revSpark} sparkColor="#4f46e5" />
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi
+          label="Revenue"
+          value={formatCurrency(monthlyRevenue)}
+          delta={revenueGrowthPercent}
+          context={periodLabel}
+          note="vs previous period"
+          spark={revSpark}
+          sparkColor="#4f46e5"
+        />
         <Kpi
           label="Profit"
           value={formatCurrency(netProfit)}
           tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
-          note={margin !== undefined ? `${margin}% margin` : "after expenses"}
+          context={margin !== undefined ? `${margin}% margin` : "after expenses"}
+          note="Net of expenses"
           spark={profitSpark}
           sparkColor="#059669"
         />
-        <Kpi label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
+        <Kpi
+          label="Today's revenue"
+          value={formatCurrency(todayRevenue)}
+          context={`${todayServices ?? 0} services today`}
+          note="Live collection"
+        />
         <Kpi
           label="Pending payments"
           value={formatCurrency(health?.metrics?.pendingPaymentValue)}
           tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-700" : "text-slate-900"}
-          note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
+          context={`${health?.metrics?.pendingCustomers ?? 0} customers`}
+          note="Outstanding"
         />
       </div>
 
       {/* Trend + health + services */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-8"><Panel
+        <div className="xl:col-span-8">
+          <Panel
             title="Trend"
             hint={periodLabel}
             action={
@@ -723,20 +818,34 @@ const SuperadminDashboard = () => {
             }
           >
             <RevenueChart data={revenueChartData} view={revenueView} />
-          </Panel></div>
+          </Panel>
+        </div>
         <div className="flex flex-col gap-4 xl:col-span-4">
           <Panel title="Network health" hint="Overall score across centres">
             <Gauge value={health?.overallScore} label="out of 100" />
-            <div className="mt-3 flex justify-center gap-4 text-xs text-slate-600">
-              {[["green", "Healthy", "bg-emerald-500"], ["yellow", "Watch", "bg-amber-500"], ["red", "At risk", "bg-rose-500"]].map(([k, l, dot]) => (
+            {/* Stacked breakdown bar */}
+            <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100">
+              {greenN > 0 && <div className="bg-emerald-500" style={{ width: `${(greenN / healthTotal) * 100}%` }} />}
+              {yellowN > 0 && <div className="bg-amber-500" style={{ width: `${(yellowN / healthTotal) * 100}%` }} />}
+              {redN > 0 && <div className="bg-rose-500" style={{ width: `${(redN / healthTotal) * 100}%` }} />}
+            </div>
+            <div className="mt-2 flex justify-between text-xs text-slate-600">
+              {[
+                ["green", "Healthy", "bg-emerald-500", greenN],
+                ["yellow", "Watch", "bg-amber-500", yellowN],
+                ["red", "At risk", "bg-rose-500", redN],
+              ].map(([k, l, dot, n]) => (
                 <span key={k} className="flex items-center gap-1.5">
                   <span className={`h-2 w-2 rounded-full ${dot}`} />
-                  {healthCount(k)} {l}
+                  <span className="font-semibold tabular-nums text-slate-900">{n}</span> {l}
                 </span>
               ))}
             </div>
           </Panel>
-          <Panel title="Open services" hint={`${todayServices ?? 0} created today`}>
+          <Panel
+            title="Open services"
+            hint={`${todayServices ?? 0} created today`}
+          >
             <StatusDonut items={serviceItems} />
           </Panel>
         </div>
@@ -745,13 +854,21 @@ const SuperadminDashboard = () => {
       {/* Centres + closing log */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
         <div className="xl:col-span-7">
-          <Panel title="Profit by centre" hint="Bar colour shows centre health">
+          <Panel
+            title="Profit by centre"
+            hint="Ranked high to low · bar colour = centre health"
+          >
             <CentreProfitChart centres={centreList} />
           </Panel>
         </div>
-        <div className="xl:col-span-5"><Panel
+        <div className="xl:col-span-5">
+          <Panel
             title="Accounting closing log"
-            hint={closingLoading || closingError ? "" : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`}
+            hint={
+              closingLoading || closingError
+                ? ""
+                : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`
+            }
             action={
               <input
                 type="date"
@@ -762,12 +879,37 @@ const SuperadminDashboard = () => {
                 aria-label="Accounting date"
               />
             }
+            summary={
+              !closingLoading && !closingError && closingRows.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { label: "Closed", value: closingSummary.closed, dot: "bg-emerald-500", tone: "text-emerald-700" },
+                    { label: "Variance", value: closingSummary.variance, dot: "bg-rose-500", tone: "text-rose-700" },
+                    { label: "Incomplete", value: closingSummary.incomplete, dot: "bg-amber-500", tone: "text-amber-700" },
+                    { label: "Not closed", value: closingSummary.notClosed, dot: "bg-rose-500", tone: "text-rose-700" },
+                  ].map((c) => (
+                    <span
+                      key={c.label}
+                      className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${c.dot}`} />
+                      <span className="font-semibold tabular-nums text-slate-900">{c.value}</span>
+                      <span className="text-slate-500">{c.label}</span>
+                    </span>
+                  ))}
+                </div>
+              ) : null
+            }
           >
             <div className="max-h-96 overflow-y-auto">
               {closingLoading ? (
-                <div className="flex justify-center py-8"><FiLoader className="h-6 w-6 animate-spin text-indigo-600" /></div>
+                <div className="flex justify-center py-8">
+                  <FiLoader className="h-6 w-6 animate-spin text-indigo-600" />
+                </div>
               ) : closingError ? (
-                <p className="rounded-lg bg-rose-50 p-4 text-center text-sm text-rose-600">Could not load closing log.</p>
+                <p className="rounded-lg bg-rose-50 p-4 text-center text-sm text-rose-600">
+                  Could not load closing log.
+                </p>
               ) : closingRows.length === 0 ? (
                 <p className="py-6 text-center text-sm text-slate-500">No centres found.</p>
               ) : (
@@ -794,7 +936,8 @@ const SuperadminDashboard = () => {
                 </ul>
               )}
             </div>
-          </Panel></div>
+          </Panel>
+        </div>
       </div>
 
       {/* People */}
@@ -808,59 +951,71 @@ const SuperadminDashboard = () => {
       {/* Money, alerts, highlights */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Panel title="Wallet position" hint="Across all centres">
-            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
-            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
-              {walletParts.map((p) => (
-                <div key={p.label} className={p.bar} style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%` }} />
-              ))}
-            </div>
-            <ul className="mt-3 space-y-1.5 text-sm">
-              {walletParts.map((p) => (
+          <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
+          <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
+            {walletParts.map((p) => (
+              <div key={p.label} className={p.bar} style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%` }} />
+            ))}
+          </div>
+          <ul className="mt-3 space-y-1.5 text-sm">
+            {walletParts.map((p) => {
+              const pct = ((Number(p.value) || 0) / walletSum) * 100;
+              return (
                 <li key={p.label} className="flex items-center justify-between">
                   <span className="flex items-center gap-2 text-slate-600">
                     <span className={`h-2 w-2 rounded-full ${p.bar}`} />
                     {p.label}
                   </span>
-                  <span className="tabular-nums text-slate-900">{formatCurrency(p.value)}</span>
+                  <span className="flex items-baseline gap-2">
+                    <span className="text-[11px] tabular-nums text-slate-400">{pct.toFixed(0)}%</span>
+                    <span className="tabular-nums font-medium text-slate-900">{formatCurrency(p.value)}</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+
+        <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
+          {notifications.length > 0 ? (
+            <ul className="max-h-72 space-y-2 overflow-y-auto">
+              {notifications.map((n) => (
+                <li
+                  key={n.id}
+                  className={`rounded-r-lg border-l-4 py-2 pl-3 pr-2 ${
+                    n.priority === "critical"
+                      ? "border-rose-500 bg-rose-50"
+                      : n.priority === "warning"
+                      ? "border-amber-500 bg-amber-50"
+                      : "border-sky-500 bg-sky-50"
+                  }`}
+                >
+                  <p className="text-sm font-medium text-slate-900">{n.title}</p>
+                  <p className="text-xs text-slate-600">{n.message}</p>
                 </li>
               ))}
             </ul>
-          </Panel>
-        <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
-            {notifications.length > 0 ? (
-              <ul className="max-h-72 space-y-2 overflow-y-auto">
-                {notifications.map((n) => (
-                  <li
-                    key={n.id}
-                    className={`rounded-r-lg border-l-4 py-2 pl-3 pr-2 ${
-                      n.priority === "critical" ? "border-rose-500 bg-rose-50" : n.priority === "warning" ? "border-amber-500 bg-amber-50" : "border-sky-500 bg-sky-50"
-                    }`}
-                  >
-                    <p className="text-sm font-medium text-slate-900">{n.title}</p>
-                    <p className="text-xs text-slate-600">{n.message}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
-            )}
-          </Panel>
+          ) : (
+            <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
+          )}
+        </Panel>
+
         <div className="flex flex-col gap-4">
           <Panel title="Leading">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
-                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
-                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
-              </ul>
-            </Panel>
+            <ul className="divide-y divide-slate-100">
+              <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} tone="text-emerald-700" />
+              <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} tone="text-emerald-700" />
+              <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} tone="text-amber-700" />
+            </ul>
+          </Panel>
           <Panel title="Needs work">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
-                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
-                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
-                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
-              </ul>
-            </Panel>
+            <ul className="divide-y divide-slate-100">
+              <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} tone="text-rose-700" />
+              <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} tone="text-rose-700" />
+              <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} tone="text-amber-700" />
+              <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} tone="text-amber-700" />
+            </ul>
+          </Panel>
         </div>
       </div>
     </div>
