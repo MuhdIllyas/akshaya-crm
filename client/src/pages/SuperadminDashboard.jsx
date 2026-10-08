@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import {
   BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, Cell
+  Tooltip, ResponsiveContainer, Cell, AreaChart, Area, PieChart, Pie
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
 import {
@@ -230,82 +230,48 @@ const StaffPerformanceChart = ({ staffData }) => {
 // ==========================================
 const RevenueChart = ({ data, view }) => {
   if (!data || data.length === 0) {
-    return <div className="text-gray-500 text-sm p-4">No revenue data available</div>;
+    return <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
   }
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
-  };
+  const fmt = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 
   const formatLabel = (label) => {
     if (!label) return '';
     if (label.length === 7) {
-      const date = new Date(label + '-01');
-      return date.toLocaleString('default', { month: 'short', year: '2-digit' });
+      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
     }
     if (label.length === 10) return label.slice(5);
     return label;
   };
 
-  const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const item = payload[0].payload;
-      return (
-        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
-          <p className="font-bold text-base">{formatLabel(item.label)}</p>
-          <p className="text-blue-400 font-semibold">Value: {formatCurrency(item.value)}</p>
-        </div>
-      );
-    }
-    return null;
-  };
+  const short = (v) => (v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${v / 1000}k` : `₹${v}`);
+  const color = view === 'profit' ? '#059669' : view === 'expenses' ? '#e11d48' : '#4f46e5';
+  const gid = `fill-${view}`;
 
-  const getBarColor = () => {
-    if (view === 'profit') return '#16a34a';
-    if (view === 'expenses') return '#e11d48';
-    return '#4f46e5';
-  };
+  const Tip = ({ active, payload }) =>
+    active && payload?.length ? (
+      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
+        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
+      </div>
+    ) : null;
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-        <XAxis
-          dataKey="label"
-          tickFormatter={formatLabel}
-          tick={{ fontSize: 12, fill: '#6b7280' }}
-          axisLine={{ stroke: '#d1d5db' }}
-          tickLine={false}
-        />
-        <YAxis
-          tickFormatter={(val) => `₹${(val/1000)}k`}
-          tick={{ fontSize: 12, fill: '#6b7280' }}
-          axisLine={{ stroke: '#d1d5db' }}
-          tickLine={false}
-        />
-        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.05)' }} />
-        <Bar
-          dataKey="value"
-          fill={getBarColor()}
-          radius={[4, 4, 0, 0]}
-          barSize={data.length > 6 ? 30 : Math.min(60, 80 / data.length)}
-          animationDuration={800}
-        >
-          {data.map((entry, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={`url(#revenueGradient)`}
-              className="hover:opacity-80 transition-opacity"
-            />
-          ))}
-        </Bar>
+      <AreaChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
         <defs>
-          <linearGradient id="revenueGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={getBarColor()} stopOpacity={0.9} />
-            <stop offset="100%" stopColor={getBarColor()} stopOpacity={0.4} />
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.28} />
+            <stop offset="100%" stopColor={color} stopOpacity={0} />
           </linearGradient>
         </defs>
-      </BarChart>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={24} />
+        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip content={<Tip />} cursor={{ stroke: color, strokeOpacity: 0.25 }} />
+        <Area type="monotone" dataKey="value" stroke={color} strokeWidth={2.5} fill={`url(#${gid})`} dot={data.length <= 14 ? { r: 3, fill: color, strokeWidth: 0 } : false} activeDot={{ r: 5 }} />
+      </AreaChart>
     </ResponsiveContainer>
   );
 };
@@ -313,10 +279,8 @@ const RevenueChart = ({ data, view }) => {
 // ==========================================
 // DESIGN PRIMITIVES
 // ==========================================
-const HEALTH_DOT = { green: "bg-emerald-500", yellow: "bg-amber-500", red: "bg-rose-500" };
-
 const Panel = ({ title, hint, action, children, className = "" }) => (
-  <section className={`rounded-xl border border-slate-200 bg-white ${className}`}>
+  <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
     <div className="flex items-start justify-between gap-3 px-5 pt-4">
       <div>
         <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
@@ -324,7 +288,7 @@ const Panel = ({ title, hint, action, children, className = "" }) => (
       </div>
       {action}
     </div>
-    <div className="px-5 pb-5 pt-3">{children}</div>
+    <div className="flex-1 px-5 pb-5 pt-3">{children}</div>
   </section>
 );
 
@@ -346,39 +310,153 @@ const Segmented = ({ options, value, onChange }) => (
   </div>
 );
 
-const Sparkline = ({ data = [], color = "#a5b4fc" }) => {
+const money = (n) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
+
+const Sparkline = ({ data = [], color = "#4f46e5" }) => {
   const pts = data.map(Number).filter(Number.isFinite);
   if (pts.length < 2) return null;
-  const w = 88, h = 32;
+  const w = 104, h = 36;
   const max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
-  const d = pts.map((v, i) => `${((i / (pts.length - 1)) * w).toFixed(1)},${(h - 2 - ((v - min) / span) * (h - 4)).toFixed(1)}`).join(" ");
+  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   return (
     <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="flex-shrink-0">
-      <polyline points={d} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+      <polygon points={`0,${h} ${line} ${w},${h}`} fill={color} opacity="0.12" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
     </svg>
   );
 };
 
-const KpiDark = ({ label, value, delta, note, spark, tone = "text-white" }) => {
+const Kpi = ({ label, value, delta, note, spark, sparkColor, tone = "text-slate-900" }) => {
   const v = Number(delta);
   const hasDelta = Number.isFinite(v) && v !== 0;
   return (
-    <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10">
-      <p className="text-xs font-medium text-indigo-200">{label}</p>
-      <div className="mt-1 flex items-end justify-between gap-3">
-        <p className={`text-2xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
-        {spark && <Sparkline data={spark} />}
-      </div>
-      <p className="mt-1 flex items-center gap-1.5 text-xs text-indigo-200/80">
+    <div className="rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
         {hasDelta && (
-          <span className={`inline-flex items-center gap-0.5 font-medium ${v > 0 ? "text-emerald-300" : "text-rose-300"}`}>
+          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${v > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
             {v > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
             {Math.abs(v)}%
           </span>
         )}
-        {note}
-      </p>
+      </div>
+      <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
+      <div className="mt-3 flex items-end justify-between gap-3">
+        <p className="text-xs text-slate-500">{note}</p>
+        {spark && <Sparkline data={spark} color={sparkColor} />}
+      </div>
     </div>
+  );
+};
+
+const Gauge = ({ value = 0, label }) => {
+  const v = Math.max(0, Math.min(100, Number(value) || 0));
+  const arc = Math.PI * 52;
+  const color = v >= 75 ? "#059669" : v >= 50 ? "#d97706" : "#e11d48";
+  return (
+    <div className="flex flex-col items-center">
+      <svg viewBox="0 0 140 80" className="w-44" aria-hidden="true">
+        <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke="#e2e8f0" strokeWidth="12" strokeLinecap="round" />
+        <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={`${(v / 100) * arc} ${arc}`} />
+      </svg>
+      <p className="-mt-9 text-3xl font-semibold tabular-nums text-slate-900">{Math.round(v)}</p>
+      <p className="text-xs text-slate-500">{label}</p>
+    </div>
+  );
+};
+
+const StatusDonut = ({ items }) => {
+  const total = items.reduce((a, i) => a + (Number(i.value) || 0), 0);
+  const slices = total ? items.map((i) => ({ ...i, value: Number(i.value) || 0 })) : [{ name: "none", value: 1, color: "#e2e8f0" }];
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative h-32 w-32 flex-shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={slices} dataKey="value" innerRadius={42} outerRadius={60} paddingAngle={total ? 2 : 0} stroke="none">
+              {slices.map((s, k) => <Cell key={k} fill={s.color} />)}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-2xl font-semibold tabular-nums text-slate-900">{total}</p>
+          <p className="text-[11px] text-slate-500">open</p>
+        </div>
+      </div>
+      <ul className="flex-1 space-y-2 text-sm">
+        {items.map((i) => (
+          <li key={i.name} className="flex items-center justify-between">
+            <span className="flex items-center gap-2 text-slate-600">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: i.color }} />
+              {i.name}
+            </span>
+            <span className="font-semibold tabular-nums text-slate-900">{i.value ?? 0}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+};
+
+const HEALTH_HEX = { green: "#059669", yellow: "#d97706", red: "#e11d48" };
+
+const CentreProfitChart = ({ centres }) => {
+  const data = centres.map((c) => ({
+    name: c.name,
+    profit: Number(c.profit) || 0,
+    rating: c.rating || 0,
+    health: c.healthStatus?.label || "Unknown",
+    fill: HEALTH_HEX[c.healthStatus?.color] || "#94a3b8",
+  }));
+  if (data.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No centres yet.</p>;
+  const Tip = ({ active, payload }) =>
+    active && payload?.length ? (
+      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+        <p className="text-sm font-semibold">{payload[0].payload.name}</p>
+        <p className="mt-1 text-slate-300">Profit {money(payload[0].payload.profit)}</p>
+        <p className="text-slate-300">Rating {payload[0].payload.rating}, {payload[0].payload.health}</p>
+      </div>
+    ) : null;
+  return (
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 40)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+        <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#e5e7eb" />
+        <XAxis type="number" tickFormatter={(v) => `₹${v / 1000}k`} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12, fill: "#334155" }} axisLine={false} tickLine={false} />
+        <Tooltip content={<Tip />} cursor={{ fill: "rgba(100,116,139,0.08)" }} />
+        <Bar dataKey="profit" radius={[0, 4, 4, 0]} barSize={18}>
+          {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+        </Bar>
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const TeamBars = ({ teams }) => {
+  const maxRev = Math.max(1, ...teams.map((t) => Number(t.revenue) || 0));
+  if (teams.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No team data.</p>;
+  return (
+    <ul className="space-y-4">
+      {teams.map((t, i) => {
+        const rev = Number(t.revenue) || 0;
+        const profit = Number(t.profit) || 0;
+        return (
+          <li key={t.id || i}>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="truncate text-sm font-medium text-slate-900">{t.name}</span>
+              <span className={`text-sm font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(profit)}</span>
+            </div>
+            <div className="relative mt-1.5 h-2 rounded-full bg-slate-100">
+              <div className="absolute inset-y-0 left-0 rounded-full bg-slate-300" style={{ width: `${(rev / maxRev) * 100}%` }} />
+              <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${(Math.max(0, profit) / maxRev) * 100}%` }} />
+            </div>
+            <p className="mt-1 text-xs text-slate-500">Revenue {money(rev)}, expenses {money(t.expenses || 0)}</p>
+          </li>
+        );
+      })}
+    </ul>
   );
 };
 
@@ -403,7 +481,6 @@ const SuperadminDashboard = () => {
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
   const [period, setPeriod] = useState("month"); // default: This Month
-  const [tab, setTab] = useState("overview");
 
   // Accounting closing log (all centres)
   const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
@@ -529,29 +606,8 @@ const SuperadminDashboard = () => {
 
   const closingRows = closingData.rows || [];
 
-  const MapView = () => {
-    return (
-      <div className="relative bg-gray-100 rounded-lg h-64 flex items-center justify-center">
-        <svg viewBox="0 0 200 200" className="w-full h-full">
-          <path d="M50,50 L150,50 L180,120 L120,180 L40,160 Z" fill="#e2e8f0" stroke="#94a3b8" />
-          {centreList.map((centre) => {
-            const status = centre.healthStatus || { color: "gray" };
-            const color = status.color === "green" ? "#22c55e" : status.color === "yellow" ? "#eab308" : "#ef4444";
-            const x = 40 + (centre.id * 30) % 140;
-            const y = 40 + (centre.id * 20) % 120;
-            return (
-              <circle key={centre.id} cx={x} cy={y} r="6" fill={color} stroke="white" strokeWidth="2" />
-            );
-          })}
-        </svg>
-        <div className="absolute bottom-2 left-2 text-xs text-gray-600">Kerala Map</div>
-      </div>
-    );
-  };
-
   const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "";
   const margin = financials.totals?.margin;
-  const maxCentreProfit = Math.max(1, ...centreList.map((c) => Math.abs(Number(c.profit) || 0)));
   const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
 
   const walletParts = [
@@ -569,110 +625,131 @@ const SuperadminDashboard = () => {
     { label: "Network health", value: health?.overallScore !== undefined ? `${health.overallScore}/100` : "-" },
   ];
 
-  const opsStrip = [
-    { label: "Pending services", value: pendingServices, tone: "text-amber-600" },
-    { label: "Services today", value: todayServices, tone: "text-emerald-700" },
-    { label: "In progress", value: inProgressServices, tone: "text-sky-700" },
-    { label: "Delayed", value: delayedServices, tone: "text-rose-600" },
-  ];
-
   const revSpark = (chartData.revenue || []).map((d) => d.value);
   const profitSpark = (chartData.profit || []).map((d) => d.value);
-  const tabs = [
-    { value: "overview", label: "Overview" },
-    { value: "centres", label: "Centres" },
-    { value: "finance", label: "Finance" },
-    { value: "people", label: "People" },
+  const closingDay = closingData.date
+    ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : "";
+  const healthCount = (color) => centreList.filter((c) => c.healthStatus?.color === color).length;
+  const btnPrimary =
+    "inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2";
+  const btnGhost =
+    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600";
+  const serviceItems = [
+    { name: "Pending", value: pendingServices ?? 0, color: "#d97706" },
+    { name: "In progress", value: inProgressServices ?? 0, color: "#2563eb" },
+    { name: "Delayed", value: delayedServices ?? 0, color: "#e11d48" },
   ];
-  const btnOnDark =
-    "inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/20 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
-  const btnLight =
-    "inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-indigo-950 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
 
   return (
-    <div className="min-h-screen bg-slate-100">
-      {/* Dark header band */}
-      <div className="bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 px-4 pb-24 pt-6 text-white lg:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wider text-indigo-300">Superadmin</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight lg:text-3xl">Network overview</h1>
-            <p className="mt-1 text-sm text-indigo-200">
-              {periodLabel} across {totalCentres ?? centreList.length} centres and {totalStaff ?? 0} staff
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {loading && <FiLoader className="h-5 w-5 animate-spin text-indigo-200" />}
-            <select
-              value={period}
-              onChange={(e) => setPeriod(e.target.value)}
-              className="rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white [&>option]:text-slate-900"
-              aria-label="Select period"
-            >
-              {PERIOD_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-            <button className={btnOnDark} onClick={() => navigate("/dashboard/superadmin/messenger")}>
-              <FiSend className="h-4 w-4" /> Broadcast
-            </button>
-            <button className={btnOnDark} onClick={() => navigate("/dashboard/superadmin/analytics")}>
-              <FiBarChart2 className="h-4 w-4" /> Reports
-            </button>
-            <button className={btnOnDark} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
-              <FiUserPlus className="h-4 w-4" /> New admin
-            </button>
-            <button className={btnLight} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
-              <FiPlus className="h-4 w-4" /> New centre
-            </button>
-          </div>
+    <div className="min-h-screen bg-slate-100 p-4 lg:p-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Superadmin dashboard</h1>
+          <p className={`mt-1 text-sm ${needsLook > 0 ? "text-amber-700" : "text-slate-500"}`}>
+            {closingLoading
+              ? "Checking registers..."
+              : closingError || closingRows.length === 0
+              ? periodLabel
+              : needsLook === 0
+              ? `${periodLabel}. All ${closingRows.length} registers closed cleanly for ${closingDay}.`
+              : `${periodLabel}. ${needsLook} of ${closingRows.length} registers need a look for ${closingDay}.`}
+          </p>
         </div>
-
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <KpiDark label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" spark={revSpark} />
-          <KpiDark
-            label="Profit"
-            value={formatCurrency(netProfit)}
-            tone={netProfit < 0 ? "text-rose-300" : "text-white"}
-            note={margin !== undefined ? `${margin}% margin` : "after expenses"}
-            spark={profitSpark}
-          />
-          <KpiDark label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
-          <KpiDark
-            label="Pending payments"
-            value={formatCurrency(health?.metrics?.pendingPaymentValue)}
-            tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-300" : "text-white"}
-            note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          {loading && <FiLoader className="h-5 w-5 animate-spin text-indigo-600" />}
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+            aria-label="Select period"
+          >
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/messenger")}><FiSend className="h-4 w-4" /> Broadcast</button>
+          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/analytics")}><FiBarChart2 className="h-4 w-4" /> Reports</button>
+          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/centremanagement")}><FiUserPlus className="h-4 w-4" /> New admin</button>
+          <button className={btnPrimary} onClick={() => navigate("/dashboard/superadmin/centremanagement")}><FiPlus className="h-4 w-4" /> New centre</button>
         </div>
       </div>
 
-      {/* Content overlaps the band */}
-      <div className="-mt-12 px-4 pb-10 lg:px-8">
-        <div className="inline-flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200" role="tablist">
-          {tabs.map((t) => (
-            <button
-              key={t.value}
-              role="tab"
-              aria-selected={tab === t.value}
-              onClick={() => setTab(t.value)}
-              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
-                tab === t.value ? "bg-indigo-950 text-white" : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {t.label}
-              {t.value === "overview" && needsLook > 0 && (
-                <span className="ml-2 rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold text-indigo-950">{needsLook}</span>
-              )}
-            </button>
-          ))}
-        </div>
+      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+        {glance.filter((g) => g.label !== "Network health").map((g) => (
+          <div key={g.label} className="flex items-baseline gap-1.5">
+            <dt className="text-slate-500">{g.label}</dt>
+            <dd className="font-semibold tabular-nums text-slate-900">{g.value}</dd>
+          </div>
+        ))}
+      </dl>
 
-        <div className="mt-5 space-y-6">
-          {tab === "overview" && (
-            <>
-              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-                <Panel
+      {/* KPIs */}
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" spark={revSpark} sparkColor="#4f46e5" />
+        <Kpi
+          label="Profit"
+          value={formatCurrency(netProfit)}
+          tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
+          note={margin !== undefined ? `${margin}% margin` : "after expenses"}
+          spark={profitSpark}
+          sparkColor="#059669"
+        />
+        <Kpi label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
+        <Kpi
+          label="Pending payments"
+          value={formatCurrency(health?.metrics?.pendingPaymentValue)}
+          tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-700" : "text-slate-900"}
+          note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
+        />
+      </div>
+
+      {/* Trend + health + services */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-8"><Panel
+            title="Trend"
+            hint={periodLabel}
+            action={
+              <Segmented
+                value={revenueView}
+                onChange={setRevenueView}
+                options={[
+                  { value: "revenue", label: "Revenue" },
+                  { value: "profit", label: "Profit" },
+                  { value: "expenses", label: "Expenses" },
+                ]}
+              />
+            }
+          >
+            <RevenueChart data={revenueChartData} view={revenueView} />
+          </Panel></div>
+        <div className="flex flex-col gap-4 xl:col-span-4">
+          <Panel title="Network health" hint="Overall score across centres">
+            <Gauge value={health?.overallScore} label="out of 100" />
+            <div className="mt-3 flex justify-center gap-4 text-xs text-slate-600">
+              {[["green", "Healthy", "bg-emerald-500"], ["yellow", "Watch", "bg-amber-500"], ["red", "At risk", "bg-rose-500"]].map(([k, l, dot]) => (
+                <span key={k} className="flex items-center gap-1.5">
+                  <span className={`h-2 w-2 rounded-full ${dot}`} />
+                  {healthCount(k)} {l}
+                </span>
+              ))}
+            </div>
+          </Panel>
+          <Panel title="Open services" hint={`${todayServices ?? 0} created today`}>
+            <StatusDonut items={serviceItems} />
+          </Panel>
+        </div>
+      </div>
+
+      {/* Centres + closing log */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-7">
+          <Panel title="Profit by centre" hint="Bar colour shows centre health">
+            <CentreProfitChart centres={centreList} />
+          </Panel>
+        </div>
+        <div className="xl:col-span-5"><Panel
             title="Accounting closing log"
             hint={closingLoading || closingError ? "" : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`}
             action={
@@ -717,136 +794,20 @@ const SuperadminDashboard = () => {
                 </ul>
               )}
             </div>
-          </Panel>
-                <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
-            {notifications.length > 0 ? (
-              <ul className="max-h-72 space-y-2 overflow-y-auto">
-                {notifications.map((n) => (
-                  <li
-                    key={n.id}
-                    className={`rounded-r-lg border-l-4 py-2 pl-3 pr-2 ${
-                      n.priority === "critical" ? "border-rose-500 bg-rose-50" : n.priority === "warning" ? "border-amber-500 bg-amber-50" : "border-sky-500 bg-sky-50"
-                    }`}
-                  >
-                    <p className="text-sm font-medium text-slate-900">{n.title}</p>
-                    <p className="text-xs text-slate-600">{n.message}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
-            )}
-          </Panel>
-              </div>
-              <div className="grid grid-cols-2 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-4">
-                {opsStrip.map((o) => (
-                  <div key={o.label} className="px-5 py-4">
-                    <p className="text-xs text-slate-500">{o.label}</p>
-                    <p className={`mt-1 text-2xl font-semibold tabular-nums ${o.tone}`}>{o.value ?? 0}</p>
-                  </div>
-                ))}
-              </div>
-              <Panel title="At a glance">
-                <dl className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-                  {glance.map((g) => (
-                    <div key={g.label}>
-                      <dt className="text-xs text-slate-500">{g.label}</dt>
-                      <dd className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{g.value}</dd>
-                      {g.note && <p className="text-xs text-slate-400">{g.note}</p>}
-                    </div>
-                  ))}
-                </dl>
-              </Panel>
-            </>
-          )}
-
-          {tab === "centres" && (
-            <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                {centreList.length === 0 && <p className="text-sm text-slate-500">No centres yet.</p>}
-                {centreList.map((c, i) => {
-                  const profit = Number(c.profit) || 0;
-                  const st = c.healthStatus || { label: "Unknown", color: "gray" };
-                  const reg = closingRows.find((r) => String(r.centre_id) === String(c.id));
-                  const rv = reg ? getClosingView(reg) : null;
-                  return (
-                    <div key={c.id} className="rounded-xl border border-slate-200 bg-white p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0">
-                          <p className="truncate font-semibold text-slate-900">
-                            <span className="mr-2 text-xs font-normal tabular-nums text-slate-400">#{i + 1}</span>
-                            {c.name}
-                          </p>
-                          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
-                            <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[st.color] || "bg-slate-300"}`} />
-                            {st.label}
-                          </p>
-                        </div>
-                        {rv && (
-                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium ring-1 ring-slate-200 ${rv.text}`}>
-                            <span className={`h-1.5 w-1.5 rounded-full ${rv.dot}`} />
-                            Register: {rv.label.toLowerCase()}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mt-4 text-xs text-slate-500">Profit</p>
-                      <p className={`text-2xl font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-slate-900"}`}>{formatCurrency(profit)}</p>
-                      <div className="mt-3 h-1.5 rounded-full bg-slate-100">
-                        <div
-                          className={`h-1.5 rounded-full ${profit < 0 ? "bg-rose-500" : "bg-indigo-600"}`}
-                          style={{ width: `${Math.max(2, Math.min(100, (Math.abs(profit) / maxCentreProfit) * 100))}%` }}
-                        />
-                      </div>
-                      <p className="mt-3 text-xs text-slate-500">
-                        Rating <span className="font-semibold tabular-nums text-slate-800">{c.rating || 0}</span>
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-                <Panel title="Leading">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
-                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
-                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
-              </ul>
-            </Panel>
-                <Panel title="Needs work">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
-                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
-                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
-                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
-              </ul>
-            </Panel>
-              </div>
-              <Panel title="Network map">
-            <MapView />
-          </Panel>
-            </>
-          )}
-
-          {tab === "finance" && (
-            <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3">
-              <div className="xl:col-span-2"><Panel
-            title="Trend"
-            hint={periodLabel}
-            action={
-              <Segmented
-                value={revenueView}
-                onChange={setRevenueView}
-                options={[
-                  { value: "revenue", label: "Revenue" },
-                  { value: "profit", label: "Profit" },
-                  { value: "expenses", label: "Expenses" },
-                ]}
-              />
-            }
-          >
-            <RevenueChart data={revenueChartData} view={revenueView} />
           </Panel></div>
-              <Panel title="Wallet position" hint="Across all centres">
+      </div>
+
+      {/* People */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <StaffPerformanceChart staffData={topStaffList} />
+        <Panel title="Top teams" hint="Grey bar is revenue, green is profit">
+          <TeamBars teams={topTeamsList} />
+        </Panel>
+      </div>
+
+      {/* Money, alerts, highlights */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Panel title="Wallet position" hint="Across all centres">
             <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
             <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
               {walletParts.map((p) => (
@@ -865,41 +826,41 @@ const SuperadminDashboard = () => {
               ))}
             </ul>
           </Panel>
-            </div>
-          )}
-
-          {tab === "people" && (
-            <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
-              <StaffPerformanceChart staffData={topStaffList} />
-              <Panel title="Top teams">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left text-xs font-medium text-slate-500">
-                    <tr className="border-b border-slate-200">
-                      <th className="py-2 pr-3">Team</th>
-                      <th className="py-2 pr-3 text-right">Revenue</th>
-                      <th className="py-2 pr-3 text-right">Profit</th>
-                      <th className="py-2 text-right">Expenses</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {topTeamsList.length === 0 && (
-                      <tr><td colSpan={4} className="py-6 text-center text-slate-500">No team data.</td></tr>
-                    )}
-                    {topTeamsList.map((t, idx) => (
-                      <tr key={t.id || idx}>
-                        <td className="py-2.5 pr-3 font-medium text-slate-900">{t.name}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{formatCurrency(t.revenue)}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums text-emerald-700">{formatCurrency(t.profit || 0)}</td>
-                        <td className="py-2.5 text-right tabular-nums text-rose-600">{formatCurrency(t.expenses || 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
+            {notifications.length > 0 ? (
+              <ul className="max-h-72 space-y-2 overflow-y-auto">
+                {notifications.map((n) => (
+                  <li
+                    key={n.id}
+                    className={`rounded-r-lg border-l-4 py-2 pl-3 pr-2 ${
+                      n.priority === "critical" ? "border-rose-500 bg-rose-50" : n.priority === "warning" ? "border-amber-500 bg-amber-50" : "border-sky-500 bg-sky-50"
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-slate-900">{n.title}</p>
+                    <p className="text-xs text-slate-600">{n.message}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
+            )}
+          </Panel>
+        <div className="flex flex-col gap-4">
+          <Panel title="Leading">
+              <ul className="divide-y divide-slate-100">
+                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
+                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
+                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
+              </ul>
             </Panel>
-            </div>
-          )}
+          <Panel title="Needs work">
+              <ul className="divide-y divide-slate-100">
+                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
+                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
+                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
+                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
+              </ul>
+            </Panel>
         </div>
       </div>
     </div>
