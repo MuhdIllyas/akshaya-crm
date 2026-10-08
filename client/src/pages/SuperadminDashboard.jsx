@@ -362,7 +362,6 @@ const StaffPerformanceChart = ({ staffData }) => {
   const totalCharges = staffData.reduce((a, s) => a + (Number(s.serviceCharges) || 0), 0);
   const totalServices = staffData.reduce((a, s) => a + (Number(s.servicesCompleted) || 0), 0);
   const avgCharges = staffData.length ? totalCharges / staffData.length : 0;
-  const topName = staffData[0]?.name || "—";
 
   const BarTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
@@ -698,11 +697,27 @@ const SuperadminDashboard = () => {
   const closingDay = closingData.date
     ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
     : "";
+
+  // ==========================================
+  // NETWORK HEALTH — derive score from the same distribution shown below the gauge
+  // ==========================================
   const healthCount = (color) => centreList.filter((c) => c.healthStatus?.color === color).length;
   const greenN = healthCount("green");
   const yellowN = healthCount("yellow");
   const redN = healthCount("red");
-  const healthTotal = Math.max(1, greenN + yellowN + redN);
+  const healthTotal = greenN + yellowN + redN;
+
+  // Weighted: healthy 100 · watch 60 · at risk 20
+  // Falls back to backend value only when there is no centre data at all.
+  const computedScore = healthTotal
+    ? Math.round((greenN * 100 + yellowN * 60 + redN * 20) / healthTotal)
+    : null;
+  const networkScore =
+    computedScore !== null
+      ? computedScore
+      : Number.isFinite(Number(health?.overallScore))
+      ? Math.round(Number(health.overallScore))
+      : 0;
 
   // Closing summary
   const closingSummary = {
@@ -822,7 +837,7 @@ const SuperadminDashboard = () => {
         </div>
         <div className="flex flex-col gap-4 xl:col-span-4">
           <Panel title="Network health" hint="Overall score across centres">
-            <Gauge value={health?.overallScore} label="out of 100" />
+            <Gauge value={networkScore} label="out of 100" />
             {/* Stacked breakdown bar */}
             <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100">
               {greenN > 0 && <div className="bg-emerald-500" style={{ width: `${(greenN / healthTotal) * 100}%` }} />}
@@ -841,6 +856,9 @@ const SuperadminDashboard = () => {
                 </span>
               ))}
             </div>
+            <p className="mt-2 text-[11px] text-slate-400">
+              Weighted: healthy 100 · watch 60 · at risk 20
+            </p>
           </Panel>
           <Panel
             title="Open services"
