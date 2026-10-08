@@ -6,11 +6,9 @@ import {
   Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import {
-  FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
-  FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown,
-  FiCheckCircle, FiXCircle, FiLoader
+  FiArrowUp, FiArrowDown, FiBarChart2,
+  FiLoader, FiPlus, FiSend, FiUserPlus
 } from "react-icons/fi";
 
 // ==========================================
@@ -72,39 +70,25 @@ const todayIST = () =>
 
 const getClosingView = (row) => {
   if (row.status === "not_closed") {
-    return {
-      Icon: FiXCircle,
-      label: "Not closed",
-      detail: "No closing submitted",
-      wrap: "bg-rose-50 border-rose-200",
-      text: "text-rose-700",
-    };
+    return { label: "Not closed", detail: "No closing submitted", text: "text-rose-700", dot: "bg-rose-500" };
   }
   if (row.status === "incomplete") {
     return {
-      Icon: FiAlertCircle,
-      label: "Not fully closed",
+      label: "Incomplete",
       detail: `Cash counted (${inr(row.actual_cash)}), closing not completed`,
-      wrap: "bg-amber-50 border-amber-200",
       text: "text-amber-700",
+      dot: "bg-amber-500",
     };
   }
   const variance = Number(row.cash_variance || 0);
   if (variance === 0) {
-    return {
-      Icon: FiCheckCircle,
-      label: "Closed",
-      detail: `Cash ${inr(row.actual_cash)} • no variance`,
-      wrap: "bg-emerald-50 border-emerald-200",
-      text: "text-emerald-700",
-    };
+    return { label: "Closed", detail: `Cash ${inr(row.actual_cash)}, no variance`, text: "text-emerald-700", dot: "bg-emerald-500" };
   }
   return {
-    Icon: FiAlertCircle,
-    label: "Closed with variance",
-    detail: `Cash ${inr(row.actual_cash)} • ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
-    wrap: "bg-rose-50 border-rose-200",
+    label: "Variance",
+    detail: `Cash ${inr(row.actual_cash)}, ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
     text: "text-rose-700",
+    dot: "bg-rose-500",
   };
 };
 
@@ -153,10 +137,10 @@ const StaffPerformanceChart = ({ staffData }) => {
   };
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-100 flex flex-col h-[450px] transition-all hover:shadow-xl">
+    <div className="flex h-[450px] flex-col rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h2 className="text-lg font-semibold text-gray-700">👨‍💼 Top Staff Performers</h2>
+          <h2 className="text-[15px] font-semibold text-slate-900">Top staff by service charges</h2>
           <p className="text-xs text-gray-500">Ranked across all centres</p>
         </div>
         <div className="flex flex-col gap-2">
@@ -277,9 +261,9 @@ const RevenueChart = ({ data, view }) => {
   };
 
   const getBarColor = () => {
-    if (view === 'profit') return '#22c55e';
-    if (view === 'expenses') return '#ef4444';
-    return '#3b82f6';
+    if (view === 'profit') return '#16a34a';
+    if (view === 'expenses') return '#e11d48';
+    return '#0f766e';
   };
 
   return (
@@ -327,33 +311,74 @@ const RevenueChart = ({ data, view }) => {
 };
 
 // ==========================================
-// StatCard Component (matching Admin Dashboard)
+// DESIGN PRIMITIVES
 // ==========================================
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick }) => (
-  <motion.div
-    whileHover={{ y: -4, scale: 1.02 }}
-    onClick={onClick}
-    className={`bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer ${onClick ? 'hover:border-indigo-300' : ''}`}
-  >
-    <div className="flex items-center justify-between">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-        <div className="flex items-end space-x-2">
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          {trend !== undefined && (
-            <div className={`flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-gray-500'}`}>
-              {trend > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
-              <span>{Math.abs(trend)}%</span>
-            </div>
-          )}
-        </div>
-        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+const HEALTH_DOT = { green: "bg-emerald-500", yellow: "bg-amber-500", red: "bg-rose-500" };
+
+const Panel = ({ title, hint, action, children, className = "" }) => (
+  <section className={`rounded-xl border border-slate-200 bg-white ${className}`}>
+    <div className="flex items-start justify-between gap-3 px-5 pt-4">
+      <div>
+        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
+        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
       </div>
-      <div className={`p-3 rounded-xl ${color} shadow-md`}>
-        <Icon className="h-6 w-6 text-white" />
-      </div>
+      {action}
     </div>
-  </motion.div>
+    <div className="px-5 pb-5 pt-3">{children}</div>
+  </section>
+);
+
+const Segmented = ({ options, value, onChange }) => (
+  <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="tablist">
+    {options.map((o) => (
+      <button
+        key={o.value}
+        role="tab"
+        aria-selected={value === o.value}
+        onClick={() => onChange(o.value)}
+        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${
+          value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+        }`}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+);
+
+const Delta = ({ value }) => {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v === 0) return null;
+  const up = v > 0;
+  return (
+    <span className={`inline-flex items-center gap-0.5 font-medium ${up ? "text-emerald-700" : "text-rose-600"}`}>
+      {up ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
+      {Math.abs(v)}%
+    </span>
+  );
+};
+
+const Figure = ({ label, value, delta, note, tone = "text-slate-900" }) => (
+  <div className="lg:px-6 lg:first:pl-0">
+    <p className="text-xs font-medium text-slate-500">{label}</p>
+    <p className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
+    <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+      <Delta value={delta} />
+      {note}
+    </p>
+  </div>
+);
+
+const HighlightRow = ({ label, name, value }) => (
+  <li className="flex items-baseline justify-between gap-3 py-2 text-sm">
+    <span className="text-slate-500">{label}</span>
+    <span className="min-w-0 truncate text-right">
+      <span className="font-medium text-slate-900">{name || "N/A"}</span>
+      {value !== undefined && value !== null && value !== "" && (
+        <span className="ml-2 tabular-nums text-slate-500">{value}</span>
+      )}
+    </span>
+  </li>
 );
 
 // ==========================================
@@ -489,7 +514,6 @@ const SuperadminDashboard = () => {
   const notifications = alerts;
 
   const closingRows = closingData.rows || [];
-  const closedCount = closingRows.filter((r) => r.status === "closed").length;
 
   const MapView = () => {
     return (
@@ -511,462 +535,341 @@ const SuperadminDashboard = () => {
     );
   };
 
-  // Prepare data for the new StatCards
-  const kpiData = [
-    {
-      title: "Total Centres",
-      value: totalCentres,
-      icon: FiHome,
-      color: "bg-blue-500",
-      subtitle: `+${newCentresThisMonth ?? 0} this month`,
-      trend: newCentresThisMonth > 0 ? 5 : -2,
-      onClick: () => navigate('/dashboard/superadmin/centremanagement')
-    },
-    {
-      title: "Total Staff",
-      value: totalStaff,
-      icon: FiUsers,
-      color: "bg-purple-500",
-      subtitle: `${admins ?? 0} Admins, ${staffCount ?? 0} Staff`,
-      trend: 0,
-      onClick: () => navigate('/dashboard/superadmin/staffmanagement')
-    },
-    {
-      title: "Customers",
-      value: totalCustomers?.toLocaleString(),
-      icon: FiUserCheck,
-      color: "bg-green-500",
-      subtitle: `+${customerGrowth ?? 0} this month`,
-      trend: customerGrowth > 0 ? 8 : -3,
-    },
-    {
-      title: "Today's Services",
-      value: todayServices ?? 0,
-      icon: FiShoppingBag,
-      color: "bg-indigo-500",
-      subtitle: "All centres",
-      trend: 0,
-    },
-    {
-      title: "Today's Revenue",
-      value: formatCurrency(todayRevenue),
-      icon: FiDollarSign,
-      color: "bg-yellow-500",
-      subtitle: "Live collection",
-      trend: todayRevenue > 0 ? 12 : -5,
-    },
-    {
-      title: "Period Revenue",
-      value: formatCurrency(monthlyRevenue),
-      icon: FiTrendingUp,
-      color: "bg-orange-500",
-      subtitle: `vs previous`,
-      trend: revenueGrowthPercent,
-    },
-    {
-      title: "Period Profit",
-      value: formatCurrency(netProfit),
-      icon: FiPieChart,
-      color: "bg-red-500",
-      subtitle: "Selected range",
-      trend: netProfit > 0 ? 6 : -2,
-    },
-    {
-      title: "Pending Payments",
-      value: formatCurrency(health?.metrics?.pendingPaymentValue),
-      icon: FiAlertCircle,
-      color: "bg-pink-500",
-      subtitle: `${health?.metrics?.pendingCustomers ?? 0} Customers`,
-      trend: health?.metrics?.pendingCustomers > 5 ? 15 : -4,
-    }
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "";
+  const margin = financials.totals?.margin;
+  const maxCentreProfit = Math.max(1, ...centreList.map((c) => Math.abs(Number(c.profit) || 0)));
+  const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
+  const closingDay = closingData.date
+    ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : "";
+
+  const walletParts = [
+    { label: "Cash", value: walletCash, bar: "bg-teal-600" },
+    { label: "Bank", value: walletBank, bar: "bg-sky-600" },
+    { label: "Digital", value: walletDigital, bar: "bg-indigo-500" },
+  ];
+  const walletSum = walletParts.reduce((a, p) => a + (Number(p.value) || 0), 0) || 1;
+
+  const glance = [
+    { label: "Centres", value: totalCentres ?? centreList.length, note: `+${newCentresThisMonth ?? 0} this month` },
+    { label: "Staff", value: totalStaff ?? 0, note: `${admins ?? 0} admins` },
+    { label: "Customers", value: totalCustomers?.toLocaleString() ?? 0, note: `+${customerGrowth ?? 0} this month` },
+    { label: "Rating", value: avgRating ? `${Number(avgRating).toFixed(1)}/5` : "-", note: `${totalReviews ?? 0} reviews` },
+    { label: "Network health", value: health?.overallScore !== undefined ? `${health.overallScore}/100` : "-" },
   ];
 
+  const opsStrip = [
+    { label: "Pending services", value: pendingServices, tone: "text-amber-600" },
+    { label: "Services today", value: todayServices, tone: "text-emerald-700" },
+    { label: "In progress", value: inProgressServices, tone: "text-sky-700" },
+    { label: "Delayed", value: delayedServices, tone: "text-rose-600" },
+  ];
+
+  const btnPrimary =
+    "inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2";
+  const btnGhost =
+    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600";
+
   return (
-    <div className="bg-gray-50 min-h-screen p-4 lg:p-8 space-y-8">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 tracking-tight">📊 Superadmin Dashboard</h1>
-        <div className="flex items-center space-x-2">
-          {loading && <FiLoader className="animate-spin h-5 w-5 text-indigo-600" />}
+    <div className="min-h-screen bg-slate-50 p-4 lg:p-8">
+      {/* Top bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm font-medium text-slate-500">Superadmin</p>
+        <div className="flex flex-wrap items-center gap-2">
+          {loading && <FiLoader className="h-5 w-5 animate-spin text-teal-700" />}
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="px-4 py-2 bg-indigo-100 text-indigo-800 text-sm font-medium rounded-full shadow-sm border border-indigo-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
             aria-label="Select period"
           >
             {PERIOD_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
+          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/messenger")}>
+            <FiSend className="h-4 w-4" /> Broadcast
+          </button>
+          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/analytics")}>
+            <FiBarChart2 className="h-4 w-4" /> Reports
+          </button>
+          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
+            <FiUserPlus className="h-4 w-4" /> New admin
+          </button>
+          <button className={btnPrimary} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
+            <FiPlus className="h-4 w-4" /> New centre
+          </button>
         </div>
       </div>
 
-      {/* Global KPI Cards - using StatCard (matches Admin Dashboard) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {kpiData.map((kpi, index) => (
-          <StatCard key={index} {...kpi} />
+      {/* Headline: the state of the network in one sentence */}
+      <div className="mt-6">
+        <h1 className="max-w-3xl text-2xl font-semibold tracking-tight text-slate-900 lg:text-3xl">
+          {formatCurrency(monthlyRevenue)} in revenue across {totalCentres ?? centreList.length} centres, {periodLabel.toLowerCase()}.
+        </h1>
+        <p className={`mt-2 text-sm ${needsLook > 0 ? "text-amber-700" : "text-slate-600"}`}>
+          {closingLoading
+            ? "Checking registers..."
+            : closingError || closingRows.length === 0
+            ? "Register status unavailable."
+            : needsLook === 0
+            ? `All ${closingRows.length} registers closed cleanly for ${closingDay}.`
+            : `${needsLook} of ${closingRows.length} registers need a look for ${closingDay}.`}
+        </p>
+      </div>
+
+      {/* Key figures */}
+      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-slate-200">
+        <Figure label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" />
+        <Figure
+          label="Profit"
+          value={formatCurrency(netProfit)}
+          tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
+          note={margin !== undefined ? `${margin}% margin` : "after expenses"}
+        />
+        <Figure label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
+        <Figure
+          label="Pending payments"
+          value={formatCurrency(health?.metrics?.pendingPaymentValue)}
+          tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-700" : "text-slate-900"}
+          note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
+        />
+      </div>
+
+      <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-2 border-t border-slate-200 pt-4 text-sm">
+        {glance.map((g) => (
+          <div key={g.label} className="flex items-baseline gap-2">
+            <dt className="text-slate-500">{g.label}</dt>
+            <dd className="font-semibold tabular-nums text-slate-900">{g.value}</dd>
+            {g.note && <span className="text-xs text-slate-400">{g.note}</span>}
+          </div>
         ))}
-      </div>
+      </dl>
 
-      {/* Revenue Analytics + Centre Performance */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-        <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-semibold text-gray-700">📈 Revenue Analytics</h2>
-            <div className="flex space-x-2 bg-gray-100 p-1 rounded-lg">
-              <button
-                onClick={() => setRevenueView("revenue")}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  revenueView === "revenue" ? "bg-white text-blue-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Revenue
-              </button>
-              <button
-                onClick={() => setRevenueView("profit")}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  revenueView === "profit" ? "bg-white text-green-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Profit
-              </button>
-              <button
-                onClick={() => setRevenueView("expenses")}
-                className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
-                  revenueView === "expenses" ? "bg-white text-red-600 shadow-sm" : "text-gray-500 hover:text-gray-700"
-                }`}
-              >
-                Expenses
-              </button>
-            </div>
-          </div>
-          <RevenueChart data={revenueChartData} view={revenueView} />
-        </div>
+      <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
+        {/* ============ MAIN COLUMN ============ */}
+        <div className="space-y-6 xl:col-span-8">
+          <Panel
+            title="Trend"
+            hint={periodLabel}
+            action={
+              <Segmented
+                value={revenueView}
+                onChange={setRevenueView}
+                options={[
+                  { value: "revenue", label: "Revenue" },
+                  { value: "profit", label: "Profit" },
+                  { value: "expenses", label: "Expenses" },
+                ]}
+              />
+            }
+          >
+            <RevenueChart data={revenueChartData} view={revenueView} />
+          </Panel>
 
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Centre Leaderboard</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rank</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Centre</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Profit</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Rating</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {centreList.slice(0, 5).map((centre, idx) => (
-                  <tr key={centre.id} className="hover:bg-gray-50 cursor-pointer transition-colors">
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx+1}`}
-                    </td>
-                    <td className="px-3 py-2 font-medium text-gray-800">{centre.name}</td>
-                    <td className="px-3 py-2 text-gray-600">{formatCurrency(centre.profit)}</td>
-                    <td className="px-3 py-2 text-gray-600">{centre.rating || 0}</td>
+          <Panel title="Centres" hint="Ranked by profit, with health and rating">
+            <div className="max-h-96 overflow-auto">
+              <table className="min-w-full text-sm">
+                <thead className="sticky top-0 bg-white text-left text-xs font-medium text-slate-500">
+                  <tr className="border-b border-slate-200">
+                    <th className="w-8 py-2 pr-2">#</th>
+                    <th className="py-2 pr-4">Centre</th>
+                    <th className="py-2 pr-4">Profit</th>
+                    <th className="py-2 pr-4">Rating</th>
+                    <th className="py-2">Health</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {centreList.length === 0 && (
+                    <tr><td colSpan={5} className="py-6 text-center text-slate-500">No centres yet.</td></tr>
+                  )}
+                  {centreList.map((c, i) => {
+                    const profit = Number(c.profit) || 0;
+                    const st = c.healthStatus || { label: "Unknown", color: "gray" };
+                    return (
+                      <tr key={c.id}>
+                        <td className="py-2.5 pr-2 tabular-nums text-slate-400">{i + 1}</td>
+                        <td className="py-2.5 pr-4 font-medium text-slate-900">{c.name}</td>
+                        <td className="w-[40%] py-2.5 pr-4">
+                          <div className="flex items-center gap-3">
+                            <div className="h-1.5 flex-1 rounded-full bg-slate-100">
+                              <div
+                                className={`h-1.5 rounded-full ${profit < 0 ? "bg-rose-500" : "bg-teal-600"}`}
+                                style={{ width: `${Math.max(2, Math.min(100, (Math.abs(profit) / maxCentreProfit) * 100))}%` }}
+                              />
+                            </div>
+                            <span className={`w-24 text-right tabular-nums ${profit < 0 ? "text-rose-600" : "text-slate-700"}`}>
+                              {formatCurrency(profit)}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 pr-4 tabular-nums text-slate-700">{c.rating || 0}</td>
+                        <td className="py-2.5">
+                          <span className="inline-flex items-center gap-2 text-slate-700">
+                            <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[st.color] || "bg-slate-300"}`} />
+                            {st.label}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Panel>
 
-      {/* Centre Health */}
-      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🏥 Centre Health</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {centreList.map((centre) => {
-            const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
-            return (
-              <div key={centre.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-                <div>
-                  <div className="font-medium text-gray-800">{centre.name}</div>
-                  <div className="text-sm mt-1">{status.icon} <span className="font-medium text-gray-700">{status.label}</span></div>
-                </div>
-                <div className="text-right">
-                  <div className="text-lg font-bold text-gray-800">{centre.rating || 0}</div>
-                  <div className="text-xs text-gray-500">Rating</div>
-                </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Panel title="Leading">
+              <ul className="divide-y divide-slate-100">
+                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
+                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
+                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
+              </ul>
+            </Panel>
+            <Panel title="Needs work">
+              <ul className="divide-y divide-slate-100">
+                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
+                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
+                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
+                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
+              </ul>
+            </Panel>
+          </div>
+
+          <div className="grid grid-cols-2 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-4">
+            {opsStrip.map((o) => (
+              <div key={o.label} className="px-5 py-4">
+                <p className="text-xs text-slate-500">{o.label}</p>
+                <p className={`mt-1 text-2xl font-semibold tabular-nums ${o.tone}`}>{o.value ?? 0}</p>
               </div>
-            );
-          })}
-        </div>
-        {health?.overallScore !== undefined && (
-          <div className="mt-4 text-sm text-gray-600 border-t pt-3 flex items-center justify-between">
-            <span>Overall Network Health Score</span>
-            <span className="font-bold text-lg text-gray-800 ml-2">{health.overallScore}/100</span>
+            ))}
           </div>
-        )}
-      </div>
 
-      {/* Live Operations */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-        {pendingServices !== undefined && (
-          <div className="bg-red-50 p-4 rounded-2xl border border-red-200 shadow-sm hover:shadow-md transition-all">
-            <div className="text-sm text-red-800 font-medium">🕒 Pending Services</div>
-            <div className="text-2xl font-bold text-red-900 mt-1">{pendingServices}</div>
-          </div>
-        )}
-        {todayServices !== undefined && (
-          <div className="bg-green-50 p-4 rounded-2xl border border-green-200 shadow-sm hover:shadow-md transition-all">
-            <div className="text-sm text-green-800 font-medium">✅ Completed Today</div>
-            <div className="text-2xl font-bold text-green-900 mt-1">{todayServices}</div>
-          </div>
-        )}
-        {delayedServices !== undefined && (
-          <div className="bg-orange-50 p-4 rounded-2xl border border-orange-200 shadow-sm hover:shadow-md transition-all">
-            <div className="text-sm text-orange-800 font-medium">⏳ Delayed Services</div>
-            <div className="text-2xl font-bold text-orange-900 mt-1">{delayedServices}</div>
-          </div>
-        )}
-        {inProgressServices !== undefined && (
-          <div className="bg-blue-50 p-4 rounded-2xl border border-blue-200 shadow-sm hover:shadow-md transition-all">
-            <div className="text-sm text-blue-800 font-medium">📋 In Progress</div>
-            <div className="text-2xl font-bold text-blue-900 mt-1">{inProgressServices}</div>
-          </div>
-        )}
-      </div>
-
-      {/* Financial Health */}
-      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">💰 Financial Health</h2>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-            <div className="text-sm text-gray-600 mb-1">Cash Wallet</div>
-            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletCash)}</div>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-            <div className="text-sm text-gray-600 mb-1">Bank</div>
-            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletBank)}</div>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 hover:bg-gray-100 transition-colors">
-            <div className="text-sm text-gray-600 mb-1">Digital</div>
-            <div className="text-xl font-bold text-gray-800">{formatCurrency(walletDigital)}</div>
-          </div>
-          <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 hover:bg-indigo-100 transition-colors">
-            <div className="text-sm text-indigo-800 font-semibold mb-1">Total Wallets</div>
-            <div className="text-2xl font-bold text-indigo-900">{formatCurrency(walletTotal)}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Best & Worst Centres */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">🏆 Best Performing Centres</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-              <div className="text-xs text-green-700 font-medium mb-1">Best Revenue</div>
-              <div className="font-bold text-gray-800 truncate">{best.revenue?.name || "N/A"}</div>
-              <div className="text-lg text-green-700">{formatCurrency(best.revenue?.value)}</div>
-            </div>
-            <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-              <div className="text-xs text-blue-700 font-medium mb-1">Best Profit</div>
-              <div className="font-bold text-gray-800 truncate">{best.profit?.name || "N/A"}</div>
-              <div className="text-lg text-blue-700">{formatCurrency(best.profit?.value)}</div>
-            </div>
-            <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 col-span-2">
-              <div className="text-xs text-yellow-700 font-medium mb-1">Best Rating</div>
-              <div className="flex justify-between items-end">
-                <div className="font-bold text-gray-800">{best.rating?.name || "N/A"}</div>
-                <div className="text-lg text-yellow-700 font-bold">{best.rating?.value || 0} ⭐</div>
+          <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
+            <StaffPerformanceChart staffData={topStaffList} />
+            <Panel title="Top teams">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-xs font-medium text-slate-500">
+                    <tr className="border-b border-slate-200">
+                      <th className="py-2 pr-3">Team</th>
+                      <th className="py-2 pr-3 text-right">Revenue</th>
+                      <th className="py-2 pr-3 text-right">Profit</th>
+                      <th className="py-2 text-right">Expenses</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {topTeamsList.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-slate-500">No team data.</td></tr>
+                    )}
+                    {topTeamsList.map((t, idx) => (
+                      <tr key={t.id || idx}>
+                        <td className="py-2.5 pr-3 font-medium text-slate-900">{t.name}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{formatCurrency(t.revenue)}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums text-emerald-700">{formatCurrency(t.profit || 0)}</td>
+                        <td className="py-2.5 text-right tabular-nums text-rose-600">{formatCurrency(t.expenses || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
+            </Panel>
           </div>
+
+          <Panel title="Network map">
+            <MapView />
+          </Panel>
         </div>
 
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4">⚠️ Worst Performing Centres</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-              <div className="text-xs text-red-700 font-medium mb-1">Lowest Profit</div>
-              <div className="font-bold text-gray-800 truncate">{worst.revenue?.name || "N/A"}</div>
-              <div className="text-lg text-red-700">{formatCurrency(worst.revenue?.value)}</div>
-            </div>
-            <div className="bg-red-50 p-4 rounded-xl border border-red-100">
-              <div className="text-xs text-red-700 font-medium mb-1">Highest Pending</div>
-              <div className="font-bold text-gray-800 truncate">{worst.pending?.name || "N/A"}</div>
-              <div className="text-lg text-red-700">{worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A"}</div>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-              <div className="text-xs text-orange-700 font-medium mb-1">Most Delayed</div>
-              <div className="font-bold text-gray-800 truncate">{worst.delayed?.name || "N/A"}</div>
-              <div className="text-lg text-orange-700">{worst.delayed?.value ?? "N/A"}</div>
-            </div>
-            <div className="bg-orange-50 p-4 rounded-xl border border-orange-100">
-              <div className="text-xs text-orange-700 font-medium mb-1">Most Complaints</div>
-              <div className="font-bold text-gray-800 truncate">{worst.complaints?.name || "N/A"}</div>
-              <div className="text-lg text-orange-700">{worst.complaints?.value ?? "N/A"}</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Top Staff & Teams */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <StaffPerformanceChart staffData={topStaffList} />
-
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-6">👥 Top Teams</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200 text-sm">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Team</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Revenue</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Profit</th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Expenses</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
-                {topTeamsList.map((team, idx) => (
-                  <tr key={team.id || idx} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-3 py-4 whitespace-nowrap font-medium text-gray-900">{team.name}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-gray-600">{formatCurrency(team.revenue)}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-green-600 font-medium">{formatCurrency(team.profit || 0)}</td>
-                    <td className="px-3 py-4 whitespace-nowrap text-red-600">{formatCurrency(team.expenses || 0)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      {/* Notifications & Accounting Closing Log */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <h2 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-            <span className="mr-2">🔔</span> Action Required
-          </h2>
-          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-            {notifications.length > 0 ? (
-              notifications.map((notif) => (
-                <div key={notif.id} className={`p-4 rounded-lg flex items-start border-l-4 shadow-sm ${
-                  notif.priority === "critical" ? "bg-red-50 border-red-500" :
-                  notif.priority === "warning" ? "bg-yellow-50 border-yellow-500" : "bg-blue-50 border-blue-500"
-                }`}>
-                  <div className="flex-1">
-                    <div className="font-semibold text-gray-800 text-sm mb-1">{notif.title}</div>
-                    <div className="text-gray-600 text-sm">{notif.message}</div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">All caught up! No pending notifications.</div>
-            )}
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-          <div className="flex items-start justify-between mb-4 gap-3">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-700 flex items-center">
-                <span className="mr-2">📒</span> Accounting Closing Log
-              </h2>
-              {!closingLoading && !closingError && (
-                <p className="text-xs text-gray-500 mt-1">
-                  {closedCount} of {closingRows.length} centres closed
-                </p>
+        {/* ============ ATTENTION RAIL ============ */}
+        <aside className="space-y-6 xl:sticky xl:top-6 xl:col-span-4">
+          <Panel
+            title="Accounting closing log"
+            hint={closingLoading || closingError ? "" : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`}
+            action={
+              <input
+                type="date"
+                value={closingDate || closingData.date || ""}
+                max={todayIST()}
+                onChange={(e) => setClosingDate(e.target.value)}
+                className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                aria-label="Accounting date"
+              />
+            }
+          >
+            <div className="max-h-96 overflow-y-auto">
+              {closingLoading ? (
+                <div className="flex justify-center py-8"><FiLoader className="h-6 w-6 animate-spin text-teal-700" /></div>
+              ) : closingError ? (
+                <p className="rounded-lg bg-rose-50 p-4 text-center text-sm text-rose-600">Could not load closing log.</p>
+              ) : closingRows.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-500">No centres found.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {closingRows.map((row) => {
+                    const v = getClosingView(row);
+                    return (
+                      <li key={row.centre_id} className="flex items-start gap-3 py-2.5">
+                        <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${v.dot}`} />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-slate-900">{row.centre_name}</p>
+                          <p className="text-xs text-slate-500">{v.detail}</p>
+                          {row.status === "closed" && row.closed_at && (
+                            <p className="text-[11px] text-slate-400">
+                              {new Date(row.closed_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                              {row.closed_by_name ? `, ${row.closed_by_name}` : ""}
+                            </p>
+                          )}
+                        </div>
+                        <span className={`text-xs font-medium ${v.text}`}>{v.label}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
             </div>
-            <input
-              type="date"
-              value={closingDate || closingData.date || ""}
-              max={todayIST()}
-              onChange={(e) => setClosingDate(e.target.value)}
-              className="border border-gray-300 rounded-lg px-2 py-1 text-xs text-gray-700"
-              aria-label="Accounting date"
-            />
-          </div>
+          </Panel>
 
-          <div className="space-y-3 max-h-80 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300">
-            {closingLoading ? (
-              <div className="flex justify-center py-8">
-                <FiLoader className="animate-spin h-6 w-6 text-indigo-600" />
-              </div>
-            ) : closingError ? (
-              <div className="text-sm text-rose-600 p-4 text-center bg-rose-50 rounded-lg">
-                Could not load closing log.
-              </div>
-            ) : closingRows.length === 0 ? (
-              <div className="text-gray-500 text-sm italic p-4 text-center bg-gray-50 rounded-lg">
-                No centres found.
-              </div>
+          <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
+            {notifications.length > 0 ? (
+              <ul className="max-h-72 space-y-2 overflow-y-auto">
+                {notifications.map((n) => (
+                  <li
+                    key={n.id}
+                    className={`rounded-r-lg border-l-4 py-2 pl-3 pr-2 ${
+                      n.priority === "critical" ? "border-rose-500 bg-rose-50" : n.priority === "warning" ? "border-amber-500 bg-amber-50" : "border-sky-500 bg-sky-50"
+                    }`}
+                  >
+                    <p className="text-sm font-medium text-slate-900">{n.title}</p>
+                    <p className="text-xs text-slate-600">{n.message}</p>
+                  </li>
+                ))}
+              </ul>
             ) : (
-              closingRows.map((row) => {
-                const v = getClosingView(row);
-                return (
-                  <div key={row.centre_id} className={`p-3 rounded-lg border flex items-start space-x-3 ${v.wrap}`}>
-                    <v.Icon className={`h-5 w-5 mt-0.5 flex-shrink-0 ${v.text}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-gray-900 truncate">{row.centre_name}</p>
-                        <span className={`text-xs font-medium whitespace-nowrap ${v.text}`}>{v.label}</span>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-0.5">{v.detail}</p>
-                      {row.status === "closed" && row.closed_at && (
-                        <p className="text-[11px] text-gray-500 mt-0.5">
-                          Closed {new Date(row.closed_at).toLocaleString("en-IN", {
-                            day: "numeric",
-                            month: "short",
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                          {row.closed_by_name ? ` by ${row.closed_by_name}` : ""}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
+              <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
             )}
-          </div>
-        </div>
-      </div>
+          </Panel>
 
-      {/* Map View */}
-      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow mb-8">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">🗺️ Centre Network Map</h2>
-        <MapView />
-      </div>
-
-      {/* Quick Actions */}
-      <div className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-shadow">
-        <h2 className="text-lg font-semibold text-gray-700 mb-4">⚡ Quick Actions</h2>
-        <div className="flex flex-wrap gap-3">
-          <button 
-            onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
-            className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition shadow-sm"
-          >
-            + Create Centre
-          </button>
-          <button 
-            onClick={() => navigate('/dashboard/superadmin/centremanagement')} 
-            className="px-5 py-2.5 bg-purple-600 text-white text-sm font-medium rounded-xl hover:bg-purple-700 transition shadow-md hover:shadow-lg flex items-center"
-          >
-            <span className="mr-1">👤</span> Create Admin
-          </button>
-          <button 
-            onClick={() => navigate('/dashboard/superadmin/messenger')} 
-            className="px-5 py-2.5 bg-green-600 text-white text-sm font-medium rounded-xl hover:bg-green-700 transition shadow-md hover:shadow-lg flex items-center"
-          >
-            <span className="mr-1">📢</span> Broadcast
-          </button>
-          <button 
-            onClick={() => navigate('/dashboard/superadmin/analytics')} 
-            className="px-5 py-2.5 bg-red-600 text-white text-sm font-medium rounded-xl hover:bg-red-700 transition shadow-md hover:shadow-lg flex items-center"
-          >
-            <span className="mr-1">📊</span> Global Report
-          </button>
-          <button 
-            onClick={() => navigate('/dashboard/superadmin/analytics')} 
-            className="px-5 py-2.5 bg-gray-800 text-white text-sm font-medium rounded-xl hover:bg-gray-900 transition shadow-md hover:shadow-lg flex items-center"
-          >
-            <span className="mr-1">📤</span> Export Data
-          </button>
-        </div>
+          <Panel title="Wallet position" hint="Across all centres">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
+            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
+              {walletParts.map((p) => (
+                <div key={p.label} className={p.bar} style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%` }} />
+              ))}
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {walletParts.map((p) => (
+                <li key={p.label} className="flex items-center justify-between">
+                  <span className="flex items-center gap-2 text-slate-600">
+                    <span className={`h-2 w-2 rounded-full ${p.bar}`} />
+                    {p.label}
+                  </span>
+                  <span className="tabular-nums text-slate-900">{formatCurrency(p.value)}</span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        </aside>
       </div>
     </div>
   );
