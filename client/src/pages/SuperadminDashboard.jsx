@@ -263,7 +263,7 @@ const RevenueChart = ({ data, view }) => {
   const getBarColor = () => {
     if (view === 'profit') return '#16a34a';
     if (view === 'expenses') return '#e11d48';
-    return '#0f766e';
+    return '#4f46e5';
   };
 
   return (
@@ -336,7 +336,7 @@ const Segmented = ({ options, value, onChange }) => (
         role="tab"
         aria-selected={value === o.value}
         onClick={() => onChange(o.value)}
-        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 ${
+        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
           value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
         }`}
       >
@@ -346,28 +346,41 @@ const Segmented = ({ options, value, onChange }) => (
   </div>
 );
 
-const Delta = ({ value }) => {
-  const v = Number(value);
-  if (!Number.isFinite(v) || v === 0) return null;
-  const up = v > 0;
+const Sparkline = ({ data = [], color = "#a5b4fc" }) => {
+  const pts = data.map(Number).filter(Number.isFinite);
+  if (pts.length < 2) return null;
+  const w = 88, h = 32;
+  const max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
+  const d = pts.map((v, i) => `${((i / (pts.length - 1)) * w).toFixed(1)},${(h - 2 - ((v - min) / span) * (h - 4)).toFixed(1)}`).join(" ");
   return (
-    <span className={`inline-flex items-center gap-0.5 font-medium ${up ? "text-emerald-700" : "text-rose-600"}`}>
-      {up ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
-      {Math.abs(v)}%
-    </span>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="flex-shrink-0">
+      <polyline points={d} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
   );
 };
 
-const Figure = ({ label, value, delta, note, tone = "text-slate-900" }) => (
-  <div className="lg:px-6 lg:first:pl-0">
-    <p className="text-xs font-medium text-slate-500">{label}</p>
-    <p className={`mt-1 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
-    <p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
-      <Delta value={delta} />
-      {note}
-    </p>
-  </div>
-);
+const KpiDark = ({ label, value, delta, note, spark, tone = "text-white" }) => {
+  const v = Number(delta);
+  const hasDelta = Number.isFinite(v) && v !== 0;
+  return (
+    <div className="rounded-xl bg-white/5 p-4 ring-1 ring-white/10">
+      <p className="text-xs font-medium text-indigo-200">{label}</p>
+      <div className="mt-1 flex items-end justify-between gap-3">
+        <p className={`text-2xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
+        {spark && <Sparkline data={spark} />}
+      </div>
+      <p className="mt-1 flex items-center gap-1.5 text-xs text-indigo-200/80">
+        {hasDelta && (
+          <span className={`inline-flex items-center gap-0.5 font-medium ${v > 0 ? "text-emerald-300" : "text-rose-300"}`}>
+            {v > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
+            {Math.abs(v)}%
+          </span>
+        )}
+        {note}
+      </p>
+    </div>
+  );
+};
 
 const HighlightRow = ({ label, name, value }) => (
   <li className="flex items-baseline justify-between gap-3 py-2 text-sm">
@@ -390,6 +403,7 @@ const SuperadminDashboard = () => {
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
   const [period, setPeriod] = useState("month"); // default: This Month
+  const [tab, setTab] = useState("overview");
 
   // Accounting closing log (all centres)
   const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
@@ -539,12 +553,9 @@ const SuperadminDashboard = () => {
   const margin = financials.totals?.margin;
   const maxCentreProfit = Math.max(1, ...centreList.map((c) => Math.abs(Number(c.profit) || 0)));
   const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
-  const closingDay = closingData.date
-    ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-    : "";
 
   const walletParts = [
-    { label: "Cash", value: walletCash, bar: "bg-teal-600" },
+    { label: "Cash", value: walletCash, bar: "bg-indigo-600" },
     { label: "Bank", value: walletBank, bar: "bg-sky-600" },
     { label: "Digital", value: walletDigital, bar: "bg-indigo-500" },
   ];
@@ -565,225 +576,103 @@ const SuperadminDashboard = () => {
     { label: "Delayed", value: delayedServices, tone: "text-rose-600" },
   ];
 
-  const btnPrimary =
-    "inline-flex items-center gap-1.5 rounded-lg bg-teal-700 px-3 py-2 text-sm font-medium text-white hover:bg-teal-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600 focus-visible:ring-offset-2";
-  const btnGhost =
-    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600";
+  const revSpark = (chartData.revenue || []).map((d) => d.value);
+  const profitSpark = (chartData.profit || []).map((d) => d.value);
+  const tabs = [
+    { value: "overview", label: "Overview" },
+    { value: "centres", label: "Centres" },
+    { value: "finance", label: "Finance" },
+    { value: "people", label: "People" },
+  ];
+  const btnOnDark =
+    "inline-flex items-center gap-1.5 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/20 hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
+  const btnLight =
+    "inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-sm font-medium text-indigo-950 hover:bg-indigo-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-white";
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 lg:p-8">
-      {/* Top bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm font-medium text-slate-500">Superadmin</p>
-        <div className="flex flex-wrap items-center gap-2">
-          {loading && <FiLoader className="h-5 w-5 animate-spin text-teal-700" />}
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
-            aria-label="Select period"
-          >
-            {PERIOD_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/messenger")}>
-            <FiSend className="h-4 w-4" /> Broadcast
-          </button>
-          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/analytics")}>
-            <FiBarChart2 className="h-4 w-4" /> Reports
-          </button>
-          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
-            <FiUserPlus className="h-4 w-4" /> New admin
-          </button>
-          <button className={btnPrimary} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
-            <FiPlus className="h-4 w-4" /> New centre
-          </button>
+    <div className="min-h-screen bg-slate-100">
+      {/* Dark header band */}
+      <div className="bg-gradient-to-br from-indigo-950 via-indigo-900 to-slate-900 px-4 pb-24 pt-6 text-white lg:px-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wider text-indigo-300">Superadmin</p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight lg:text-3xl">Network overview</h1>
+            <p className="mt-1 text-sm text-indigo-200">
+              {periodLabel} across {totalCentres ?? centreList.length} centres and {totalStaff ?? 0} staff
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {loading && <FiLoader className="h-5 w-5 animate-spin text-indigo-200" />}
+            <select
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white ring-1 ring-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-white [&>option]:text-slate-900"
+              aria-label="Select period"
+            >
+              {PERIOD_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <button className={btnOnDark} onClick={() => navigate("/dashboard/superadmin/messenger")}>
+              <FiSend className="h-4 w-4" /> Broadcast
+            </button>
+            <button className={btnOnDark} onClick={() => navigate("/dashboard/superadmin/analytics")}>
+              <FiBarChart2 className="h-4 w-4" /> Reports
+            </button>
+            <button className={btnOnDark} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
+              <FiUserPlus className="h-4 w-4" /> New admin
+            </button>
+            <button className={btnLight} onClick={() => navigate("/dashboard/superadmin/centremanagement")}>
+              <FiPlus className="h-4 w-4" /> New centre
+            </button>
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <KpiDark label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" spark={revSpark} />
+          <KpiDark
+            label="Profit"
+            value={formatCurrency(netProfit)}
+            tone={netProfit < 0 ? "text-rose-300" : "text-white"}
+            note={margin !== undefined ? `${margin}% margin` : "after expenses"}
+            spark={profitSpark}
+          />
+          <KpiDark label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
+          <KpiDark
+            label="Pending payments"
+            value={formatCurrency(health?.metrics?.pendingPaymentValue)}
+            tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-300" : "text-white"}
+            note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
+          />
         </div>
       </div>
 
-      {/* Headline: the state of the network in one sentence */}
-      <div className="mt-6">
-        <h1 className="max-w-3xl text-2xl font-semibold tracking-tight text-slate-900 lg:text-3xl">
-          {formatCurrency(monthlyRevenue)} in revenue across {totalCentres ?? centreList.length} centres, {periodLabel.toLowerCase()}.
-        </h1>
-        <p className={`mt-2 text-sm ${needsLook > 0 ? "text-amber-700" : "text-slate-600"}`}>
-          {closingLoading
-            ? "Checking registers..."
-            : closingError || closingRows.length === 0
-            ? "Register status unavailable."
-            : needsLook === 0
-            ? `All ${closingRows.length} registers closed cleanly for ${closingDay}.`
-            : `${needsLook} of ${closingRows.length} registers need a look for ${closingDay}.`}
-        </p>
-      </div>
-
-      {/* Key figures */}
-      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 lg:grid-cols-4 lg:gap-0 lg:divide-x lg:divide-slate-200">
-        <Figure label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" />
-        <Figure
-          label="Profit"
-          value={formatCurrency(netProfit)}
-          tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
-          note={margin !== undefined ? `${margin}% margin` : "after expenses"}
-        />
-        <Figure label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
-        <Figure
-          label="Pending payments"
-          value={formatCurrency(health?.metrics?.pendingPaymentValue)}
-          tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-700" : "text-slate-900"}
-          note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
-        />
-      </div>
-
-      <dl className="mt-6 flex flex-wrap gap-x-8 gap-y-2 border-t border-slate-200 pt-4 text-sm">
-        {glance.map((g) => (
-          <div key={g.label} className="flex items-baseline gap-2">
-            <dt className="text-slate-500">{g.label}</dt>
-            <dd className="font-semibold tabular-nums text-slate-900">{g.value}</dd>
-            {g.note && <span className="text-xs text-slate-400">{g.note}</span>}
-          </div>
-        ))}
-      </dl>
-
-      <div className="mt-8 grid grid-cols-1 items-start gap-6 xl:grid-cols-12">
-        {/* ============ MAIN COLUMN ============ */}
-        <div className="space-y-6 xl:col-span-8">
-          <Panel
-            title="Trend"
-            hint={periodLabel}
-            action={
-              <Segmented
-                value={revenueView}
-                onChange={setRevenueView}
-                options={[
-                  { value: "revenue", label: "Revenue" },
-                  { value: "profit", label: "Profit" },
-                  { value: "expenses", label: "Expenses" },
-                ]}
-              />
-            }
-          >
-            <RevenueChart data={revenueChartData} view={revenueView} />
-          </Panel>
-
-          <Panel title="Centres" hint="Ranked by profit, with health and rating">
-            <div className="max-h-96 overflow-auto">
-              <table className="min-w-full text-sm">
-                <thead className="sticky top-0 bg-white text-left text-xs font-medium text-slate-500">
-                  <tr className="border-b border-slate-200">
-                    <th className="w-8 py-2 pr-2">#</th>
-                    <th className="py-2 pr-4">Centre</th>
-                    <th className="py-2 pr-4">Profit</th>
-                    <th className="py-2 pr-4">Rating</th>
-                    <th className="py-2">Health</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {centreList.length === 0 && (
-                    <tr><td colSpan={5} className="py-6 text-center text-slate-500">No centres yet.</td></tr>
-                  )}
-                  {centreList.map((c, i) => {
-                    const profit = Number(c.profit) || 0;
-                    const st = c.healthStatus || { label: "Unknown", color: "gray" };
-                    return (
-                      <tr key={c.id}>
-                        <td className="py-2.5 pr-2 tabular-nums text-slate-400">{i + 1}</td>
-                        <td className="py-2.5 pr-4 font-medium text-slate-900">{c.name}</td>
-                        <td className="w-[40%] py-2.5 pr-4">
-                          <div className="flex items-center gap-3">
-                            <div className="h-1.5 flex-1 rounded-full bg-slate-100">
-                              <div
-                                className={`h-1.5 rounded-full ${profit < 0 ? "bg-rose-500" : "bg-teal-600"}`}
-                                style={{ width: `${Math.max(2, Math.min(100, (Math.abs(profit) / maxCentreProfit) * 100))}%` }}
-                              />
-                            </div>
-                            <span className={`w-24 text-right tabular-nums ${profit < 0 ? "text-rose-600" : "text-slate-700"}`}>
-                              {formatCurrency(profit)}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-2.5 pr-4 tabular-nums text-slate-700">{c.rating || 0}</td>
-                        <td className="py-2.5">
-                          <span className="inline-flex items-center gap-2 text-slate-700">
-                            <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[st.color] || "bg-slate-300"}`} />
-                            {st.label}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Panel>
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <Panel title="Leading">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
-                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
-                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
-              </ul>
-            </Panel>
-            <Panel title="Needs work">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
-                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
-                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
-                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
-              </ul>
-            </Panel>
-          </div>
-
-          <div className="grid grid-cols-2 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-4">
-            {opsStrip.map((o) => (
-              <div key={o.label} className="px-5 py-4">
-                <p className="text-xs text-slate-500">{o.label}</p>
-                <p className={`mt-1 text-2xl font-semibold tabular-nums ${o.tone}`}>{o.value ?? 0}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
-            <StaffPerformanceChart staffData={topStaffList} />
-            <Panel title="Top teams">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-sm">
-                  <thead className="text-left text-xs font-medium text-slate-500">
-                    <tr className="border-b border-slate-200">
-                      <th className="py-2 pr-3">Team</th>
-                      <th className="py-2 pr-3 text-right">Revenue</th>
-                      <th className="py-2 pr-3 text-right">Profit</th>
-                      <th className="py-2 text-right">Expenses</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {topTeamsList.length === 0 && (
-                      <tr><td colSpan={4} className="py-6 text-center text-slate-500">No team data.</td></tr>
-                    )}
-                    {topTeamsList.map((t, idx) => (
-                      <tr key={t.id || idx}>
-                        <td className="py-2.5 pr-3 font-medium text-slate-900">{t.name}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{formatCurrency(t.revenue)}</td>
-                        <td className="py-2.5 pr-3 text-right tabular-nums text-emerald-700">{formatCurrency(t.profit || 0)}</td>
-                        <td className="py-2.5 text-right tabular-nums text-rose-600">{formatCurrency(t.expenses || 0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </Panel>
-          </div>
-
-          <Panel title="Network map">
-            <MapView />
-          </Panel>
+      {/* Content overlaps the band */}
+      <div className="-mt-12 px-4 pb-10 lg:px-8">
+        <div className="inline-flex rounded-xl bg-white p-1 shadow-sm ring-1 ring-slate-200" role="tablist">
+          {tabs.map((t) => (
+            <button
+              key={t.value}
+              role="tab"
+              aria-selected={tab === t.value}
+              onClick={() => setTab(t.value)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+                tab === t.value ? "bg-indigo-950 text-white" : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              {t.label}
+              {t.value === "overview" && needsLook > 0 && (
+                <span className="ml-2 rounded-full bg-amber-400 px-1.5 text-[11px] font-semibold text-indigo-950">{needsLook}</span>
+              )}
+            </button>
+          ))}
         </div>
 
-        {/* ============ ATTENTION RAIL ============ */}
-        <aside className="space-y-6 xl:sticky xl:top-6 xl:col-span-4">
-          <Panel
+        <div className="mt-5 space-y-6">
+          {tab === "overview" && (
+            <>
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <Panel
             title="Accounting closing log"
             hint={closingLoading || closingError ? "" : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`}
             action={
@@ -792,14 +681,14 @@ const SuperadminDashboard = () => {
                 value={closingDate || closingData.date || ""}
                 max={todayIST()}
                 onChange={(e) => setClosingDate(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-600"
+                className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
                 aria-label="Accounting date"
               />
             }
           >
             <div className="max-h-96 overflow-y-auto">
               {closingLoading ? (
-                <div className="flex justify-center py-8"><FiLoader className="h-6 w-6 animate-spin text-teal-700" /></div>
+                <div className="flex justify-center py-8"><FiLoader className="h-6 w-6 animate-spin text-indigo-600" /></div>
               ) : closingError ? (
                 <p className="rounded-lg bg-rose-50 p-4 text-center text-sm text-rose-600">Could not load closing log.</p>
               ) : closingRows.length === 0 ? (
@@ -829,8 +718,7 @@ const SuperadminDashboard = () => {
               )}
             </div>
           </Panel>
-
-          <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
+                <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
             {notifications.length > 0 ? (
               <ul className="max-h-72 space-y-2 overflow-y-auto">
                 {notifications.map((n) => (
@@ -849,8 +737,116 @@ const SuperadminDashboard = () => {
               <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
             )}
           </Panel>
+              </div>
+              <div className="grid grid-cols-2 divide-x divide-slate-200 rounded-xl border border-slate-200 bg-white sm:grid-cols-4">
+                {opsStrip.map((o) => (
+                  <div key={o.label} className="px-5 py-4">
+                    <p className="text-xs text-slate-500">{o.label}</p>
+                    <p className={`mt-1 text-2xl font-semibold tabular-nums ${o.tone}`}>{o.value ?? 0}</p>
+                  </div>
+                ))}
+              </div>
+              <Panel title="At a glance">
+                <dl className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+                  {glance.map((g) => (
+                    <div key={g.label}>
+                      <dt className="text-xs text-slate-500">{g.label}</dt>
+                      <dd className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{g.value}</dd>
+                      {g.note && <p className="text-xs text-slate-400">{g.note}</p>}
+                    </div>
+                  ))}
+                </dl>
+              </Panel>
+            </>
+          )}
 
-          <Panel title="Wallet position" hint="Across all centres">
+          {tab === "centres" && (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                {centreList.length === 0 && <p className="text-sm text-slate-500">No centres yet.</p>}
+                {centreList.map((c, i) => {
+                  const profit = Number(c.profit) || 0;
+                  const st = c.healthStatus || { label: "Unknown", color: "gray" };
+                  const reg = closingRows.find((r) => String(r.centre_id) === String(c.id));
+                  const rv = reg ? getClosingView(reg) : null;
+                  return (
+                    <div key={c.id} className="rounded-xl border border-slate-200 bg-white p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="truncate font-semibold text-slate-900">
+                            <span className="mr-2 text-xs font-normal tabular-nums text-slate-400">#{i + 1}</span>
+                            {c.name}
+                          </p>
+                          <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                            <span className={`h-2 w-2 rounded-full ${HEALTH_DOT[st.color] || "bg-slate-300"}`} />
+                            {st.label}
+                          </p>
+                        </div>
+                        {rv && (
+                          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-slate-50 px-2 py-0.5 text-[11px] font-medium ring-1 ring-slate-200 ${rv.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${rv.dot}`} />
+                            Register: {rv.label.toLowerCase()}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-4 text-xs text-slate-500">Profit</p>
+                      <p className={`text-2xl font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-slate-900"}`}>{formatCurrency(profit)}</p>
+                      <div className="mt-3 h-1.5 rounded-full bg-slate-100">
+                        <div
+                          className={`h-1.5 rounded-full ${profit < 0 ? "bg-rose-500" : "bg-indigo-600"}`}
+                          style={{ width: `${Math.max(2, Math.min(100, (Math.abs(profit) / maxCentreProfit) * 100))}%` }}
+                        />
+                      </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        Rating <span className="font-semibold tabular-nums text-slate-800">{c.rating || 0}</span>
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <Panel title="Leading">
+              <ul className="divide-y divide-slate-100">
+                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
+                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
+                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
+              </ul>
+            </Panel>
+                <Panel title="Needs work">
+              <ul className="divide-y divide-slate-100">
+                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
+                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
+                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
+                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
+              </ul>
+            </Panel>
+              </div>
+              <Panel title="Network map">
+            <MapView />
+          </Panel>
+            </>
+          )}
+
+          {tab === "finance" && (
+            <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-3">
+              <div className="xl:col-span-2"><Panel
+            title="Trend"
+            hint={periodLabel}
+            action={
+              <Segmented
+                value={revenueView}
+                onChange={setRevenueView}
+                options={[
+                  { value: "revenue", label: "Revenue" },
+                  { value: "profit", label: "Profit" },
+                  { value: "expenses", label: "Expenses" },
+                ]}
+              />
+            }
+          >
+            <RevenueChart data={revenueChartData} view={revenueView} />
+          </Panel></div>
+              <Panel title="Wallet position" hint="Across all centres">
             <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
             <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
               {walletParts.map((p) => (
@@ -869,7 +865,42 @@ const SuperadminDashboard = () => {
               ))}
             </ul>
           </Panel>
-        </aside>
+            </div>
+          )}
+
+          {tab === "people" && (
+            <div className="grid grid-cols-1 gap-6 2xl:grid-cols-2">
+              <StaffPerformanceChart staffData={topStaffList} />
+              <Panel title="Top teams">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="text-left text-xs font-medium text-slate-500">
+                    <tr className="border-b border-slate-200">
+                      <th className="py-2 pr-3">Team</th>
+                      <th className="py-2 pr-3 text-right">Revenue</th>
+                      <th className="py-2 pr-3 text-right">Profit</th>
+                      <th className="py-2 text-right">Expenses</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {topTeamsList.length === 0 && (
+                      <tr><td colSpan={4} className="py-6 text-center text-slate-500">No team data.</td></tr>
+                    )}
+                    {topTeamsList.map((t, idx) => (
+                      <tr key={t.id || idx}>
+                        <td className="py-2.5 pr-3 font-medium text-slate-900">{t.name}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums text-slate-600">{formatCurrency(t.revenue)}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums text-emerald-700">{formatCurrency(t.profit || 0)}</td>
+                        <td className="py-2.5 text-right tabular-nums text-rose-600">{formatCurrency(t.expenses || 0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
