@@ -615,19 +615,19 @@ async function fetchStaffAnalytics(client, dates) {
         SELECT 
             st.id, st.name as staff_name, c.name as centre_name,
             COUNT(se.id) as services_completed,
-            COALESCE(SUM(se.total_charges), 0) as revenue_generated
+            COALESCE(SUM(se.service_charges), 0) as service_charges_earned
         FROM staff st
         JOIN centres c ON st.centre_id = c.id
         JOIN service_entries se ON se.staff_id = st.id
         WHERE se.status = 'completed' AND se.created_at >= $1 AND se.created_at <= $2
         GROUP BY st.id, st.name, c.name
-        ORDER BY revenue_generated DESC LIMIT 10
+        ORDER BY service_charges_earned DESC, services_completed DESC LIMIT 10
     `;
     const result = await client.query(topStaffQuery, [startDate, endDate]);
     return {
         topPerformers: result.rows.map(row => ({
             id: row.id, name: row.staff_name, centre: row.centre_name,
-            servicesCompleted: parseInt(row.services_completed, 10), revenue: parseFloat(row.revenue_generated)
+            servicesCompleted: parseInt(row.services_completed, 10), serviceCharges: parseFloat(row.service_charges_earned)
         }))
     };
 }
