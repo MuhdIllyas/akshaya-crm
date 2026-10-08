@@ -260,7 +260,6 @@ const CentreProfitChart = ({ centres }) => {
 
   if (data.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No centres yet.</p>;
 
-  // Prepend rank to Y axis labels
   const rankedData = data.map((d, i) => ({ ...d, rankName: `${i + 1}.  ${d.name}` }));
 
   const Tip = ({ active, payload }) =>
@@ -358,7 +357,6 @@ const StaffPerformanceChart = ({ staffData }) => {
   const formatCurrency = (amount) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
 
-  // Summary stats
   const totalCharges = staffData.reduce((a, s) => a + (Number(s.serviceCharges) || 0), 0);
   const totalServices = staffData.reduce((a, s) => a + (Number(s.servicesCompleted) || 0), 0);
   const avgCharges = staffData.length ? totalCharges / staffData.length : 0;
@@ -407,7 +405,7 @@ const StaffPerformanceChart = ({ staffData }) => {
               metric === 'serviceCharges' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            Service Charges
+            Charges
           </button>
           <button
             onClick={() => setMetric('servicesCompleted')}
@@ -431,7 +429,7 @@ const StaffPerformanceChart = ({ staffData }) => {
       {/* Summary stats */}
       <div className="mb-4 grid grid-cols-3 gap-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Service charges</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Total charges</p>
           <p className="mt-0.5 text-sm font-semibold tabular-nums text-slate-900">{formatCurrency(totalCharges)}</p>
         </div>
         <div>
@@ -684,22 +682,9 @@ const SuperadminDashboard = () => {
   ];
   const walletSum = walletParts.reduce((a, p) => a + (Number(p.value) || 0), 0) || 1;
 
-  const glance = [
-    { label: "Centres", value: totalCentres ?? centreList.length, hint: `+${newCentresThisMonth ?? 0} this month` },
-    { label: "Staff", value: totalStaff ?? 0, hint: `${admins ?? 0} admins` },
-    { label: "Customers", value: totalCustomers?.toLocaleString() ?? 0, hint: `+${customerGrowth ?? 0} this month` },
-    { label: "Rating", value: avgRating ? `${Number(avgRating).toFixed(1)}/5` : "—", hint: `${totalReviews ?? 0} reviews` },
-    { label: "Health", value: health?.overallScore !== undefined ? `${health.overallScore}/100` : "—", hint: "network score" },
-  ];
-
-  const revSpark = (chartData.revenue || []).map((d) => d.value);
-  const profitSpark = (chartData.profit || []).map((d) => d.value);
-  const closingDay = closingData.date
-    ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-    : "";
-
   // ==========================================
-  // NETWORK HEALTH — derive score from the same distribution shown below the gauge
+  // NETWORK HEALTH — derived from the centre health distribution
+  // (defined BEFORE glance so the tile can read networkScore)
   // ==========================================
   const healthCount = (color) => centreList.filter((c) => c.healthStatus?.color === color).length;
   const greenN = healthCount("green");
@@ -718,6 +703,26 @@ const SuperadminDashboard = () => {
       : Number.isFinite(Number(health?.overallScore))
       ? Math.round(Number(health.overallScore))
       : 0;
+
+  const glance = [
+    { label: "Centres", value: totalCentres ?? centreList.length, hint: `+${newCentresThisMonth ?? 0} this month` },
+    { label: "Staff", value: totalStaff ?? 0, hint: `${admins ?? 0} admins` },
+    { label: "Customers", value: totalCustomers?.toLocaleString() ?? 0, hint: `+${customerGrowth ?? 0} this month` },
+    { label: "Rating", value: avgRating ? `${Number(avgRating).toFixed(1)}/5` : "—", hint: `${totalReviews ?? 0} reviews` },
+    {
+      label: "Health",
+      value: `${networkScore}/100`,
+      hint: healthTotal
+        ? `${greenN} healthy · ${yellowN} watch · ${redN} at risk`
+        : "no centre data",
+    },
+  ];
+
+  const revSpark = (chartData.revenue || []).map((d) => d.value);
+  const profitSpark = (chartData.profit || []).map((d) => d.value);
+  const closingDay = closingData.date
+    ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+    : "";
 
   // Closing summary
   const closingSummary = {
@@ -838,6 +843,7 @@ const SuperadminDashboard = () => {
         <div className="flex flex-col gap-4 xl:col-span-4">
           <Panel title="Network health" hint="Overall score across centres">
             <Gauge value={networkScore} label="out of 100" />
+
             {/* Stacked breakdown bar */}
             <div className="mt-4 flex h-2 overflow-hidden rounded-full bg-slate-100">
               {greenN > 0 && <div className="bg-emerald-500" style={{ width: `${(greenN / healthTotal) * 100}%` }} />}
@@ -856,9 +862,30 @@ const SuperadminDashboard = () => {
                 </span>
               ))}
             </div>
-            <p className="mt-2 text-[11px] text-slate-400">
-              Weighted: healthy 100 · watch 60 · at risk 20
-            </p>
+
+            {/* How the score is calculated */}
+            <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                How this score is calculated
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600">
+                Each centre gets a health weight:{" "}
+                <span className="font-medium text-emerald-700">healthy = 100</span>,{" "}
+                <span className="font-medium text-amber-700">watch = 60</span>,{" "}
+                <span className="font-medium text-rose-700">at risk = 20</span>. The network score is
+                the average across all centres.
+              </p>
+              {healthTotal > 0 ? (
+                <p className="mt-2 border-t border-slate-200/70 pt-2 font-mono text-[11px] text-slate-500">
+                  ({greenN}×100 + {yellowN}×60 + {redN}×20) ÷ {healthTotal} ={" "}
+                  <span className="font-semibold text-slate-700">{networkScore}</span>
+                </p>
+              ) : (
+                <p className="mt-2 border-t border-slate-200/70 pt-2 text-[11px] text-slate-500">
+                  No centre health data available — falling back to backend score.
+                </p>
+              )}
+            </div>
           </Panel>
           <Panel
             title="Open services"
