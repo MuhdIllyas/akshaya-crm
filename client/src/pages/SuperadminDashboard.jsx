@@ -3,18 +3,19 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import {
   BarChart, Bar, ScatterChart, Scatter, CartesianGrid, ZAxis, XAxis, YAxis,
-  Tooltip, ResponsiveContainer, Cell, PieChart, Pie
+  Tooltip, ResponsiveContainer, Cell
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
 import {
-  FiArrowUp, FiArrowDown, FiBarChart2,
-  FiLoader, FiPlus, FiSend, FiUserPlus
+  FiHome, FiUsers, FiUserCheck, FiShoppingBag, FiDollarSign,
+  FiTrendingUp, FiPieChart, FiAlertCircle, FiArrowUp, FiArrowDown,
+  FiCheckCircle, FiXCircle, FiLoader, FiActivity, FiZap, FiRadio
 } from "react-icons/fi";
 
 // ==========================================
 // ACCOUNTING CLOSING LOG HELPERS
 // ==========================================
-// Adjust the path if your accounting router is mounted somewhere else
 const CLOSING_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/all`;
 
 // ==========================================
@@ -29,11 +30,10 @@ const PERIOD_OPTIONS = [
   { value: "year", label: "This Year" },
 ];
 
-// Returns { start, end } as "YYYY-MM-DD" (IST calendar dates)
 const getPeriodRange = (period) => {
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
   const [y, m, d] = today.split("-").map(Number);
-  const fmt = (dt) => dt.toISOString().split("T")[0]; // dt is built with Date.UTC, so no timezone drift
+  const fmt = (dt) => dt.toISOString().split("T")[0];
 
   let start;
   switch (period) {
@@ -41,16 +41,15 @@ const getPeriodRange = (period) => {
       start = new Date(Date.UTC(y, m - 1, d));
       break;
     case "week": {
-      // week starts on Monday
       const base = new Date(Date.UTC(y, m - 1, d));
-      const dow = base.getUTCDay(); // 0 = Sunday
+      const dow = base.getUTCDay();
       start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
       break;
     }
-    case "3months": // current month + previous 2 full months
+    case "3months":
       start = new Date(Date.UTC(y, m - 1 - 2, 1));
       break;
-    case "6months": // current month + previous 5 full months
+    case "6months":
       start = new Date(Date.UTC(y, m - 1 - 5, 1));
       break;
     case "year":
@@ -68,429 +67,457 @@ const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN")}`;
 const todayIST = () =>
   new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
+// ==========================================
+// CLOSING VIEW (dark theme tones)
+// ==========================================
 const getClosingView = (row) => {
   if (row.status === "not_closed") {
-    return { label: "Not closed", detail: "No closing submitted", text: "text-rose-700", dot: "bg-rose-500" };
+    return {
+      Icon: FiXCircle,
+      label: "Not closed",
+      detail: "No closing submitted",
+      wrap: "bg-rose-500/[0.06] border-rose-500/25",
+      chip: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30",
+      icon: "text-rose-400",
+      glow: "shadow-[0_0_24px_-8px_rgba(244,63,94,0.5)]",
+    };
   }
   if (row.status === "incomplete") {
     return {
-      label: "Incomplete",
+      Icon: FiAlertCircle,
+      label: "Not fully closed",
       detail: `Cash counted (${inr(row.actual_cash)}), closing not completed`,
-      text: "text-amber-700",
-      dot: "bg-amber-500",
+      wrap: "bg-amber-500/[0.06] border-amber-500/25",
+      chip: "bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30",
+      icon: "text-amber-400",
+      glow: "shadow-[0_0_24px_-8px_rgba(245,158,11,0.5)]",
     };
   }
   const variance = Number(row.cash_variance || 0);
   if (variance === 0) {
-    return { label: "Closed", detail: `Cash ${inr(row.actual_cash)}, no variance`, text: "text-emerald-700", dot: "bg-emerald-500" };
+    return {
+      Icon: FiCheckCircle,
+      label: "Closed",
+      detail: `Cash ${inr(row.actual_cash)} • no variance`,
+      wrap: "bg-emerald-500/[0.06] border-emerald-500/25",
+      chip: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30",
+      icon: "text-emerald-400",
+      glow: "shadow-[0_0_24px_-8px_rgba(16,185,129,0.5)]",
+    };
   }
   return {
-    label: "Variance",
-    detail: `Cash ${inr(row.actual_cash)}, ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
-    text: "text-rose-700",
-    dot: "bg-rose-500",
+    Icon: FiAlertCircle,
+    label: "Closed with variance",
+    detail: `Cash ${inr(row.actual_cash)} • ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
+    wrap: "bg-rose-500/[0.06] border-rose-500/25",
+    chip: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30",
+    icon: "text-rose-400",
+    glow: "shadow-[0_0_24px_-8px_rgba(244,63,94,0.5)]",
   };
 };
 
 // ==========================================
-// STAFF PERFORMANCE CHART (unchanged)
+// SHARED UI PRIMITIVES (dark)
+// ==========================================
+const Panel = ({
+  title, subtitle, icon, action, children,
+  className = "", bodyClassName = "", accent = "cyan",
+}) => {
+  const accentRing = {
+    cyan: "hover:border-cyan-400/30 hover:shadow-[0_0_40px_-12px_rgba(34,211,238,0.35)]",
+    violet: "hover:border-violet-400/30 hover:shadow-[0_0_40px_-12px_rgba(167,139,250,0.35)]",
+    emerald: "hover:border-emerald-400/30 hover:shadow-[0_0_40px_-12px_rgba(16,185,129,0.35)]",
+    rose: "hover:border-rose-400/30 hover:shadow-[0_0_40px_-12px_rgba(244,63,94,0.35)]",
+    amber: "hover:border-amber-400/30 hover:shadow-[0_0_40px_-12px_rgba(245,158,11,0.35)]",
+  }[accent];
+
+  return (
+    <div
+      className={`group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-950/40 backdrop-blur-sm transition-all duration-300 ${accentRing} ${className}`}
+    >
+      {/* top hairline */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+
+      {(title || action) && (
+        <div className="flex items-start justify-between gap-3 border-b border-white/[0.04] px-5 py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            {icon && (
+              <span className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.02] text-sm">
+                {icon}
+              </span>
+            )}
+            <div className="min-w-0">
+              {title && (
+                <h2 className="truncate text-[13px] font-semibold tracking-tight text-slate-100">
+                  {title}
+                </h2>
+              )}
+              {subtitle && (
+                <p className="truncate text-[11px] font-medium text-slate-500">{subtitle}</p>
+              )}
+            </div>
+          </div>
+          {action}
+        </div>
+      )}
+      <div className={`p-5 ${bodyClassName}`}>{children}</div>
+    </div>
+  );
+};
+
+const TrendChip = ({ trend }) => {
+  if (trend === undefined || trend === null || trend === 0) {
+    return (
+      <span className="inline-flex items-center rounded-md border border-white/[0.06] bg-white/[0.03] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-500">
+        —
+      </span>
+    );
+  }
+  const up = trend > 0;
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+        up
+          ? "bg-emerald-500/10 text-emerald-300 ring-1 ring-emerald-500/25"
+          : "bg-rose-500/10 text-rose-300 ring-1 ring-rose-500/25"
+      }`}
+    >
+      {up ? <FiArrowUp className="h-2.5 w-2.5" /> : <FiArrowDown className="h-2.5 w-2.5" />}
+      {Math.abs(trend)}%
+    </span>
+  );
+};
+
+// ==========================================
+// NEON STAT CARD
+// ==========================================
+const StatCard = ({
+  title, value, icon: Icon, accent = "cyan",
+  subtitle, trend, onClick, delay = 0,
+}) => {
+  const accents = {
+    cyan: { text: "text-cyan-400", from: "from-cyan-400", shadow: "shadow-[0_0_30px_-10px_rgba(34,211,238,0.6)]" },
+    emerald: { text: "text-emerald-400", from: "from-emerald-400", shadow: "shadow-[0_0_30px_-10px_rgba(16,185,129,0.6)]" },
+    violet: { text: "text-violet-400", from: "from-violet-400", shadow: "shadow-[0_0_30px_-10px_rgba(167,139,250,0.6)]" },
+    amber: { text: "text-amber-400", from: "from-amber-400", shadow: "shadow-[0_0_30px_-10px_rgba(245,158,11,0.6)]" },
+    rose: { text: "text-rose-400", from: "from-rose-400", shadow: "shadow-[0_0_30px_-10px_rgba(244,63,94,0.6)]" },
+  }[accent];
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, delay, ease: "easeOut" }}
+      whileHover={{ y: -3 }}
+      whileTap={{ scale: 0.99 }}
+      onClick={onClick}
+      className={`group relative overflow-hidden rounded-2xl border border-white/[0.06] bg-slate-950/40 p-5 backdrop-blur-sm transition-all duration-300 hover:border-white/[0.12] ${
+        onClick ? "cursor-pointer" : ""
+      }`}
+    >
+      {/* top edge glow line */}
+      <div
+        className={`pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-current to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100 ${accents.text}`}
+      />
+      {/* corner glow */}
+      <div
+        className={`pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-gradient-to-br ${accents.from} to-transparent opacity-[0.06] blur-2xl transition-opacity duration-300 group-hover:opacity-[0.15]`}
+      />
+
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">
+            {title}
+          </p>
+          <div className="mt-2 flex items-end gap-2">
+            <p className="font-mono text-2xl font-bold tabular-nums tracking-tight text-slate-50">
+              {value}
+            </p>
+            <div className="pb-0.5">
+              <TrendChip trend={trend} />
+            </div>
+          </div>
+          {subtitle && (
+            <p className="mt-1.5 truncate text-[11px] font-medium text-slate-500">{subtitle}</p>
+          )}
+        </div>
+        <div
+          className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.06] bg-white/[0.02] ${accents.text} transition-transform duration-300 group-hover:scale-110`}
+        >
+          <Icon className="h-4.5 w-4.5" style={{ width: 18, height: 18 }} />
+        </div>
+      </div>
+    </motion.div>
+  );
+};
+
+// ==========================================
+// STAFF PERFORMANCE CHART (dark)
 // ==========================================
 const StaffPerformanceChart = ({ staffData }) => {
   const [metric, setMetric] = useState('serviceCharges');
 
   if (!staffData || staffData.length === 0) {
-    return <div className="text-gray-500 text-sm p-4">No staff data available</div>;
+    return (
+      <Panel title="Top Staff Performers" subtitle="Ranked across all centres" icon="👨‍💼">
+        <div className="py-10 text-center text-sm text-slate-600">No staff data available</div>
+      </Panel>
+    );
   }
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount);
+
+  const DarkTooltip = ({ active, payload, variant }) => {
+    if (!active || !payload || !payload.length) return null;
+    const data = payload[0].payload;
+    const border = variant === "cyan" ? "border-cyan-400/40" : "border-violet-400/40";
+    return (
+      <div className={`rounded-xl border ${border} bg-slate-950/95 p-3 text-sm shadow-2xl shadow-black/60 backdrop-blur`}>
+        <p className="mb-1 text-sm font-bold text-slate-50">{data.name}</p>
+        <p className="mb-2 text-[11px] text-slate-500">{data.centre}</p>
+        <p className="font-mono text-xs font-semibold text-cyan-300">
+          Service Charges: {formatCurrency(data.serviceCharges)}
+        </p>
+        <p className="font-mono text-xs font-semibold text-violet-300">
+          Services: {data.servicesCompleted}
+        </p>
+      </div>
+    );
   };
 
-  const BarTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
-          <p className="font-bold text-base mb-1">{data.name}</p>
-          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
-          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
-          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
-        </div>
-      );
-    }
-    return null;
-  };
-
-  const ScatterTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
-      const data = payload[0].payload;
-      return (
-        <div className="bg-gray-900 text-white p-3 rounded-lg shadow-xl text-sm border border-gray-700 z-50">
-          <p className="font-bold text-base mb-1">{data.name}</p>
-          <p className="text-gray-300 text-xs mb-2">{data.centre}</p>
-          <p className="text-purple-400 font-semibold">Services: {data.servicesCompleted}</p>
-          <p className="text-blue-400 font-semibold">Service Charges: {formatCurrency(data.serviceCharges)}</p>
-        </div>
-      );
-    }
-    return null;
-  };
+  const tabs = [
+    { key: 'serviceCharges', label: 'Charges', active: 'text-cyan-300' },
+    { key: 'servicesCompleted', label: 'Apps', active: 'text-violet-300' },
+    { key: 'scatter', label: 'Efficiency', active: 'text-emerald-300' },
+  ];
 
   return (
-    <div className="flex h-[450px] flex-col rounded-xl border border-slate-200 bg-white p-5">
-      <div className="flex justify-between items-start mb-6">
-        <div>
-          <h2 className="text-[15px] font-semibold text-slate-900">Top staff by service charges</h2>
-          <p className="text-xs text-gray-500">Ranked across all centres</p>
+    <Panel
+      title="Top Staff Performers"
+      subtitle="Ranked across all centres"
+      icon="👨‍💼"
+      accent="cyan"
+      className="flex h-[460px] flex-col"
+      bodyClassName="flex flex-1 flex-col p-5 pt-4"
+      action={
+        <div className="flex rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setMetric(t.key)}
+              className={`rounded-md px-2.5 py-1 text-[11px] font-semibold transition-all duration-200 ${
+                metric === t.key
+                  ? `bg-white/[0.06] ${t.active}`
+                  : 'text-slate-500 hover:text-slate-300'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
         </div>
-        <div className="flex flex-col gap-2">
-          <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-            <button
-              onClick={() => setMetric('serviceCharges')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'serviceCharges' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Service Charges
-            </button>
-            <button
-              onClick={() => setMetric('servicesCompleted')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'servicesCompleted' ? 'bg-white text-purple-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Applications
-            </button>
-            <button
-              onClick={() => setMetric('scatter')}
-              className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${
-                metric === 'scatter' ? 'bg-white text-green-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Efficiency
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex-1 w-full min-h-0">
+      }
+    >
+      <div className="min-h-0 w-full flex-1">
         <ResponsiveContainer width="100%" height="100%">
           {metric === 'scatter' ? (
             <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
               <XAxis
-                type="number"
-                dataKey="servicesCompleted"
-                name="Applications"
-                tick={{ fontSize: 12 }}
-                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 12 }}
+                type="number" dataKey="servicesCompleted" name="Applications"
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                axisLine={{ stroke: '#1e293b' }} tickLine={false}
+                label={{ value: 'Total Applications', position: 'insideBottom', offset: -10, fontSize: 11, fill: '#475569' }}
               />
               <YAxis
-                type="number"
-                dataKey="serviceCharges"
-                name="Service Charges"
-                tickFormatter={(val) => `₹${(val/1000)}k`}
-                tick={{ fontSize: 12 }}
+                type="number" dataKey="serviceCharges" name="Service Charges"
+                tickFormatter={(val) => `₹${(val / 1000)}k`}
+                tick={{ fontSize: 11, fill: '#64748b' }}
+                axisLine={{ stroke: '#1e293b' }} tickLine={false}
               />
               <ZAxis type="number" dataKey="serviceCharges" range={[100, 500]} name="Volume" />
-              <Tooltip content={<ScatterTooltip />} cursor={{ strokeDasharray: '3 3' }} />
-              <Scatter name="Staff" data={staffData} fill="#10B981" opacity={0.7} />
+              <Tooltip
+                content={<DarkTooltip variant="cyan" />}
+                cursor={{ strokeDasharray: '3 3', stroke: '#334155' }}
+              />
+              <Scatter name="Staff" data={staffData} fill="#22d3ee" opacity={0.85} />
             </ScatterChart>
           ) : (
-            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 40, bottom: 5 }}>
+            <BarChart data={staffData} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
               <XAxis type="number" hide />
               <YAxis
-                dataKey="name"
-                type="category"
-                axisLine={false}
-                tickLine={false}
-                tick={{ fontSize: 12, fill: '#4B5563' }}
-                width={120}
+                dataKey="name" type="category" axisLine={false} tickLine={false}
+                tick={{ fontSize: 11, fill: '#94a3b8' }} width={110}
               />
-              <Tooltip content={<BarTooltip />} cursor={{ fill: '#F3F4F6' }} />
-              <Bar dataKey={metric} radius={[0, 4, 4, 0]} barSize={20} animationDuration={1000}>
+              <Tooltip content={<DarkTooltip variant={metric === 'serviceCharges' ? 'cyan' : 'violet'} />} cursor={{ fill: 'rgba(148,163,184,0.05)' }} />
+              <Bar dataKey={metric} radius={[0, 6, 6, 0]} barSize={16} animationDuration={1000}>
                 {staffData.map((entry, index) => (
                   <Cell
                     key={`cell-${index}`}
-                    fill={metric === 'serviceCharges' ? '#3B82F6' : '#8B5CF6'}
-                    className="hover:opacity-80 transition-opacity duration-200 cursor-pointer"
+                    fill={metric === 'serviceCharges' ? 'url(#staffCyanGrad)' : 'url(#staffVioletGrad)'}
+                    className="cursor-pointer transition-opacity duration-200 hover:opacity-80"
                   />
                 ))}
               </Bar>
+              <defs>
+                <linearGradient id="staffCyanGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.6} />
+                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={1} />
+                </linearGradient>
+                <linearGradient id="staffVioletGrad" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#7c3aed" stopOpacity={0.6} />
+                  <stop offset="100%" stopColor="#a78bfa" stopOpacity={1} />
+                </linearGradient>
+              </defs>
             </BarChart>
           )}
         </ResponsiveContainer>
       </div>
-    </div>
+    </Panel>
   );
 };
 
 // ==========================================
-// REVENUE CHART COMPONENT (unchanged)
+// REVENUE CHART (dark)
 // ==========================================
 const RevenueChart = ({ data, view }) => {
   if (!data || data.length === 0) {
-    return <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
+    return <div className="p-6 text-center text-sm text-slate-600">No revenue data available</div>;
   }
 
-  const fmt = (amount) =>
+  const formatCurrency = (amount) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 
   const formatLabel = (label) => {
     if (!label) return '';
     if (label.length === 7) {
-      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
+      const date = new Date(label + '-01');
+      return date.toLocaleString('default', { month: 'short', year: '2-digit' });
     }
     if (label.length === 10) return label.slice(5);
     return label;
   };
 
-  const short = (v) => (v >= 100000 ? `₹${(v / 100000).toFixed(1)}L` : v >= 1000 ? `₹${v / 1000}k` : `₹${v}`);
-  const color = view === 'profit' ? '#059669' : view === 'expenses' ? '#e11d48' : '#4f46e5';
-  const gid = `fill-${view}`;
+  const CustomTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const item = payload[0].payload;
+      const color =
+        view === 'profit' ? 'text-emerald-300'
+        : view === 'expenses' ? 'text-rose-300'
+        : 'text-cyan-300';
+      return (
+        <div className="rounded-xl border border-white/10 bg-slate-950/95 p-3 text-sm shadow-2xl shadow-black/60 backdrop-blur">
+          <p className="text-sm font-bold text-slate-50">{formatLabel(item.label)}</p>
+          <p className={`font-mono text-xs font-semibold ${color}`}>
+            Value: {formatCurrency(item.value)}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
-  const Tip = ({ active, payload }) =>
-    active && payload?.length ? (
-      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
-        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
-        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
-      </div>
-    ) : null;
+  const getBarColor = () => {
+    if (view === 'profit') return '#10b981';
+    if (view === 'expenses') return '#f43f5e';
+    return '#22d3ee';
+  };
 
   return (
     <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e293b" />
+        <XAxis
+          dataKey="label" tickFormatter={formatLabel}
+          tick={{ fontSize: 11, fill: '#64748b' }}
+          axisLine={{ stroke: '#1e293b' }} tickLine={false}
+        />
+        <YAxis
+          tickFormatter={(val) => `₹${(val / 1000)}k`}
+          tick={{ fontSize: 11, fill: '#64748b' }}
+          axisLine={{ stroke: '#1e293b' }} tickLine={false}
+        />
+        <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(148,163,184,0.04)' }} />
+        <Bar
+          dataKey="value" fill={getBarColor()} radius={[4, 4, 0, 0]}
+          barSize={data.length > 6 ? 28 : Math.min(56, 76 / data.length)}
+          animationDuration={800}
+        >
+          {data.map((entry, index) => (
+            <Cell key={`cell-${index}`} fill="url(#revenueGradientDark)" className="transition-opacity hover:opacity-80" />
+          ))}
+        </Bar>
         <defs>
-          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity={0.95} />
-            <stop offset="100%" stopColor={color} stopOpacity={0.55} />
+          <linearGradient id="revenueGradientDark" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={getBarColor()} stopOpacity={1} />
+            <stop offset="100%" stopColor={getBarColor()} stopOpacity={0.15} />
           </linearGradient>
         </defs>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={16} />
-        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
-        <Tooltip content={<Tip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
-        <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
       </BarChart>
     </ResponsiveContainer>
   );
 };
 
 // ==========================================
-// DESIGN PRIMITIVES
+// MINI MAP (dark)
 // ==========================================
-const Panel = ({ title, hint, action, children, className = "" }) => (
-  <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
-    <div className="flex items-start justify-between gap-3 px-5 pt-4">
-      <div>
-        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
-        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
-      </div>
-      {action}
+const MapView = ({ centreList }) => (
+  <div className="relative flex h-64 items-center justify-center overflow-hidden rounded-xl border border-white/[0.06] bg-slate-950/60">
+    {/* grid overlay */}
+    <div
+      className="absolute inset-0 opacity-[0.35]"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)",
+        backgroundSize: "24px 24px",
+      }}
+    />
+    <svg viewBox="0 0 200 200" className="relative h-full w-full">
+      <path
+        d="M50,50 L150,50 L180,120 L120,180 L40,160 Z"
+        fill="rgba(30,41,59,0.5)"
+        stroke="#334155"
+        strokeWidth="1.25"
+      />
+      {centreList.map((centre) => {
+        const status = centre.healthStatus || { color: "gray" };
+        const color =
+          status.color === "green" ? "#10b981"
+          : status.color === "yellow" ? "#f59e0b"
+          : "#f43f5e";
+        const x = 40 + (centre.id * 30) % 140;
+        const y = 40 + (centre.id * 20) % 120;
+        return (
+          <g key={centre.id}>
+            <circle cx={x} cy={y} r="10" fill={color} opacity="0.15" />
+            <circle cx={x} cy={y} r="5" fill={color} stroke="#020617" strokeWidth="1.5" />
+          </g>
+        );
+      })}
+    </svg>
+    <div className="absolute bottom-3 left-3 rounded-md border border-white/[0.06] bg-slate-950/80 px-2.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-wider text-slate-400 backdrop-blur">
+      Kerala · Network
     </div>
-    <div className="flex-1 px-5 pb-5 pt-3">{children}</div>
-  </section>
-);
-
-const Segmented = ({ options, value, onChange }) => (
-  <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="tablist">
-    {options.map((o) => (
-      <button
-        key={o.value}
-        role="tab"
-        aria-selected={value === o.value}
-        onClick={() => onChange(o.value)}
-        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
-          value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
-        }`}
-      >
-        {o.label}
-      </button>
-    ))}
   </div>
 );
 
-const money = (n) =>
-  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
-
-const Sparkline = ({ data = [], color = "#4f46e5" }) => {
-  const pts = data.map(Number).filter(Number.isFinite);
-  if (pts.length < 2) return null;
-  const w = 104, h = 36;
-  const max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
-  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
-  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
-  return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="flex-shrink-0">
-      <polygon points={`0,${h} ${line} ${w},${h}`} fill={color} opacity="0.12" />
-      <polyline points={line} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-};
-
-const Kpi = ({ label, value, delta, note, spark, sparkColor, tone = "text-slate-900" }) => {
-  const v = Number(delta);
-  const hasDelta = Number.isFinite(v) && v !== 0;
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</p>
-        {hasDelta && (
-          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${v > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-            {v > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
-            {Math.abs(v)}%
-          </span>
-        )}
-      </div>
-      <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
-      <div className="mt-3 flex items-end justify-between gap-3">
-        <p className="text-xs text-slate-500">{note}</p>
-        {spark && <Sparkline data={spark} color={sparkColor} />}
-      </div>
-    </div>
-  );
-};
-
-const Gauge = ({ value = 0, label }) => {
-  const v = Math.max(0, Math.min(100, Number(value) || 0));
-  const arc = Math.PI * 52;
-  const color = v >= 75 ? "#059669" : v >= 50 ? "#d97706" : "#e11d48";
-  return (
-    <div className="flex flex-col items-center">
-      <svg viewBox="0 0 140 80" className="w-44" aria-hidden="true">
-        <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke="#e2e8f0" strokeWidth="12" strokeLinecap="round" />
-        <path d="M 18 70 A 52 52 0 0 1 122 70" fill="none" stroke={color} strokeWidth="12" strokeLinecap="round" strokeDasharray={`${(v / 100) * arc} ${arc}`} />
-      </svg>
-      <p className="-mt-9 text-3xl font-semibold tabular-nums text-slate-900">{Math.round(v)}</p>
-      <p className="text-xs text-slate-500">{label}</p>
-    </div>
-  );
-};
-
-const StatusDonut = ({ items }) => {
-  const total = items.reduce((a, i) => a + (Number(i.value) || 0), 0);
-  const slices = total ? items.map((i) => ({ ...i, value: Number(i.value) || 0 })) : [{ name: "none", value: 1, color: "#e2e8f0" }];
-  return (
-    <div className="flex items-center gap-5">
-      <div className="relative h-32 w-32 flex-shrink-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
-            <Pie data={slices} dataKey="value" innerRadius={42} outerRadius={60} paddingAngle={total ? 2 : 0} stroke="none">
-              {slices.map((s, k) => <Cell key={k} fill={s.color} />)}
-            </Pie>
-          </PieChart>
-        </ResponsiveContainer>
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <p className="text-2xl font-semibold tabular-nums text-slate-900">{total}</p>
-          <p className="text-[11px] text-slate-500">open</p>
-        </div>
-      </div>
-      <ul className="flex-1 space-y-2 text-sm">
-        {items.map((i) => (
-          <li key={i.name} className="flex items-center justify-between">
-            <span className="flex items-center gap-2 text-slate-600">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: i.color }} />
-              {i.name}
-            </span>
-            <span className="font-semibold tabular-nums text-slate-900">{i.value ?? 0}</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-};
-
-const HEALTH_HEX = { green: "#059669", yellow: "#d97706", red: "#e11d48" };
-
-const CentreProfitChart = ({ centres }) => {
-  const data = centres.map((c) => ({
-    name: c.name,
-    profit: Number(c.profit) || 0,
-    rating: c.rating || 0,
-    health: c.healthStatus?.label || "Unknown",
-    fill: HEALTH_HEX[c.healthStatus?.color] || "#94a3b8",
-  }));
-  if (data.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No centres yet.</p>;
-  const Tip = ({ active, payload }) =>
-    active && payload?.length ? (
-      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
-        <p className="text-sm font-semibold">{payload[0].payload.name}</p>
-        <p className="mt-1 text-slate-300">Profit {money(payload[0].payload.profit)}</p>
-        <p className="text-slate-300">Rating {payload[0].payload.rating}, {payload[0].payload.health}</p>
-      </div>
-    ) : null;
-  return (
-    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 40)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
-        <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis type="number" tickFormatter={(v) => `₹${v / 1000}k`} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
-        <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 12, fill: "#334155" }} axisLine={false} tickLine={false} />
-        <Tooltip content={<Tip />} cursor={{ fill: "rgba(100,116,139,0.08)" }} />
-        <Bar dataKey="profit" radius={[0, 4, 4, 0]} barSize={18}>
-          {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
-  );
-};
-
-const TeamBars = ({ teams }) => {
-  const maxRev = Math.max(1, ...teams.map((t) => Number(t.revenue) || 0));
-  if (teams.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No team data.</p>;
-  return (
-    <ul className="space-y-4">
-      {teams.map((t, i) => {
-        const rev = Number(t.revenue) || 0;
-        const profit = Number(t.profit) || 0;
-        return (
-          <li key={t.id || i}>
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="truncate text-sm font-medium text-slate-900">{t.name}</span>
-              <span className={`text-sm font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(profit)}</span>
-            </div>
-            <div className="relative mt-1.5 h-2 rounded-full bg-slate-100">
-              <div className="absolute inset-y-0 left-0 rounded-full bg-slate-300" style={{ width: `${(rev / maxRev) * 100}%` }} />
-              <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${(Math.max(0, profit) / maxRev) * 100}%` }} />
-            </div>
-            <p className="mt-1 text-xs text-slate-500">Revenue {money(rev)}, expenses {money(t.expenses || 0)}</p>
-          </li>
-        );
-      })}
-    </ul>
-  );
-};
-
-const HighlightRow = ({ label, name, value }) => (
-  <li className="flex items-baseline justify-between gap-3 py-2 text-sm">
-    <span className="text-slate-500">{label}</span>
-    <span className="min-w-0 truncate text-right">
-      <span className="font-medium text-slate-900">{name || "N/A"}</span>
-      {value !== undefined && value !== null && value !== "" && (
-        <span className="ml-2 tabular-nums text-slate-500">{value}</span>
-      )}
-    </span>
-  </li>
-);
-
 // ==========================================
-// MAIN DASHBOARD COMPONENT
+// MAIN DASHBOARD
 // ==========================================
 const SuperadminDashboard = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
-  const [period, setPeriod] = useState("month"); // default: This Month
+  const [period, setPeriod] = useState("month");
 
-  // Accounting closing log (all centres)
-  const [closingDate, setClosingDate] = useState(""); // empty = backend default (yesterday, IST)
+  const [closingDate, setClosingDate] = useState("");
   const [closingData, setClosingData] = useState({ date: "", rows: [] });
   const [closingLoading, setClosingLoading] = useState(true);
   const [closingError, setClosingError] = useState(false);
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
-  };
+  const formatCurrency = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -510,29 +537,26 @@ const SuperadminDashboard = () => {
               modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
               timeframe: "custom",
               customStartDate: start,
-              customEndDate: end
+              customEndDate: end,
             },
             headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal
+            signal: controller.signal,
           }
         );
 
         setDashboard(response.data);
         setLoading(false);
       } catch (err) {
-        if (axios.isCancel(err)) return; // superseded by a newer request
+        if (axios.isCancel(err)) return;
         console.error("Error fetching dashboard:", err);
         toast.error("Failed to load dashboard data.", { position: "top-right" });
         setLoading(false);
       }
     };
     fetchDashboard();
-
-    // cancel the previous request if the period changes quickly
     return () => controller.abort();
   }, [period]);
 
-  // Fetch accounting closing log for all centres
   useEffect(() => {
     const controller = new AbortController();
     setClosingLoading(true);
@@ -560,40 +584,50 @@ const SuperadminDashboard = () => {
 
   if (loading && !dashboard) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-6 flex items-center justify-center min-h-[400px]">
-        <svg className="animate-spin h-8 w-8 text-indigo-600 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <span className="text-gray-600 font-medium">Loading Superadmin Dashboard...</span>
+      <div className="relative min-h-screen bg-slate-950 p-4 lg:p-8">
+        <div className="pointer-events-none absolute inset-0 opacity-[0.4]"
+          style={{
+            backgroundImage:
+              "radial-gradient(circle at 15% 10%, rgba(34,211,238,0.08), transparent 40%), radial-gradient(circle at 85% 90%, rgba(167,139,250,0.08), transparent 40%)",
+          }}
+        />
+        <div className="relative mx-auto max-w-[1500px] space-y-6">
+          <div className="h-16 animate-pulse rounded-2xl border border-white/[0.06] bg-slate-900/40" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-28 animate-pulse rounded-2xl border border-white/[0.06] bg-slate-900/40" />
+            ))}
+          </div>
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <div className="h-80 animate-pulse rounded-2xl border border-white/[0.06] bg-slate-900/40 lg:col-span-2" />
+            <div className="h-80 animate-pulse rounded-2xl border border-white/[0.06] bg-slate-900/40" />
+          </div>
+          <div className="flex items-center justify-center gap-2 py-4 text-slate-500">
+            <FiLoader className="h-4 w-4 animate-spin text-cyan-400" />
+            <span className="font-mono text-xs font-medium uppercase tracking-widest">
+              Initializing Command Center…
+            </span>
+          </div>
+        </div>
       </div>
     );
   }
 
   const { executive = {}, finance = {}, operations = {}, leaderboards = {} } = dashboard || {};
-
-  // --- Executive ---
-  const { stats = {}, health = {}, alerts = [], insights = [] } = executive;
-
-  // --- Finance ---
+  const { stats = {}, health = {}, alerts = [] } = executive;
   const { financials = {}, wallets = {} } = finance;
   const chartData = financials.charts || {};
   const revenueChartData = chartData[revenueView] || [];
-
-  // --- Operations ---
   const { customers = {}, staff = {}, teams = {} } = operations;
-
-  // --- Leaderboards ---
   const { centres = {} } = leaderboards;
   const centreList = centres.fullList || [];
   const best = centres.best || {};
   const worst = centres.worst || {};
 
-  // Direct access to pre‑computed fields
   const {
     totalCentres, totalStaff, totalCustomers, customerGrowth, revenueGrowthPercent,
     newCentresThisMonth, todayRevenue, todayServices, pendingServices, delayedServices,
-    inProgressServices, admins, staffCount
+    inProgressServices, admins, staffCount,
   } = stats;
 
   const { revenue: monthlyRevenue, profit: netProfit } = financials.totals || {};
@@ -605,262 +639,618 @@ const SuperadminDashboard = () => {
   const notifications = alerts;
 
   const closingRows = closingData.rows || [];
+  const closedCount = closingRows.filter((r) => r.status === "closed").length;
+  const unclosedCount = closingRows.length - closedCount;
+  const closeProgress = closingRows.length ? Math.round((closedCount / closingRows.length) * 100) : 0;
 
-  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "";
-  const margin = financials.totals?.margin;
-  const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
-
-  const walletParts = [
-    { label: "Cash", value: walletCash, bar: "bg-indigo-600" },
-    { label: "Bank", value: walletBank, bar: "bg-sky-600" },
-    { label: "Digital", value: walletDigital, bar: "bg-indigo-500" },
+  const kpiData = [
+    {
+      title: "Total Centres", value: totalCentres, icon: FiHome, accent: "cyan",
+      subtitle: `+${newCentresThisMonth ?? 0} this month`,
+      trend: newCentresThisMonth > 0 ? 5 : -2,
+      onClick: () => navigate('/dashboard/superadmin/centremanagement'),
+    },
+    {
+      title: "Total Staff", value: totalStaff, icon: FiUsers, accent: "violet",
+      subtitle: `${admins ?? 0} admins · ${staffCount ?? 0} staff`,
+      trend: 0,
+      onClick: () => navigate('/dashboard/superadmin/staffmanagement'),
+    },
+    {
+      title: "Customers", value: totalCustomers?.toLocaleString(), icon: FiUserCheck, accent: "emerald",
+      subtitle: `+${customerGrowth ?? 0} this month`,
+      trend: customerGrowth > 0 ? 8 : -3,
+    },
+    {
+      title: "Today's Services", value: todayServices ?? 0, icon: FiShoppingBag, accent: "cyan",
+      subtitle: "All centres",
+      trend: 0,
+    },
+    {
+      title: "Today's Revenue", value: formatCurrency(todayRevenue), icon: FiDollarSign, accent: "amber",
+      subtitle: "Live collection",
+      trend: todayRevenue > 0 ? 12 : -5,
+    },
+    {
+      title: "Period Revenue", value: formatCurrency(monthlyRevenue), icon: FiTrendingUp, accent: "amber",
+      subtitle: "vs previous",
+      trend: revenueGrowthPercent,
+    },
+    {
+      title: "Period Profit", value: formatCurrency(netProfit), icon: FiPieChart, accent: "emerald",
+      subtitle: "Selected range",
+      trend: netProfit > 0 ? 6 : -2,
+    },
+    {
+      title: "Pending Payments", value: formatCurrency(health?.metrics?.pendingPaymentValue), icon: FiAlertCircle, accent: "rose",
+      subtitle: `${health?.metrics?.pendingCustomers ?? 0} customers`,
+      trend: health?.metrics?.pendingCustomers > 5 ? 15 : -4,
+    },
   ];
-  const walletSum = walletParts.reduce((a, p) => a + (Number(p.value) || 0), 0) || 1;
 
-  const glance = [
-    { label: "Centres", value: totalCentres ?? centreList.length, note: `+${newCentresThisMonth ?? 0} this month` },
-    { label: "Staff", value: totalStaff ?? 0, note: `${admins ?? 0} admins` },
-    { label: "Customers", value: totalCustomers?.toLocaleString() ?? 0, note: `+${customerGrowth ?? 0} this month` },
-    { label: "Rating", value: avgRating ? `${Number(avgRating).toFixed(1)}/5` : "-", note: `${totalReviews ?? 0} reviews` },
-    { label: "Network health", value: health?.overallScore !== undefined ? `${health.overallScore}/100` : "-" },
-  ];
-
-  const revSpark = (chartData.revenue || []).map((d) => d.value);
-  const profitSpark = (chartData.profit || []).map((d) => d.value);
-  const closingDay = closingData.date
-    ? new Date(`${closingData.date}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
-    : "";
-  const healthCount = (color) => centreList.filter((c) => c.healthStatus?.color === color).length;
-  const btnPrimary =
-    "inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2";
-  const btnGhost =
-    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600";
-  const serviceItems = [
-    { name: "Pending", value: pendingServices ?? 0, color: "#d97706" },
-    { name: "In progress", value: inProgressServices ?? 0, color: "#2563eb" },
-    { name: "Delayed", value: delayedServices ?? 0, color: "#e11d48" },
+  const revenueTabs = [
+    { key: 'revenue', label: 'Revenue', active: 'text-cyan-300' },
+    { key: 'profit', label: 'Profit', active: 'text-emerald-300' },
+    { key: 'expenses', label: 'Expenses', active: 'text-rose-300' },
   ];
 
   return (
-    <div className="min-h-screen bg-slate-100 p-4 lg:p-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Superadmin dashboard</h1>
-          <p className={`mt-1 text-sm ${needsLook > 0 ? "text-amber-700" : "text-slate-500"}`}>
-            {closingLoading
-              ? "Checking registers..."
-              : closingError || closingRows.length === 0
-              ? periodLabel
-              : needsLook === 0
-              ? `${periodLabel}. All ${closingRows.length} registers closed cleanly for ${closingDay}.`
-              : `${periodLabel}. ${needsLook} of ${closingRows.length} registers need a look for ${closingDay}.`}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {loading && <FiLoader className="h-5 w-5 animate-spin text-indigo-600" />}
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
-            aria-label="Select period"
-          >
-            {PERIOD_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>{opt.label}</option>
-            ))}
-          </select>
-          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/messenger")}><FiSend className="h-4 w-4" /> Broadcast</button>
-          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/analytics")}><FiBarChart2 className="h-4 w-4" /> Reports</button>
-          <button className={btnGhost} onClick={() => navigate("/dashboard/superadmin/centremanagement")}><FiUserPlus className="h-4 w-4" /> New admin</button>
-          <button className={btnPrimary} onClick={() => navigate("/dashboard/superadmin/centremanagement")}><FiPlus className="h-4 w-4" /> New centre</button>
-        </div>
-      </div>
+    <div className="relative min-h-screen bg-slate-950">
+      {/* ambient background glows */}
+      <div
+        className="pointer-events-none fixed inset-0 opacity-100"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 12% 0%, rgba(34,211,238,0.07), transparent 35%), radial-gradient(circle at 88% 100%, rgba(167,139,250,0.07), transparent 35%), radial-gradient(circle at 50% 50%, rgba(15,23,42,0.4), transparent 70%)",
+        }}
+      />
+      {/* subtle grid */}
+      <div
+        className="pointer-events-none fixed inset-0 opacity-[0.15]"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(148,163,184,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.06) 1px, transparent 1px)",
+          backgroundSize: "48px 48px",
+        }}
+      />
 
-      <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-        {glance.filter((g) => g.label !== "Network health").map((g) => (
-          <div key={g.label} className="flex items-baseline gap-1.5">
-            <dt className="text-slate-500">{g.label}</dt>
-            <dd className="font-semibold tabular-nums text-slate-900">{g.value}</dd>
+      <div className="relative">
+        {/* ================= HEADER ================= */}
+        <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-slate-950/70 backdrop-blur-xl">
+          <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3 px-4 py-3.5 lg:px-8">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-cyan-400/25 bg-cyan-500/10 text-lg shadow-[0_0_24px_-8px_rgba(34,211,238,0.7)]">
+                <FiRadio className="h-5 w-5 text-cyan-300" />
+                <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400 ring-2 ring-slate-950" />
+              </span>
+              <div>
+                <h1 className="text-base font-bold tracking-tight text-slate-50 lg:text-lg">
+                  Command Center
+                </h1>
+                <p className="font-mono text-[10px] font-medium uppercase tracking-[0.15em] text-slate-500">
+                  Superadmin · Live Network
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              {loading && <FiLoader className="h-4 w-4 animate-spin text-cyan-400" />}
+              <div className="relative">
+                <select
+                  value={period}
+                  onChange={(e) => setPeriod(e.target.value)}
+                  className="cursor-pointer appearance-none rounded-lg border border-white/[0.06] bg-white/[0.03] py-2 pl-3.5 pr-9 font-mono text-xs font-medium uppercase tracking-wider text-slate-300 transition hover:border-cyan-400/30 focus:border-cyan-400/40 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                  aria-label="Select period"
+                >
+                  {PERIOD_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value} className="bg-slate-900 text-slate-200">
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-500">▾</span>
+              </div>
+            </div>
           </div>
-        ))}
-      </dl>
+        </header>
 
-      {/* KPIs */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Kpi label="Revenue" value={formatCurrency(monthlyRevenue)} delta={revenueGrowthPercent} note="vs previous period" spark={revSpark} sparkColor="#4f46e5" />
-        <Kpi
-          label="Profit"
-          value={formatCurrency(netProfit)}
-          tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
-          note={margin !== undefined ? `${margin}% margin` : "after expenses"}
-          spark={profitSpark}
-          sparkColor="#059669"
-        />
-        <Kpi label="Today's revenue" value={formatCurrency(todayRevenue)} note={`${todayServices ?? 0} services today`} />
-        <Kpi
-          label="Pending payments"
-          value={formatCurrency(health?.metrics?.pendingPaymentValue)}
-          tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-700" : "text-slate-900"}
-          note={`${health?.metrics?.pendingCustomers ?? 0} customers`}
-        />
-      </div>
+        {/* ================= CONTENT ================= */}
+        <div className="mx-auto max-w-[1500px] space-y-6 p-4 lg:p-8">
 
-      {/* Trend + health + services */}
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-8"><Panel
-            title="Trend"
-            hint={periodLabel}
-            action={
-              <Segmented
-                value={revenueView}
-                onChange={setRevenueView}
-                options={[
-                  { value: "revenue", label: "Revenue" },
-                  { value: "profit", label: "Profit" },
-                  { value: "expenses", label: "Expenses" },
-                ]}
-              />
-            }
-          >
-            <RevenueChart data={revenueChartData} view={revenueView} />
-          </Panel></div>
-        <div className="flex flex-col gap-4 xl:col-span-4">
-          <Panel title="Network health" hint="Overall score across centres">
-            <Gauge value={health?.overallScore} label="out of 100" />
-            <div className="mt-3 flex justify-center gap-4 text-xs text-slate-600">
-              {[["green", "Healthy", "bg-emerald-500"], ["yellow", "Watch", "bg-amber-500"], ["red", "At risk", "bg-rose-500"]].map(([k, l, dot]) => (
-                <span key={k} className="flex items-center gap-1.5">
-                  <span className={`h-2 w-2 rounded-full ${dot}`} />
-                  {healthCount(k)} {l}
-                </span>
-              ))}
+          {/* ---------- KPI TILES ---------- */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {kpiData.map((kpi, index) => (
+              <StatCard key={index} {...kpi} delay={index * 0.03} />
+            ))}
+          </div>
+
+          {/* ---------- REVENUE + LEADERBOARD ---------- */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <Panel
+              title="Revenue Analytics"
+              subtitle="Trend for selected period"
+              icon={<FiActivity className="h-4 w-4 text-cyan-300" />}
+              accent="cyan"
+              className="lg:col-span-2"
+              action={
+                <div className="flex rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+                  {revenueTabs.map((t) => (
+                    <button
+                      key={t.key}
+                      onClick={() => setRevenueView(t.key)}
+                      className={`rounded-md px-3 py-1 text-[11px] font-semibold transition-all duration-200 ${
+                        revenueView === t.key
+                          ? `bg-white/[0.06] ${t.active}`
+                          : 'text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              }
+            >
+              <RevenueChart data={revenueChartData} view={revenueView} />
+            </Panel>
+
+            <Panel
+              title="Centre Leaderboard"
+              subtitle="Top 5 by profit"
+              icon="🏆"
+              accent="amber"
+              bodyClassName="p-3 pt-2"
+            >
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Rank</th>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Centre</th>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Profit</th>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Rate</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {centreList.slice(0, 5).map((centre, idx) => (
+                      <tr key={centre.id} className="cursor-pointer border-t border-white/[0.03] transition-colors hover:bg-white/[0.02]">
+                        <td className="whitespace-nowrap px-3 py-3">
+                          <span
+                            className={`inline-flex h-6 w-6 items-center justify-center rounded-md font-mono text-[10px] font-bold ${
+                              idx === 0 ? 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30'
+                              : idx === 1 ? 'bg-slate-500/15 text-slate-300 ring-1 ring-slate-500/30'
+                              : idx === 2 ? 'bg-orange-500/15 text-orange-300 ring-1 ring-orange-500/30'
+                              : 'bg-white/[0.03] text-slate-500 ring-1 ring-white/[0.06]'
+                            }`}
+                          >
+                            {idx + 1}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-[13px] font-medium text-slate-200">{centre.name}</td>
+                        <td className="px-3 py-3 font-mono text-[12px] font-semibold text-emerald-300">
+                          {formatCurrency(centre.profit)}
+                        </td>
+                        <td className="px-3 py-3 font-mono text-[12px] text-slate-400">
+                          {centre.rating || 0} <span className="text-amber-400">★</span>
+                        </td>
+                      </tr>
+                    ))}
+                    {centreList.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-600">No centres</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          </div>
+
+          {/* ---------- LIVE OPS STRIP ---------- */}
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            {[
+              { label: "Pending", value: pendingServices, color: "rose" },
+              { label: "In Progress", value: inProgressServices, color: "cyan" },
+              { label: "Delayed", value: delayedServices, color: "amber" },
+              { label: "Completed", value: todayServices, color: "emerald" },
+            ].map((item) => {
+              if (item.value === undefined) return null;
+              const tone = {
+                rose: { ring: "border-rose-500/25", glow: "shadow-[0_0_36px_-16px_rgba(244,63,94,0.9)]", text: "text-rose-300", dot: "bg-rose-400" },
+                cyan: { ring: "border-cyan-500/25", glow: "shadow-[0_0_36px_-16px_rgba(34,211,238,0.9)]", text: "text-cyan-300", dot: "bg-cyan-400" },
+                amber: { ring: "border-amber-500/25", glow: "shadow-[0_0_36px_-16px_rgba(245,158,11,0.9)]", text: "text-amber-300", dot: "bg-amber-400" },
+                emerald: { ring: "border-emerald-500/25", glow: "shadow-[0_0_36px_-16px_rgba(16,185,129,0.9)]", text: "text-emerald-300", dot: "bg-emerald-400" },
+              }[item.color];
+              return (
+                <div
+                  key={item.label}
+                  className={`relative overflow-hidden rounded-2xl border bg-slate-950/40 p-4 backdrop-blur-sm transition-all duration-300 hover:-translate-y-0.5 ${tone.ring} ${tone.glow}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`h-1.5 w-1.5 animate-pulse rounded-full ${tone.dot}`} />
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      {item.label}
+                    </span>
+                  </div>
+                  <div className={`mt-2 font-mono text-2xl font-bold tabular-nums ${tone.text}`}>
+                    {item.value}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ---------- HEALTH + MAP ---------- */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            <Panel
+              title="Centre Health"
+              subtitle="Live status · network-wide"
+              icon="🏥"
+              accent="emerald"
+              className="lg:col-span-2"
+            >
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {centreList.map((centre) => {
+                  const status = centre.healthStatus || { label: "Unknown", icon: "❓", color: "gray" };
+                  const dotColor =
+                    status.color === "green" ? "bg-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.9)]"
+                    : status.color === "yellow" ? "bg-amber-400 shadow-[0_0_10px_rgba(245,158,11,0.9)]"
+                    : status.color === "gray" ? "bg-slate-500"
+                    : "bg-rose-400 shadow-[0_0_10px_rgba(244,63,94,0.9)]";
+                  return (
+                    <div
+                      key={centre.id}
+                      className="flex items-center justify-between rounded-xl border border-white/[0.06] bg-white/[0.02] p-3.5 transition-all duration-200 hover:border-white/[0.12] hover:bg-white/[0.04]"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-[13px] font-semibold text-slate-200">{centre.name}</div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className={`h-1.5 w-1.5 rounded-full ${dotColor}`} />
+                          <span className="text-[11px] font-medium text-slate-500">
+                            {status.label}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-mono text-base font-bold text-slate-100">{centre.rating || 0}</div>
+                        <div className="font-mono text-[9px] uppercase tracking-widest text-slate-600">rate</div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {health?.overallScore !== undefined && (
+                <div className="mt-5 border-t border-white/[0.04] pt-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Network Health Score
+                    </span>
+                    <span className="font-mono text-sm font-bold text-emerald-300">
+                      {health.overallScore}<span className="text-slate-600">/100</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.04]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 shadow-[0_0_12px_rgba(34,211,238,0.7)] transition-all duration-700"
+                      style={{ width: `${Math.min(100, Math.max(0, health.overallScore))}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+            </Panel>
+
+            <Panel title="Network Map" subtitle="Distribution & health" icon="🗺️" accent="violet">
+              <MapView centreList={centreList} />
+            </Panel>
+          </div>
+
+          {/* ---------- WALLETS ---------- */}
+          <Panel title="Wallet Balances" subtitle="Cash · bank · digital" icon="💰" accent="emerald">
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              {[
+                { label: "Cash", value: walletCash, accent: "emerald" },
+                { label: "Bank", value: walletBank, accent: "cyan" },
+                { label: "Digital", value: walletDigital, accent: "violet" },
+              ].map((w) => {
+                const tone = {
+                  emerald: { text: "text-emerald-300", dot: "bg-emerald-400" },
+                  cyan: { text: "text-cyan-300", dot: "bg-cyan-400" },
+                  violet: { text: "text-violet-300", dot: "bg-violet-400" },
+                }[w.accent];
+                return (
+                  <div
+                    key={w.label}
+                    className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 transition-all duration-200 hover:border-white/[0.12] hover:bg-white/[0.04]"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`h-1.5 w-1.5 rounded-full ${tone.dot}`} />
+                      <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                        {w.label}
+                      </span>
+                    </div>
+                    <div className={`mt-2 font-mono text-lg font-bold tabular-nums ${tone.text}`}>
+                      {formatCurrency(w.value)}
+                    </div>
+                  </div>
+                );
+              })}
+              <div className="relative overflow-hidden rounded-xl border border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.08] to-violet-500/[0.06] p-4 shadow-[0_0_40px_-16px_rgba(34,211,238,0.8)]">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-cyan-300">
+                    Total
+                  </span>
+                </div>
+                <div className="mt-2 font-mono text-2xl font-bold tabular-nums text-slate-50">
+                  {formatCurrency(walletTotal)}
+                </div>
+              </div>
             </div>
           </Panel>
-          <Panel title="Open services" hint={`${todayServices ?? 0} created today`}>
-            <StatusDonut items={serviceItems} />
-          </Panel>
-        </div>
-      </div>
 
-      {/* Centres + closing log */}
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="xl:col-span-7">
-          <Panel title="Profit by centre" hint="Bar colour shows centre health">
-            <CentreProfitChart centres={centreList} />
-          </Panel>
-        </div>
-        <div className="xl:col-span-5"><Panel
-            title="Accounting closing log"
-            hint={closingLoading || closingError ? "" : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`}
-            action={
-              <input
-                type="date"
-                value={closingDate || closingData.date || ""}
-                max={todayIST()}
-                onChange={(e) => setClosingDate(e.target.value)}
-                className="rounded-lg border border-slate-300 px-2 py-1 text-xs text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
-                aria-label="Accounting date"
-              />
-            }
-          >
-            <div className="max-h-96 overflow-y-auto">
-              {closingLoading ? (
-                <div className="flex justify-center py-8"><FiLoader className="h-6 w-6 animate-spin text-indigo-600" /></div>
-              ) : closingError ? (
-                <p className="rounded-lg bg-rose-50 p-4 text-center text-sm text-rose-600">Could not load closing log.</p>
-              ) : closingRows.length === 0 ? (
-                <p className="py-6 text-center text-sm text-slate-500">No centres found.</p>
-              ) : (
-                <ul className="divide-y divide-slate-100">
-                  {closingRows.map((row) => {
+          {/* ---------- BEST / WORST ---------- */}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            <Panel title="Best Performers" subtitle="Top of the network" icon="🏆" accent="emerald">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-4">
+                  <div className="font-mono text-[10px] font-bold uppercase tracking-widest text-emerald-400">Best Revenue</div>
+                  <div className="mt-1 truncate text-[13px] font-bold text-slate-100">{best.revenue?.name || "N/A"}</div>
+                  <div className="mt-0.5 font-mono text-base font-bold text-emerald-300">
+                    {formatCurrency(best.revenue?.value)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-4">
+                  <div className="font-mono text-[10px] font-bold uppercase tracking-widest text-cyan-400">Best Profit</div>
+                  <div className="mt-1 truncate text-[13px] font-bold text-slate-100">{best.profit?.name || "N/A"}</div>
+                  <div className="mt-0.5 font-mono text-base font-bold text-cyan-300">
+                    {formatCurrency(best.profit?.value)}
+                  </div>
+                </div>
+                <div className="col-span-2 rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4">
+                  <div className="font-mono text-[10px] font-bold uppercase tracking-widest text-amber-400">Best Rating</div>
+                  <div className="mt-1 flex items-end justify-between">
+                    <div className="truncate text-[13px] font-bold text-slate-100">{best.rating?.name || "N/A"}</div>
+                    <div className="font-mono text-base font-bold text-amber-300">
+                      {best.rating?.value || 0} <span className="text-amber-400">★</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Panel>
+
+            <Panel title="Needs Attention" subtitle="Underperformers" icon="⚠️" accent="rose">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Lowest Profit", name: worst.revenue?.name, value: formatCurrency(worst.revenue?.value), tone: "rose" },
+                  { label: "Highest Pending", name: worst.pending?.name, value: worst.pending?.value ? formatCurrency(worst.pending.value) : "N/A", tone: "rose" },
+                  { label: "Most Delayed", name: worst.delayed?.name, value: worst.delayed?.value ?? "N/A", tone: "amber" },
+                  { label: "Most Complaints", name: worst.complaints?.name, value: worst.complaints?.value ?? "N/A", tone: "amber" },
+                ].map((item) => {
+                  const tone = item.tone === "rose"
+                    ? { ring: "border-rose-500/20", bg: "bg-rose-500/[0.04]", text: "text-rose-300" }
+                    : { ring: "border-amber-500/20", bg: "bg-amber-500/[0.04]", text: "text-amber-300" };
+                  return (
+                    <div key={item.label} className={`rounded-xl border ${tone.ring} ${tone.bg} p-4`}>
+                      <div className={`font-mono text-[10px] font-bold uppercase tracking-widest ${tone.text}`}>
+                        {item.label}
+                      </div>
+                      <div className="mt-1 truncate text-[13px] font-bold text-slate-100">{item.name || "N/A"}</div>
+                      <div className={`mt-0.5 font-mono text-base font-bold ${tone.text}`}>{item.value}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </Panel>
+          </div>
+
+          {/* ---------- STAFF + TEAMS ---------- */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <StaffPerformanceChart staffData={topStaffList} />
+
+            <Panel
+              title="Top Teams"
+              subtitle="Revenue · profit · expenses"
+              icon="👥"
+              accent="violet"
+              bodyClassName="p-3 pt-2"
+            >
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead>
+                    <tr>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Team</th>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Revenue</th>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Profit</th>
+                      <th className="px-3 py-2 text-left font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">Expenses</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {topTeamsList.map((team, idx) => (
+                      <tr key={team.id || idx} className="border-t border-white/[0.03] transition-colors hover:bg-white/[0.02]">
+                        <td className="whitespace-nowrap px-3 py-3.5 text-[13px] font-medium text-slate-200">{team.name}</td>
+                        <td className="whitespace-nowrap px-3 py-3.5 font-mono text-[12px] text-slate-400">{formatCurrency(team.revenue)}</td>
+                        <td className="whitespace-nowrap px-3 py-3.5 font-mono text-[12px] font-semibold text-emerald-300">{formatCurrency(team.profit || 0)}</td>
+                        <td className="whitespace-nowrap px-3 py-3.5 font-mono text-[12px] font-medium text-rose-300">{formatCurrency(team.expenses || 0)}</td>
+                      </tr>
+                    ))}
+                    {topTeamsList.length === 0 && (
+                      <tr>
+                        <td colSpan={4} className="px-3 py-8 text-center text-sm text-slate-600">
+                          No team data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Panel>
+          </div>
+
+          {/* ---------- ALERTS + CLOSING ---------- */}
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+            <Panel
+              title="Action Required"
+              subtitle={`${notifications.length} item${notifications.length === 1 ? "" : "s"}`}
+              icon={<FiZap className="h-4 w-4 text-amber-300" />}
+              accent="amber"
+              bodyClassName="p-5 pt-4"
+            >
+              <div className="max-h-80 space-y-3 overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-700">
+                {notifications.length > 0 ? (
+                  notifications.map((notif) => {
+                    const tone =
+                      notif.priority === "critical"
+                        ? { bar: "bg-rose-400", bg: "bg-rose-500/[0.05]", ring: "border-rose-500/25", dot: "bg-rose-400", glow: "shadow-[0_0_20px_-8px_rgba(244,63,94,0.7)]" }
+                        : notif.priority === "warning"
+                        ? { bar: "bg-amber-400", bg: "bg-amber-500/[0.05]", ring: "border-amber-500/25", dot: "bg-amber-400", glow: "shadow-[0_0_20px_-8px_rgba(245,158,11,0.7)]" }
+                        : { bar: "bg-cyan-400", bg: "bg-cyan-500/[0.05]", ring: "border-cyan-500/25", dot: "bg-cyan-400", glow: "shadow-[0_0_20px_-8px_rgba(34,211,238,0.7)]" };
+                    return (
+                      <div
+                        key={notif.id}
+                        className={`relative flex items-start gap-3 overflow-hidden rounded-xl border ${tone.ring} ${tone.bg} p-4 ${tone.glow}`}
+                      >
+                        <span className={`absolute inset-y-0 left-0 w-0.5 ${tone.bar}`} />
+                        <span className={`mt-1.5 h-1.5 w-1.5 flex-shrink-0 animate-pulse rounded-full ${tone.dot}`} />
+                        <div className="flex-1">
+                          <div className="mb-0.5 text-[13px] font-semibold text-slate-100">{notif.title}</div>
+                          <div className="text-[12px] leading-relaxed text-slate-400">{notif.message}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center font-mono text-xs uppercase tracking-widest text-slate-600">
+                    All systems nominal
+                  </div>
+                )}
+              </div>
+            </Panel>
+
+            <Panel
+              title="Closing Log"
+              subtitle={
+                !closingLoading && !closingError
+                  ? `${closedCount} of ${closingRows.length} centres closed`
+                  : "Daily close status"
+              }
+              icon="📒"
+              accent="cyan"
+              bodyClassName="p-5 pt-4"
+              action={
+                <input
+                  type="date"
+                  value={closingDate || closingData.date || ""}
+                  max={todayIST()}
+                  onChange={(e) => setClosingDate(e.target.value)}
+                  className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 py-1.5 font-mono text-[11px] font-medium text-slate-300 transition focus:border-cyan-400/40 focus:outline-none focus:ring-2 focus:ring-cyan-500/20"
+                  aria-label="Accounting date"
+                  style={{ colorScheme: "dark" }}
+                />
+              }
+            >
+              {!closingLoading && !closingError && closingRows.length > 0 && (
+                <div className="mb-4">
+                  <div className="mb-1.5 flex items-center justify-between">
+                    <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                      Completion
+                    </span>
+                    <span className="font-mono text-xs font-bold text-emerald-300">{closeProgress}%</span>
+                  </div>
+                  <div className="h-1 w-full overflow-hidden rounded-full bg-white/[0.04]">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-cyan-400 shadow-[0_0_12px_rgba(16,185,129,0.8)] transition-all duration-700"
+                      style={{ width: `${closeProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="max-h-80 space-y-3 overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-slate-700">
+                {closingLoading ? (
+                  <div className="space-y-3">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i} className="h-16 animate-pulse rounded-xl border border-white/[0.06] bg-white/[0.02]" />
+                    ))}
+                  </div>
+                ) : closingError ? (
+                  <div className="rounded-xl border border-rose-500/25 bg-rose-500/[0.05] p-4 text-center text-sm font-medium text-rose-300">
+                    Could not load closing log.
+                  </div>
+                ) : closingRows.length === 0 ? (
+                  <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center font-mono text-xs uppercase tracking-widest text-slate-600">
+                    No centres found
+                  </div>
+                ) : (
+                  closingRows.map((row) => {
                     const v = getClosingView(row);
                     return (
-                      <li key={row.centre_id} className="flex items-start gap-3 py-2.5">
-                        <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${v.dot}`} />
+                      <div
+                        key={row.centre_id}
+                        className={`flex items-start gap-3 rounded-xl border p-3.5 transition-all duration-200 ${v.wrap} ${v.glow}`}
+                      >
+                        <div className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg border border-white/[0.06] bg-white/[0.03] ${v.icon}`}>
+                          <v.Icon className="h-4 w-4" />
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-900">{row.centre_name}</p>
-                          <p className="text-xs text-slate-500">{v.detail}</p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="truncate text-[13px] font-semibold text-slate-100">{row.centre_name}</p>
+                            <span className={`whitespace-nowrap rounded-md px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest ${v.chip}`}>
+                              {v.label}
+                            </span>
+                          </div>
+                          <p className="mt-1 font-mono text-[11px] text-slate-400">{v.detail}</p>
                           {row.status === "closed" && row.closed_at && (
-                            <p className="text-[11px] text-slate-400">
-                              {new Date(row.closed_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
-                              {row.closed_by_name ? `, ${row.closed_by_name}` : ""}
+                            <p className="mt-1 font-mono text-[10px] text-slate-600">
+                              {new Date(row.closed_at).toLocaleString("en-IN", {
+                                day: "numeric", month: "short", hour: "2-digit", minute: "2-digit",
+                              })}
+                              {row.closed_by_name ? ` · ${row.closed_by_name}` : ""}
                             </p>
                           )}
                         </div>
-                        <span className={`text-xs font-medium ${v.text}`}>{v.label}</span>
-                      </li>
+                      </div>
                     );
-                  })}
-                </ul>
-              )}
-            </div>
-          </Panel></div>
-      </div>
-
-      {/* People */}
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <StaffPerformanceChart staffData={topStaffList} />
-        <Panel title="Top teams" hint="Grey bar is revenue, green is profit">
-          <TeamBars teams={topTeamsList} />
-        </Panel>
-      </div>
-
-      {/* Money, alerts, highlights */}
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel title="Wallet position" hint="Across all centres">
-            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
-            <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
-              {walletParts.map((p) => (
-                <div key={p.label} className={p.bar} style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%` }} />
-              ))}
-            </div>
-            <ul className="mt-3 space-y-1.5 text-sm">
-              {walletParts.map((p) => (
-                <li key={p.label} className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-slate-600">
-                    <span className={`h-2 w-2 rounded-full ${p.bar}`} />
-                    {p.label}
-                  </span>
-                  <span className="tabular-nums text-slate-900">{formatCurrency(p.value)}</span>
-                </li>
-              ))}
-            </ul>
-          </Panel>
-        <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
-            {notifications.length > 0 ? (
-              <ul className="max-h-72 space-y-2 overflow-y-auto">
-                {notifications.map((n) => (
-                  <li
-                    key={n.id}
-                    className={`rounded-r-lg border-l-4 py-2 pl-3 pr-2 ${
-                      n.priority === "critical" ? "border-rose-500 bg-rose-50" : n.priority === "warning" ? "border-amber-500 bg-amber-50" : "border-sky-500 bg-sky-50"
-                    }`}
-                  >
-                    <p className="text-sm font-medium text-slate-900">{n.title}</p>
-                    <p className="text-xs text-slate-600">{n.message}</p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="py-4 text-center text-sm text-slate-500">Nothing needs action right now.</p>
-            )}
-          </Panel>
-        <div className="flex flex-col gap-4">
-          <Panel title="Leading">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} />
-                <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} />
-                <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} />
-              </ul>
+                  })
+                )}
+              </div>
             </Panel>
-          <Panel title="Needs work">
-              <ul className="divide-y divide-slate-100">
-                <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} />
-                <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} />
-                <HighlightRow label="Most delayed" name={worst.delayed?.name} value={worst.delayed?.value ?? ""} />
-                <HighlightRow label="Most complaints" name={worst.complaints?.name} value={worst.complaints?.value ?? ""} />
-              </ul>
-            </Panel>
+          </div>
+
+          {/* ---------- QUICK ACTIONS ---------- */}
+          <Panel title="Quick Actions" subtitle="Shortcuts to common tasks" icon="⚡" accent="violet">
+            <div className="flex flex-wrap gap-3">
+              <button
+                onClick={() => navigate('/dashboard/superadmin/centremanagement')}
+                className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/30 bg-cyan-500/[0.08] px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-widest text-cyan-300 transition-all duration-200 hover:-translate-y-0.5 hover:bg-cyan-500/[0.15] hover:shadow-[0_0_30px_-8px_rgba(34,211,238,0.9)]"
+              >
+                ➕ Create Centre
+              </button>
+              <button
+                onClick={() => navigate('/dashboard/superadmin/centremanagement')}
+                className="inline-flex items-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/[0.08] px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-widest text-violet-300 transition-all duration-200 hover:-translate-y-0.5 hover:bg-violet-500/[0.15] hover:shadow-[0_0_30px_-8px_rgba(167,139,250,0.9)]"
+              >
+                👤 Create Admin
+              </button>
+              <button
+                onClick={() => navigate('/dashboard/superadmin/messenger')}
+                className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/30 bg-emerald-500/[0.08] px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-widest text-emerald-300 transition-all duration-200 hover:-translate-y-0.5 hover:bg-emerald-500/[0.15] hover:shadow-[0_0_30px_-8px_rgba(16,185,129,0.9)]"
+              >
+                📢 Broadcast
+              </button>
+              <button
+                onClick={() => navigate('/dashboard/superadmin/analytics')}
+                className="inline-flex items-center gap-2 rounded-lg border border-rose-400/30 bg-rose-500/[0.08] px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-widest text-rose-300 transition-all duration-200 hover:-translate-y-0.5 hover:bg-rose-500/[0.15] hover:shadow-[0_0_30px_-8px_rgba(244,63,94,0.9)]"
+              >
+                📊 Global Report
+              </button>
+              <button
+                onClick={() => navigate('/dashboard/superadmin/analytics')}
+                className="inline-flex items-center gap-2 rounded-lg border border-slate-400/30 bg-slate-500/[0.08] px-4 py-2.5 font-mono text-[11px] font-bold uppercase tracking-widest text-slate-300 transition-all duration-200 hover:-translate-y-0.5 hover:bg-slate-500/[0.15] hover:shadow-[0_0_30px_-8px_rgba(148,163,184,0.9)]"
+              >
+                📤 Export Data
+              </button>
+            </div>
+          </Panel>
         </div>
       </div>
     </div>
