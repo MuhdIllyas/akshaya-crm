@@ -73,22 +73,25 @@ export const getSuperAdminDashboard = async (filters = {}) => {
     }
 
     const dates = getDateContext(filters);
+    // Optional centre filter: "all"/missing => whole network (null)
+    const rawCentre = filters.centreId;
+    const centreId = rawCentre && rawCentre !== 'all' && Number.isInteger(Number(rawCentre)) ? Number(rawCentre) : null;
     const client = await pool.connect();
     
     const data = {};
     const tasks = [];
 
     try {
-        if (modules.includes('stats')) tasks.push(fetchOrganisationStats(client, dates).then(r => data.stats = r));
-        if (modules.includes('financials')) tasks.push(fetchFinancialOverview(client, dates).then(r => data.financials = calculateFinancialMetrics(r)));
-        if (modules.includes('wallets')) tasks.push(fetchWalletAnalytics(client, dates).then(r => data.wallets = r));
+        if (modules.includes('stats')) tasks.push(fetchOrganisationStats(client, dates, centreId).then(r => data.stats = r));
+        if (modules.includes('financials')) tasks.push(fetchFinancialOverview(client, dates, centreId).then(r => data.financials = calculateFinancialMetrics(r)));
+        if (modules.includes('wallets')) tasks.push(fetchWalletAnalytics(client, dates, centreId).then(r => data.wallets = r));
         if (modules.includes('leaderboards')) tasks.push(fetchCentreLeaderboard(client, dates).then(r => data.leaderboard = r));
-        if (modules.includes('customers')) tasks.push(fetchCustomerAnalytics(client, dates).then(r => data.customers = r));
-        if (modules.includes('staff')) tasks.push(fetchStaffAnalytics(client, dates).then(r => data.staff = r));
-        if (modules.includes('teams')) tasks.push(fetchTeamAnalytics(client, dates).then(r => data.teams = r));
-        if (modules.includes('health')) tasks.push(fetchHealthAnalytics(client, dates).then(r => data.health = r));
+        if (modules.includes('customers')) tasks.push(fetchCustomerAnalytics(client, dates, centreId).then(r => data.customers = r));
+        if (modules.includes('staff')) tasks.push(fetchStaffAnalytics(client, dates, centreId).then(r => data.staff = r));
+        if (modules.includes('teams')) tasks.push(fetchTeamAnalytics(client, dates, centreId).then(r => data.teams = r));
+        if (modules.includes('health')) tasks.push(fetchHealthAnalytics(client, dates, centreId).then(r => data.health = r));
         if (modules.includes('activity')) tasks.push(fetchRecentActivities(client).then(r => data.activity = r));
-        if (modules.includes('alerts')) tasks.push(fetchSystemAlerts(client).then(r => data.alerts = r));
+        if (modules.includes('alerts')) tasks.push(fetchSystemAlerts(client, centreId).then(r => data.alerts = r));
 
         await Promise.all(tasks);
         return buildDashboard(data);
@@ -128,39 +131,42 @@ function buildDashboard(data) {
 /**
  * ORGANISATION ENGINE
  */
-async function fetchOrganisationStats(client, dates) {
+async function fetchOrganisationStats(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
 
     const [revenueResult, expenseResult, entityCountsResult, operationsResult, growthResult] = await Promise.all([
         // 1. Revenue
         client.query(`
-            SELECT 
-                COALESCE(SUM(total_charges), 0) as total_revenue, 
-                COALESCE(SUM(service_charges), 0) as gross_profit,
-                COUNT(id) as total_services 
-            FROM service_entries 
-            WHERE status = 'completed' 
-            AND created_at >= $1 AND created_at <= $2
-        `, [startDate, endDate]),
+            SELECT
+                COALESCE(SUM(se.total_charges), 0) as total_revenue,
+                COALESCE(SUM(se.service_charges), 0) as gross_profit,
+                COUNT(se.id) as total_services
+            FROM service_entries se
+            LEFT JOIN staff st ON st.id = se.staff_id
+            WHERE se.status = 'completed'
+            AND se.created_at >= $1 AND se.created_at <= $2
+            AND ($3::int IS NULL OR st.centre_id = $3::int)
+        `, [startDate, endDate, centreId]),
 
         // 2. Expenses
         client.query(`
-            SELECT COALESCE(SUM(amount), 0) as total_expenses 
-            FROM expenses 
+            SELECT COALESCE(SUM(amount), 0) as total_expenses
+            FROM expenses
             WHERE status IN ('approved', 'auto_approved')
             AND (is_reversal IS NULL OR is_reversal = FALSE)
             AND expense_date >= $1 AND expense_date <= $2
-        `, [startDate, endDate]),
+            AND ($3::int IS NULL OR centre_id = $3::int)
+        `, [startDate, endDate, centreId]),
 
         // 3. Global Entity Counts (FIXED: Case insensitive status checks)
         client.query(`
-            SELECT 
-                (SELECT COUNT(*) FROM centres WHERE LOWER(status) = 'active') as total_centres,
-                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active') as total_staff,
-                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND LOWER(role) = 'admin') as total_admins,
-                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND LOWER(role) = 'staff') as total_regular_staff,
-                (SELECT COUNT(DISTINCT phone) FROM service_entries WHERE phone IS NOT NULL AND TRIM(phone) != '') as total_customers
-        `),
+            SELECT
+                (SELECT COUNT(*) FROM centres WHERE LOWER(status) = 'active' AND ($1::int IS NULL OR id = $1::int)) as total_centres,
+                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND ($1::int IS NULL OR centre_id = $1::int)) as total_staff,
+                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND LOWER(role) = 'admin' AND ($1::int IS NULL OR centre_id = $1::int)) as total_admins,
+                (SELECT COUNT(*) FROM staff WHERE LOWER(status) = 'active' AND LOWER(role) = 'staff' AND ($1::int IS NULL OR centre_id = $1::int)) as total_regular_staff,
+                (SELECT COUNT(DISTINCT se.phone) FROM service_entries se LEFT JOIN staff st ON st.id = se.staff_id WHERE se.phone IS NOT NULL AND TRIM(se.phone) != '' AND ($1::int IS NULL OR st.centre_id = $1::int)) as total_customers
+        `, [centreId]),
 
         // 4. Live Operations (Today)
         client.query(`
@@ -172,27 +178,33 @@ async function fetchOrganisationStats(client, dates) {
                 COALESCE(SUM(se.total_charges) FILTER (WHERE DATE(se.created_at) = CURRENT_DATE AND se.status = 'completed'), 0) as today_revenue
             FROM service_entries se
             LEFT JOIN service_tracking strak ON strak.service_entry_id = se.id
-        `),
+            LEFT JOIN staff st ON st.id = se.staff_id
+            WHERE ($1::int IS NULL OR st.centre_id = $1::int)
+        `, [centreId]),
 
         // 5. NEW: Growth & Momentum Metrics
         // Calculates metrics for "This Month" compared to "Last Month"
         client.query(`
             WITH ThisMonth AS (
-                SELECT COALESCE(SUM(total_charges), 0) as rev 
-                FROM service_entries 
-                WHERE status = 'completed' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)
+                SELECT COALESCE(SUM(se.total_charges), 0) as rev
+                FROM service_entries se
+                LEFT JOIN staff st ON st.id = se.staff_id
+                WHERE se.status = 'completed' AND DATE_TRUNC('month', se.created_at) = DATE_TRUNC('month', CURRENT_DATE)
+                AND ($1::int IS NULL OR st.centre_id = $1::int)
             ),
             LastMonth AS (
-                SELECT COALESCE(SUM(total_charges), 0) as rev 
-                FROM service_entries 
-                WHERE status = 'completed' AND DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+                SELECT COALESCE(SUM(se.total_charges), 0) as rev
+                FROM service_entries se
+                LEFT JOIN staff st ON st.id = se.staff_id
+                WHERE se.status = 'completed' AND DATE_TRUNC('month', se.created_at) = DATE_TRUNC('month', CURRENT_DATE - INTERVAL '1 month')
+                AND ($1::int IS NULL OR st.centre_id = $1::int)
             )
-            SELECT 
-                (SELECT COUNT(*) FROM centres WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE)) as new_centres,
-                (SELECT COUNT(DISTINCT phone) FROM service_entries WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) AND phone IS NOT NULL AND TRIM(phone) != '') as new_customers,
+            SELECT
+                (SELECT COUNT(*) FROM centres WHERE DATE_TRUNC('month', created_at) = DATE_TRUNC('month', CURRENT_DATE) AND ($1::int IS NULL OR id = $1::int)) as new_centres,
+                (SELECT COUNT(DISTINCT se.phone) FROM service_entries se LEFT JOIN staff st ON st.id = se.staff_id WHERE DATE_TRUNC('month', se.created_at) = DATE_TRUNC('month', CURRENT_DATE) AND se.phone IS NOT NULL AND TRIM(se.phone) != '' AND ($1::int IS NULL OR st.centre_id = $1::int)) as new_customers,
                 (SELECT rev FROM ThisMonth) as this_month_rev,
                 (SELECT rev FROM LastMonth) as last_month_rev
-        `)
+        `, [centreId])
     ]);
 
     // Financials
@@ -240,7 +252,7 @@ async function fetchOrganisationStats(client, dates) {
 /**
  * FETCH LAYER: FINANCIAL ENGINE
  */
-async function fetchFinancialOverview(client, dates) {
+async function fetchFinancialOverview(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
     const diffTime = Math.abs(new Date(endDate) - new Date(startDate));
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -251,11 +263,13 @@ async function fetchFinancialOverview(client, dates) {
             SELECT sv.category_id, COALESCE(SUM(se.total_charges), 0) as total
             FROM service_entries se
             JOIN services sv ON se.category_id = sv.id
+            LEFT JOIN staff st ON st.id = se.staff_id
             WHERE se.status = 'completed'
             AND se.created_at >= $1 AND se.created_at <= $2
+            AND ($3::int IS NULL OR st.centre_id = $3::int)
             GROUP BY sv.category_id
             ORDER BY total DESC
-        `, [startDate, endDate]),
+        `, [startDate, endDate, centreId]),
 
         // FIXED: Expenses Reversals and Auto Approved
         client.query(`
@@ -264,22 +278,25 @@ async function fetchFinancialOverview(client, dates) {
             WHERE status IN ('approved', 'auto_approved')
             AND (is_reversal IS NULL OR is_reversal = FALSE)
             AND expense_date >= $1 AND expense_date <= $2
+            AND ($3::int IS NULL OR centre_id = $3::int)
             GROUP BY category
             ORDER BY total DESC
-        `, [startDate, endDate]),
+        `, [startDate, endDate, centreId]),
 
         // FIXED: Grabbing gross_profit (service_charges) alongside total_charges
         client.query(`
-            SELECT 
-                TO_CHAR(created_at, '${timeFormat}') as date_label, 
-                COALESCE(SUM(total_charges), 0) as total_revenue,
-                COALESCE(SUM(service_charges), 0) as gross_profit
-            FROM service_entries
-            WHERE status = 'completed'
-            AND created_at >= $1 AND created_at <= $2
-            GROUP BY TO_CHAR(created_at, '${timeFormat}')
+            SELECT
+                TO_CHAR(se.created_at, '${timeFormat}') as date_label,
+                COALESCE(SUM(se.total_charges), 0) as total_revenue,
+                COALESCE(SUM(se.service_charges), 0) as gross_profit
+            FROM service_entries se
+            LEFT JOIN staff st ON st.id = se.staff_id
+            WHERE se.status = 'completed'
+            AND se.created_at >= $1 AND se.created_at <= $2
+            AND ($3::int IS NULL OR st.centre_id = $3::int)
+            GROUP BY TO_CHAR(se.created_at, '${timeFormat}')
             ORDER BY date_label ASC
-        `, [startDate, endDate]),
+        `, [startDate, endDate, centreId]),
 
         // FIXED: Expenses Reversals and Auto Approved
         client.query(`
@@ -288,9 +305,10 @@ async function fetchFinancialOverview(client, dates) {
             WHERE status IN ('approved', 'auto_approved')
             AND (is_reversal IS NULL OR is_reversal = FALSE)
             AND expense_date >= $1 AND expense_date <= $2
+            AND ($3::int IS NULL OR centre_id = $3::int)
             GROUP BY TO_CHAR(expense_date, '${timeFormat}')
             ORDER BY date_label ASC
-        `, [startDate, endDate])
+        `, [startDate, endDate, centreId])
     ]);
 
     return {
@@ -361,21 +379,24 @@ function calculateFinancialMetrics(rawFinancial) {
 /**
  * WALLET ENGINE
  */
-async function fetchWalletAnalytics(client, dates) {
+async function fetchWalletAnalytics(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
 
     const [balancesResult, flowResult] = await Promise.all([
         client.query(`
             SELECT wallet_type, COALESCE(SUM(balance), 0) as total_balance
             FROM wallets
+            WHERE ($1::int IS NULL OR centre_id = $1::int)
             GROUP BY wallet_type
-        `),
+        `, [centreId]),
         client.query(`
-            SELECT type, COALESCE(SUM(amount), 0) as total_amount
-            FROM wallet_transactions
-            WHERE created_at >= $1 AND created_at <= $2
-            GROUP BY type
-        `, [startDate, endDate])
+            SELECT wt.type, COALESCE(SUM(wt.amount), 0) as total_amount
+            FROM wallet_transactions wt
+            JOIN wallets w ON w.id = wt.wallet_id
+            WHERE wt.created_at >= $1 AND wt.created_at <= $2
+            AND ($3::int IS NULL OR w.centre_id = $3::int)
+            GROUP BY wt.type
+        `, [startDate, endDate, centreId])
     ]);
 
     const balances = { cash: 0, bank: 0, digital: 0, total: 0 };
@@ -580,16 +601,20 @@ async function fetchCentreLeaderboard(client, dates) {
 /**
  * CUSTOMER ANALYTICS ENGINE
  */
-async function fetchCustomerAnalytics(client, dates) {
+async function fetchCustomerAnalytics(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
     const [statsResult, trendResult] = await Promise.all([
         client.query(`
-            SELECT 
+            SELECT
                 COUNT(*) as new_customers,
-                (SELECT COUNT(*) FROM service_reviews WHERE submitted_at >= $1 AND submitted_at <= $2) as total_reviews,
-                (SELECT ROUND(AVG(service_rating), 1) FROM service_reviews WHERE submitted_at >= $1 AND submitted_at <= $2) as avg_rating
+                (SELECT COUNT(*) FROM service_reviews sr LEFT JOIN staff st ON st.id = sr.staff_id
+                    WHERE sr.submitted_at >= $1 AND sr.submitted_at <= $2
+                    AND ($3::int IS NULL OR st.centre_id = $3::int)) as total_reviews,
+                (SELECT ROUND(AVG(sr.service_rating), 1) FROM service_reviews sr LEFT JOIN staff st ON st.id = sr.staff_id
+                    WHERE sr.submitted_at >= $1 AND sr.submitted_at <= $2
+                    AND ($3::int IS NULL OR st.centre_id = $3::int)) as avg_rating
             FROM customers WHERE created_at >= $1 AND created_at <= $2
-        `, [startDate, endDate]),
+        `, [startDate, endDate, centreId]),
         client.query(`
             SELECT DATE(created_at) as date, COUNT(*) as registrations
             FROM customers WHERE created_at >= $1 AND created_at <= $2
@@ -609,7 +634,7 @@ async function fetchCustomerAnalytics(client, dates) {
 /**
  * STAFF ANALYTICS ENGINE
  */
-async function fetchStaffAnalytics(client, dates) {
+async function fetchStaffAnalytics(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
     const topStaffQuery = `
         SELECT 
@@ -620,10 +645,11 @@ async function fetchStaffAnalytics(client, dates) {
         JOIN centres c ON st.centre_id = c.id
         JOIN service_entries se ON se.staff_id = st.id
         WHERE se.status = 'completed' AND se.created_at >= $1 AND se.created_at <= $2
+        AND ($3::int IS NULL OR st.centre_id = $3::int)
         GROUP BY st.id, st.name, c.name
         ORDER BY service_charges_earned DESC, services_completed DESC LIMIT 10
     `;
-    const result = await client.query(topStaffQuery, [startDate, endDate]);
+    const result = await client.query(topStaffQuery, [startDate, endDate, centreId]);
     return {
         topPerformers: result.rows.map(row => ({
             id: row.id, name: row.staff_name, centre: row.centre_name,
@@ -667,7 +693,7 @@ async function fetchRecentActivities(client) {
     return { timeline, summary, alerts: [], achievements: [] };
 }
 
-async function fetchTeamAnalytics(client, dates) {
+async function fetchTeamAnalytics(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
     
     const query = `
@@ -685,8 +711,9 @@ async function fetchTeamAnalytics(client, dates) {
             LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.is_active = true
             LEFT JOIN staff st ON st.id = tm.staff_id
             LEFT JOIN service_entries se ON se.staff_id = st.id 
-                AND se.status = 'completed' 
+                AND se.status = 'completed'
                 AND se.created_at >= $1 AND se.created_at <= $2
+            WHERE ($3::int IS NULL OR t.centre_id = $3::int)
             GROUP BY t.id, t.name, c.name
         ),
         TeamExpenses AS (
@@ -715,7 +742,7 @@ async function fetchTeamAnalytics(client, dates) {
         ORDER BY net_profit DESC
     `;
     
-    const result = await client.query(query, [startDate, endDate]);
+    const result = await client.query(query, [startDate, endDate, centreId]);
     
     const formatted = result.rows.map(r => ({
         id: r.id, 
@@ -736,16 +763,17 @@ async function fetchTeamAnalytics(client, dates) {
     };
 }
 
-async function fetchHealthAnalytics(client, dates) {
+async function fetchHealthAnalytics(client, dates, centreId = null) {
     const { startDate, endDate } = dates;
 
     const [negativeWallets, pendingPayments, unassignedServices] = await Promise.all([
         client.query(`
-            SELECT w.wallet_type, w.balance, c.name as centre_name 
-            FROM wallets w 
-            JOIN centres c ON c.id = w.centre_id 
+            SELECT w.wallet_type, w.balance, c.name as centre_name
+            FROM wallets w
+            JOIN centres c ON c.id = w.centre_id
             WHERE w.balance < 0
-        `),
+            AND ($1::int IS NULL OR w.centre_id = $1::int)
+        `, [centreId]),
         client.query(`
             WITH ServicePayments AS (
                 SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
@@ -758,15 +786,18 @@ async function fetchHealthAnalytics(client, dates) {
                 COUNT(DISTINCT se.phone) as pending_customers, -- 👇 FIXED: Count unique customers who owe money
                 COALESCE(SUM(se.total_charges - COALESCE(sp.paid, 0)), 0) as total_value 
             FROM service_entries se
+            LEFT JOIN staff st ON st.id = se.staff_id
             LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
-            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0 
+            WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 0
             AND se.created_at >= $1 AND se.created_at <= $2
-        `, [startDate, endDate]),
+            AND ($3::int IS NULL OR st.centre_id = $3::int)
+        `, [startDate, endDate, centreId]),
         client.query(`
-            SELECT COUNT(id) as count 
-            FROM service_entries 
+            SELECT COUNT(id) as count
+            FROM service_entries
             WHERE status = 'pending' AND staff_id IS NULL
-        `)
+            AND $1::int IS NULL   -- unassigned services belong to no centre
+        `, [centreId])
     ]);
 
     const warnings = [];
@@ -796,7 +827,7 @@ async function fetchHealthAnalytics(client, dates) {
     };
 }
 
-async function fetchSystemAlerts(client) {
+async function fetchSystemAlerts(client, centreId = null) {
     const [
         negativeWallets,
         largePendingPayments,
@@ -805,10 +836,11 @@ async function fetchSystemAlerts(client) {
     ] = await Promise.all([
         client.query(`
             SELECT w.id, w.wallet_type, w.balance, c.name as centre_name
-            FROM wallets w 
+            FROM wallets w
             JOIN centres c ON c.id = w.centre_id
             WHERE w.balance < 0
-        `),
+            AND ($1::int IS NULL OR w.centre_id = $1::int)
+        `, [centreId]),
         client.query(`
             WITH ServicePayments AS (
                 SELECT service_entry_id, COALESCE(SUM(amount), 0) as paid
@@ -828,15 +860,17 @@ async function fetchSystemAlerts(client) {
             JOIN services sv ON sv.id = se.category_id
             LEFT JOIN ServicePayments sp ON sp.service_entry_id = se.id
             WHERE (se.total_charges - COALESCE(sp.paid, 0)) > 5000
-        `),
+            AND ($1::int IS NULL OR st.centre_id = $1::int)
+        `, [centreId]),
         client.query(`
             SELECT sr.id, sr.service_rating, sr.customer_name, c.name as centre_name
             FROM service_reviews sr
             JOIN staff st ON st.id = sr.staff_id
             JOIN centres c ON c.id = st.centre_id
-            WHERE sr.service_rating <= 2 
+            WHERE sr.service_rating <= 2
             AND sr.submitted_at >= NOW() - INTERVAL '7 days'
-        `),
+            AND ($1::int IS NULL OR st.centre_id = $1::int)
+        `, [centreId]),
         client.query(`
             SELECT se.id, c.name as centre_name, sv.name as service_name, se.created_at
             FROM service_entries se
@@ -845,7 +879,8 @@ async function fetchSystemAlerts(client) {
             JOIN services sv ON sv.id = se.category_id
             WHERE se.status IN ('pending', 'processing')
             AND se.created_at < NOW() - INTERVAL '5 days'
-        `)
+            AND ($1::int IS NULL OR st.centre_id = $1::int)
+        `, [centreId])
     ]);
 
     const alerts = [];

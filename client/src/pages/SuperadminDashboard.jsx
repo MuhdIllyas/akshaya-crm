@@ -247,10 +247,8 @@ const StatusDonut = ({ items }) => {
 const HEALTH_HEX = { green: "#059669", yellow: "#d97706", red: "#e11d48" };
 
 // Centre profit chart — ranked, value-labelled
-const CentreProfitChart = ({ centres }) => {
-  const data = centres
-    .map((c) => ({
-      name: c.name,
+const CentreProfitChart = ({ centres, selectedId = "all" }) => {
+  const data = centres .map((c) => ({ id: c.id, name: c.name,
       profit: Number(c.profit) || 0,
       rating: c.rating || 0,
       health: c.healthStatus?.label || "Unknown",
@@ -275,7 +273,7 @@ const CentreProfitChart = ({ centres }) => {
     <ResponsiveContainer width="100%" height={Math.max(220, data.length * 44)}>
       <BarChart data={rankedData} layout="vertical" margin={{ top: 0, right: 56, left: 0, bottom: 0 }}>
         <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="#e5e7eb" />
-        <XAxis type="number" tickFormatter={(v) => `₹${v / 1000}k`} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+        <XAxis type="number" tickFormatter={shortINR} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
         <YAxis type="category" dataKey="rankName" width={140} tick={{ fontSize: 12, fill: "#334155" }} axisLine={false} tickLine={false} />
         <Tooltip content={<Tip />} cursor={{ fill: "rgba(100,116,139,0.08)" }} />
         <Bar dataKey="profit" radius={[0, 4, 4, 0]} barSize={18}>
@@ -285,7 +283,9 @@ const CentreProfitChart = ({ centres }) => {
             formatter={(v) => shortINR(v)}
             style={{ fontSize: 11, fill: "#334155", fontWeight: 600 }}
           />
-          {rankedData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+          {rankedData.map((d, i) => (
+            <Cell key={i} fill={d.fill} fillOpacity={selectedId === "all" || String(d.id) === String(selectedId) ? 1 : 0.25} />
+          ))}
         </Bar>
       </BarChart>
     </ResponsiveContainer>
@@ -347,7 +347,7 @@ const HighlightRow = ({ label, name, value, tone = "text-slate-900" }) => (
 // ==========================================
 // STAFF PERFORMANCE CHART
 // ==========================================
-const StaffPerformanceChart = ({ staffData }) => {
+const StaffPerformanceChart = ({ staffData, scopeLabel = "Ranked across all centres" }) => {
   const [metric, setMetric] = useState('serviceCharges');
 
   if (!staffData || staffData.length === 0) {
@@ -396,7 +396,7 @@ const StaffPerformanceChart = ({ staffData }) => {
       <div className="flex justify-between items-start mb-4">
         <div>
           <h2 className="text-[15px] font-semibold text-slate-900">Top staff</h2>
-          <p className="text-xs text-gray-500">Ranked across all centres</p>
+          <p className="text-xs text-gray-500">{scopeLabel}</p>
         </div>
         <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
           <button
@@ -566,6 +566,28 @@ const SuperadminDashboard = () => {
   const [closingLoading, setClosingLoading] = useState(true);
   const [closingError, setClosingError] = useState(false);
 
+  // Centre filter ("all" = whole network)
+  const [centreId, setCentreId] = useState(() => localStorage.getItem("superadmin_dash_centre") || "all");
+  const [centreOptions, setCentreOptions] = useState([]);
+
+  useEffect(() => {
+    localStorage.setItem("superadmin_dash_centre", centreId);
+  }, [centreId]);
+
+  useEffect(() => {
+    axios
+      .get(`${import.meta.env.VITE_API_URL}/api/wallet/centres`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      })
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setCentreOptions(list);
+        // a saved centre that no longer exists falls back to the whole network
+        setCentreId((prev) => (prev === "all" || list.some((c) => String(c.id) === String(prev)) ? prev : "all"));
+      })
+      .catch((err) => console.error("Failed to load centres", err));
+  }, []);
+
   const formatCurrency = (amount) =>
     new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
 
@@ -587,7 +609,8 @@ const SuperadminDashboard = () => {
               modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
               timeframe: "custom",
               customStartDate: start,
-              customEndDate: end
+              customEndDate: end,
+              centreId: centreId === "all" ? undefined : centreId
             },
             headers: { Authorization: `Bearer ${token}` },
             signal: controller.signal
@@ -605,7 +628,7 @@ const SuperadminDashboard = () => {
     };
     fetchDashboard();
     return () => controller.abort();
-  }, [period]);
+  }, [period, centreId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -669,9 +692,13 @@ const SuperadminDashboard = () => {
   const topTeamsList = teams.topTeams || [];
   const notifications = alerts;
 
-  const closingRows = closingData.rows || [];
+  const closingRows = (closingData.rows || []).filter(
+    (r) => centreId === "all" || String(r.centre_id) === String(centreId)
+  );
 
   const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "";
+  const selectedCentreName = centreOptions.find((c) => String(c.id) === String(centreId))?.name || "";
+  const scoped = centreId !== "all";
   const margin = financials.totals?.margin;
   const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
 
@@ -686,7 +713,8 @@ const SuperadminDashboard = () => {
   // NETWORK HEALTH — derived from the centre health distribution
   // (defined BEFORE glance so the tile can read networkScore)
   // ==========================================
-  const healthCount = (color) => centreList.filter((c) => c.healthStatus?.color === color).length;
+  const scopedCentres = scoped ? centreList.filter((c) => String(c.id) === String(centreId)) : centreList;
+  const healthCount = (color) => scopedCentres.filter((c) => c.healthStatus?.color === color).length;
   const greenN = healthCount("green");
   const yellowN = healthCount("yellow");
   const redN = healthCount("red");
@@ -747,7 +775,14 @@ const SuperadminDashboard = () => {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Superadmin dashboard</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Superadmin dashboard
+            {scoped && selectedCentreName && (
+              <span className="ml-3 rounded-full bg-indigo-50 px-2.5 py-1 align-middle text-xs font-semibold text-indigo-700">
+                {selectedCentreName}
+              </span>
+            )}
+          </h1>
           <p className={`mt-1 text-sm ${needsLook > 0 ? "text-amber-700" : "text-slate-500"}`}>
             {closingLoading
               ? "Checking registers..."
@@ -760,6 +795,17 @@ const SuperadminDashboard = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {loading && <FiLoader className="h-5 w-5 animate-spin text-indigo-600" />}
+          <select
+            value={centreId}
+            onChange={(e) => setCentreId(e.target.value)}
+            className="max-w-[200px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+            aria-label="Select centre"
+          >
+            <option value="all">All centres</option>
+            {centreOptions.map((c) => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
@@ -791,7 +837,7 @@ const SuperadminDashboard = () => {
           value={formatCurrency(monthlyRevenue)}
           delta={revenueGrowthPercent}
           context={periodLabel}
-          note="vs previous period"
+          note="this month vs last month"
           spark={revSpark}
           sparkColor="#4f46e5"
         />
@@ -815,7 +861,7 @@ const SuperadminDashboard = () => {
           value={formatCurrency(health?.metrics?.pendingPaymentValue)}
           tone={health?.metrics?.pendingPaymentValue > 0 ? "text-amber-700" : "text-slate-900"}
           context={`${health?.metrics?.pendingCustomers ?? 0} customers`}
-          note="Outstanding"
+          note="Dues on services in this period"
         />
       </div>
 
@@ -841,7 +887,7 @@ const SuperadminDashboard = () => {
           </Panel>
         </div>
         <div className="flex flex-col gap-4 xl:col-span-4">
-          <Panel title="Network health" hint="Overall score across centres">
+          <Panel title={scoped ? "Centre health" : "Network health"} hint={scoped ? selectedCentreName : "Overall score across centres"}>
             <Gauge value={networkScore} label="out of 100" />
 
             {/* Stacked breakdown bar */}
@@ -873,7 +919,7 @@ const SuperadminDashboard = () => {
                 <span className="font-medium text-emerald-700">healthy = 100</span>,{" "}
                 <span className="font-medium text-amber-700">watch = 60</span>,{" "}
                 <span className="font-medium text-rose-700">at risk = 20</span>. The network score is
-                the average across all centres.
+                the average across active centres.
               </p>
               {healthTotal > 0 ? (
                 <p className="mt-2 border-t border-slate-200/70 pt-2 font-mono text-[11px] text-slate-500">
@@ -889,7 +935,7 @@ const SuperadminDashboard = () => {
           </Panel>
           <Panel
             title="Open services"
-            hint={`${todayServices ?? 0} created today`}
+            hint={`${todayServices ?? 0} completed today`}
           >
             <StatusDonut items={serviceItems} />
           </Panel>
@@ -901,9 +947,9 @@ const SuperadminDashboard = () => {
         <div className="xl:col-span-7">
           <Panel
             title="Profit by centre"
-            hint="Ranked high to low · bar colour = centre health"
+            hint={scoped ? `${selectedCentreName} highlighted · all centres shown for comparison` : "Ranked high to low · bar colour = centre health"}
           >
-            <CentreProfitChart centres={centreList} />
+            <CentreProfitChart centres={centreList} selectedId={centreId} />
           </Panel>
         </div>
         <div className="xl:col-span-5">
@@ -987,7 +1033,7 @@ const SuperadminDashboard = () => {
 
       {/* People */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <StaffPerformanceChart staffData={topStaffList} />
+        <StaffPerformanceChart staffData={topStaffList} scopeLabel={scoped ? "Ranked within this centre" : "Ranked across all centres"} />
         <Panel title="Top teams" hint="Grey bar is revenue, green is profit">
           <TeamBars teams={topTeamsList} />
         </Panel>
@@ -995,7 +1041,7 @@ const SuperadminDashboard = () => {
 
       {/* Money, alerts, highlights */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel title="Wallet position" hint="Across all centres">
+        <Panel title="Wallet position" hint={scoped ? "This centre" : "Across all centres"}>
           <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
           <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
             {walletParts.map((p) => (
@@ -1046,14 +1092,14 @@ const SuperadminDashboard = () => {
         </Panel>
 
         <div className="flex flex-col gap-4">
-          <Panel title="Leading">
+          <Panel title="Leading" hint={scoped ? "Network-wide comparison" : undefined}>
             <ul className="divide-y divide-slate-100">
               <HighlightRow label="Revenue" name={best.revenue?.name} value={best.revenue?.value ? formatCurrency(best.revenue.value) : ""} tone="text-emerald-700" />
               <HighlightRow label="Profit" name={best.profit?.name} value={best.profit?.value ? formatCurrency(best.profit.value) : ""} tone="text-emerald-700" />
               <HighlightRow label="Rating" name={best.rating?.name} value={best.rating?.value ? `${best.rating.value}/5` : ""} tone="text-amber-700" />
             </ul>
           </Panel>
-          <Panel title="Needs work">
+          <Panel title="Needs work" hint={scoped ? "Network-wide comparison" : undefined}>
             <ul className="divide-y divide-slate-100">
               <HighlightRow label="Lowest revenue" name={worst.revenue?.name} value={worst.revenue?.value !== undefined ? formatCurrency(worst.revenue.value) : ""} tone="text-rose-700" />
               <HighlightRow label="Highest pending" name={worst.pending?.name} value={worst.pending?.value ? formatCurrency(worst.pending.value) : ""} tone="text-rose-700" />
