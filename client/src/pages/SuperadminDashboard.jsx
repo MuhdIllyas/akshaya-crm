@@ -553,8 +553,7 @@ const RevenueChart = ({ data, view }) => {
     ) : null;
 
   return (
-    <div className="h-full min-h-[280px]">
-    <ResponsiveContainer width="100%" height="100%">
+    <ResponsiveContainer width="100%" height={280}>
       <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
         <defs>
           <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
@@ -569,7 +568,6 @@ const RevenueChart = ({ data, view }) => {
         <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
       </BarChart>
     </ResponsiveContainer>
-    </div>
   );
 };
 
@@ -956,12 +954,6 @@ const SuperadminDashboard = () => {
               )}
             </div>
           </Panel>
-          <Panel
-            title="Open services"
-            hint={`${todayServices ?? 0} completed today`}
-          >
-            <StatusDonut items={serviceItems} />
-          </Panel>
         </div>
       </div>
 
@@ -1064,37 +1056,45 @@ const SuperadminDashboard = () => {
 
       {/* Money, alerts, highlights */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel title="Wallet position" hint={scoped ? "This centre" : "Across all centres"}>
-          <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
-          <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full bg-slate-100">
-            {walletParts
-              .filter((p) => (Number(p.value) || 0) > 0)
-              .map((p) => (
-                <div
-                  key={p.label}
-                  title={`${p.label}: ${formatCurrency(p.value)}`}
-                  style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%`, minWidth: 8, background: p.color }}
-                />
-              ))}
-          </div>
-          <ul className="mt-3 space-y-1.5 text-sm">
-            {walletParts.map((p) => {
-              const pct = ((Number(p.value) || 0) / walletSum) * 100;
-              return (
-                <li key={p.label} className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-slate-600">
-                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
-                    {p.label}
-                  </span>
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-[11px] tabular-nums text-slate-400">{pct > 0 && pct < 1 ? "<1" : pct.toFixed(0)}%</span>
-                    <span className="tabular-nums font-medium text-slate-900">{formatCurrency(p.value)}</span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
+        <div className="flex flex-col gap-4">
+          <Panel title="Wallet position" hint={scoped ? "This centre" : "Across all centres"}>
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
+            <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full bg-slate-100">
+              {walletParts
+                .filter((p) => (Number(p.value) || 0) > 0)
+                .map((p) => (
+                  <div
+                    key={p.label}
+                    title={`${p.label}: ${formatCurrency(p.value)}`}
+                    style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%`, minWidth: 8, background: p.color }}
+                  />
+                ))}
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {walletParts.map((p) => {
+                const pct = ((Number(p.value) || 0) / walletSum) * 100;
+                return (
+                  <li key={p.label} className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
+                      {p.label}
+                    </span>
+                    <span className="flex items-baseline gap-2">
+                      <span className="text-[11px] tabular-nums text-slate-400">{pct > 0 && pct < 1 ? "<1" : pct.toFixed(0)}%</span>
+                      <span className="tabular-nums font-medium text-slate-900">{formatCurrency(p.value)}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+          <Panel
+            title="Open services"
+            hint={`${todayServices ?? 0} completed today`}
+          >
+            <StatusDonut items={serviceItems} />
+          </Panel>
+        </div>
 
         <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
           {notifications.length > 0 ? (
