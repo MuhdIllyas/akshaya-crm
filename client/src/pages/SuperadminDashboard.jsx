@@ -7,7 +7,7 @@ import {
 } from 'recharts';
 import { useNavigate } from "react-router-dom";
 import {
-  FiArrowUp, FiArrowDown, FiBarChart2,
+  FiArrowUp, FiArrowDown, FiBarChart2, FiGlobe, FiMapPin,
   FiLoader, FiPlus, FiSend, FiUserPlus
 } from "react-icons/fi";
 
@@ -105,7 +105,7 @@ const getClosingView = (row) => {
 // ==========================================
 const Panel = ({ title, hint, summary, action, children, className = "" }) => (
   <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
-    <div className="flex items-start justify-between gap-3 px-5 pt-4">
+    <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
       <div className="min-w-0">
         <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
         {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
@@ -118,14 +118,14 @@ const Panel = ({ title, hint, summary, action, children, className = "" }) => (
 );
 
 const Segmented = ({ options, value, onChange }) => (
-  <div className="inline-flex rounded-lg bg-slate-100 p-0.5" role="tablist">
+  <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5" role="tablist">
     {options.map((o) => (
       <button
         key={o.value}
         role="tab"
         aria-selected={value === o.value}
         onClick={() => onChange(o.value)}
-        className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+        className={`whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
           value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
         }`}
       >
@@ -248,7 +248,10 @@ const HEALTH_HEX = { green: "#059669", yellow: "#d97706", red: "#e11d48" };
 
 // Centre profit chart — ranked, value-labelled
 const CentreProfitChart = ({ centres, selectedId = "all" }) => {
-  const data = centres .map((c) => ({ id: c.id, name: c.name,
+  const data = centres
+    .map((c) => ({
+      id: c.id,
+      name: c.name,
       profit: Number(c.profit) || 0,
       rating: c.rating || 0,
       health: c.healthStatus?.label || "Unknown",
@@ -307,11 +310,24 @@ const TeamBars = ({ teams }) => {
         return (
           <li key={t.id || i}>
             <div className="flex items-baseline justify-between gap-3">
-              <span className="flex min-w-0 items-baseline gap-2">
+              <span className="flex min-w-0 items-start gap-2">
                 <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">
                   {i + 1}
                 </span>
-                <span className="truncate text-sm font-medium text-slate-900">{t.name}</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-slate-900">{t.name}</span>
+                  {t.centre ? (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                      <FiMapPin className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                      <span className="truncate">{t.centre}</span>
+                    </span>
+                  ) : (
+                    <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-indigo-700">
+                      <FiGlobe className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                      Global
+                    </span>
+                  )}
+                </span>
               </span>
               <span className={`text-sm font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>
                 {money(profit)}
@@ -503,6 +519,8 @@ const StaffPerformanceChart = ({ staffData, scopeLabel = "Ranked across all cent
 // ==========================================
 // REVENUE CHART
 // ==========================================
+const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#0891b2", profit: "#059669", expenses: "#e11d48" };
+const TREND_LABELS = { revenue: "Revenue", serviceCharges: "Service charges", profit: "Profit", expenses: "Expenses" };
 const RevenueChart = ({ data, view }) => {
   if (!data || data.length === 0) {
     return <div className="flex h-[280px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
@@ -521,7 +539,8 @@ const RevenueChart = ({ data, view }) => {
   };
 
   const short = (v) => shortINR(v);
-  const color = view === 'profit' ? '#059669' : view === 'expenses' ? '#e11d48' : '#4f46e5';
+  const color = TREND_COLORS[view] || TREND_COLORS.revenue;
+  const seriesName = TREND_LABELS[view] || "Revenue";
   const gid = `fill-${view}`;
 
   const Tip = ({ active, payload }) =>
@@ -529,6 +548,7 @@ const RevenueChart = ({ data, view }) => {
       <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
         <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
         <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
+        <p className="text-slate-400">{seriesName}</p>
       </div>
     ) : null;
 
@@ -703,9 +723,9 @@ const SuperadminDashboard = () => {
   const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
 
   const walletParts = [
-    { label: "Cash", value: walletCash, bar: "bg-indigo-600" },
-    { label: "Bank", value: walletBank, bar: "bg-sky-600" },
-    { label: "Digital", value: walletDigital, bar: "bg-indigo-500" },
+    { label: "Cash", value: walletCash, color: "#2a78d6" },
+    { label: "Bank", value: walletBank, color: "#eb6834" },
+    { label: "Digital", value: walletDigital, color: "#1baf7a" },
   ];
   const walletSum = walletParts.reduce((a, p) => a + (Number(p.value) || 0), 0) || 1;
 
@@ -870,13 +890,14 @@ const SuperadminDashboard = () => {
         <div className="xl:col-span-8">
           <Panel
             title="Trend"
-            hint={periodLabel}
+            hint={revenueView === "serviceCharges" ? `${periodLabel}. Earnings before expenses.` : periodLabel}
             action={
               <Segmented
                 value={revenueView}
                 onChange={setRevenueView}
                 options={[
                   { value: "revenue", label: "Revenue" },
+                  { value: "serviceCharges", label: "Service charges" },
                   { value: "profit", label: "Profit" },
                   { value: "expenses", label: "Expenses" },
                 ]}
@@ -932,12 +953,6 @@ const SuperadminDashboard = () => {
                 </p>
               )}
             </div>
-          </Panel>
-          <Panel
-            title="Open services"
-            hint={`${todayServices ?? 0} completed today`}
-          >
-            <StatusDonut items={serviceItems} />
           </Panel>
         </div>
       </div>
@@ -1041,31 +1056,45 @@ const SuperadminDashboard = () => {
 
       {/* Money, alerts, highlights */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel title="Wallet position" hint={scoped ? "This centre" : "Across all centres"}>
-          <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
-          <div className="mt-3 flex h-2 overflow-hidden rounded-full bg-slate-100">
-            {walletParts.map((p) => (
-              <div key={p.label} className={p.bar} style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%` }} />
-            ))}
-          </div>
-          <ul className="mt-3 space-y-1.5 text-sm">
-            {walletParts.map((p) => {
-              const pct = ((Number(p.value) || 0) / walletSum) * 100;
-              return (
-                <li key={p.label} className="flex items-center justify-between">
-                  <span className="flex items-center gap-2 text-slate-600">
-                    <span className={`h-2 w-2 rounded-full ${p.bar}`} />
-                    {p.label}
-                  </span>
-                  <span className="flex items-baseline gap-2">
-                    <span className="text-[11px] tabular-nums text-slate-400">{pct.toFixed(0)}%</span>
-                    <span className="tabular-nums font-medium text-slate-900">{formatCurrency(p.value)}</span>
-                  </span>
-                </li>
-              );
-            })}
-          </ul>
-        </Panel>
+        <div className="flex flex-col gap-4">
+          <Panel title="Wallet position" hint={scoped ? "This centre" : "Across all centres"}>
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{formatCurrency(walletTotal)}</p>
+            <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full bg-slate-100">
+              {walletParts
+                .filter((p) => (Number(p.value) || 0) > 0)
+                .map((p) => (
+                  <div
+                    key={p.label}
+                    title={`${p.label}: ${formatCurrency(p.value)}`}
+                    style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%`, minWidth: 8, background: p.color }}
+                  />
+                ))}
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {walletParts.map((p) => {
+                const pct = ((Number(p.value) || 0) / walletSum) * 100;
+                return (
+                  <li key={p.label} className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
+                      {p.label}
+                    </span>
+                    <span className="flex items-baseline gap-2">
+                      <span className="text-[11px] tabular-nums text-slate-400">{pct > 0 && pct < 1 ? "<1" : pct.toFixed(0)}%</span>
+                      <span className="tabular-nums font-medium text-slate-900">{formatCurrency(p.value)}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+          <Panel
+            title="Open services"
+            hint={`${todayServices ?? 0} completed today`}
+          >
+            <StatusDonut items={serviceItems} />
+          </Panel>
+        </div>
 
         <Panel title="Action required" hint={notifications.length ? `${notifications.length} open` : ""}>
           {notifications.length > 0 ? (

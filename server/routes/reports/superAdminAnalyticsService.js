@@ -361,6 +361,7 @@ function calculateFinancialMetrics(rawFinancial) {
 
     const charts = {
         revenue: combinedTrend.map(t => ({ label: t.date, value: t.revenue })),
+        serviceCharges: combinedTrend.map(t => ({ label: t.date, value: t.grossProfit })),
         profit: combinedTrend.map(t => ({ label: t.date, value: t.profit })), // Will now correctly look different!
         expenses: combinedTrend.map(t => ({ label: t.date, value: t.expense }))
     };
@@ -701,20 +702,21 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
             SELECT 
                 t.id as team_id, 
                 t.name as team_name, 
-                c.name as centre_name,
+                t.centre_id as centre_id,
+                c.name as centre_name,   -- NULL for global (not centre-specific) teams
                 COUNT(DISTINCT st.id) as members,
                 COUNT(se.id) as services_completed,
                 COALESCE(SUM(se.total_charges), 0) as revenue,
                 COALESCE(SUM(se.service_charges), 0) as gross_profit
             FROM teams t
-            JOIN centres c ON c.id = t.centre_id
+            LEFT JOIN centres c ON c.id = t.centre_id
             LEFT JOIN team_members tm ON tm.team_id = t.id AND tm.is_active = true
             LEFT JOIN staff st ON st.id = tm.staff_id
             LEFT JOIN service_entries se ON se.staff_id = st.id 
                 AND se.status = 'completed'
                 AND se.created_at >= $1 AND se.created_at <= $2
             WHERE ($3::int IS NULL OR t.centre_id = $3::int)
-            GROUP BY t.id, t.name, c.name
+            GROUP BY t.id, t.name, t.centre_id, c.name
         ),
         TeamExpenses AS (
             SELECT 
@@ -730,6 +732,7 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
         SELECT 
             tr.team_id as id, 
             tr.team_name, 
+            tr.centre_id,
             tr.centre_name, 
             tr.members,
             tr.services_completed, 
@@ -747,7 +750,9 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
     const formatted = result.rows.map(r => ({
         id: r.id, 
         name: r.team_name, 
-        centre: r.centre_name, 
+        centreId: r.centre_id,
+        centre: r.centre_name || null,   // null => global team
+        isGlobal: !r.centre_id,
         members: parseInt(r.members, 10),
         servicesCompleted: parseInt(r.services_completed, 10), 
         revenue: parseFloat(r.revenue),
