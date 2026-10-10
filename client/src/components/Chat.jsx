@@ -21,7 +21,7 @@ import {
   FiList,
   FiMessageSquare, FiCheckSquare,
   FiUser, FiBriefcase, FiUsers,
-  FiSmartphone, FiMapPin, FiChevronRight, FiSearch
+  FiSmartphone, FiMapPin, FiChevronRight
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoMdCheckmarkCircle, IoMdCheckmarkCircleOutline } from "react-icons/io";
@@ -70,18 +70,6 @@ const formatDate = (dateString) => {
   }
 };
 
-// Helper to format date separator
-const formatDateSeparator = (dateString) => {
-  const date = new Date(dateString);
-  const today = new Date();
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  if (date.toDateString() === today.toDateString()) return 'Today';
-  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-};
-
 // TaskMessage component (interactive task card)
 const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
   const [completing, setCompleting] = useState(false);
@@ -107,28 +95,26 @@ const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
   const dueDate = match ? match[3] : '';
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm max-w-md">
+    <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
       <div className="flex justify-between items-start gap-4">
         <div>
-          <h4 className={`font-semibold text-sm ${completed ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+          <h4 className={`font-medium ${completed ? 'line-through text-gray-500' : 'text-gray-900'}`}>
             {title}
           </h4>
-          {assignee && <p className="text-xs text-slate-500 mt-1 flex items-center gap-1"><FiUser size={12}/> {assignee}</p>}
-          {dueDate && <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><FiClock size={12}/> {dueDate}</p>}
+          {assignee && <p className="text-xs text-gray-500 mt-1">👤 {assignee}</p>}
+          {dueDate && <p className="text-xs text-gray-500">📅 {dueDate}</p>}
         </div>
         {!completed && (
           <button
             onClick={handleComplete}
             disabled={completing}
-            className="px-3 py-1.5 text-xs whitespace-nowrap bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition disabled:opacity-50 font-medium"
+            className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
           >
             {completing ? '...' : '✓ Complete'}
           </button>
         )}
         {completed && (
-          <span className="text-xs text-emerald-600 font-medium whitespace-nowrap mt-1 flex items-center gap-1">
-            <IoMdCheckmarkCircle /> Completed
-          </span>
+          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">✓ Completed</span>
         )}
       </div>
     </div>
@@ -155,31 +141,20 @@ const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm max-w-md">
+    <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm max-w-md">
       <div className="flex justify-between items-start gap-4">
         <div>
-          <h4 className={`font-semibold text-sm ${
-            completed ? 'line-through text-slate-400' : 'text-slate-800'
+          <h4 className={`font-medium ${
+            completed ? 'line-through text-gray-500' : 'text-gray-900'
           }`}>
             {taskData.title}
           </h4>
-          <div className="flex flex-wrap gap-2 mt-2">
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
-              taskData.priority === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-              taskData.priority === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-              'bg-emerald-50 text-emerald-700 border-emerald-200'
-            }`}>
-              {taskData.priority}
-            </span>
-            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${
-              completed ? 'bg-slate-100 text-slate-600 border-slate-200' : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-            }`}>
-              {taskData.status}
-            </span>
-          </div>
+          <p className="text-xs text-gray-500 mt-1">
+            Priority: {taskData.priority} | Status: {taskData.status}
+          </p>
           {taskData.due_date && (
-            <p className="text-xs text-slate-500 mt-2 flex items-center gap-1">
-              <FiClock size={12}/> {formatDate(taskData.due_date)}
+            <p className="text-xs text-gray-500">
+              📅 {formatDate(taskData.due_date)}
             </p>
           )}
         </div>
@@ -187,14 +162,14 @@ const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
           <button
             onClick={handleComplete}
             disabled={completing}
-            className="px-3 py-1.5 text-xs whitespace-nowrap bg-slate-900 text-white rounded-lg hover:bg-slate-800 transition disabled:opacity-50 font-medium"
+            className="px-3 py-1 text-xs whitespace-nowrap bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
           >
             {completing ? '...' : '✓ Complete'}
           </button>
         )}
         {completed && (
-          <span className="text-xs text-emerald-600 font-medium whitespace-nowrap mt-1 flex items-center gap-1">
-            <IoMdCheckmarkCircle /> Completed
+          <span className="text-xs text-green-600 font-medium whitespace-nowrap mt-1">
+            ✓ Completed
           </span>
         )}
       </div>
@@ -202,7 +177,7 @@ const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
   );
 };
 
-// ---------- Flat Tracking Mention Card ----------
+// ---------- NEW: Flat Tracking Mention Card ----------
 const TrackingMentionCard = ({ entityId, displayText }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -218,8 +193,8 @@ const TrackingMentionCard = ({ entityId, displayText }) => {
     return () => { isMounted = false; };
   }, [entityId]);
 
-  if (loading) return <span className="text-indigo-400 font-medium animate-pulse">{displayText}</span>;
-  if (!data) return <span className="text-rose-400 font-medium line-through" title="Tracking not found">{displayText}</span>;
+  if (loading) return <span className="text-blue-200 font-medium animate-pulse">{displayText}</span>;
+  if (!data) return <span className="text-red-300 font-medium line-through" title="Tracking not found">{displayText}</span>;
 
   return (
     <div
@@ -227,18 +202,18 @@ const TrackingMentionCard = ({ entityId, displayText }) => {
         e.stopPropagation();
         window.open(`/dashboard/staff/track_service/${data.tracking_id || entityId}`, '_blank');
       }}
-      className="my-3 block w-72 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-indigo-400 transition-colors cursor-pointer text-left overflow-hidden select-none"
+      className="my-3 block w-72 bg-white border-2 border-gray-200 rounded-lg shadow-sm hover:border-navy-700 transition-colors cursor-pointer text-left overflow-hidden select-none"
     >
       {/* Header section */}
-      <div className="bg-slate-50 border-b border-slate-100 px-3 py-2 flex justify-between items-center">
-        <div className="flex items-center gap-1.5 text-indigo-700 font-bold text-xs">
+      <div className="bg-gray-50 border-b border-gray-200 px-3 py-2 flex justify-between items-center">
+        <div className="flex items-center gap-1.5 text-navy-700 font-bold text-xs">
           <FiFile size={12} />
           <span>App #{data.application_number || data.tracking_id || entityId}</span>
         </div>
         <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded border ${
-          data.priority === 'High' ? 'bg-rose-50 text-rose-600 border-rose-200' :
-          data.priority === 'Medium' ? 'bg-amber-50 text-amber-600 border-amber-200' :
-          'bg-emerald-50 text-emerald-600 border-emerald-200'
+          data.priority === 'High' ? 'bg-red-50 text-red-600 border-red-200' :
+          data.priority === 'Medium' ? 'bg-yellow-50 text-yellow-600 border-yellow-200' :
+          'bg-green-50 text-green-600 border-green-200'
         }`}>
           {data.priority || 'Normal'}
         </span>
@@ -246,35 +221,38 @@ const TrackingMentionCard = ({ entityId, displayText }) => {
 
       {/* Body section */}
       <div className="p-3 space-y-2.5">
+        {/* Service Name */}
         <div className="flex items-start gap-2">
-          <FiBriefcase className="text-slate-400 mt-0.5 shrink-0" size={14} />
-          <p className="font-bold text-slate-900 text-sm leading-tight">
+          <FiBriefcase className="text-gray-400 mt-0.5 shrink-0" size={14} />
+          <p className="font-bold text-gray-900 text-sm leading-tight">
             {data.service_name || 'Unknown Service'}
           </p>
         </div>
 
+        {/* Customer Name */}
         <div className="flex items-center gap-2">
-          <FiUser className="text-slate-400 shrink-0" size={14} />
-          <p className="font-medium text-slate-700 text-sm truncate">
+          <FiUser className="text-gray-400 shrink-0" size={14} />
+          <p className="font-medium text-gray-700 text-sm truncate">
             {data.customer_name || 'No Customer Attached'}
           </p>
         </div>
 
-        <div className="bg-slate-50 border border-slate-100 rounded-lg p-2 space-y-1.5 mt-1">
+        {/* Status Box */}
+        <div className="bg-gray-50 border border-gray-100 rounded-md p-2 space-y-1.5 mt-1">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-medium">Status</span>
-            <span className="font-bold text-slate-800 capitalize">{data.status || 'Pending'}</span>
+            <span className="text-gray-500 font-medium">Status</span>
+            <span className="font-bold text-gray-800 capitalize">{data.status || 'Pending'}</span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-medium">Step</span>
-            <span className="font-bold text-indigo-700 truncate max-w-[120px]" title={data.current_step}>
+            <span className="text-gray-500 font-medium">Step</span>
+            <span className="font-bold text-navy-700 truncate max-w-[120px]" title={data.current_step}>
               {data.current_step || 'Initial Phase'}
             </span>
           </div>
           {data.estimated_delivery && (
             <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500 font-medium">Delivery</span>
-              <span className="font-bold text-slate-800 flex items-center gap-1">
+              <span className="text-gray-500 font-medium">Delivery</span>
+              <span className="font-bold text-gray-800 flex items-center gap-1">
                 <FiClock size={10} /> {data.estimated_delivery}
               </span>
             </div>
@@ -283,14 +261,14 @@ const TrackingMentionCard = ({ entityId, displayText }) => {
       </div>
 
       {/* Footer section */}
-      <div className="bg-slate-50 border-t border-slate-100 px-3 py-2 flex items-center justify-between">
+      <div className="bg-gray-50 border-t border-gray-200 px-3 py-2 flex items-center justify-between">
         <div className="flex flex-col">
-          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Assigned To</span>
-          <span className="text-xs font-bold text-slate-700 truncate max-w-[100px]">
+          <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Assigned To</span>
+          <span className="text-xs font-bold text-gray-700 truncate max-w-[100px]">
             {data.assigned_to || 'Unassigned'}
           </span>
         </div>
-        <div className="text-xs font-bold text-indigo-700 flex items-center gap-1 bg-white border border-slate-200 px-2 py-1 rounded hover:bg-slate-50 transition-colors">
+        <div className="text-xs font-bold text-navy-700 flex items-center gap-1 bg-white border border-gray-200 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
           Open <FiChevronRight size={12} />
         </div>
       </div>
@@ -334,7 +312,7 @@ const Chat = ({
   const [templateParams, setTemplateParams] = useState("");
   const [sendingTemplate, setSendingTemplate] = useState(false);
 
-  // ---------- Mention states ----------
+  // ---------- NEW: Mention states ----------
   const [mentionQuery, setMentionQuery] = useState(null);
   const [mentionResults, setMentionResults] = useState([]);
   const [pendingStaffMentions, setPendingStaffMentions] = useState([]);
@@ -360,6 +338,7 @@ const Chat = ({
     const customerMessages = currentMessages.filter(m => m.sender_type === 'customer' && !m.isOptimistic);
     if (customerMessages.length > 0) {
       const lastMsg = customerMessages[customerMessages.length - 1];
+      // ✅ Use createdAt (raw timestamp) instead of time (formatted string)
       const ts = lastMsg.createdAt || lastMsg.created_at;
       if (ts) setLastCustomerMessageTime(new Date(ts));
     } else {
@@ -387,12 +366,17 @@ const Chat = ({
   useEffect(() => {
     if (showTemplateModal && activeConversation) {
       let defaultName = getConversationDisplayName();
+      
+      // Strip out CRM prefixes to get just the clean name
       defaultName = defaultName.replace(/WhatsApp /i, '').replace(/Chat with /i, '').trim();
+
+      // If the name is just a raw phone number, leave it blank
       if (/^\+?\d+$/.test(defaultName.replace(/[\s-]/g, ''))) {
         defaultName = ''; 
       }
+
       setTemplateParams(defaultName);
-      setSelectedTemplate("reengagement_message");
+      setSelectedTemplate("reengagement_message"); // Always default to re-engagement
     }
   }, [showTemplateModal, activeConversation, getConversationDisplayName]);
 
@@ -492,11 +476,12 @@ const Chat = ({
     }
   }, [activeConversation?.id, currentUser.id, currentUser.name, API_BASE_URL]);
 
-  // ---------- handleInputChange ----------
+  // ---------- UPDATED: handleInputChange ----------
   const handleInputChange = async (e) => {
     const val = e.target.value;
     setNewMessage(val);
     
+    // Detect Staff Mentions (@ followed by letters)
     const cursor = e.target.selectionStart;
     const textBeforeCursor = val.slice(0, cursor);
     const match = textBeforeCursor.match(/(?:^|\s)@([a-zA-Z]+)$/);
@@ -513,6 +498,7 @@ const Chat = ({
       setMentionQuery(null);
     }
 
+    // Existing typing indicator logic
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     if (val.length > 0) {
       if (!isTyping) {
@@ -532,6 +518,7 @@ const Chat = ({
       }
     }
   };
+  // ------------------------------------------------
 
   useEffect(() => {
     return () => {
@@ -540,44 +527,62 @@ const Chat = ({
     };
   }, [activeConversation?.id, isTyping, emitTyping]);
 
-  // ---------- handleSelectMention ----------
+  // ---------- NEW: handleSelectMention ----------
   const handleSelectMention = (staff) => {
-    const inputEl = chatInputRef.current; 
-    if (!inputEl) return; 
-    const cursor = inputEl.selectionStart;
-    const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
-    const textAfter = newMessage.slice(cursor);
-    
-    setNewMessage(textBefore + textAfter);
-    setMentionQuery(null);
-    setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
-    inputEl.focus();
-  };
+      
+      const inputEl = chatInputRef.current; 
+      
+      // Safety check just in case it hasn't mounted
+      if (!inputEl) return; 
 
-  // 🔥 Convert Message to Note (React-Mentions Compatible)
+      const cursor = inputEl.selectionStart;
+      
+      // Replace the typed query with the full staff name
+      const textBefore = newMessage.slice(0, cursor).replace(/(?:^|\s)@([a-zA-Z]+)$/, ` @${staff.name} `);
+      const textAfter = newMessage.slice(cursor);
+      
+      setNewMessage(textBefore + textAfter);
+      setMentionQuery(null);
+      setPendingStaffMentions(prev => [...prev, { entityId: staff.id, name: staff.name }]);
+      
+      inputEl.focus();
+    };
+
+  // 🔥 UPDATED: Convert Message to Note (React-Mentions Compatible)
   const handleConvertToNote = async (msg) => {
     try {
       const staffMentions = [];
       let finalContent = msg.text;
 
+      // 1. Format the text for Notes.jsx (react-mentions syntax: @[Name](id))
       if (msg.mentions && msg.mentions.length > 0) {
+        
+        // Sort mentions backwards by index so we can replace text without messing up string positions
         const sortedMentions = [...msg.mentions].sort((a, b) => b.start_index - a.start_index);
+
         sortedMentions.forEach(m => {
           if (m.mention_type === 'staff') {
             staffMentions.push(m.entity_id);
+            
+            // Remove the '@' from the display text (e.g. "@Shijin" -> "Shijin")
             const cleanName = m.display_text.replace('@', '').trim();
+            
+            // Format it exactly how Notes.jsx expects it: @[Shijin](123)
             const formattedMention = `@[${cleanName}](${m.entity_id})`;
+            
+            // Safely swap the raw text with the formatted string
             finalContent = finalContent.substring(0, m.start_index) + formattedMention + finalContent.substring(m.end_index);
           }
         });
       }
 
+      // 2. Deduplicate IDs and calculate privacy
       const uniqueMentions = [...new Set(staffMentions)];
       const calculatedVisibility = uniqueMentions.length > 0 ? "mention" : "private";
 
       const payload = {
         title: `Note from chat: ${msg.sender || 'Unknown'}`,
-        content: finalContent,
+        content: finalContent, // 🔥 Now formatted perfectly for Notes.jsx!
         visibility: calculatedVisibility,
         mentions: uniqueMentions,
         related_conversation_id: activeConversation.id,
@@ -607,6 +612,7 @@ const Chat = ({
     const trackingRegex = /(?:^|\s)@(\d+)/g;
     let match;
 
+    // 1. Auto-Parse Tracking IDs on send (@284)
     while ((match = trackingRegex.exec(newMessage)) !== null) {
       const matchText = match[0].trim();
       const startIndex = match.index + (match[0].startsWith(' ') ? 1 : 0);
@@ -619,6 +625,7 @@ const Chat = ({
       });
     }
 
+    // 2. Parse Staff Mentions from the ones they clicked in the dropdown
     pendingStaffMentions.forEach(m => {
       const regex = new RegExp(`(?:^|\\s)@${m.name}(?=\\s|$)`, 'g');
       while ((match = regex.exec(newMessage)) !== null) {
@@ -633,6 +640,7 @@ const Chat = ({
         });
       }
     });
+    // ---------------------------------------------
 
     const tempId = `temp-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const optimisticMessage = {
@@ -650,13 +658,14 @@ const Chat = ({
       isCurrentUser: true,
       is_read_by_me: true,
       isOptimistic: true,
-      mentions: mentions
+      mentions: mentions // <-- Attach mentions
     };
     onSendMessage(newMessage, fileToUpload, optimisticMessage);
     setNewMessage("");
     setFileToUpload(null);
-    setPendingStaffMentions([]);
+    setPendingStaffMentions([]); // Reset pending mentions
   };
+  // ------------------------------------------------
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -711,24 +720,25 @@ const Chat = ({
 
   const renderMessageStatus = (msg) => {
     if (!msg.isCurrentUser) return null;
-    if (msg.isOptimistic) return <FiClock className="text-slate-400 ml-1" size={12} title="Sending..." />;
+    if (msg.isOptimistic) return <FiClock className="text-blue-200 ml-1" size={12} title="Sending..." />;
     const readers = getReadReceipts(msg.id);
     const otherParticipants = activeConversation?.participants?.filter(p => p.staff_id !== currentUser.id) || [];
     if (readers.length === otherParticipants.length && otherParticipants.length > 0) {
-      return <IoMdCheckmarkCircle className="text-indigo-500 ml-1" size={14} title="Read by everyone" />;
+      return <IoMdCheckmarkCircle className="text-blue-300 ml-1" size={14} title="Read by everyone" />;
     } else if (readers.length > 0) {
-      return <IoMdCheckmarkCircle className="text-indigo-400 ml-1" size={14} title={`Read by ${readers.length} of ${otherParticipants.length}`} />;
+      return <IoMdCheckmarkCircle className="text-blue-200 ml-1" size={14} title={`Read by ${readers.length} of ${otherParticipants.length}`} />;
     } else {
-      return <IoMdCheckmarkCircleOutline className="text-slate-400 ml-1" size={14} title="Sent" />;
+      return <IoMdCheckmarkCircleOutline className="text-blue-200 ml-1" size={14} title="Sent" />;
     }
   };
 
-  // ---------- renderMessageTextWithMentions ----------
+  // ---------- NEW: renderMessageTextWithMentions ----------
   const renderMessageTextWithMentions = (text, mentions = []) => {
     if (!mentions || mentions.length === 0) {
       return <p className="text-sm whitespace-pre-wrap break-words">{text}</p>;
     }
     
+    // Sort by index so we can slice the string correctly
     const sorted = [...mentions].sort((a, b) => a.start_index - b.start_index);
     const parts = [];
     let lastIndex = 0;
@@ -738,14 +748,16 @@ const Chat = ({
         parts.push(text.slice(lastIndex, m.start_index));
       }
       
+      // Render Tracking Card
       if (m.mention_type === 'tracking') {
         parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
       } 
+      // 🔥 UPDATED: Render Staff Chip (Bold and Colored)
       else if (m.mention_type === 'staff') {
         parts.push(
           <span 
             key={`mnt-${idx}`} 
-            className="font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded-md border border-indigo-100 shadow-sm mx-0.5 cursor-pointer hover:bg-indigo-100 transition-colors"
+            className="font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded-md border border-blue-200 shadow-sm mx-0.5 cursor-pointer hover:bg-blue-200 transition-colors"
           >
             {m.display_text}
           </span>
@@ -761,6 +773,7 @@ const Chat = ({
     
     return <div className="text-sm whitespace-pre-wrap break-words leading-relaxed">{parts}</div>;
   };
+  // -------------------------------------------------------
 
   // Manual template send handler
   const handleSendTemplate = async () => {
@@ -794,20 +807,20 @@ const Chat = ({
 
   if (!activeConversation) {
     return (
-      <div className="flex flex-col items-center justify-center bg-slate-50 p-4 text-center h-full overflow-y-auto">
+      <div className="flex flex-col items-center justify-center bg-gray-50 p-4 text-center h-full overflow-y-auto">
         <motion.div
           initial={{ scale: 0.8, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           transition={{ delay: 0.2 }}
-          className="bg-indigo-600 w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg shadow-indigo-500/20"
+          className="bg-navy-700 w-24 h-24 rounded-2xl flex items-center justify-center mb-6"
         >
-          <FiSend className="text-white text-3xl" />
+          <FiSend className="text-white text-4xl" />
         </motion.div>
         <motion.h3
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.3 }}
-          className="text-2xl font-bold text-slate-800 mb-2"
+          className="text-2xl font-bold text-gray-800 mb-2"
         >
           Welcome to Chat
         </motion.h3>
@@ -815,7 +828,7 @@ const Chat = ({
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="text-slate-500 max-w-md mb-8"
+          className="text-gray-500 max-w-md mb-6"
         >
           Select a conversation or start a new chat to begin messaging
         </motion.p>
@@ -825,7 +838,7 @@ const Chat = ({
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.5 }}
             onClick={onOpenNewChatModal}
-            className="px-6 py-3 bg-slate-900 text-white rounded-xl flex items-center gap-2 hover:bg-slate-800 transition shadow-sm font-medium"
+            className="px-5 py-3 bg-navy-700 text-white rounded-xl flex items-center gap-2 hover:bg-navy-800 transition shadow-lg"
           >
             <FiPlus /> New Conversation
           </motion.button>
@@ -834,7 +847,7 @@ const Chat = ({
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.6 }}
             onClick={onOpenTaskModal}
-            className="px-6 py-3 bg-white text-slate-800 border border-slate-200 rounded-xl flex items-center gap-2 hover:bg-slate-50 transition shadow-sm font-medium"
+            className="px-5 py-3 bg-green-600 text-white rounded-xl flex items-center gap-2 hover:bg-green-700 transition shadow-lg"
           >
             <FiPlus /> Create Task
           </motion.button>
@@ -854,6 +867,7 @@ const Chat = ({
   const singleOtherParticipant = !activeConversation.is_group && !isWhatsApp && activeConversation.participants?.find(p => p.staff_id !== currentUser.id);
   const isParticipantOnline = singleOtherParticipant ? isUserOnline(singleOtherParticipant.staff_id) : false;
 
+  // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
   const otherParticipants = activeConversation.participants ? activeConversation.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
   const isFunctionallyGroup = activeConversation.is_group || otherParticipants.length > 1;
 
@@ -864,14 +878,11 @@ const Chat = ({
       }
   }
 
-  // Group messages by date for separators
-  let lastMessageDate = null;
-
   return (
     <div className="flex flex-col w-full bg-white h-full min-h-0">
       {/* Fixed Header */}
-      <div className="flex-none h-[72px] w-full px-5 flex items-center border-b border-slate-200 bg-white">
-        <button className="md:hidden mr-3 text-slate-400 hover:text-slate-600" onClick={onBack}>
+      <div className="flex-none h-[70px] w-full px-4 flex items-center border-b border-gray-200 bg-white shadow-sm">
+        <button className="md:hidden mr-3 text-gray-500 hover:text-gray-700" onClick={onBack}>
           <FiChevronLeft size={24} />
         </button>
         <div className="relative mr-3 flex-shrink-0">
@@ -879,60 +890,61 @@ const Chat = ({
             <img 
               src={avatarPhoto} 
               alt={displayName} 
-              className="w-10 h-10 rounded-full object-cover border border-slate-200 shadow-sm"
+              className="w-10 h-10 rounded-full object-cover border border-gray-200"
               onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
             />
           ) : null}
           
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-semibold shadow-sm ${activeConversation.avatarColor || 'bg-slate-800'} ${avatarPhoto ? 'hidden' : ''}`}>
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white ${activeConversation.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
             {isFunctionallyGroup ? <FiUsers size={20} /> : avatarChar}
           </div>
 
           {/* Online Dot */}
           {showOnlineStatus && singleOtherParticipant && !isFunctionallyGroup && (
-            <span className={`absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+            <span className={`absolute -bottom-0 -right-0 w-3 h-3 rounded-full border-2 border-white ${isParticipantOnline ? 'bg-green-500' : 'bg-gray-400'}`} />
           )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="font-semibold text-slate-800 truncate text-[15px]">{displayName}</h2>
+            <h2 className="font-semibold text-gray-800 truncate">{displayName}</h2>
             {isWhatsApp && (
-              <span className="bg-emerald-50 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 font-semibold border border-emerald-100">
-                <FiSmartphone size={10} /> WhatsApp
+              <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full flex items-center gap-1">
+                <FiSmartphone size={12} /> WhatsApp
               </span>
             )}
             {serviceInfo && (
-              <span className="bg-purple-50 text-purple-700 text-[10px] px-2 py-0.5 rounded-full font-semibold border border-purple-100">
+              <span className="bg-purple-100 text-purple-800 text-xs px-2 py-0.5 rounded-full">
                 Service
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 flex-wrap mt-0.5">
+          <div className="flex items-center gap-1 flex-wrap">
             {typingUsers[activeConversation.id]?.length > 0 ? (
-              <p className="text-xs text-indigo-600 italic font-medium">
+              <p className="text-xs text-navy-700 italic">
                 {typingUsers[activeConversation.id].map(u => u.name).join(', ')} typing...
               </p>
             ) : activeConversation.is_group ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-gray-500">
                 {activeConversation.participants?.length || 0} members
                 {onlineParticipants.length > 0 && (
-                  <span className="ml-2 text-emerald-600">({onlineParticipants.length} online)</span>
+                  <span className="ml-2">({onlineParticipants.length} online)</span>
                 )}
               </p>
             ) : isWhatsApp ? (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-gray-500">
                 WhatsApp conversation
               </p>
             ) : (
               <div className="flex items-center">
-                <BsCircleFill className={`text-[10px] mr-1.5 ${isParticipantOnline ? 'text-emerald-500' : 'text-slate-300'}`} />
-                <span className="text-xs text-slate-500 font-medium">
+                <BsCircleFill className={`text-xs mr-1 ${isParticipantOnline ? 'text-green-500' : 'text-gray-400'}`} />
+                <span className="text-xs text-gray-500">
                   {isParticipantOnline ? 'Online' : 'Offline'}
                 </span>
+                {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
                 {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
                   <>
-                    <span className="text-slate-300 mx-2">•</span>
-                    <span className="text-xs text-slate-500 truncate flex items-center gap-1">
+                    <span className="text-gray-300 mx-2">•</span>
+                    <span className="text-xs text-gray-500 truncate flex items-center gap-1">
                       <FiMapPin size={10}/> {otherParticipants[0].centre_name}
                     </span>
                   </>
@@ -940,25 +952,22 @@ const Chat = ({
               </div>
             )}
             {serviceInfo && serviceInfo.applicationNumber && (
-              <span className="text-xs text-slate-400 ml-2">
+              <span className="text-xs text-gray-400 ml-2">
                 App #{serviceInfo.applicationNumber}
               </span>
             )}
           </div>
         </div>
         <div className="ml-auto flex gap-1 relative">
-          <button className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
-            <FiSearch size={18} />
-          </button>
-          <button className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
+          <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition">
             <FiVideoCall size={18} />
           </button>
-          <button className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
+          <button className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition">
             <FiPhoneCall size={18} />
           </button>
           <button
             onClick={onOpenTaskModal}
-            className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition"
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition"
             title="Create New Task"
           >
             <FiPlus size={18} />
@@ -966,23 +975,24 @@ const Chat = ({
           {hasTasks && (
             <button
               onClick={() => setShowTasksModal(true)}
-              className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition"
+              className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition"
               title="View Tasks"
             >
               <FiList size={18} />
             </button>
           )}
+          {/* WhatsApp Template Button (only if window expired) */}
           {isWhatsApp && !isWithinWindow && (
             <button
               onClick={() => setShowTemplateModal(true)}
-              className="p-2 rounded-full bg-emerald-50 text-emerald-600 hover:bg-emerald-100 transition"
+              className="p-2 rounded-full bg-green-100 text-green-700 hover:bg-green-200 transition"
               title="Send Template"
             >
               <FiMessageSquare size={18} />
             </button>
           )}
           <button
-            className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition relative"
+            className="p-2 rounded-full hover:bg-gray-100 text-gray-600 transition relative"
             onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
           >
             <FiMoreVertical size={18} />
@@ -993,26 +1003,25 @@ const Chat = ({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="absolute top-full right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 overflow-hidden"
+                className="absolute top-full right-0 mt-2 w-56 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden"
               >
-                <button className="flex items-center w-full p-3 text-sm text-slate-700 hover:bg-slate-50 transition">
-                  <FiUserPlus className="mr-3 text-slate-400" size={16} /> Add People
+                <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
+                  <FiUserPlus className="mr-3" /> Add People
                 </button>
-                <button className="flex items-center w-full p-3 text-sm text-slate-700 hover:bg-slate-50 transition">
-                  <FiStar className="mr-3 text-slate-400" size={16} /> Mark as Favorite
+                <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
+                  <FiStar className="mr-3" /> Mark as Favorite
                 </button>
-                <button className="flex items-center w-full p-3 text-sm text-slate-700 hover:bg-slate-50 transition">
-                  <FiInfo className="mr-3 text-slate-400" size={16} /> View Details
+                <button className="flex items-center w-full p-3 text-sm hover:bg-gray-50">
+                  <FiInfo className="mr-3" /> View Details
                 </button>
-                <div className="h-px bg-slate-100 my-1"></div>
                 <button 
                   onClick={() => {
-                    setIsMoreMenuOpen(false);
+                    setIsMoreMenuOpen(false); // Close the menu
                     if (onDeleteConversation) onDeleteConversation(activeConversation.id);
                   }}
-                  className="flex items-center w-full p-3 text-sm text-rose-600 hover:bg-rose-50 transition"
+                  className="flex items-center w-full p-3 text-sm text-red-500 hover:bg-gray-50"
                 >
-                  <FiTrash2 className="mr-3" size={16} /> Delete Conversation
+                  <FiTrash2 className="mr-3" /> Delete Conversation
                 </button>
               </motion.div>
             )}
@@ -1023,12 +1032,12 @@ const Chat = ({
       {/* Scrollable Messages Area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 min-h-0 overflow-y-auto bg-slate-50/50 custom-scrollbar"
+        className="flex-1 min-h-0 overflow-y-auto bg-gray-50 chat-scroll"
       >
-        <div className="px-5 py-6 space-y-4">
+        <div className="px-4 py-6 space-y-4">
           {loadingChat ? (
             <div className="flex justify-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
             </div>
           ) : (
             <>
@@ -1038,146 +1047,135 @@ const Chat = ({
                   : `msg-${msg.id}`;
                 const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
                 const isNewTaskMessage = msg.messageType === "task";
-
-                // Date separator logic
-                const msgDate = msg.createdAt || msg.created_at || new Date();
-                const dateStr = new Date(msgDate).toDateString();
-                let showDateSeparator = false;
-                if (dateStr !== lastMessageDate) {
-                  showDateSeparator = true;
-                  lastMessageDate = dateStr;
-                }
-
                 return (
-                  <React.Fragment key={messageKey}>
-                    {showDateSeparator && (
-                      <div className="flex justify-center my-6">
-                        <span className="bg-slate-100 text-slate-500 text-[11px] font-semibold px-3 py-1 rounded-full uppercase tracking-wider">
-                          {formatDateSeparator(msgDate)}
-                        </span>
-                      </div>
-                    )}
-                    <motion.div
-                      id={`msg-${msg.id}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
-                    >
-                    {isTaskMessage ? (
-                      <div className="flex max-w-xs lg:max-w-md flex-row">
-                        <div className="mr-2 flex-shrink-0 relative">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200">
-                            <FiMessageSquare size={14} />
-                          </div>
+                  <motion.div
+                    key={messageKey}
+                    id={`msg-${msg.id}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
+                  >
+                  {isTaskMessage ? (
+                    // ✅ EXISTING SERVICE TASK (DO NOT TOUCH)
+                    <div className="flex max-w-xs lg:max-w-md flex-row">
+                      <div className="mr-2 flex-shrink-0 relative">
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                          <FiMessageSquare size={14} />
                         </div>
-                        <TaskMessage
-                          taskId={msg.fileName}
-                          text={msg.text}
-                          taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
-                          onStatusUpdate={onTaskStatusUpdate}
-                        />
                       </div>
+                      <TaskMessage
+                        taskId={msg.fileName}
+                        text={msg.text}
+                        taskData={serviceInfo?.tasks?.find(t => String(t.id) === String(msg.fileName))}
+                        onStatusUpdate={onTaskStatusUpdate}
+                      />
+                    </div>
 
-                      ) : isNewTaskMessage ? (
-                        (() => {
-                            const task = msg.live_task_data || msg.data || allTasks.find(t => String(t.id) === String(msg.text)); 
-                            if (!task) return null;
-                            return (
-                              <NormalTaskMessage
-                                taskId={task.id}
-                                taskData={task}
-                                onStatusUpdate={onNormalTaskStatusUpdate}
-                              />
-                            );
-                        })()
-                      ) : (
-                        <div className={`flex max-w-[85%] lg:max-w-[70%] ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
-                          {!msg.isCurrentUser && (
-                            <div className="mr-2 flex-shrink-0 relative">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs text-slate-500 font-semibold border border-slate-200">
-                                {msg.sender_type === 'customer' ? (
-                                  <FiUser size={14} className="text-slate-500" />
-                                ) : (
-                                  msg.sender?.[0] || '?'
-                                )}
-                              </div>
-                              {!isWhatsApp && isUserOnline(msg.senderId) && (
-                                <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white" />
+                    ) : isNewTaskMessage ? (
+                      // 🔥 NEW TASK UI (Updated for normalized database)
+                      (() => {
+                          // Use the live task data attached by your backend fetch query
+                          const task = msg.live_task_data || msg.data || allTasks.find(t => String(t.id) === String(msg.text)); 
+                          
+                          if (!task) return null;
+                          
+                          return (
+                            <NormalTaskMessage
+                              taskId={task.id}
+                              taskData={task}
+                              onStatusUpdate={onNormalTaskStatusUpdate}
+                            />
+                          );
+                      })()
+                    ) : (
+                      <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
+                        {!msg.isCurrentUser && (
+                          <div className="mr-2 flex-shrink-0 relative">
+                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
+                              {msg.sender_type === 'customer' ? (
+                                <FiUser size={14} className="text-gray-500" />
+                              ) : (
+                                msg.sender?.[0] || '?'
                               )}
                             </div>
-                          )}
-                          <div
-                            className={`px-4 py-2.5 rounded-2xl shadow-sm ${
-                              msg.isCurrentUser
-                                ? "bg-indigo-50 text-slate-800 rounded-br-md border border-indigo-100"
-                                : "bg-white text-slate-700 rounded-bl-md border border-slate-200"
-                              } ${msg.isOptimistic ? 'opacity-70' : ''}`}
-                          >
-                            {msg.isDeleted ? (
-                              <p className="text-sm italic text-slate-400">This message was deleted</p>
-                            ) : msg.isFile ? (
-                              <div
-                                className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition"
-                                onClick={() => {
-                                  if (msg.fileUrl) {
-                                    const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
-                                    window.open(fullUrl, '_blank');
-                                  }
-                                }}
-                              >
-                                {msg.messageType === 'image' ? (
-                                  <>
-                                    <FiImage className="flex-shrink-0 text-slate-500" size={18} />
-                                    <span className="truncate text-sm font-medium">{msg.fileName || 'Image'}</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <FiFile className="flex-shrink-0 text-slate-500" size={18} />
-                                    <span className="truncate text-sm font-medium">{msg.fileName || 'File'}</span>
-                                  </>
-                                )}
-                                <FiDownload size={14} className="ml-2 text-slate-400" />
-                              </div>
-                            ) : (
-                              renderMessageTextWithMentions(msg.text, msg.mentions)
+                            {!isWhatsApp && isUserOnline(msg.senderId) && (
+                              <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
                             )}
-                            <div className={`flex justify-end items-center mt-1.5 gap-1 text-[10px] ${msg.isCurrentUser ? "text-slate-400" : "text-slate-400"}`}>
-                              <span>{msg.time}</span>
+                          </div>
+                        )}
+                        <div
+                          className={`px-4 py-2 rounded-2xl ${msg.isCurrentUser
+                              ? "bg-navy-700 text-white rounded-br-none"
+                              : "bg-white text-gray-700 rounded-bl-none shadow-sm border border-gray-200"
+                            } ${msg.isOptimistic ? 'opacity-70' : ''}`}
+                        >
+                          {msg.isDeleted ? (
+                            <p className="text-sm italic text-gray-400">This message was deleted</p>
+                          ) : msg.isFile ? (
+                            <div
+                              className="flex items-center gap-2 cursor-pointer hover:opacity-80"
+                              onClick={() => {
+                                if (msg.fileUrl) {
+                                  const fullUrl = msg.fileUrl.startsWith('http') ? msg.fileUrl : `${API_BASE_URL}${msg.fileUrl}`;
+                                  window.open(fullUrl, '_blank');
+                                }
+                              }}
+                            >
+                              {msg.messageType === 'image' ? (
+                                <>
+                                  <FiImage className="flex-shrink-0" size={20} />
+                                  <span className="truncate">{msg.fileName || 'Image'}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <FiFile className="flex-shrink-0" size={20} />
+                                  <span className="truncate">{msg.fileName || 'File'}</span>
+                                </>
+                              )}
+                              <FiDownload size={14} className="ml-2" />
+                            </div>
+                          ) : (
+                            // ---------- REPLACED with mention renderer ----------
+                            renderMessageTextWithMentions(msg.text, msg.mentions)
+                          )}
+                          <div className={`flex justify-between items-center mt-1 text-xs ${msg.isCurrentUser ? "text-blue-200" : "text-gray-500"}`}>
+                            <span>{msg.time}</span>
+                            <div className="flex items-center">
                               {renderMessageStatus(msg)}
                             </div>
                           </div>
-                          {/* Hover Actions */}
-                          {!msg.isOptimistic && !msg.isDeleted && msg.messageType === 'text' && (
-                            <div className={`flex items-end mb-1 opacity-0 group-hover:opacity-100 transition-opacity gap-1 ${msg.isCurrentUser ? 'mr-2' : 'ml-2'}`}>
-                              <button 
-                                onClick={() => handleConvertToNote(msg)}
-                                className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-amber-500 rounded-full shadow-sm hover:shadow transition" 
-                                title="Convert to Note"
-                              >
-                                <FiStar size={12} />
-                              </button>
-                              <button 
-                                onClick={() => onOpenTaskModal(msg.text)}
-                                className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-emerald-600 rounded-full shadow-sm hover:shadow transition" 
-                                title="Create Task from Message"
-                              >
-                                <FiCheckSquare size={12} />
-                              </button>
-                              {msg.isCurrentUser && (
-                                <button
-                                  onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
-                                  className="p-1.5 bg-white border border-slate-200 text-slate-400 hover:text-rose-500 rounded-full shadow-sm hover:shadow transition"
-                                  title="Delete Message"
-                                >
-                                  <FiTrash2 size={12} />
-                                </button>
-                              )}
-                            </div>
-                          )}
                         </div>
-                      )}
-                    </motion.div>
-                  </React.Fragment>
+                        {/* 🔥 Unified Hover Actions (Note, Task, Delete) */}
+                        {!msg.isOptimistic && !msg.isDeleted && msg.messageType === 'text' && (
+                          <div className={`flex items-end mb-1 opacity-0 group-hover:opacity-100 transition-opacity gap-1 ${msg.isCurrentUser ? 'mr-2' : 'ml-2'}`}>
+                            <button 
+                              onClick={() => handleConvertToNote(msg)}
+                              className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-yellow-500 rounded-full shadow-sm hover:shadow transition" 
+                              title="Convert to Note"
+                            >
+                              <FiStar size={12} />
+                            </button>
+                            <button 
+                              onClick={() => onOpenTaskModal(msg.text)} // Pass the text to optionally prepopulate the task modal later
+                              className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-green-600 rounded-full shadow-sm hover:shadow transition" 
+                              title="Create Task from Message"
+                            >
+                              <FiCheckSquare size={12} />
+                            </button>
+                            {msg.isCurrentUser && (
+                              <button
+                                onClick={() => onDeleteMessage(msg.id, activeConversation.id)}
+                                className="p-1.5 bg-white border border-gray-200 text-gray-400 hover:text-red-500 rounded-full shadow-sm hover:shadow transition"
+                                title="Delete Message"
+                              >
+                                <FiTrash2 size={12} />
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
                 );
               })}
             </>
@@ -1187,51 +1185,51 @@ const Chat = ({
       </div>
 
       {/* Fixed Input Area */}
-      <div className="w-full bg-white px-4 py-3 border-t border-slate-200 sticky bottom-0 relative">
+      <div className="w-full bg-white p-3 border-t border-gray-200 sticky bottom-0 relative">
         {fileToUpload && (
-          <div className="mb-3 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between">
+          <div className="mb-2 px-3 py-2 bg-gray-100 rounded-lg flex items-center justify-between">
             <div className="flex items-center gap-2">
               {fileToUpload.type?.startsWith('image/') ? (
-                <FiImage className="text-slate-500" size={16} />
+                <FiImage className="text-gray-600" />
               ) : (
-                <FiFile className="text-slate-500" size={16} />
+                <FiFile className="text-gray-600" />
               )}
-              <span className="text-xs text-slate-700 font-medium truncate max-w-[200px]">
+              <span className="text-sm text-gray-700 truncate max-w-[200px]">
                 {fileToUpload.name}
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className="text-xs text-gray-500">
                 ({(fileToUpload.size / 1024).toFixed(1)} KB)
               </span>
             </div>
             <button
               onClick={() => setFileToUpload(null)}
-              className="text-slate-400 hover:text-rose-500 transition"
+              className="text-gray-500 hover:text-red-500"
               disabled={isUploading}
             >
-              <FiX size={16} />
+              <FiX size={18} />
             </button>
           </div>
         )}
         {isUploading && fileToUpload && (
-          <div className="mb-3">
-            <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+          <div className="mb-2">
+            <div className="h-1 bg-gray-200 rounded-full overflow-hidden">
               <motion.div
-                className="h-full bg-indigo-600"
+                className="h-full bg-navy-700"
                 initial={{ width: 0 }}
                 animate={{ width: `${uploadProgress}%` }}
                 transition={{ duration: 0.3 }}
               />
             </div>
-            <p className="text-[10px] text-slate-500 mt-1 text-right font-medium">
+            <p className="text-xs text-gray-500 mt-1 text-right">
               Uploading... {uploadProgress}%
             </p>
           </div>
         )}
-        <div className="flex items-end gap-2">
+        <div className="flex items-center gap-2">
           <div className="relative">
             <button
               onClick={() => setIsEmojiPickerOpen(!isEmojiPickerOpen)}
-              className="p-2 text-slate-400 hover:text-indigo-600 rounded-full hover:bg-slate-100 transition"
+              className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-100 transition"
             >
               <FaRegSmile size={20} />
             </button>
@@ -1241,7 +1239,7 @@ const Chat = ({
                   initial={{ opacity: 0, y: 10, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute bottom-full left-0 mb-2 z-50 shadow-xl rounded-xl overflow-hidden border border-slate-200"
+                  className="absolute bottom-full left-0 mb-2 z-50"
                   ref={emojiPickerRef}
                 >
                   <EmojiPicker
@@ -1253,9 +1251,9 @@ const Chat = ({
               )}
             </AnimatePresence>
           </div>
-          <div className="flex-1 bg-white border border-slate-200 rounded-full px-4 py-2 flex items-center focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-400 transition-all">
+          <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center">
             <input
-              id="chat-message-input"
+              id="chat-message-input"   // <-- added id
               ref={chatInputRef}
               type="text"
               value={newMessage}
@@ -1264,12 +1262,12 @@ const Chat = ({
               placeholder={
                 isWhatsApp && !isWithinWindow
                   ? "24h window expired – use template button"
-                  : "Write your message..."
+                  : "Type a message..."
               }
-              className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-sm text-slate-700 placeholder:text-slate-400"
+              className="flex-1 bg-transparent border-none focus:ring-0 focus:outline-none text-gray-700"
               disabled={isUploading || (isWhatsApp && !isWithinWindow)}
             />
-            <div className="flex items-center gap-1 ml-2">
+            <div className="flex items-center gap-1">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -1279,7 +1277,7 @@ const Chat = ({
               />
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1.5 text-slate-400 hover:text-indigo-600 rounded-full hover:bg-slate-100 transition"
+                className="p-2 text-gray-500 hover:text-navy-700 rounded-full hover:bg-gray-200 transition"
                 disabled={isUploading || (isWhatsApp && !isWithinWindow)}
               >
                 <FiPaperclip size={18} />
@@ -1294,7 +1292,7 @@ const Chat = ({
               whileTap={{ scale: 0.95 }}
               onClick={handleSendMessage}
               disabled={isUploading || (isWhatsApp && !isWithinWindow)}
-              className="bg-indigo-600 text-white p-2.5 rounded-full shadow-sm hover:bg-indigo-700 transition disabled:opacity-50"
+              className="bg-navy-700 text-white p-3 rounded-full shadow-md hover:bg-navy-800 transition disabled:opacity-50"
             >
               <FiSend size={18} />
             </motion.button>
@@ -1302,31 +1300,31 @@ const Chat = ({
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="bg-slate-100 text-slate-500 p-2.5 rounded-full shadow-sm hover:bg-slate-200 transition"
+              className="bg-gray-200 text-gray-600 p-3 rounded-full shadow"
             >
               <FiMic size={18} />
             </motion.button>
           )}
         </div>
 
-        {/* ---------- Autocomplete dropdown ---------- */}
+        {/* ---------- NEW: Autocomplete dropdown ---------- */}
         {mentionQuery && mentionResults.length > 0 && (
-          <div className="absolute bottom-[80px] left-14 bg-white border border-slate-200 rounded-xl shadow-xl w-64 overflow-hidden z-50">
-            <div className="px-3 py-2 bg-slate-50 border-b border-slate-100 text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+          <div className="absolute bottom-[80px] left-14 bg-white border border-gray-200 rounded-xl shadow-xl w-64 overflow-hidden z-50">
+            <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 text-xs text-gray-500 font-semibold uppercase">
               Staff Suggestions
             </div>
             {mentionResults.map(staff => (
               <button
                 key={staff.id}
                 onClick={() => handleSelectMention(staff)}
-                className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-indigo-50 transition text-left"
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-blue-50 transition text-left"
               >
-                <div className="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
+                <div className="w-8 h-8 rounded-full bg-navy-700 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">
                   {staff.name.charAt(0)}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-slate-800 text-sm truncate">{staff.name}</p>
-                  <p className="text-[10px] text-slate-500 truncate">{staff.role}</p>
+                  <p className="font-semibold text-gray-800 text-sm truncate">{staff.name}</p>
+                  <p className="text-xs text-gray-500 truncate">{staff.role}</p>
                 </div>
               </button>
             ))}
@@ -1338,41 +1336,41 @@ const Chat = ({
 
       {/* Tasks Modal */}
       {showTasksModal && serviceInfo && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowTasksModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-800">Service Tasks</h3>
-              <button onClick={() => setShowTasksModal(false)} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTasksModal(false)}>
+          <div className="bg-white rounded-lg w-full max-w-md shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-gray-900">Service Tasks</h3>
+              <button onClick={() => setShowTasksModal(false)} className="text-gray-500 hover:text-gray-700">
                 <FiX size={20} />
               </button>
             </div>
-            <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar">
+            <div className="p-4 max-h-[60vh] overflow-y-auto">
               {serviceInfo.tasks.length === 0 ? (
-                <p className="text-slate-500 text-center py-4 text-sm">No tasks for this service.</p>
+                <p className="text-gray-500 text-center py-4">No tasks for this service.</p>
               ) : (
                 <div className="space-y-3">
                   {serviceInfo.tasks.map(task => (
-                    <div key={task.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div key={task.id} className="p-3 bg-gray-50 rounded-lg border border-gray-200">
                       <div className="flex justify-between items-start">
                         <div>
-                          <h4 className={`font-semibold text-sm ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                          <h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-900'}`}>
                             {task.title}
                           </h4>
-                          {task.description && <p className="text-xs text-slate-500 mt-1">{task.description}</p>}
-                          <div className="flex flex-wrap gap-2 mt-2 text-[10px] text-slate-500 font-medium">
-                            {task.assigned_to_name && <span className="flex items-center gap-1"><FiUser size={10}/> {task.assigned_to_name}</span>}
-                            {task.due_date && <span className="flex items-center gap-1"><FiClock size={10}/> {formatDate(task.due_date)}</span>}
-                            <span className={`px-2 py-0.5 rounded-full border ${
-                              task.priority === 'high' ? 'bg-rose-50 text-rose-700 border-rose-200' :
-                              task.priority === 'medium' ? 'bg-amber-50 text-amber-700 border-amber-200' :
-                              'bg-emerald-50 text-emerald-700 border-emerald-200'
+                          {task.description && <p className="text-sm text-gray-600 mt-1">{task.description}</p>}
+                          <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-500">
+                            {task.assigned_to_name && <span>👤 {task.assigned_to_name}</span>}
+                            {task.due_date && <span>📅 {formatDate(task.due_date)}</span>}
+                            <span className={`px-2 py-0.5 rounded-full ${
+                              task.priority === 'high' ? 'bg-red-100 text-red-800' :
+                              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+                              'bg-green-100 text-green-800'
                             }`}>
                               {task.priority}
                             </span>
-                            <span className={`px-2 py-0.5 rounded-full border ${
-                              task.status === 'completed' ? 'bg-slate-100 text-slate-600 border-slate-200' :
-                              task.status === 'in_progress' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
-                              'bg-slate-100 text-slate-600 border-slate-200'
+                            <span className={`px-2 py-0.5 rounded-full ${
+                              task.status === 'completed' ? 'bg-green-100 text-green-800' :
+                              task.status === 'in_progress' ? 'bg-blue-100 text-blue-800' :
+                              'bg-gray-100 text-gray-800'
                             }`}>
                               {task.status === 'in_progress' ? 'In Progress' : task.status === 'completed' ? 'Completed' : 'Pending'}
                             </span>
@@ -1390,41 +1388,42 @@ const Chat = ({
 
       {/* WhatsApp Template Modal */}
       {showTemplateModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4" onClick={() => setShowTemplateModal(false)}>
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl border border-slate-200" onClick={e => e.stopPropagation()}>
-            <h3 className="text-lg font-bold text-slate-800 mb-4">Send WhatsApp Template</h3>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setShowTemplateModal(false)}>
+          <div className="bg-white rounded-lg w-full max-w-md p-6 shadow-xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold mb-4">Send WhatsApp Template</h3>
             <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Template</label>
+              <label className="block text-sm font-medium mb-1">Template</label>
               <select
                 value={selectedTemplate}
                 onChange={(e) => setSelectedTemplate(e.target.value)}
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 bg-slate-50 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition"
+                className="w-full border rounded-lg px-3 py-2 bg-gray-50"
               >
+                {/* Now using abstract keys. Backend handles the centre mapping! */}
                 <option value="reengagement_message">Re‑engagement (Auto-Mapped)</option>
               </select>
             </div>
             <div className="mb-4">
-              <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Parameters (comma separated)</label>
+              <label className="block text-sm font-medium mb-1">Parameters (comma separated)</label>
               <input
                 type="text"
                 value={templateParams}
                 onChange={(e) => setTemplateParams(e.target.value)}
                 placeholder="e.g. John, APP-123"
-                className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition"
+                className="w-full border rounded-lg px-3 py-2"
               />
-              <p className="text-[10px] text-slate-500 mt-1">Example: Customer name, Application ID</p>
+              <p className="text-xs text-gray-500 mt-1">Example: Customer name, Application ID</p>
             </div>
-            <div className="flex justify-end gap-2 mt-6">
+            <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowTemplateModal(false)}
-                className="px-4 py-2 border border-slate-200 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                className="px-4 py-2 border rounded-lg hover:bg-gray-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSendTemplate}
                 disabled={sendingTemplate}
-                className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-medium hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm"
+                className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
               >
                 {sendingTemplate ? "Sending..." : "Send"}
               </button>
