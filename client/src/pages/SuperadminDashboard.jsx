@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import {
@@ -15,7 +15,6 @@ import {
 // ACCOUNTING CLOSING LOG HELPERS
 // ==========================================
 const CLOSING_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/all`;
-const CLOSING_HISTORY_ENDPOINT = `${import.meta.env.VITE_API_URL}/api/accounting/nightly-close/history`;
 
 // ==========================================
 // PERIOD FILTER HELPERS
@@ -587,99 +586,6 @@ const StaffPerformanceChart = ({ staffData, scopeLabel = "Ranked across all cent
 // ==========================================
 // REVENUE CHART
 // ==========================================
-/* Closing history: centres down the side, last N days across, one cell per night */
-const HISTORY_CELL = {
-  closed: { cls: "bg-emerald-500 text-white", glyph: "", label: "Closed" },
-  variance: { cls: "bg-amber-500 text-white", glyph: "!", label: "Closed with variance" },
-  incomplete: { cls: "border border-amber-400 bg-amber-100 text-amber-700", glyph: "~", label: "Not fully closed" },
-  missed: { cls: "bg-rose-500 text-white", glyph: "×", label: "Not closed" },
-};
-const historyKind = (r) =>
-  r.status === "not_closed" ? "missed" : r.status === "incomplete" ? "incomplete" : Number(r.cash_variance || 0) !== 0 ? "variance" : "closed";
-const dayHead = (ymd) => {
-  const d = new Date(`${ymd}T00:00:00+05:30`);
-  return {
-    num: d.toLocaleDateString("en-IN", { day: "numeric", timeZone: "Asia/Kolkata" }),
-    wd: d.toLocaleDateString("en-IN", { weekday: "short", timeZone: "Asia/Kolkata" }),
-    full: d.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", timeZone: "Asia/Kolkata" }),
-  };
-};
-
-const ClosingHistory = ({ days, rows, centreId }) => {
-  const scrollRef = useRef(null);
-  useEffect(() => {
-    // start scrolled to the newest night on narrow screens
-    if (scrollRef.current) scrollRef.current.scrollLeft = scrollRef.current.scrollWidth;
-  }, [days.length]);
-  const byCentre = new Map();
-  for (const r of rows) {
-    if (centreId !== "all" && String(r.centre_id) !== String(centreId)) continue;
-    if (!byCentre.has(r.centre_id)) byCentre.set(r.centre_id, { name: r.centre_name, cells: new Map() });
-    byCentre.get(r.centre_id).cells.set(r.accounting_date, r);
-  }
-  const centres = [...byCentre.entries()].map(([id, c]) => {
-    const kinds = days.map((d) => (c.cells.has(d) ? historyKind(c.cells.get(d)) : "missed"));
-    return { id, name: c.name, cells: c.cells, kinds, clean: kinds.filter((k) => k === "closed").length };
-  });
-  if (centres.length === 0) return <p className="py-6 text-center text-sm text-slate-500">No centres found.</p>;
-  // worst first: most missed/incomplete, then fewest clean nights
-  const bad = (c) => c.kinds.filter((k) => k === "missed" || k === "incomplete").length;
-  centres.sort((a, b) => bad(b) - bad(a) || a.clean - b.clean || a.name.localeCompare(b.name));
-  return (
-    <div>
-      <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-600">
-        {Object.values(HISTORY_CELL).map((k) => (
-          <span key={k.label} className="inline-flex items-center gap-1.5">
-            <span className={`inline-flex h-4 w-4 items-center justify-center rounded text-[10px] font-bold ${k.cls}`}>{k.glyph}</span>
-            {k.label}
-          </span>
-        ))}
-      </div>
-      <div ref={scrollRef} className="overflow-x-auto">
-        <table className="border-separate" style={{ borderSpacing: "3px" }}>
-          <thead>
-            <tr>
-              <th className="sticky left-0 bg-white" />
-              {days.map((d) => {
-                const h = dayHead(d);
-                return (
-                  <th key={d} title={h.full} className="w-8 min-w-[2rem] pb-1 text-center font-normal">
-                    <div className="text-[10px] uppercase leading-tight text-slate-400">{h.wd.slice(0, 2)}</div>
-                    <div className="text-xs font-medium tabular-nums leading-tight text-slate-600">{h.num}</div>
-                  </th>
-                );
-              })}
-              <th className="pl-2 text-right text-[11px] font-normal text-slate-400">Clean</th>
-            </tr>
-          </thead>
-          <tbody>
-            {centres.map((c) => (
-              <tr key={c.id}>
-                <td className="sticky left-0 max-w-[10rem] truncate bg-white pr-3 text-sm font-medium text-slate-800" title={c.name}>{c.name}</td>
-                {days.map((d, i) => {
-                  const k = HISTORY_CELL[c.kinds[i]];
-                  const r = c.cells.get(d);
-                  const v = Number(r?.cash_variance || 0);
-                  const tip = `${dayHead(d).full}: ${k.label}${c.kinds[i] === "variance" ? `, ${money(Math.abs(v))} ${v < 0 ? "short" : "over"}` : ""}`;
-                  return (
-                    <td key={d} title={tip} aria-label={`${c.name}, ${tip}`}
-                      className={`h-8 w-8 rounded text-center text-xs font-bold ${k.cls}`}>
-                      {k.glyph}
-                    </td>
-                  );
-                })}
-                <td className="whitespace-nowrap pl-2 text-right text-xs tabular-nums text-slate-600">
-                  <span className="font-semibold text-slate-900">{c.clean}</span>/{days.length}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-};
-
 /* Revenue / expense mix: donut + ranked legend, top 6 + "Other". Rows with subcategories expand on click. */
 const MIX_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
 const MIX_OTHER = "#94a3b8";
@@ -818,9 +724,6 @@ const SuperadminDashboard = () => {
   const [closingData, setClosingData] = useState({ date: "", rows: [] });
   const [closingLoading, setClosingLoading] = useState(true);
   const [closingError, setClosingError] = useState(false);
-  const [histData, setHistData] = useState({ days: [], rows: [] });
-  const [histLoading, setHistLoading] = useState(true);
-  const [histError, setHistError] = useState(false);
 
   // Centre filter ("all" = whole network)
   const [centreId, setCentreId] = useState(() => localStorage.getItem("superadmin_dash_centre") || "all");
@@ -914,24 +817,6 @@ const SuperadminDashboard = () => {
 
     return () => controller.abort();
   }, [closingDate]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    axios
-      .get(CLOSING_HISTORY_ENDPOINT, {
-        params: { days: 14 },
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-        signal: controller.signal,
-      })
-      .then((res) => { setHistData(res.data); setHistLoading(false); })
-      .catch((err) => {
-        if (axios.isCancel(err)) return;
-        console.error("Closing history error:", err);
-        setHistError(true);
-        setHistLoading(false);
-      });
-    return () => controller.abort();
-  }, []);
 
   if (loading && !dashboard) {
     return (
@@ -1315,22 +1200,6 @@ const SuperadminDashboard = () => {
         </Panel>
         <Panel title="Expenses by category" hint={`${periodLabel}. Approved expenses`}>
           <MixDonut rows={financials.breakdowns?.expenses} totalLabel="spent" emptyText="No approved expenses in this period." />
-        </Panel>
-      </div>
-
-      {/* Closing history */}
-      <div className="mt-4">
-        <Panel
-          title="Closing history"
-          hint={`Last ${histData.days.length || 14} nights, newest on the right. Centres needing attention first`}
-        >
-          {histLoading ? (
-            <div className="flex justify-center py-8"><FiLoader className="h-6 w-6 animate-spin text-indigo-600" /></div>
-          ) : histError ? (
-            <p className="rounded-lg bg-rose-50 p-4 text-center text-sm text-rose-600">Could not load closing history.</p>
-          ) : (
-            <ClosingHistory days={histData.days} rows={histData.rows || []} centreId={centreId} />
-          )}
         </Panel>
       </div>
 
