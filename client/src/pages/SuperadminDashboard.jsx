@@ -586,6 +586,114 @@ const StaffPerformanceChart = ({ staffData, scopeLabel = "Ranked across all cent
 // ==========================================
 // REVENUE CHART
 // ==========================================
+/* Staff targets: today's daily target and this month's target, per staff */
+const TargetBar = ({ value, max, tone }) => (
+  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className={`h-full rounded-full ${tone}`} style={{ width: `${max > 0 ? Math.min((value / max) * 100, 100) : 0}%` }} />
+  </div>
+);
+
+const StaffTargets = ({ targets, scoped }) => {
+  const [filter, setFilter] = useState("all");
+  const [showAll, setShowAll] = useState(false);
+  const staff = targets?.staff || [];
+  const sum = targets?.summary || {};
+  if (staff.length === 0) {
+    return <p className="py-8 text-center text-sm text-slate-500">No staff targets are set for this month yet.</p>;
+  }
+  const rows = [...staff]
+    .filter((x) => (filter === "met" ? x.todayMet : filter === "notyet" ? !x.todayMet : true))
+    .sort((a, b) => b.progress - a.progress || a.name.localeCompare(b.name));
+  const visible = showAll ? rows : rows.slice(0, 8);
+  const monthPct = sum.totalTarget > 0 ? Math.round((sum.totalAchieved / sum.totalTarget) * 100) : 0;
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Met today's target</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+            {sum.metToday} <span className="text-sm font-normal text-slate-500">of {sum.staffCount} staff</span>
+          </p>
+          <p className="text-xs text-slate-500">{money(sum.todayAchieved)} of {money(sum.todayTarget)} today</p>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">On pace this month</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+            {sum.onPace} <span className="text-sm font-normal text-slate-500">of {sum.staffCount} staff</span>
+          </p>
+          <p className="text-xs text-slate-500">{sum.reached} already reached the full target</p>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Month so far</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+            {monthPct}% <span className="text-sm font-normal text-slate-500">of target</span>
+          </p>
+          <p className="text-xs text-slate-500">{money(sum.totalAchieved)} of {money(sum.totalTarget)}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500">Day {targets.dayOfMonth} of {targets.daysInMonth}. Daily target is the monthly target divided by days in the month</p>
+        <Segmented
+          value={filter}
+          onChange={(v) => { setFilter(v); setShowAll(false); }}
+          options={[{ value: "all", label: "All" }, { value: "met", label: "Met today" }, { value: "notyet", label: "Not yet" }]}
+        />
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-slate-500">No staff in this view.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-slate-100">
+          {visible.map((x) => {
+            const monthTone = x.progress >= 100 ? "bg-emerald-500" : x.onPace ? "bg-indigo-500" : "bg-amber-500";
+            return (
+              <li key={x.id} className="grid grid-cols-1 gap-x-6 gap-y-2 py-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.3fr)_4.5rem] md:items-center">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{x.name}</p>
+                  {!scoped && <p className="truncate text-xs text-slate-500">{x.centre || "No centre"}</p>}
+                </div>
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-slate-500">Today</span>
+                    <span className={`tabular-nums ${x.todayMet ? "font-semibold text-emerald-700" : "text-slate-700"}`}>
+                      {x.todayMet ? "Met · " : ""}{money(x.today)} / {money(x.dailyTarget)}
+                    </span>
+                  </div>
+                  <TargetBar value={x.today} max={x.dailyTarget} tone={x.todayMet ? "bg-emerald-500" : "bg-indigo-500"} />
+                </div>
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-slate-500">
+                      Month <span className={x.progress >= 100 ? "text-emerald-700" : x.onPace ? "text-slate-500" : "text-amber-700"}>
+                        {x.progress >= 100 ? "· reached" : x.onPace ? "· on pace" : "· behind pace"}
+                      </span>
+                    </span>
+                    <span className="tabular-nums text-slate-700">
+                      {money(x.achieved)} / {money(x.target)} <span className="font-semibold text-slate-900">{Math.round(x.progress)}%</span>
+                    </span>
+                  </div>
+                  <TargetBar value={x.achieved} max={x.target} tone={monthTone} />
+                </div>
+                <div className="text-xs text-slate-500 md:text-right" title="Past days this month on which the daily target was met">
+                  <span className="font-semibold tabular-nums text-slate-900">{x.daysMet}</span>/{x.completeDays} days
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {rows.length > 8 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)}
+          className="mt-2 text-xs font-medium text-indigo-600 hover:text-indigo-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
+          {showAll ? "Show fewer" : `Show all ${rows.length}`}
+        </button>
+      )}
+    </div>
+  );
+};
+
 /* Revenue / expense mix: donut + ranked legend, top 6 + "Other". Rows with subcategories expand on click. */
 const MIX_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
 const MIX_OTHER = "#94a3b8";
@@ -766,7 +874,7 @@ const SuperadminDashboard = () => {
           `${import.meta.env.VITE_API_URL}/api/analytics/superadmin/dashboard`,
           {
             params: {
-              modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights,comparison",
+              modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights,comparison,targets",
               timeframe: "custom",
               customStartDate: start,
               customEndDate: end,
@@ -836,7 +944,7 @@ const SuperadminDashboard = () => {
   const { financials = {}, wallets = {} } = finance;
   const chartData = financials.charts || {};
   const revenueChartData = chartData[revenueView] || [];
-  const { customers = {}, staff = {}, teams = {} } = operations;
+  const { customers = {}, staff = {}, teams = {}, targets = null } = operations;
   const { centres = {} } = leaderboards;
   const centreList = centres.fullList || [];
   const best = centres.best || {};
@@ -1208,6 +1316,16 @@ const SuperadminDashboard = () => {
         <StaffPerformanceChart staffData={topStaffList} scopeLabel={scoped ? "Ranked within this centre" : "Ranked across all centres"} />
         <Panel title="Top teams" hint="Grey bar is revenue, green is profit">
           <TeamBars teams={topTeamsList} />
+        </Panel>
+      </div>
+
+      {/* Staff targets */}
+      <div className="mt-4">
+        <Panel
+          title="Staff targets"
+          hint={scoped ? `${selectedCentreName}. Today's daily target and this month's target` : "All centres. Today's daily target and this month's target"}
+        >
+          <StaffTargets targets={targets} scoped={scoped} />
         </Panel>
       </div>
 
