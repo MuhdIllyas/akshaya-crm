@@ -1194,8 +1194,8 @@ const SuperadminDashboard = () => {
 
       {/* Where the money comes from and goes */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel title="Revenue by service" hint={`${periodLabel}. Click a service for its subcategories`}>
-          <MixDonut rows={financials.breakdowns?.revenue} totalLabel="billed" emptyText="No completed services in this period." />
+        <Panel title="Service charges by service" hint={`${periodLabel}. Click a service for its subcategories`}>
+          <MixDonut rows={financials.breakdowns?.revenue} totalLabel="earned" emptyText="No completed services in this period." />
         </Panel>
         <Panel title="Expenses by category" hint={`${periodLabel}. Approved expenses`}>
           <MixDonut rows={financials.breakdowns?.expenses} totalLabel="spent" emptyText="No approved expenses in this period." />

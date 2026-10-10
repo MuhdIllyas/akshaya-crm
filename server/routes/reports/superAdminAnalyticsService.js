@@ -302,7 +302,7 @@ async function fetchFinancialOverview(client, dates, centreId = null) {
         client.query(`
             SELECT sv.id as category_id, sv.name as category,
                    sub.id as subcategory_id, sub.name as subcategory,
-                   COALESCE(SUM(se.total_charges), 0) as total,
+                   COALESCE(SUM(se.service_charges), 0) as total,
                    COUNT(*)::int as services
             FROM service_entries se
             JOIN services sv ON se.category_id = sv.id
