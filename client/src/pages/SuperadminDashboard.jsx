@@ -586,60 +586,73 @@ const StaffPerformanceChart = ({ staffData, scopeLabel = "Ranked across all cent
 // ==========================================
 // REVENUE CHART
 // ==========================================
-/* Revenue / expense mix: ranked bars, top 6 + "Other". Revenue rows with subcategories expand on click. */
-const MixBars = ({ rows, color, emptyText }) => {
+/* Revenue / expense mix: donut + ranked legend, top 6 + "Other". Rows with subcategories expand on click. */
+const MIX_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
+const MIX_OTHER = "#94a3b8";
+
+const MixDonut = ({ rows, totalLabel, emptyText }) => {
   const [open, setOpen] = useState(null);
   const clean = (rows || [])
     .map((r) => ({ name: r.category || "Uncategorised", amount: Number(r.amount) || 0, subs: r.subcategories || [] }))
     .filter((r) => r.amount > 0)
     .sort((a, b) => b.amount - a.amount);
-  if (clean.length === 0) return <p className="py-6 text-center text-sm text-slate-500">{emptyText}</p>;
+  if (clean.length === 0) return <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>;
   const total = clean.reduce((a, r) => a + r.amount, 0);
-  const top = clean.slice(0, 6);
   const rest = clean.slice(6).reduce((a, r) => a + r.amount, 0);
-  const list = rest > 0 ? [...top, { name: `Other (${clean.length - 6})`, amount: rest, subs: [], muted: true }] : top;
-  const max = Math.max(...list.map((r) => r.amount));
+  const list = [
+    ...clean.slice(0, 6).map((r, i) => ({ ...r, color: MIX_COLORS[i] })),
+    ...(rest > 0 ? [{ name: `Other (${clean.length - 6})`, amount: rest, subs: [], color: MIX_OTHER }] : []),
+  ];
   return (
-    <ul className="space-y-3">
-      {list.map((r) => {
-        const expandable = r.subs.length > 0 && !(r.subs.length === 1 && r.subs[0].name === "No subcategory");
-        const isOpen = open === r.name;
-        const Row = expandable ? "button" : "div";
-        return (
-          <li key={r.name}>
-            <Row
-              {...(expandable ? { type: "button", onClick: () => setOpen(isOpen ? null : r.name), "aria-expanded": isOpen } : {})}
-              className={`block w-full text-left ${expandable ? "rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""}`}
-            >
-              <div className="flex items-baseline justify-between gap-3 text-sm">
-                <span className="flex min-w-0 items-center gap-1 font-medium text-slate-800" title={r.name}>
-                  {expandable && <FiChevronRight className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
-                  <span className="truncate">{r.name}</span>
-                </span>
-                <span className="whitespace-nowrap tabular-nums text-slate-900">
-                  {money(r.amount)} <span className="text-xs text-slate-500">{Math.round((r.amount / total) * 100)}%</span>
-                </span>
-              </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div className="h-full rounded-full" style={{ width: `${(r.amount / max) * 100}%`, backgroundColor: r.muted ? "#94a3b8" : color }} />
-              </div>
-            </Row>
-            {isOpen && (
-              <ul className="mt-2 space-y-1 border-l-2 border-slate-100 pl-3">
-                {r.subs.map((sub) => (
-                  <li key={sub.name} className="flex items-baseline justify-between gap-3 text-xs">
-                    <span className="truncate text-slate-600" title={sub.name}>{sub.name}</span>
-                    <span className="whitespace-nowrap tabular-nums text-slate-700">
-                      {money(sub.amount)} <span className="text-slate-400">{Math.round((sub.amount / r.amount) * 100)}% · {sub.services} {sub.services === 1 ? "service" : "services"}</span>
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+      <div className="relative h-40 w-40 flex-shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={list} dataKey="amount" nameKey="name" innerRadius="64%" outerRadius="100%" paddingAngle={list.length > 1 ? 2 : 0} stroke="none" isAnimationActive={false}>
+              {list.map((r) => <Cell key={r.name} fill={r.color} />)}
+            </Pie>
+            <Tooltip formatter={(v, n) => [money(v), n]} />
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-base font-semibold tabular-nums text-slate-900">{money(total)}</span>
+          <span className="text-[11px] text-slate-500">{totalLabel}</span>
+        </div>
+      </div>
+      <ul className="w-full min-w-0 flex-1 space-y-1">
+        {list.map((r) => {
+          const expandable = r.subs.length > 0 && !(r.subs.length === 1 && r.subs[0].name === "No subcategory");
+          const isOpen = open === r.name;
+          const Row = expandable ? "button" : "div";
+          return (
+            <li key={r.name}>
+              <Row
+                {...(expandable ? { type: "button", onClick: () => setOpen(isOpen ? null : r.name), "aria-expanded": isOpen } : {})}
+                className={`flex w-full items-center gap-2 rounded px-1 py-1 text-left text-sm ${expandable ? "hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""}`}
+              >
+                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-sm" style={{ backgroundColor: r.color }} />
+                <span className="min-w-0 flex-1 truncate font-medium text-slate-800" title={r.name}>{r.name}</span>
+                {expandable && <FiChevronRight className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
+                <span className="whitespace-nowrap tabular-nums text-slate-900">{money(r.amount)}</span>
+                <span className="w-9 text-right text-xs tabular-nums text-slate-500">{Math.round((r.amount / total) * 100)}%</span>
+              </Row>
+              {isOpen && (
+                <ul className="mb-1 ml-[18px] space-y-1 border-l-2 border-slate-100 pl-3">
+                  {r.subs.map((sub) => (
+                    <li key={sub.name} className="flex items-baseline justify-between gap-3 text-xs">
+                      <span className="truncate text-slate-600" title={sub.name}>{sub.name}</span>
+                      <span className="whitespace-nowrap tabular-nums text-slate-700">
+                        {money(sub.amount)} <span className="text-slate-400">{Math.round((sub.amount / r.amount) * 100)}% · {sub.services}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 };
 
@@ -703,7 +716,6 @@ const SuperadminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
-  const [mixView, setMixView] = useState("revenue");
   const [period, setPeriod] = useState("month");
   const [dataPeriod, setDataPeriod] = useState("month"); // period the loaded data was fetched for
 
@@ -1181,23 +1193,12 @@ const SuperadminDashboard = () => {
       </div>
 
       {/* Where the money comes from and goes */}
-      <div className="mt-4">
-        <Panel
-          title="Revenue and expense mix"
-          hint={mixView === "revenue" ? `${periodLabel}. Billed amount by service, click one to see subcategories` : `${periodLabel}. Approved expenses by category`}
-          action={
-            <Segmented
-              value={mixView}
-              onChange={setMixView}
-              options={[{ value: "revenue", label: "Revenue" }, { value: "expenses", label: "Expenses" }]}
-            />
-          }
-        >
-          <MixBars
-            rows={financials.breakdowns?.[mixView]}
-            color={TREND_COLORS[mixView]}
-            emptyText={mixView === "revenue" ? "No completed services in this period." : "No approved expenses in this period."}
-          />
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel title="Revenue by service" hint={`${periodLabel}. Click a service for its subcategories`}>
+          <MixDonut rows={financials.breakdowns?.revenue} totalLabel="billed" emptyText="No completed services in this period." />
+        </Panel>
+        <Panel title="Expenses by category" hint={`${periodLabel}. Approved expenses`}>
+          <MixDonut rows={financials.breakdowns?.expenses} totalLabel="spent" emptyText="No approved expenses in this period." />
         </Panel>
       </div>
 
