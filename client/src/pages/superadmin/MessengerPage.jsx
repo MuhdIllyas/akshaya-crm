@@ -68,21 +68,18 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
   const [isGroup, setIsGroup] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [isCreating, setIsCreating] = useState(false);
-  const [chatType, setChatType] = useState('internal'); 
+  const [chatType, setChatType] = useState('internal');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [customerName, setCustomerName] = useState('');
 
   if (!isOpen) return null;
 
-  // 1. Filter by search
   const filteredStaff = staffList.filter(staff =>
     staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     staff.role?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  // 2. Group the filtered staff by Centre Name
   const groupedStaff = filteredStaff.reduce((acc, staff) => {
-    // Prefer backend name, fallback to map, fallback to ID
     const cName = staff.centre_name || centresMap?.[staff.centre_id] || (staff.centre_id ? `Centre ${staff.centre_id}` : 'Other Staff');
     if (!acc[cName]) acc[cName] = [];
     acc[cName].push(staff);
@@ -124,48 +121,51 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       onClick={handleClose}
     >
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: 20, opacity: 0 }}
+        initial={{ y: 20, opacity: 0, scale: 0.98 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 20, opacity: 0, scale: 0.98 }}
         transition={{ type: "spring", damping: 25, stiffness: 300 }}
-        className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200/60"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6 pb-0">
+        <div className="p-6 pb-0 bg-gradient-to-br from-white to-slate-50/50">
           <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xl font-bold text-gray-800">New Conversation</h3>
-            <button onClick={handleClose} disabled={isCreating} className="p-2 rounded-full hover:bg-gray-100 transition">
-              <IoMdClose className="text-gray-500" />
+            <h3 className="text-xl font-bold text-slate-800 tracking-tight">New Conversation</h3>
+            <button onClick={handleClose} disabled={isCreating} className="p-2 rounded-full hover:bg-slate-100 transition text-slate-400 hover:text-slate-600">
+              <IoMdClose size={20} />
             </button>
           </div>
 
           <div className="space-y-4 mb-4">
-            <div className="flex gap-2">
-              <button type="button" onClick={() => setChatType('internal')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${chatType === 'internal' ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Internal</button>
-              <button type="button" onClick={() => setChatType('whatsapp')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${chatType === 'whatsapp' ? 'bg-green-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>WhatsApp</button>
+            <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+              <button type="button" onClick={() => setChatType('internal')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition-all text-sm font-semibold ${chatType === 'internal' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Internal</button>
+              <button type="button" onClick={() => setChatType('whatsapp')} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition-all text-sm font-semibold flex items-center justify-center gap-1.5 ${chatType === 'whatsapp' ? 'bg-emerald-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}><FiSmartphone size={14}/> WhatsApp</button>
             </div>
 
             {chatType === 'internal' && (
               <>
-                <div className="flex gap-2">
-                  <button type="button" onClick={() => setIsGroup(false)} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${!isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Direct</button>
-                  <button type="button" onClick={() => setIsGroup(true)} disabled={isCreating} className={`flex-1 py-2 rounded-lg transition ${isGroup ? 'bg-navy-700 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>Group</button>
+                <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+                  <button type="button" onClick={() => setIsGroup(false)} disabled={isCreating} className={`flex-1 py-1.5 rounded-lg transition-all text-sm font-semibold ${!isGroup ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Direct</button>
+                  <button type="button" onClick={() => setIsGroup(true)} disabled={isCreating} className={`flex-1 py-1.5 rounded-lg transition-all text-sm font-semibold ${isGroup ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Group</button>
                 </div>
 
                 {isGroup && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Group Name</label>
-                    <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Enter group name" disabled={isCreating} />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Group Name</label>
+                    <input type="text" value={groupName} onChange={(e) => setGroupName(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" placeholder="Enter group name" disabled={isCreating} />
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Search Staff</label>
-                  <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Search by name or role..." disabled={isCreating} />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Search Staff</label>
+                  <div className="relative">
+                    <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                    <input type="text" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" placeholder="Search by name or role..." disabled={isCreating} />
+                  </div>
                 </div>
               </>
             )}
@@ -173,26 +173,25 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
             {chatType === 'whatsapp' && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone Number *</label>
-                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" placeholder="+1234567890" disabled={isCreating} />
-                  <p className="text-xs text-gray-500 mt-1">Include country code (e.g., +1 for US)</p>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Phone Number *</label>
+                  <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 focus:bg-white outline-none transition text-sm" placeholder="+1234567890" disabled={isCreating} />
+                  <p className="text-xs text-slate-400 mt-1.5">Include country code (e.g., +1 for US)</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name (Optional)</label>
-                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 focus:border-transparent" placeholder="John Doe" disabled={isCreating} />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Customer Name (Optional)</label>
+                  <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 focus:bg-white outline-none transition text-sm" placeholder="John Doe" disabled={isCreating} />
                 </div>
               </>
             )}
           </div>
         </div>
 
-        {/* Scrollable Staff List Area */}
         {chatType === 'internal' && (
           <div className="px-6 pb-2 flex-1 overflow-hidden flex flex-col">
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex-shrink-0">
-              Select Participants ({selectedUsers.length} selected)
+            <label className="block text-xs font-semibold text-slate-600 mb-2 flex-shrink-0 uppercase tracking-wider">
+              Select Participants <span className="text-indigo-600">({selectedUsers.length})</span>
             </label>
-            <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg custom-scrollbar bg-white min-h-[150px]">
+            <div className="flex-1 overflow-y-auto border border-slate-200 rounded-xl custom-scrollbar bg-white min-h-[150px]">
               {sortedCentres.length > 0 ? (
                 sortedCentres.map(centreName => {
                   const members = groupedStaff[centreName];
@@ -200,13 +199,12 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
                   const allSelected = centreStaffIds.every(id => selectedUsers.includes(id));
 
                   return (
-                    <div key={centreName} className="mb-0 border-b border-gray-200 last:border-0">
-                      <div className="bg-gray-50 px-3 py-2 flex justify-between items-center sticky top-0 z-10 border-b border-gray-200 shadow-sm">
-                        <span className="text-xs font-bold text-gray-600 uppercase tracking-wider">{centreName}</span>
+                    <div key={centreName} className="mb-0 border-b border-slate-100 last:border-0">
+                      <div className="bg-slate-50/80 px-3 py-2 flex justify-between items-center sticky top-0 z-10 backdrop-blur-sm border-b border-slate-100">
+                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{centreName}</span>
                         <div className="flex items-center gap-2">
-                          {/* 🔥 NEW: Select All button for easy Group creation! */}
                           {isGroup && (
-                            <button 
+                            <button
                               type="button"
                               onClick={(e) => {
                                 e.preventDefault();
@@ -217,17 +215,17 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
                                   setSelectedUsers(Array.from(newSelection));
                                 }
                               }}
-                              className="text-[10px] bg-white border border-gray-300 px-2 py-0.5 rounded text-navy-700 hover:bg-gray-100 font-medium transition"
+                              className="text-[10px] bg-white border border-slate-200 px-2 py-0.5 rounded-md text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200 font-semibold transition"
                             >
                               {allSelected ? 'Deselect All' : 'Select All'}
                             </button>
                           )}
-                          <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full font-medium">{members.length}</span>
+                          <span className="text-[10px] text-slate-500 bg-slate-200/70 px-2 py-0.5 rounded-full font-bold">{members.length}</span>
                         </div>
                       </div>
                       <div>
                         {members.map(staff => (
-                          <label key={staff.id} className={`flex items-center p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 transition ${isCreating ? 'opacity-50 pointer-events-none' : ''}`}>
+                          <label key={staff.id} className={`flex items-center p-3 hover:bg-indigo-50/40 cursor-pointer border-b border-slate-50 last:border-0 transition ${isCreating ? 'opacity-50 pointer-events-none' : ''}`}>
                             <input
                               type={isGroup ? "checkbox" : "radio"}
                               name="participantSelection"
@@ -241,11 +239,11 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
                                 }
                               }}
                               disabled={isCreating}
-                              className={`w-4 h-4 text-navy-700 border-gray-300 focus:ring-navy-700 mr-3 ${isGroup ? 'rounded' : ''}`}
+                              className={`w-4 h-4 text-indigo-600 border-slate-300 focus:ring-indigo-500 mr-3 ${isGroup ? 'rounded' : ''}`}
                             />
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-800 text-sm">{staff.name}</p>
-                              <p className="text-[10px] text-gray-500 uppercase tracking-wide mt-0.5">{staff.role || 'Staff'}</p>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-slate-800 text-sm truncate">{staff.name}</p>
+                              <p className="text-[10px] text-slate-500 uppercase tracking-wide mt-0.5">{staff.role || 'Staff'}</p>
                             </div>
                           </label>
                         ))}
@@ -254,17 +252,17 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
                   );
                 })
               ) : (
-                <div className="p-8 text-center text-gray-500 flex flex-col items-center">
-                  <FiUsers size={24} className="mb-2 text-gray-300" />
-                  <p>No staff members found</p>
+                <div className="p-8 text-center text-slate-500 flex flex-col items-center">
+                  <FiUsers size={24} className="mb-2 text-slate-300" />
+                  <p className="text-sm">No staff members found</p>
                 </div>
               )}
             </div>
           </div>
         )}
 
-        <div className="p-6 pt-4 flex justify-end gap-3 border-t border-gray-100 flex-shrink-0 mt-auto">
-          <button onClick={handleClose} disabled={isCreating} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium disabled:opacity-50">Cancel</button>
+        <div className="p-5 pt-4 flex justify-end gap-3 border-t border-slate-100 flex-shrink-0 mt-auto bg-slate-50/50">
+          <button onClick={handleClose} disabled={isCreating} className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium disabled:opacity-50 text-sm rounded-lg hover:bg-slate-100 transition">Cancel</button>
           <button
             onClick={handleCreate}
             disabled={
@@ -272,7 +270,7 @@ const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
               (chatType === 'whatsapp' && !phoneNumber.trim()) ||
               isCreating
             }
-            className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+            className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-indigo-800 transition disabled:opacity-50 flex items-center gap-2 shadow-md shadow-indigo-500/20 text-sm"
           >
             {isCreating ? <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>Creating...</> : 'Create Chat'}
           </button>
@@ -299,9 +297,8 @@ const MessengerPage = ({ user }) => {
     }
   }
 
-  // Safely extract the role and centre from the token if the `user` prop is missing
   const currentUser = {
-    role: user?.role || decodedPayload?.role || localStorage.getItem("role") || "staff", 
+    role: user?.role || decodedPayload?.role || localStorage.getItem("role") || "staff",
     id: user?.id || decodedPayload?.id || 1,
     centreId: user?.centre_id || decodedPayload?.centre_id || localStorage.getItem("centreId") || null,
     name: user?.name || decodedPayload?.username || "Current User",
@@ -365,8 +362,8 @@ const MessengerPage = ({ user }) => {
   const [apiError, setApiError] = useState(null);
 
   const API_BASE_URL = import.meta.env.VITE_API_URL;
-    if (!API_BASE_URL) {
-      throw new Error("VITE_API_URL is not defined");
+  if (!API_BASE_URL) {
+    throw new Error("VITE_API_URL is not defined");
   }
 
   const getAvatarUrl = (photoPath) => {
@@ -409,20 +406,16 @@ const MessengerPage = ({ user }) => {
 
   const fetchAllUnreadCounts = async () => {
     if (!token) return;
-
     try {
       const res = await fetch(`${API_BASE_URL}/api/chat/unread/all`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch unread counts');
       const unreadMap = await res.json();
-
-      // Update conversations with unread counts
       setConversations(prev => prev.map(conv => ({
         ...conv,
         unread: unreadMap[conv.id] || 0
       })));
-
     } catch (err) {
       console.error('Error fetching unread counts:', err);
     }
@@ -430,7 +423,6 @@ const MessengerPage = ({ user }) => {
 
   const fetchConversationUnreadCount = async (conversationId) => {
     if (!token) return 0;
-
     try {
       const res = await fetch(`${API_BASE_URL}/api/chat/unread/${conversationId}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -445,14 +437,13 @@ const MessengerPage = ({ user }) => {
   };
 
   useEffect(() => {
-    // 🔥 NEW: Fetch Notes for this Conversation
     if (activeConversation?.id) {
       fetch(`${API_BASE_URL}/api/notes/conversation/${activeConversation.id}`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then(res => res.ok ? res.json() : [])
-      .then(data => setConversationNotes(data))
-      .catch(err => console.error("Failed to fetch notes", err));
+        .then(res => res.ok ? res.json() : [])
+        .then(data => setConversationNotes(data))
+        .catch(err => console.error("Failed to fetch notes", err));
     } else {
       setConversationNotes([]);
     }
@@ -462,15 +453,15 @@ const MessengerPage = ({ user }) => {
       fetch(`${API_BASE_URL}/api/servicecollaboration/${activeConversation.context_id}/summary`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        setServiceDetails(data);
-        setLoadingServiceDetails(false);
-      })
-      .catch(err => {
-        console.error("Failed to fetch service details", err);
-        setLoadingServiceDetails(false);
-      });
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          setServiceDetails(data);
+          setLoadingServiceDetails(false);
+        })
+        .catch(err => {
+          console.error("Failed to fetch service details", err);
+          setLoadingServiceDetails(false);
+        });
     } else {
       setServiceDetails(null);
     }
@@ -480,8 +471,6 @@ const MessengerPage = ({ user }) => {
   useEffect(() => {
     if (!token) return;
 
-    // 🔥 FIX 1: Create named functions for EVERY listener. 
-    // This prevents `socket.off()` from wiping out DashboardLayout's listeners!
     const handleConnect = () => {
       console.log("Messenger socket connected");
       setSocketConnected(true);
@@ -517,7 +506,6 @@ const MessengerPage = ({ user }) => {
 
       setMessages(prev => {
         const currentMessages = prev[conversationId] || [];
-
         if (currentMessages.some(m => m.id === msg.id)) return prev;
 
         const filteredMessages = currentMessages.filter(m => {
@@ -604,7 +592,6 @@ const MessengerPage = ({ user }) => {
           fetchConversations();
           return prev;
         }
-
         const updated = prev.map(conv =>
           String(conv.id) === String(data.conversationId)
             ? {
@@ -742,7 +729,6 @@ const MessengerPage = ({ user }) => {
       });
     };
 
-    // Attach listeners safely
     socket.on("connect", handleConnect);
     socket.on("online_users", handleOnlineUsers);
     socket.on("disconnect", handleDisconnect);
@@ -759,13 +745,11 @@ const MessengerPage = ({ user }) => {
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("conversation_deleted", handleConversationDeleted);
 
-    // 🔥 FIX 2: Manually trigger if the global socket is already connected!
     if (socket.connected) {
       handleConnect();
     }
 
     return () => {
-      // 🔥 FIX 3: Detach SPECIFIC references so we don't sever global listeners
       socket.off("connect", handleConnect);
       socket.off("online_users", handleOnlineUsers);
       socket.off("disconnect", handleDisconnect);
@@ -781,8 +765,6 @@ const MessengerPage = ({ user }) => {
       socket.off("added_to_conversation", handleAddedToConversation);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("conversation_deleted", handleConversationDeleted);
-      
-      // Removed disconnectSocket() completely!
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
 
@@ -790,21 +772,19 @@ const MessengerPage = ({ user }) => {
   useEffect(() => {
     if (!location.state) return;
 
-    // Check if we need to open the Tasks tab
     if (location.state.openTasksView) {
       setActiveView("tasks");
       window.history.replaceState({}, document.title);
       return;
     }
 
-    // Check if we need to open a specific Chat
     if (location.state.openConversationId && conversations.length > 0) {
       const targetConvId = location.state.openConversationId;
       const chatToOpen = conversations.find(c => c.id === targetConvId);
-      
+
       if (chatToOpen) {
-        setActiveView("chats"); 
-        setActiveConversation(chatToOpen); 
+        setActiveView("chats");
+        setActiveConversation(chatToOpen);
         window.history.replaceState({}, document.title);
       }
     }
@@ -825,11 +805,11 @@ const MessengerPage = ({ user }) => {
         id: conv.id,
         name: conv.name || null,
         is_group: conv.is_group || false,
-        channel: conv.channel || 'internal', // important: 'whatsapp' or 'internal'
+        channel: conv.channel || 'internal',
         context_type: conv.context_type,
         context_id: conv.context_id,
         context_name: conv.context_name,
-        context_identifier: conv.context_identifier, // phone number for WhatsApp
+        context_identifier: conv.context_identifier,
         last_message: conv.last_message,
         lastMessage: conv.last_message,
         last_message_at: conv.last_message_at,
@@ -846,10 +826,7 @@ const MessengerPage = ({ user }) => {
       );
 
       setConversations(sorted);
-
-      // Fetch fresh unread counts
       fetchAllUnreadCounts();
-
     } catch (err) {
       console.error('Error fetching conversations:', err);
       toast.error('Failed to load conversations');
@@ -919,7 +896,6 @@ const MessengerPage = ({ user }) => {
           conversationId
         });
 
-        // After marking as read, fetch updated unread count
         setTimeout(() => {
           fetchConversationUnreadCount(conversationId).then(unreadCount => {
             setConversations(prev => prev.map(conv =>
@@ -930,7 +906,6 @@ const MessengerPage = ({ user }) => {
           });
         }, 500);
       }
-
     } catch (err) {
       console.error('Error fetching messages:', err);
       toast.error('Failed to load messages');
@@ -959,7 +934,6 @@ const MessengerPage = ({ user }) => {
   const handleSendMessage = async (message, file, optimisticMessage = null) => {
     if ((!message?.trim() && !file) || !activeConversation) return;
 
-    // 🔥 FIX 1: Safely grab the exact temp ID passed from Chat.jsx
     const actualTempId = optimisticMessage?.tempId || `temp-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 
     const optimisticMsg = optimisticMessage || {
@@ -994,11 +968,10 @@ const MessengerPage = ({ user }) => {
     formData.append('message', message || '');
     formData.append('message_type', file ? (file.type?.startsWith('image/') ? 'image' : 'file') : 'text');
 
-    // 🔥 Attach Mentions to the Form Payload
     if (optimisticMessage?.mentions?.length > 0) {
       formData.append('mentions', JSON.stringify(optimisticMessage.mentions));
     }
-    
+
     if (file) {
       formData.append('file', file);
       setIsUploading(true);
@@ -1025,19 +998,15 @@ const MessengerPage = ({ user }) => {
       if (!res.ok) throw new Error('Failed to send message');
 
       const newMsg = await res.json();
-      
-      // 🔥 NEW FIX: Swap the optimistic message with the real API response
-      // This guarantees the sender sees their message instantly, even if WebSockets lag.
+
       setMessages(prev => {
         const currentMessages = prev[activeConversation.id] || [];
         const filtered = currentMessages.filter(m => m.tempId !== actualTempId);
-        
-        // Prevent duplication if the socket was somehow faster than the HTTP response
+
         if (filtered.some(m => m.id === newMsg.id)) {
-            return { ...prev, [activeConversation.id]: filtered };
+          return { ...prev, [activeConversation.id]: filtered };
         }
-        
-        // Format the saved message for the UI
+
         const formattedMsg = {
           id: newMsg.id,
           sender: 'You',
@@ -1059,18 +1028,16 @@ const MessengerPage = ({ user }) => {
           live_task_data: newMsg.live_task_data || null,
           mentions: newMsg.mentions || (optimisticMessage ? optimisticMessage.mentions : [])
         };
-        
+
         return {
           ...prev,
           [activeConversation.id]: [...filtered, formattedMsg]
         };
       });
-      
     } catch (err) {
       console.error("Upload error:", err);
       toast.error("Failed to send message or file");
-      
-      // 🔥 FIX 3: Clean up the stuck message if the server rejects the file size!
+
       setMessages(prev => ({
         ...prev,
         [activeConversation.id]: prev[activeConversation.id].filter(m => m.tempId !== actualTempId)
@@ -1095,14 +1062,12 @@ const MessengerPage = ({ user }) => {
           requestBody.name = name;
         }
       } else if (channel === 'whatsapp') {
-        // Create WhatsApp conversation
         requestBody = {
           channel: "whatsapp",
           context_type: "customer",
           context_identifier: phoneNumber,
           context_name: customerName || phoneNumber,
-          participants: [currentUser.id] // no staff participants initially? Actually, the staff will be added automatically.
-          // We might need to add the current user as participant? The backend should handle.
+          participants: [currentUser.id]
         };
       } else {
         throw new Error('Invalid channel');
@@ -1202,7 +1167,6 @@ const MessengerPage = ({ user }) => {
     }
   };
 
-  // ============== DELETE ENTIRE CONVERSATION ==============
   const handleDeleteConversation = async (conversationId) => {
     if (!window.confirm("Are you sure you want to delete this entire conversation? This action cannot be undone.")) return;
 
@@ -1216,17 +1180,14 @@ const MessengerPage = ({ user }) => {
 
       toast.success('Conversation deleted successfully');
 
-      // Instantly remove it from the sidebar and clear the active view
       setConversations(prev => prev.filter(c => String(c.id) !== String(conversationId)));
       setActiveConversation(null);
-
     } catch (err) {
       console.error('Error deleting conversation:', err);
       toast.error('Failed to delete conversation');
     }
   };
 
-  // ============== ASSIGN CONVERSATION ==============
   const handleAssignChat = async (staffId) => {
     if (!activeConversation) return;
     try {
@@ -1240,22 +1201,18 @@ const MessengerPage = ({ user }) => {
       });
 
       if (!res.ok) throw new Error('Failed to assign conversation');
-      
-      // Update local state instantly so the dropdown reflects the change
+
       const newStaffId = staffId ? parseInt(staffId) : null;
       setActiveConversation(prev => ({ ...prev, assigned_staff_id: newStaffId }));
       setConversations(prev => prev.map(c => c.id === activeConversation.id ? { ...c, assigned_staff_id: newStaffId } : c));
-      
+
       toast.success(staffId ? 'Chat assigned successfully' : 'Chat unassigned');
-      fetchConversations(); // Refresh to pull down new participants array
-      
+      fetchConversations();
     } catch (err) {
       console.error('Error assigning conversation:', err);
       toast.error('Failed to assign chat');
     }
   };
-
-  // ============== HELPER FUNCTIONS ==============
 
   const getAvatarColor = (id) => {
     const colors = [
@@ -1271,7 +1228,6 @@ const MessengerPage = ({ user }) => {
     return colors[(id || 0) % colors.length];
   };
 
-  // ============== TASK STATUS UPDATE FOR SERVICE CHAT ==============
   const handleServiceTaskStatusUpdate = async (taskId, newStatus) => {
     const serviceEntryId = activeConversation?.context_id;
     if (!serviceEntryId) return;
@@ -1285,8 +1241,7 @@ const MessengerPage = ({ user }) => {
         body: JSON.stringify({ status: newStatus }),
       });
       if (!res.ok) throw new Error('Failed to update task');
-      
-      // 🔥 FIX 1: Wrap in String() to prevent Type Mismatch bugs!
+
       setTasks(prevTasks =>
         prevTasks.map(t =>
           String(t.id) === String(taskId) ? { ...t, status: newStatus } : t
@@ -1299,7 +1254,6 @@ const MessengerPage = ({ user }) => {
     }
   };
 
-  // ============== TASK STATUS UPDATE FOR NORMAL CHAT ==============
   const handleNormalTaskStatusUpdate = async (taskId, currentStatus) => {
     const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
     try {
@@ -1316,14 +1270,12 @@ const MessengerPage = ({ user }) => {
       await fetchTasks();
       toast.success(`Task marked as ${newStatus}`);
 
-      // 🔥 FIX 2: Update the new 'live_task_data' directly instead of trying to JSON.parse
       setMessages(prev => {
         const convId = activeConversation?.id;
         if (!convId || !prev[convId]) return prev;
-        
+
         const updated = prev[convId].map(msg => {
           if (msg.messageType === 'task') {
-            // Check if this message belongs to the task we just updated
             if (String(msg.text) === String(taskId) || (msg.live_task_data && String(msg.live_task_data.id) === String(taskId))) {
               return {
                 ...msg,
@@ -1333,7 +1285,7 @@ const MessengerPage = ({ user }) => {
           }
           return msg;
         });
-        
+
         return { ...prev, [convId]: updated };
       });
     } catch (err) {
@@ -1342,13 +1294,10 @@ const MessengerPage = ({ user }) => {
     }
   };
 
-  // ============== DATA FETCHING FUNCTIONS ==============
-
   const fetchCentres = async () => {
     if (currentUser.role !== "superadmin") {
       return;
     }
-
     setCentresLoading(true);
     try {
       const res = await fetch(`${API_BASE_URL}/api/centres`, {
@@ -1372,11 +1321,9 @@ const MessengerPage = ({ user }) => {
     setCalendarError(null);
     try {
       let url = `${API_BASE_URL}/api/calendar`;
-
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
         url += `?centre_id=${currentUser.centreId}`;
       }
-
       const res = await fetch(url, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
@@ -1395,10 +1342,7 @@ const MessengerPage = ({ user }) => {
       let allLeavesData = [];
 
       if (currentUser.role === "superadmin") {
-        if (centres.length === 0) {
-          return;
-        }
-
+        if (centres.length === 0) return;
         const promises = centres.map(async (centre) => {
           try {
             const url = new URL(`${API_BASE_URL}/api/salary/leaves`);
@@ -1418,26 +1362,19 @@ const MessengerPage = ({ user }) => {
             return [];
           }
         });
-
         allLeavesData = (await Promise.all(promises)).flat();
       } else {
-        if (!currentUser.centreId) {
-          return;
-        }
-
+        if (!currentUser.centreId) return;
         const url = new URL(`${API_BASE_URL}/api/salary/leaves`);
         url.searchParams.append('centre_id', currentUser.centreId);
         const res = await fetch(url, {
           headers: token ? { Authorization: `Bearer ${token}` } : {}
         });
-
         if (!res.ok) throw new Error(`HTTP error ${res.status}`);
         const data = await res.json();
-
         const centreName = currentUser.role === "superadmin"
           ? (centresMap[currentUser.centreId] || `Centre ${currentUser.centreId}`)
           : (user?.centre_name || `Centre ${currentUser.centreId}`);
-
         allLeavesData = data.map(leave => ({
           ...leave,
           centre_name: centreName,
@@ -1457,11 +1394,9 @@ const MessengerPage = ({ user }) => {
     setApiError(null);
     try {
       let url = `${API_BASE_URL}/api/tasks/all`;
-
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
         url += `?centre_id=${currentUser.centreId}`;
       }
-
       const res = await fetch(url, {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1488,11 +1423,9 @@ const MessengerPage = ({ user }) => {
   const fetchTemplates = async () => {
     try {
       let url = `${API_BASE_URL}/api/tasks/templates`;
-
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
         url += `?centre_id=${currentUser.centreId}`;
       }
-
       const res = await fetch(url, {
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -1516,7 +1449,6 @@ const MessengerPage = ({ user }) => {
         });
       }
     }
-
     fetchTasks();
     fetchTemplates();
     fetchStaff();
@@ -1536,8 +1468,6 @@ const MessengerPage = ({ user }) => {
     fetchCalendarData();
     fetchLeavesData();
   }, [currentUser.role, currentUser.centreId, centres.length]);
-
-  // ============== TASK & TEMPLATE FUNCTIONS ==============
 
   const canCreateRecurring = () => currentUser.role === "admin" || currentUser.role === "superadmin";
   const canCreateGlobal = () => currentUser.role === "superadmin";
@@ -1766,8 +1696,6 @@ const MessengerPage = ({ user }) => {
     }
   };
 
-  // ============== CALENDAR EVENT FUNCTIONS ==============
-
   const handleSaveEvent = async () => {
     if (!eventForm.date) return alert("Please select a date");
     setLoading(true);
@@ -1882,8 +1810,6 @@ const MessengerPage = ({ user }) => {
     setIsEventModalOpen(true);
   };
 
-  // ============== FILTERED CONVERSATIONS ==============
-
   const filteredConversations = conversations.filter(
     (conv) => {
       let displayName = conv.name;
@@ -1893,8 +1819,8 @@ const MessengerPage = ({ user }) => {
         } else if (conv.participants) {
           const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
           if (otherParticipants.length > 0) {
-          displayName = otherParticipants.map(p => p.name).join(', ');
-        }
+            displayName = otherParticipants.map(p => p.name).join(', ');
+          }
         }
       }
       if (!displayName) displayName = 'Unknown Chat';
@@ -1909,45 +1835,54 @@ const MessengerPage = ({ user }) => {
   // ============== RENDER FUNCTIONS ==============
 
   const renderConversationList = () => (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 overflow-hidden">
-      <div className="flex-none p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-navy-700 w-10 h-10 rounded-lg flex items-center justify-center">
-              <FiSend className="text-white" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-800">Messages</h2>
-          </div>
-          <div className="flex gap-2">
-            <button className="p-2 rounded-full hover:bg-gray-100 transition relative">
-              <FiBell className="text-gray-600" />
-              {conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0) > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              )}
-            </button>
-            <button
-              onClick={() => setIsNewChatModalOpen(true)}
-              className="p-2 rounded-full hover:bg-gray-100 transition"
-              title="New Chat"
-            >
-              <FiPlus className="text-gray-600" />
-            </button>
-          </div>
-        </div>
+    <div className="flex flex-col h-full bg-white border-r border-slate-200/80 overflow-hidden">
+      {/* Modern Header */}
+      <div className="flex-none px-5 pt-5 pb-4 bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-900 text-white relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-40 h-40 bg-indigo-500/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none" />
         <div className="relative">
-          <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search conversations..."
-            className="pl-12 pr-4 py-3 w-full rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-200 border border-gray-200 transition text-gray-700"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/10 backdrop-blur-sm w-11 h-11 rounded-xl flex items-center justify-center border border-white/20 shadow-lg">
+                <FiSend className="text-white" size={18} />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold tracking-tight">Messages</h2>
+                <p className="text-[11px] text-indigo-200/80 font-medium">
+                  {conversations.length} {conversations.length === 1 ? 'conversation' : 'conversations'}
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              <button className="p-2.5 rounded-xl hover:bg-white/10 transition relative text-white/90 hover:text-white">
+                <FiBell size={17} />
+                {conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0) > 0 && (
+                  <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-400 rounded-full ring-2 ring-slate-800 animate-pulse"></span>
+                )}
+              </button>
+              <button
+                onClick={() => setIsNewChatModalOpen(true)}
+                className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition text-white border border-white/10 shadow-sm"
+                title="New Chat"
+              >
+                <FiPlus size={17} />
+              </button>
+            </div>
+          </div>
+          <div className="relative">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input
+              type="text"
+              placeholder="Search conversations..."
+              className="pl-10 pr-4 py-2.5 w-full rounded-xl bg-white/10 backdrop-blur-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50 placeholder:text-slate-300 text-white text-sm border border-white/10 transition"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+      <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
+        <div className="px-5 py-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
           Recent Chats
         </div>
         {filteredConversations.length > 0 ? (
@@ -1967,24 +1902,22 @@ const MessengerPage = ({ user }) => {
 
             const isAnyOnline = c.channel !== 'whatsapp' && c.participants?.some(p => p.staff_id !== currentUser.id && onlineUsers.has(String(p.staff_id)));
 
-            // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
             const otherParticipants = c.participants ? c.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
             const isFunctionallyGroup = c.is_group || otherParticipants.length > 1;
 
             let avatarPhoto = null;
             if (!isFunctionallyGroup && otherParticipants.length === 1) {
-                if (otherParticipants[0]?.photo) {
-                    avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
-                }
+              if (otherParticipants[0]?.photo) {
+                avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
+              }
             }
 
             let lastMessageText = c.last_message || c.lastMessage || '';
             const lastMessageSenderName = c.last_message_sender;
             const lastMessageSenderId = c.last_message_sender_id;
 
-            // 👈 NEW: Hide raw IDs for tasks in the sidebar
             if (!isNaN(lastMessageText) && lastMessageText.trim() !== '') {
-               lastMessageText = "📋 Sent a task";
+              lastMessageText = "📋 Sent a task";
             } else if (lastMessageSenderId && String(lastMessageSenderId) !== String(currentUser.id) && lastMessageSenderName) {
               lastMessageText = `${lastMessageSenderName}: ${lastMessageText}`;
             }
@@ -1993,76 +1926,87 @@ const MessengerPage = ({ user }) => {
               lastMessageText = 'No messages yet';
             }
 
+            const isActive = activeConversation?.id === c.id;
+            const hasUnread = c.unread > 0;
+
             return (
               <motion.div
                 key={c.id}
-                whileHover={{ scale: 1.01 }}
+                whileHover={{ x: 2 }}
                 whileTap={{ scale: 0.99 }}
                 onClick={() => setActiveConversation(c)}
-                className={`flex items-center p-4 cursor-pointer transition-all duration-200 ${activeConversation?.id === c.id
-                    ? "bg-blue-50 border-l-4 border-navy-700"
-                    : "hover:bg-gray-50 border-l-4 border-transparent"
-                  }`}
+                className={`mx-2 my-1 px-3 py-3 rounded-xl cursor-pointer transition-all duration-200 flex items-center gap-3 ${
+                  isActive
+                    ? "bg-gradient-to-r from-indigo-50 to-indigo-50/30 border border-indigo-100 shadow-sm"
+                    : "hover:bg-slate-50 border border-transparent"
+                }`}
               >
-                <div className="relative mr-3 flex-shrink-0">
+                <div className="relative flex-shrink-0">
                   {avatarPhoto ? (
-                    <img 
-                      src={avatarPhoto} 
-                      alt={displayName} 
-                      className="w-12 h-12 rounded-xl object-cover border border-gray-200"
+                    <img
+                      src={avatarPhoto}
+                      alt={displayName}
+                      className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-sm ring-1 ring-slate-100"
                       onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
                     />
                   ) : null}
-                  
-                  {/* Fallback & Group Icon */}
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${c.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
+
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold shadow-sm ring-1 ring-white/50 ${c.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
                     {isFunctionallyGroup ? <FiUsers size={20} /> : displayName.charAt(0).toUpperCase()}
                   </div>
-                  
-                  {/* Online Dot */}
+
                   {!isFunctionallyGroup && isAnyOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
+                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 rounded-full border-2 border-white shadow-sm"></span>
                   )}
                 </div>
+
                 <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start">
+                  <div className="flex justify-between items-start gap-2">
                     <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold text-gray-800 truncate">{displayName}</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={`truncate text-sm ${hasUnread ? 'font-bold text-slate-900' : 'font-semibold text-slate-800'}`}>
+                          {displayName}
+                        </span>
                         {c.channel === 'whatsapp' && (
-                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap flex items-center gap-1">
-                            <FiSmartphone size={10} /> WhatsApp
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 whitespace-nowrap flex items-center gap-1 font-semibold">
+                            <FiSmartphone size={9} /> WhatsApp
                           </span>
                         )}
-                      {c.context_type === 'service_entry' && (
-                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap">
-                          Service
-                        </span>
-                      )}
-                    </div>
-                      {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
+                        {c.context_type === 'service_entry' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-100 whitespace-nowrap font-semibold">
+                            Service
+                          </span>
+                        )}
+                      </div>
                       {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
-                        <span className="text-[10px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
-                          <FiMapPin size={10} /> {otherParticipants[0].centre_name}
+                        <span className="text-[10px] text-slate-400 truncate mt-0.5 flex items-center gap-1 font-medium">
+                          <FiMapPin size={9} /> {otherParticipants[0].centre_name}
                         </span>
                       )}
                     </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
+                    <span className={`text-[10px] whitespace-nowrap font-medium ${hasUnread ? 'text-indigo-600' : 'text-slate-400'}`}>
                       {c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                     </span>
                   </div>
-                  <div className="flex items-center mt-1">
-                    <p className="text-sm text-gray-500 truncate flex-1">
+
+                  <div className="flex items-center mt-1.5 gap-2">
+                    <p className={`text-xs truncate flex-1 ${hasUnread ? 'text-slate-700 font-medium' : 'text-slate-500'}`}>
                       {lastMessageText}
                     </p>
-                    {c.unread > 0 && (
-                      <span className="bg-navy-700 text-xs text-white rounded-full px-1.5 py-0.5 ml-2 flex-shrink-0">
+                    {hasUnread && (
+                      <span className="bg-gradient-to-br from-indigo-500 to-indigo-600 text-[10px] text-white rounded-full min-w-[20px] h-5 flex items-center justify-center px-1.5 font-bold flex-shrink-0 shadow-sm">
                         {c.unread}
                       </span>
                     )}
                   </div>
+
                   {typingUsers[c.id]?.length > 0 && (
-                    <p className="text-xs text-navy-700 italic mt-1">
+                    <p className="text-[11px] text-indigo-600 italic mt-1 font-medium flex items-center gap-1">
+                      <span className="flex gap-0.5">
+                        <span className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                        <span className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                        <span className="w-1 h-1 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                      </span>
                       {typingUsers[c.id].map(u => u.name).join(', ')} typing...
                     </p>
                   )}
@@ -2071,14 +2015,17 @@ const MessengerPage = ({ user }) => {
             );
           })
         ) : (
-          <div className="text-center py-8 px-4">
-            <FiMessageSquare className="mx-auto text-gray-400 text-4xl mb-3" />
-            <p className="text-gray-500 mb-2">No conversations yet</p>
+          <div className="text-center py-12 px-4">
+            <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+              <FiMessageSquare className="text-slate-400" size={28} />
+            </div>
+            <p className="text-slate-700 font-semibold mb-1">No conversations yet</p>
+            <p className="text-slate-400 text-xs mb-3">Start chatting with your team</p>
             <button
               onClick={() => setIsNewChatModalOpen(true)}
-              className="text-navy-700 font-medium hover:underline"
+              className="text-indigo-600 font-semibold hover:text-indigo-700 text-sm hover:underline"
             >
-              Start a new chat
+              + Start a new chat
             </button>
           </div>
         )}
@@ -2111,67 +2058,75 @@ const MessengerPage = ({ user }) => {
 
     let avatarPhoto = null;
     if (!isFunctionallyGroup && otherPanelParticipants.length === 1) {
-        if (otherPanelParticipants[0]?.photo) {
-            avatarPhoto = getAvatarUrl(otherPanelParticipants[0].photo);
-        }
+      if (otherPanelParticipants[0]?.photo) {
+        avatarPhoto = getAvatarUrl(otherPanelParticipants[0].photo);
+      }
     }
 
     return (
-      <div className="flex flex-col h-full bg-white border-l border-gray-200 overflow-hidden">
-        <div className="flex-none p-6 flex flex-col items-center border-b border-gray-200">
+      <div className="flex flex-col h-full bg-gradient-to-b from-slate-50 to-white border-l border-slate-200/80 overflow-hidden">
+        {/* Profile Header */}
+        <div className="flex-none p-6 flex flex-col items-center border-b border-slate-200/80 bg-white relative">
+          <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-br from-indigo-50 to-transparent" />
           <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-navy-700 flex items-center justify-center text-white text-3xl mb-4">
+            {avatarPhoto ? (
+              <img
+                src={avatarPhoto}
+                alt={displayName}
+                className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-lg ring-1 ring-slate-100"
+                onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+              />
+            ) : null}
+            <div className={`w-20 h-20 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center text-white text-2xl font-bold mb-4 shadow-lg ring-4 ring-white ${avatarPhoto ? 'hidden' : ''}`}>
               {displayName?.[0] || '?'}
             </div>
             {!activeConversation.is_group && onlineParticipants.length > 0 && (
-              <span className="absolute bottom-4 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></span>
+              <span className="absolute bottom-1 right-1 w-5 h-5 bg-emerald-500 rounded-full border-4 border-white shadow-sm"></span>
             )}
           </div>
-          <h3 className="text-xl font-bold text-gray-800">{displayName}</h3>
+          <h3 className="text-lg font-bold text-slate-800 mt-3 text-center">{displayName}</h3>
 
-          {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
           {!isFunctionallyGroup && otherPanelParticipants[0]?.centre_name && (
-            <p className="text-gray-500 text-sm flex items-center mt-1 text-center">
-              <FiMapPin className="mr-1" size={14} /> {otherPanelParticipants[0].centre_name}
+            <p className="text-slate-500 text-xs flex items-center mt-1.5 text-center font-medium">
+              <FiMapPin className="mr-1" size={12} /> {otherPanelParticipants[0].centre_name}
             </p>
           )}
 
           {activeConversation.channel === 'whatsapp' && (
-            <p className="text-green-600 text-sm flex items-center mt-1">
-              <FiSmartphone className="mr-1" size={14} /> WhatsApp
-            </p>
+            <span className="text-emerald-700 text-[11px] flex items-center mt-2 font-semibold bg-emerald-50 border border-emerald-100 px-2.5 py-1 rounded-full">
+              <FiSmartphone className="mr-1" size={12} /> WhatsApp
+            </span>
           )}
           {!activeConversation.is_group && activeConversation.channel !== 'whatsapp' && (
-            <p className="text-gray-500 flex items-center mt-1">
-              <BsCircleFill className={`${onlineParticipants.length > 0 ? 'text-green-500' : 'text-gray-400'} mr-2 text-xs`} />
+            <p className="text-slate-500 flex items-center mt-2 text-xs font-medium">
+              <BsCircleFill className={`${onlineParticipants.length > 0 ? 'text-emerald-500' : 'text-slate-400'} mr-1.5 text-[8px]`} />
               {onlineParticipants.length > 0 ? 'Online' : 'Offline'}
             </p>
           )}
           {activeConversation.is_group && (
-            <p className="text-gray-500 mt-1">
+            <p className="text-slate-500 mt-1.5 text-xs font-medium">
               {activeConversation.participants?.length || 0} members
               {onlineParticipants.length > 0 && (
-                <span className="ml-1 text-green-600">
+                <span className="ml-1.5 text-emerald-600 font-semibold">
                   ({onlineParticipants.length} online)
                 </span>
               )}
             </p>
           )}
           {!socketConnected && (
-            <p className="text-xs text-yellow-600 mt-2 flex items-center gap-1">
-              <FiAlertCircle size={12} />
+            <p className="text-[11px] text-amber-600 mt-2 flex items-center gap-1 bg-amber-50 border border-amber-100 px-2 py-1 rounded-full font-medium">
+              <FiAlertCircle size={11} />
               Reconnecting...
             </p>
           )}
 
-          {/* 🔥 ASSIGNMENT DROPDOWN (For WhatsApp & External Chats) */}
           {(activeConversation.channel === 'whatsapp' || activeConversation.context_type === 'customer') && (
-            <div className="mt-4 w-full px-2">
-              <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">Assign To</p>
+            <div className="mt-4 w-full">
+              <p className="text-[10px] text-slate-500 mb-1.5 font-bold uppercase tracking-widest">Assign To</p>
               <select
                 value={activeConversation.assigned_staff_id || ""}
                 onChange={(e) => handleAssignChat(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-navy-700"
+                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 transition shadow-sm"
               >
                 <option value="">Unassigned</option>
                 {staffList.map(s => (
@@ -2184,262 +2139,234 @@ const MessengerPage = ({ user }) => {
           )}
         </div>
 
-        <div className="flex-1 overflow-y-auto min-h-0 p-4">
-          <h4 className="font-semibold text-gray-700 mb-3 flex items-center">
-            <FiUsers className="mr-2" /> Participants
-          </h4>
-          <div className="space-y-3">
-            {activeConversation.participants?.map((p, index) => {
-              const isOnline = onlineUsers.has(String(p.staff_id));
-              const isCurrentUserParticipant = p.staff_id === currentUser.id;
-              const pPhoto = getAvatarUrl(p.photo);
+        <div className="flex-1 overflow-y-auto min-h-0 p-4 custom-scrollbar">
+          {/* Participants */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm mb-4">
+            <h4 className="font-bold text-slate-700 text-xs mb-3 flex items-center uppercase tracking-widest">
+              <FiUsers className="mr-2 text-indigo-600" size={13} /> Participants
+            </h4>
+            <div className="space-y-3">
+              {activeConversation.participants?.map((p, index) => {
+                const isOnline = onlineUsers.has(String(p.staff_id));
+                const isCurrentUserParticipant = p.staff_id === currentUser.id;
+                const pPhoto = getAvatarUrl(p.photo);
 
-              return (
-                <div key={index} className="flex items-center">
-                  <div className="relative mr-3 flex-shrink-0">
-                    {pPhoto ? (
-                       <img src={pPhoto} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-gray-200" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-                    ) : null}
-                    
-                    <div className={`w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 ${pPhoto ? 'hidden' : ''}`}>
-                      {p.name?.[0] || '?'}
+                return (
+                  <div key={index} className="flex items-center">
+                    <div className="relative mr-3 flex-shrink-0">
+                      {pPhoto ? (
+                        <img src={pPhoto} alt={p.name} className="w-9 h-9 rounded-full object-cover border border-slate-200" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                      ) : null}
+                      <div className={`w-9 h-9 rounded-full bg-gradient-to-br from-slate-100 to-slate-200 flex items-center justify-center text-xs font-bold text-slate-600 border border-slate-100 ${pPhoto ? 'hidden' : ''}`}>
+                        {p.name?.[0] || '?'}
+                      </div>
+                      {isOnline && (
+                        <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-white"></span>
+                      )}
                     </div>
-                    
-                    {isOnline && (
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>
-                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-slate-800 font-semibold text-sm truncate">
+                        {p.name} {isCurrentUserParticipant && <span className="text-slate-400 font-normal">(You)</span>}
+                      </p>
+                      <p className="text-[10px] text-slate-500 truncate">{p.role || 'Member'} {p.centre_name && `• ${p.centre_name}`}</p>
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="text-gray-700 font-medium">
-                      {p.name} {isCurrentUserParticipant && '(You)'}
-                    </p>
-                    <p className="text-xs text-gray-500">{p.role || 'Member'} {p.centre_name && `• ${p.centre_name}`}</p>
-                  </div>
-                  {isOnline && (
-                    <span className="text-xs text-green-600">● Online</span>
-                  )}
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
 
+          {/* Service Details */}
           {activeConversation.context_type === 'service_entry' && (
-            <>
-              <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-                <FiBriefcase className="mr-2" /> Service Details
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm mb-4">
+              <h4 className="font-bold text-slate-700 text-xs mb-3 flex items-center uppercase tracking-widest">
+                <FiBriefcase className="mr-2 text-indigo-600" size={13} /> Service Details
               </h4>
-              
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
-                <div className="mb-3 border-b border-gray-200 pb-3">
-                  <p className="text-sm font-bold text-gray-900 truncate" title={activeConversation.context_name}>
-                    {activeConversation.context_name || 'Service Request'}
+
+              <div className="bg-slate-50/50 border border-slate-100 rounded-lg p-3 mb-3">
+                <p className="text-sm font-bold text-slate-900 truncate" title={activeConversation.context_name}>
+                  {activeConversation.context_name || 'Service Request'}
+                </p>
+                {activeConversation.context_identifier && (
+                  <p className="text-[10px] text-indigo-600 mt-1 font-mono font-semibold">
+                    App #: {activeConversation.context_identifier}
                   </p>
-                  {activeConversation.context_identifier && (
-                    <p className="text-xs text-navy-700 mt-1 font-mono font-medium">
-                      App #: {activeConversation.context_identifier}
-                    </p>
-                  )}
+                )}
+              </div>
+
+              {loadingServiceDetails ? (
+                <div className="animate-pulse space-y-2 py-2">
+                  <div className="h-3 bg-slate-200 rounded w-3/4"></div>
+                  <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                  <div className="h-3 bg-slate-200 rounded w-5/6"></div>
                 </div>
-
-                {loadingServiceDetails ? (
-                  <div className="animate-pulse space-y-2 py-2">
-                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-5/6"></div>
+              ) : serviceDetails ? (
+                <div className="space-y-3 text-xs">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Type</p>
+                      <p className="font-semibold text-slate-800 text-xs">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Subcategory</p>
+                      <p className="font-semibold text-slate-800 text-xs">{serviceDetails.subcategory_name || 'N/A'}</p>
+                    </div>
                   </div>
-                ) : serviceDetails ? (
-                  <div className="space-y-3 text-xs">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Service Type</p>
-                        <p className="font-medium text-gray-800">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Subcategory</p>
-                        <p className="font-medium text-gray-800">{serviceDetails.subcategory_name || 'N/A'}</p>
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Status</p>
-                        <span className={`inline-block px-2 py-0.5 rounded font-medium text-[10px] uppercase tracking-wider ${
-                          serviceDetails.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          serviceDetails.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {serviceDetails.status?.replace('-', ' ') || 'Pending'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Current Step</p>
-                        <p className="font-medium text-navy-700 truncate" title={serviceDetails.current_step}>
-                          {serviceDetails.current_step || 'Initial Phase'}
-                        </p>
-                      </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Status</p>
+                      <span className={`inline-block px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-wider ${
+                        serviceDetails.status === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
+                        serviceDetails.status === 'processing' ? 'bg-blue-50 text-blue-700 border border-blue-100' :
+                        'bg-amber-50 text-amber-700 border border-amber-100'
+                      }`}>
+                        {serviceDetails.status?.replace('-', ' ') || 'Pending'}
+                      </span>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Priority</p>
-                        <p className={`font-medium ${
-                          serviceDetails.priority === 'High' ? 'text-red-600' :
-                          serviceDetails.priority === 'Medium' ? 'text-yellow-600' :
-                          'text-gray-800'
-                        }`}>
-                          {serviceDetails.priority || 'Normal'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Avg Time</p>
-                        <p className="font-medium text-gray-800 flex items-center gap-1">
-                          <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Expiry Date</p>
-                        <p className="font-medium text-gray-800">
-                          {serviceDetails.expiry_date ? new Date(serviceDetails.expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Last Updated</p>
-                        <p className="font-medium text-gray-800">
-                          {serviceDetails.updated_at ? new Date(serviceDetails.updated_at).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-200">
-                      <p className="text-gray-500 mb-0.5">Assigned To</p>
-                      <p className="font-medium text-gray-800 flex items-center gap-1">
-                        <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
+                    <div>
+                      <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Step</p>
+                      <p className="font-semibold text-indigo-700 truncate text-xs" title={serviceDetails.current_step}>
+                        {serviceDetails.current_step || 'Initial Phase'}
                       </p>
                     </div>
+                  </div>
 
-                    {serviceDetails.notes && (
-                      <div className="pt-2 border-t border-gray-200">
-                        <p className="text-gray-500 mb-0.5">Notes</p>
-                        <p className="font-medium text-gray-700 italic">
-                          "{serviceDetails.notes}"
-                        </p>
-                      </div>
-                    )}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Priority</p>
+                      <p className={`font-semibold text-xs ${
+                        serviceDetails.priority === 'High' ? 'text-rose-600' :
+                        serviceDetails.priority === 'Medium' ? 'text-amber-600' :
+                        'text-slate-800'
+                      }`}>
+                        {serviceDetails.priority || 'Normal'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Avg Time</p>
+                      <p className="font-semibold text-slate-800 flex items-center gap-1 text-xs">
+                        <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
+                      </p>
+                    </div>
                   </div>
-                ) : (
-                  <div className="text-xs text-center text-gray-500 py-2">
-                    Unable to load service details.
+
+                  <div className="pt-3 border-t border-slate-100">
+                    <p className="text-slate-500 mb-0.5 text-[10px] uppercase tracking-wider font-semibold">Assigned To</p>
+                    <p className="font-semibold text-slate-800 flex items-center gap-1.5 text-xs">
+                      <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
+                    </p>
                   </div>
-                )}
-                
-                <button
-                  onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
-                  className="w-full mt-4 py-2 bg-navy-700 hover:bg-navy-800 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center justify-center gap-2"
-                >
-                  <FiMapPin size={16} /> Open Tracking
-                </button>
-              </div>
-            </>
+                </div>
+              ) : (
+                <div className="text-xs text-center text-slate-500 py-2">
+                  Unable to load service details.
+                </div>
+              )}
+
+              <button
+                onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
+                className="w-full mt-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white rounded-xl font-semibold shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center gap-2 text-xs"
+              >
+                <FiMapPin size={14} /> Open Tracking
+              </button>
+            </div>
           )}
 
-          <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-            <FiFile className="mr-2" /> Shared Files
-          </h4>
-          <div className="space-y-2">
-            {messages[activeConversation.id]?.filter(m => m.isFile && !m.isOptimistic).slice(0, 5).map(file => (
-              <motion.div
-                key={file.id}
-                whileHover={{ x: 5 }}
-                className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition"
-                onClick={() => {
-                  if (file.fileUrl) {
-                    const fullUrl = file.fileUrl.startsWith('http') ? file.fileUrl : `${API_BASE_URL}${file.fileUrl}`;
-                    window.open(fullUrl, '_blank');
-                  }
-                }}
-              >
-                <div className="bg-gray-100 p-2 rounded-lg mr-3">
-                  {file.messageType === 'image' ? (
-                    <FiImage className="text-gray-500" size={20} />
-                  ) : (
-                    <FiFile className="text-gray-500" size={20} />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-gray-700 font-medium truncate">{file.fileName || 'File'}</p>
-                  <p className="text-xs text-gray-500">
-                    {file.fileSize ? `${(file.fileSize / 1024).toFixed(1)} KB` : ''}
-                  </p>
-                </div>
-                <FiDownload className="text-gray-400" size={16} />
-              </motion.div>
-            ))}
-            {(!messages[activeConversation.id]?.filter(m => m.isFile && !m.isOptimistic).length) && (
-              <p className="text-sm text-gray-500 text-center py-4">No files shared yet</p>
-            )}
+          {/* Shared Files */}
+          <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm mb-4">
+            <h4 className="font-bold text-slate-700 text-xs mb-3 flex items-center uppercase tracking-widest">
+              <FiFile className="mr-2 text-indigo-600" size={13} /> Shared Files
+            </h4>
+            <div className="space-y-2">
+              {messages[activeConversation.id]?.filter(m => m.isFile && !m.isOptimistic).slice(0, 5).map(file => (
+                <motion.div
+                  key={file.id}
+                  whileHover={{ x: 3 }}
+                  className="flex items-center p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer transition border border-transparent hover:border-slate-100"
+                  onClick={() => {
+                    if (file.fileUrl) {
+                      const fullUrl = file.fileUrl.startsWith('http') ? file.fileUrl : `${API_BASE_URL}${file.fileUrl}`;
+                      window.open(fullUrl, '_blank');
+                    }
+                  }}
+                >
+                  <div className="bg-indigo-50 p-2 rounded-lg mr-2.5 border border-indigo-100">
+                    {file.messageType === 'image' ? (
+                      <FiImage className="text-indigo-600" size={14} />
+                    ) : (
+                      <FiFile className="text-indigo-600" size={14} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-slate-700 font-semibold text-xs truncate">{file.fileName || 'File'}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      {file.fileSize ? `${(file.fileSize / 1024).toFixed(1)} KB` : ''}
+                    </p>
+                  </div>
+                  <FiDownload className="text-slate-400" size={14} />
+                </motion.div>
+              ))}
+              {(!messages[activeConversation.id]?.filter(m => m.isFile && !m.isOptimistic).length) && (
+                <p className="text-xs text-slate-400 text-center py-3 font-medium">No files shared yet</p>
+              )}
+            </div>
           </div>
 
-          {/* 🔥 Notes Section */}
+          {/* Notes */}
           {activeConversation.channel !== 'whatsapp' && (
-            <>
-              <div className="flex justify-between items-center mb-3 mt-6">
-                <h4 className="font-semibold text-gray-700 flex items-center">
-                  <FiStar className="mr-2 text-yellow-500" /> Notes
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm mb-4">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="font-bold text-slate-700 text-xs flex items-center uppercase tracking-widest">
+                  <FiStar className="mr-2 text-amber-500" size={13} /> Notes
                 </h4>
-                <button 
-                  onClick={() => setIsQuickNoteModalOpen(true)} 
-                  className="text-xs bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 px-2 py-1 rounded transition shadow-sm font-medium"
+                <button
+                  onClick={() => setIsQuickNoteModalOpen(true)}
+                  className="text-[10px] bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 px-2 py-1 rounded-md transition font-bold"
                 >
                   + Add Note
                 </button>
               </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
-                 {conversationNotes.map(note => (
-                   <div key={note.id} className="bg-[#fffdf2] border border-yellow-100 p-3 rounded-xl hover:shadow-sm transition">
-                      <p className="font-semibold text-sm text-yellow-900 truncate">{note.title || 'Note'}</p>
-                      <p className="text-xs text-yellow-800 mt-1 whitespace-pre-wrap">{note.content}</p>
-                      {note.origin_message_id && (
-                        <span className="text-[10px] text-yellow-600 mt-2 flex items-center gap-1 font-medium bg-yellow-100/50 inline-block px-1.5 py-0.5 rounded">
-                           <FiMessageSquare size={10} /> Converted from message
-                        </span>
-                      )}
-                   </div>
-                 ))}
-                 {conversationNotes.length === 0 && (
-                   <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
-                     <FiStar className="mx-auto text-gray-300 text-2xl mb-2" />
-                     <p className="text-xs text-gray-500 font-medium">No notes attached yet</p>
-                   </div>
-                 )}
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                {conversationNotes.map(note => (
+                  <div key={note.id} className="bg-gradient-to-br from-amber-50 to-yellow-50/50 border border-amber-100 p-3 rounded-xl hover:shadow-sm transition">
+                    <p className="font-bold text-xs text-amber-900 truncate">{note.title || 'Note'}</p>
+                    <p className="text-[11px] text-amber-800 mt-1 whitespace-pre-wrap leading-relaxed">{note.content}</p>
+                    {note.origin_message_id && (
+                      <span className="text-[9px] text-amber-600 mt-2 inline-flex items-center gap-1 font-bold bg-amber-100/70 px-1.5 py-0.5 rounded">
+                        <FiMessageSquare size={9} /> Converted from message
+                      </span>
+                    )}
+                  </div>
+                ))}
+                {conversationNotes.length === 0 && (
+                  <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                    <FiStar className="mx-auto text-slate-300 text-xl mb-1" />
+                    <p className="text-[11px] text-slate-500 font-medium">No notes attached yet</p>
+                  </div>
+                )}
               </div>
-            </>
+            </div>
           )}
 
-          {/* Tasks Section (Works for BOTH Service & Normal Chats) */}
+          {/* Tasks */}
           {activeConversation.channel !== 'whatsapp' && (
-            <>
-              <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-                <FiCheckSquare className="mr-2" /> Tasks
+            <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-sm">
+              <h4 className="font-bold text-slate-700 text-xs mb-3 flex items-center uppercase tracking-widest">
+                <FiCheckSquare className="mr-2 text-indigo-600" size={13} /> Tasks
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
                 {(() => {
-                  // 1. Gather the relevant tasks
                   let relevantTasks = [];
-                  
+
                   if (activeConversation.context_type === 'service_entry') {
-                    // Service Chats: Get all tasks linked to this service entry
                     relevantTasks = tasks.filter(t => String(t.related_service_entry_id) === String(activeConversation.context_id));
                   } else {
-                    // Normal Chats: Extract tasks that were shared as messages in this specific chat!
                     const uniqueTaskIds = new Set();
                     const chatMessages = messages[activeConversation.id] || [];
                     const taskMessages = chatMessages.filter(m => m.messageType === 'task' && !m.isDeleted);
-                    
+
                     taskMessages.forEach(msg => {
-                      // Grab the live task data attached to the message, or fallback to the master task list
                       const taskObj = msg.live_task_data || tasks.find(t => String(t.id) === String(msg.text));
                       if (taskObj && !uniqueTaskIds.has(String(taskObj.id))) {
                         uniqueTaskIds.add(String(taskObj.id));
@@ -2448,71 +2375,66 @@ const MessengerPage = ({ user }) => {
                     });
                   }
 
-                  // 2. Handle empty state
                   if (relevantTasks.length === 0) {
                     return (
-                      <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
-                        <FiCheckSquare className="mx-auto text-gray-300 text-2xl mb-2" />
-                        <p className="text-xs text-gray-500 font-medium">No tasks in this conversation</p>
+                      <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                        <FiCheckSquare className="mx-auto text-slate-300 text-xl mb-1" />
+                        <p className="text-[11px] text-slate-500 font-medium">No tasks in this conversation</p>
                       </div>
                     );
                   }
 
-                  // 3. Render the tasks elegantly
                   return relevantTasks.map(task => (
-                    <div key={task.id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div key={task.id} className="bg-white p-3 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow">
                       <div className="flex justify-between items-start">
                         <div className="flex-1 min-w-0 pr-2">
-                          <p className={`font-semibold text-sm truncate ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-800'}`} title={task.title}>
+                          <p className={`font-semibold text-xs truncate ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`} title={task.title}>
                             {task.title}
                           </p>
                           {task.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={task.description}>
+                            <p className="text-[10px] text-slate-500 mt-1 line-clamp-2" title={task.description}>
                               {task.description}
                             </p>
                           )}
-                          
-                          {/* Badges Row */}
-                          <div className="flex flex-wrap gap-1.5 mt-2">
+
+                          <div className="flex flex-wrap gap-1 mt-2">
                             {task.assigned_to_name && (
-                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
-                                <FiUser size={10}/> {task.assigned_to_name}
+                              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-semibold flex items-center gap-1">
+                                <FiUser size={9}/> {task.assigned_to_name}
                               </span>
                             )}
                             {task.due_date && (
-                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
-                                <FiCalendar size={10}/> {new Date(task.due_date).toLocaleDateString('en-IN')}
+                              <span className="bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded text-[9px] font-semibold flex items-center gap-1">
+                                <FiCalendar size={9}/> {new Date(task.due_date).toLocaleDateString('en-IN')}
                               </span>
                             )}
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              task.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-100' :
-                              task.priority === 'medium' ? 'bg-yellow-50 text-yellow-600 border border-yellow-100' :
-                              'bg-green-50 text-green-600 border border-green-100'
+                            <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider ${
+                              task.priority === 'high' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                              task.priority === 'medium' ? 'bg-amber-50 text-amber-600 border border-amber-100' :
+                              'bg-emerald-50 text-emerald-600 border border-emerald-100'
                             }`}>
                               {task.priority || 'Normal'}
                             </span>
                           </div>
                         </div>
 
-                        {/* Completion Checkmark */}
                         {task.status !== 'completed' ? (
                           <button
                             onClick={() => {
-                              // Dynamically trigger the correct API handler depending on the task type
                               if (task.related_service_entry_id) {
                                 handleServiceTaskStatusUpdate(task.id, 'completed');
                               } else {
                                 handleNormalTaskStatusUpdate(task.id, task.status);
                               }
                             }}
-                            className="shrink-0 p-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors border border-green-200"
+                            className="shrink-0 p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors border border-emerald-200"
                             title="Mark Complete"
                           >
-                            <FiCheck size={14} />
+                            <FiCheck size={12} />
                           </button>
                         ) : (
-                          <div className="shrink-0 p-1.5 bg-gray-50 text-gray-400 rounded-lg border border-gray-100" title="Completed">
-                            <FiCheck size={14} />
+                          <div className="shrink-0 p-1.5 bg-slate-50 text-slate-400 rounded-lg border border-slate-100" title="Completed">
+                            <FiCheck size={12} />
                           </div>
                         )}
                       </div>
@@ -2520,14 +2442,13 @@ const MessengerPage = ({ user }) => {
                   ));
                 })()}
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
     );
   };
 
-  // 🔥 Save Quick Note Logic
   const handleCreateQuickNote = async () => {
     if (!quickNoteForm.content.trim()) return toast.error("Note content is required");
     setLoading(true);
@@ -2550,7 +2471,7 @@ const MessengerPage = ({ user }) => {
 
       if (!res.ok) throw new Error("Failed to create note");
       const newNote = await res.json();
-      
+
       setConversationNotes(prev => [newNote, ...prev]);
       setIsQuickNoteModalOpen(false);
       setQuickNoteForm({ title: "", content: "" });
@@ -2562,41 +2483,43 @@ const MessengerPage = ({ user }) => {
     }
   };
 
-  // 🔥 Quick Note Modal UI
   const renderQuickNoteModal = () => (
     <AnimatePresence>
       {isQuickNoteModalOpen && (
         <motion.div
           initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setIsQuickNoteModalOpen(false)}
         >
           <motion.div
-            initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
-            className="bg-white rounded-xl w-full max-w-md shadow-xl"
+            initial={{ y: 20, opacity: 0, scale: 0.98 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 20, opacity: 0, scale: 0.98 }}
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200/60"
             onClick={e => e.stopPropagation()}
           >
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Add Quick Note</h3>
-                <button onClick={() => setIsQuickNoteModalOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
-                  <IoMdClose className="text-gray-500" />
+                <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                  <span className="w-8 h-8 bg-amber-50 rounded-lg flex items-center justify-center border border-amber-100"><FiStar className="text-amber-500" size={16}/></span>
+                  Add Quick Note
+                </h3>
+                <button onClick={() => setIsQuickNoteModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition">
+                  <IoMdClose size={20} />
                 </button>
               </div>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
-                  <input type="text" value={quickNoteForm.title} onChange={e => setQuickNoteForm({...quickNoteForm, title: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="e.g. Needs Follow-up" />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Title (Optional)</label>
+                  <input type="text" value={quickNoteForm.title} onChange={e => setQuickNoteForm({ ...quickNoteForm, title: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" placeholder="e.g. Needs Follow-up" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Content *</label>
-                  <textarea value={quickNoteForm.content} onChange={e => setQuickNoteForm({...quickNoteForm, content: e.target.value})} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Type your secure note here..." rows={4} />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Content *</label>
+                  <textarea value={quickNoteForm.content} onChange={e => setQuickNoteForm({ ...quickNoteForm, content: e.target.value })} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm resize-none" placeholder="Type your secure note here..." rows={4} />
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => setIsQuickNoteModalOpen(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
-                <button onClick={handleCreateQuickNote} disabled={loading || !quickNoteForm.content.trim()} className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2">
-                  <FiStar size={16} /> Save Note
+                <button onClick={() => setIsQuickNoteModalOpen(false)} className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg hover:bg-slate-100 transition text-sm">Cancel</button>
+                <button onClick={handleCreateQuickNote} disabled={loading || !quickNoteForm.content.trim()} className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-indigo-800 transition disabled:opacity-50 flex items-center gap-2 shadow-md shadow-indigo-500/20 text-sm">
+                  <FiStar size={14} /> Save Note
                 </button>
               </div>
             </div>
@@ -2614,46 +2537,46 @@ const MessengerPage = ({ user }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => setIsTaskModalOpen(false)}
         >
           <motion.div
             key="task-modal-content"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 20, opacity: 0 }}
-            className="bg-white rounded-xl w-full max-w-md shadow-xl"
+            initial={{ y: 20, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200/60"
             onClick={e => e.stopPropagation()}
           >
             <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-800">Create New Task</h3>
-                <button onClick={() => setIsTaskModalOpen(false)} className="p-2 rounded-full hover:bg-gray-100">
-                  <IoMdClose className="text-gray-500" />
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                  <span className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center border border-indigo-100"><FiCheckSquare className="text-indigo-600" size={16}/></span>
+                  Create New Task
+                </h3>
+                <button onClick={() => setIsTaskModalOpen(false)} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition">
+                  <IoMdClose size={20} />
                 </button>
               </div>
 
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Title *</label>
-                  <input type="text" name="title" value={taskForm.title} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="What needs to be done?" />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Task Title *</label>
+                  <input type="text" name="title" value={taskForm.title} onChange={handleTaskFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" placeholder="What needs to be done?" />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
-                  <textarea name="description" value={taskForm.description} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Add details..." rows={3} />
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Description</label>
+                  <textarea name="description" value={taskForm.description} onChange={handleTaskFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm resize-none" placeholder="Add details..." rows={3} />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Assign To *</label>
-                  <select name="assignee" value={taskForm.assignee} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Assign To *</label>
+                  <select name="assignee" value={taskForm.assignee} onChange={handleTaskFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm">
                     <option value="">Select assignee</option>
-
-                    {/* Check if current user is missing, and manually inject them if so */}
                     {!staffList.some(s => String(s.id) === String(currentUser.id)) && (
                       <option value={currentUser.id}>{currentUser.name} (Me)</option>
                     )}
-
                     {staffList.map(staff => (
                       <option key={staff.id} value={staff.id}>
                         {staff.name} ({staff.role || 'Staff'})
@@ -2664,13 +2587,13 @@ const MessengerPage = ({ user }) => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-                    <input type="date" name="dueDate" value={taskForm.dueDate} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" />
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Due Date</label>
+                    <input type="date" name="dueDate" value={taskForm.dueDate} onChange={handleTaskFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" />
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
-                    <select name="priority" value={taskForm.priority} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Priority</label>
+                    <select name="priority" value={taskForm.priority} onChange={handleTaskFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm">
                       <option value="low">Low</option>
                       <option value="medium">Medium</option>
                       <option value="high">High</option>
@@ -2680,8 +2603,8 @@ const MessengerPage = ({ user }) => {
               </div>
 
               <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => setIsTaskModalOpen(false)} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
-                <button onClick={handleCreateTask} disabled={loading} className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50">{loading ? "Creating..." : "Create Task"}</button>
+                <button onClick={() => setIsTaskModalOpen(false)} className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg hover:bg-slate-100 transition text-sm">Cancel</button>
+                <button onClick={handleCreateTask} disabled={loading} className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-indigo-800 transition disabled:opacity-50 shadow-md shadow-indigo-500/20 text-sm">{loading ? "Creating..." : "Create Task"}</button>
               </div>
             </div>
           </motion.div>
@@ -2698,38 +2621,60 @@ const MessengerPage = ({ user }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); }}
         >
           <motion.div
             key="event-modal-content"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 20, opacity: 0 }}
-            className="bg-white rounded-xl w-full max-w-md shadow-xl"
+            initial={{ y: 20, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+            className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-200/60"
             onClick={e => e.stopPropagation()}
           >
             <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-800">{editingEvent ? "Edit Event" : "Add Calendar Event"}</h3>
-                <button onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); }} className="p-2 rounded-full hover:bg-gray-100"><IoMdClose className="text-gray-500" /></button>
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                  <span className="w-8 h-8 bg-indigo-50 rounded-lg flex items-center justify-center border border-indigo-100"><FiCalendar className="text-indigo-600" size={16}/></span>
+                  {editingEvent ? "Edit Event" : "Add Calendar Event"}
+                </h3>
+                <button onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); }} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"><IoMdClose size={20} /></button>
               </div>
 
               <div className="space-y-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Date *</label><input type="date" name="date" value={eventForm.date} onChange={handleEventFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" /></div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Date *</label>
+                  <input type="date" name="date" value={eventForm.date} onChange={handleEventFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" />
+                </div>
 
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Event Type *</label><select name="type" value={eventForm.type} onChange={handleEventFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent"><option value="working">Working Day</option><option value="holiday">Holiday</option><option value="weekend">Weekend</option></select></div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Event Type *</label>
+                  <select name="type" value={eventForm.type} onChange={handleEventFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm">
+                    <option value="working">Working Day</option>
+                    <option value="holiday">Holiday</option>
+                    <option value="weekend">Weekend</option>
+                  </select>
+                </div>
 
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea name="description" value={eventForm.description} onChange={handleEventFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Add description..." rows={3} /></div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Description</label>
+                  <textarea name="description" value={eventForm.description} onChange={handleEventFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm resize-none" placeholder="Add description..." rows={3} />
+                </div>
 
                 {currentUser.role === "superadmin" && (
-                  <div><label className="block text-sm font-medium text-gray-700 mb-1">Centre *</label><select name="centre_id" value={eventForm.centre_id || ""} onChange={handleEventFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" required><option value="">Select a centre</option>{centres.map(centre => (<option key={centre.id} value={centre.id}>{centre.name}</option>))}</select></div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Centre *</label>
+                    <select name="centre_id" value={eventForm.centre_id || ""} onChange={handleEventFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" required>
+                      <option value="">Select a centre</option>
+                      {centres.map(centre => (<option key={centre.id} value={centre.id}>{centre.name}</option>))}
+                    </select>
+                  </div>
                 )}
               </div>
 
               <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); }} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
-                <button onClick={handleSaveEvent} disabled={loading} className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50">{loading ? "Saving..." : (editingEvent ? "Update Event" : "Add Event")}</button>
+                <button onClick={() => { setIsEventModalOpen(false); setEditingEvent(null); }} className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg hover:bg-slate-100 transition text-sm">Cancel</button>
+                <button onClick={handleSaveEvent} disabled={loading} className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-indigo-800 transition disabled:opacity-50 shadow-md shadow-indigo-500/20 text-sm">{loading ? "Saving..." : (editingEvent ? "Update Event" : "Add Event")}</button>
               </div>
             </div>
           </motion.div>
@@ -2746,66 +2691,143 @@ const MessengerPage = ({ user }) => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-50 p-4"
           onClick={() => { setIsTemplateModalOpen(false); resetTemplateForm(); }}
         >
           <motion.div
             key="template-modal-content"
-            initial={{ y: 20, opacity: 0 }}
-            animate={{ y: 0, opacity: 1 }}
-            exit={{ y: 20, opacity: 0 }}
-            className="bg-white rounded-xl w-full max-w-2xl shadow-xl overflow-y-auto max-h-[90vh]"
+            initial={{ y: 20, opacity: 0, scale: 0.98 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: 20, opacity: 0, scale: 0.98 }}
+            className="bg-white rounded-2xl w-full max-w-2xl shadow-2xl overflow-y-auto max-h-[90vh] border border-slate-200/60 custom-scrollbar"
             onClick={e => e.stopPropagation()}
           >
             <div className="p-6">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2"><FiRepeat className="text-navy-700" />{editingTemplate ? "Edit Recurring Template" : "Create Recurring Template"}</h3>
-                <button onClick={() => { setIsTemplateModalOpen(false); resetTemplateForm(); }} className="p-2 rounded-full hover:bg-gray-100"><IoMdClose className="text-gray-500" /></button>
+              <div className="flex justify-between items-center mb-5">
+                <h3 className="text-xl font-bold text-slate-800 tracking-tight flex items-center gap-2">
+                  <span className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center border border-purple-100"><FiRepeat className="text-purple-600" size={16}/></span>
+                  {editingTemplate ? "Edit Recurring Template" : "Create Recurring Template"}
+                </h3>
+                <button onClick={() => { setIsTemplateModalOpen(false); resetTemplateForm(); }} className="p-2 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"><IoMdClose size={20} /></button>
               </div>
 
               <div className="space-y-4">
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Template Title *</label><input type="text" name="title" value={templateForm.title} onChange={handleTemplateFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="e.g., Weekly Team Sync" /></div>
-
-                <div><label className="block text-sm font-medium text-gray-700 mb-1">Description</label><textarea name="description" value={templateForm.description} onChange={handleTemplateFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="Template description..." rows={2} /></div>
-
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <h4 className="font-medium text-blue-800 mb-3 flex items-center gap-2"><FiRepeat size={16} />Recurrence Settings</h4>
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Repeat</label><select name="recurrenceType" value={templateForm.recurrenceType} onChange={handleTemplateFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent bg-white"><option value="daily">Daily</option><option value="weekly">Weekly</option><option value="monthly">Monthly</option></select></div>
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Every (n)</label><input type="number" name="recurrenceInterval" value={templateForm.recurrenceInterval} onChange={handleTemplateFormChange} min="1" max="30" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" /></div>
-
-                    {templateForm.recurrenceType === 'weekly' && (<div><label className="block text-sm font-medium text-gray-700 mb-1">Day of Week</label><select name="recurrenceDay" value={templateForm.recurrenceDay} onChange={handleTemplateFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent bg-white"><option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option></select></div>)}
-
-                    {templateForm.recurrenceType === 'monthly' && (<div><label className="block text-sm font-medium text-gray-700 mb-1">Day of Month</label><input type="number" name="recurrenceDate" value={templateForm.recurrenceDate} onChange={handleTemplateFormChange} min="1" max="31" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" /></div>)}
-
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
-                      <div className="flex gap-4 mb-2 flex-wrap">
-                        <label className="flex items-center gap-2"><input type="radio" name="assignmentMode" value="centre_admin" checked={templateForm.assignmentMode === "centre_admin"} onChange={handleTemplateFormChange} className="w-4 h-4 text-navy-700" /><span className="flex items-center gap-1 text-sm"><FiUser size={14} />Centre Admin</span></label>
-                        <label className="flex items-center gap-2"><input type="radio" name="assignmentMode" value="all_staff" checked={templateForm.assignmentMode === "all_staff"} onChange={handleTemplateFormChange} className="w-4 h-4 text-navy-700" /><span className="flex items-center gap-1 text-sm"><FiUsers size={14} />All Staff</span></label>
-                        <label className="flex items-center gap-2"><input type="radio" name="assignmentMode" value="specific_staff" checked={templateForm.assignmentMode === "specific_staff"} onChange={handleTemplateFormChange} className="w-4 h-4 text-navy-700" /><span className="flex items-center gap-1 text-sm"><FiUserPlus size={14} />Specific Staff</span></label>
-                      </div>
-
-                      {templateForm.assignmentMode === "specific_staff" && (<div className="mt-2"><select name="specificAssignee" value={templateForm.specificAssignee} onChange={handleTemplateFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent bg-white" required><option value="">Select staff member</option>{staffList.map(staff => (<option key={staff.id} value={staff.id}>{staff.name} ({staff.role || 'Staff'})</option>))}</select></div>)}
-                    </div>
-
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Due After (days)</label><input type="number" name="dueOffsetDays" value={templateForm.dueOffsetDays} onChange={handleTemplateFormChange} min="0" max="30" className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" /><p className="text-xs text-gray-500 mt-1">Days from generation</p></div>
-
-                    <div><label className="block text-sm font-medium text-gray-700 mb-1">Priority</label><select name="priority" value={templateForm.priority} onChange={handleTemplateFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent bg-white"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></div>
-                  </div>
-
-                  {canCreateGlobal() && (<div className="mt-4 pt-4 border-t border-blue-200"><label className="flex items-center gap-3"><input type="checkbox" name="isGlobal" checked={templateForm.isGlobal} onChange={handleTemplateFormChange} className="w-4 h-4 text-navy-700 border-gray-300 rounded focus:ring-navy-700" /><span className="flex items-center gap-2 text-sm font-medium text-gray-700"><FiGlobe className="text-purple-600" />Make this a global template (applies to all centres)</span></label></div>)}
-
-                  <div className="mt-4"><label className="flex items-center gap-3"><input type="checkbox" name="isActive" checked={templateForm.isActive} onChange={handleTemplateFormChange} className="w-4 h-4 text-navy-700 border-gray-300 rounded focus:ring-navy-700" /><span className="text-sm font-medium text-gray-700">Template is active (will generate tasks on schedule)</span></label></div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Template Title *</label>
+                  <input type="text" name="title" value={templateForm.title} onChange={handleTemplateFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm" placeholder="e.g., Weekly Team Sync" />
                 </div>
 
-                <div className="p-3 bg-yellow-50 rounded-lg text-sm text-yellow-700"><FiInfo className="inline mr-2" />This template will not create tasks immediately. It will generate tasks on its next scheduled cycle (daily at 1 AM).{editingTemplate && " Changes will only affect future tasks, not existing ones."}</div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Description</label>
+                  <textarea name="description" value={templateForm.description} onChange={handleTemplateFormChange} className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 focus:bg-white outline-none transition text-sm resize-none" placeholder="Template description..." rows={2} />
+                </div>
+
+                <div className="p-5 bg-gradient-to-br from-indigo-50/60 to-blue-50/40 rounded-2xl border border-indigo-100">
+                  <h4 className="font-bold text-indigo-800 mb-4 flex items-center gap-2 text-sm uppercase tracking-wider">
+                    <FiRepeat size={14} /> Recurrence Settings
+                  </h4>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Repeat</label>
+                      <select name="recurrenceType" value={templateForm.recurrenceType} onChange={handleTemplateFormChange} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm">
+                        <option value="daily">Daily</option>
+                        <option value="weekly">Weekly</option>
+                        <option value="monthly">Monthly</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Every (n)</label>
+                      <input type="number" name="recurrenceInterval" value={templateForm.recurrenceInterval} onChange={handleTemplateFormChange} min="1" max="30" className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm" />
+                    </div>
+
+                    {templateForm.recurrenceType === 'weekly' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Day of Week</label>
+                        <select name="recurrenceDay" value={templateForm.recurrenceDay} onChange={handleTemplateFormChange} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm">
+                          <option value="1">Monday</option><option value="2">Tuesday</option><option value="3">Wednesday</option><option value="4">Thursday</option><option value="5">Friday</option><option value="6">Saturday</option><option value="0">Sunday</option>
+                        </select>
+                      </div>
+                    )}
+
+                    {templateForm.recurrenceType === 'monthly' && (
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Day of Month</label>
+                        <input type="number" name="recurrenceDate" value={templateForm.recurrenceDate} onChange={handleTemplateFormChange} min="1" max="31" className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm" />
+                      </div>
+                    )}
+
+                    <div className="col-span-2">
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Assign To</label>
+                      <div className="flex gap-4 mb-2 flex-wrap">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="assignmentMode" value="centre_admin" checked={templateForm.assignmentMode === "centre_admin"} onChange={handleTemplateFormChange} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500" />
+                          <span className="flex items-center gap-1 text-xs font-medium text-slate-700"><FiUser size={12} />Centre Admin</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="assignmentMode" value="all_staff" checked={templateForm.assignmentMode === "all_staff"} onChange={handleTemplateFormChange} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500" />
+                          <span className="flex items-center gap-1 text-xs font-medium text-slate-700"><FiUsers size={12} />All Staff</span>
+                        </label>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input type="radio" name="assignmentMode" value="specific_staff" checked={templateForm.assignmentMode === "specific_staff"} onChange={handleTemplateFormChange} className="w-4 h-4 text-indigo-600 focus:ring-indigo-500" />
+                          <span className="flex items-center gap-1 text-xs font-medium text-slate-700"><FiUserPlus size={12} />Specific Staff</span>
+                        </label>
+                      </div>
+
+                      {templateForm.assignmentMode === "specific_staff" && (
+                        <div className="mt-2">
+                          <select name="specificAssignee" value={templateForm.specificAssignee} onChange={handleTemplateFormChange} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm" required>
+                            <option value="">Select staff member</option>
+                            {staffList.map(staff => (<option key={staff.id} value={staff.id}>{staff.name} ({staff.role || 'Staff'})</option>))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Due After (days)</label>
+                      <input type="number" name="dueOffsetDays" value={templateForm.dueOffsetDays} onChange={handleTemplateFormChange} min="0" max="30" className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm" />
+                      <p className="text-[10px] text-slate-500 mt-1 font-medium">Days from generation</p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wider">Priority</label>
+                      <select name="priority" value={templateForm.priority} onChange={handleTemplateFormChange} className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 outline-none transition text-sm">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {canCreateGlobal() && (
+                    <div className="mt-4 pt-4 border-t border-indigo-200/60">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input type="checkbox" name="isGlobal" checked={templateForm.isGlobal} onChange={handleTemplateFormChange} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+                        <span className="flex items-center gap-2 text-xs font-semibold text-slate-700"><FiGlobe className="text-purple-600" size={14} />Make this a global template (applies to all centres)</span>
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="mt-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input type="checkbox" name="isActive" checked={templateForm.isActive} onChange={handleTemplateFormChange} className="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500" />
+                      <span className="text-xs font-semibold text-slate-700">Template is active (will generate tasks on schedule)</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-800 flex items-start gap-2">
+                  <FiInfo className="mt-0.5 shrink-0" size={14} />
+                  <span>This template will not create tasks immediately. It will generate tasks on its next scheduled cycle (daily at 1 AM).{editingTemplate && " Changes will only affect future tasks, not existing ones."}</span>
+                </div>
               </div>
 
               <div className="mt-6 flex justify-end gap-3">
-                <button onClick={() => { setIsTemplateModalOpen(false); resetTemplateForm(); }} className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium">Cancel</button>
-                <button onClick={handleSaveTemplate} disabled={loading} className="px-4 py-2 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition disabled:opacity-50 flex items-center gap-2">{loading ? "Saving..." : (<><FiCheck size={16} />{editingTemplate ? "Update Template" : "Create Template"}</>)}</button>
+                <button onClick={() => { setIsTemplateModalOpen(false); resetTemplateForm(); }} className="px-4 py-2 text-slate-600 hover:text-slate-800 font-medium rounded-lg hover:bg-slate-100 transition text-sm">Cancel</button>
+                <button onClick={handleSaveTemplate} disabled={loading} className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl font-semibold hover:from-indigo-700 hover:to-indigo-800 transition disabled:opacity-50 flex items-center gap-2 shadow-md shadow-indigo-500/20 text-sm">
+                  {loading ? "Saving..." : (<><FiCheck size={14} />{editingTemplate ? "Update Template" : "Create Template"}</>)}
+                </button>
               </div>
             </div>
           </motion.div>
@@ -2815,22 +2837,30 @@ const MessengerPage = ({ user }) => {
   );
 
   const renderTask = (task) => {
-    const priorityColors = { high: "bg-red-100 text-red-800 border-red-200", medium: "bg-yellow-100 text-yellow-800 border-yellow-200", low: "bg-green-100 text-green-800 border-green-200" };
+    const priorityColors = { high: "bg-rose-100 text-rose-800 border-rose-200", medium: "bg-amber-100 text-amber-800 border-amber-200", low: "bg-emerald-100 text-emerald-800 border-emerald-200" };
     const assignee = staffList.find(s => s.id === task.assigned_to);
     const isFromTemplate = task.template_id !== null && task.template_id !== undefined;
 
     return (
-      <motion.div key={task.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition">
+      <motion.div key={task.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
         <div className="flex justify-between items-start">
           <div className="flex items-start gap-3 flex-1">
-            <button onClick={() => toggleTaskCompletion(task.id, task.status)} className={`mt-1 p-1 rounded flex-shrink-0 ${task.status === 'completed' ? 'bg-navy-700 text-white' : 'border border-gray-300 text-transparent hover:border-navy-700'}`}><FiCheck size={14} /></button>
+            <button onClick={() => toggleTaskCompletion(task.id, task.status)} className={`mt-1 p-1 rounded-md flex-shrink-0 ${task.status === 'completed' ? 'bg-indigo-600 text-white' : 'border border-slate-300 text-transparent hover:border-indigo-500'}`}><FiCheck size={14} /></button>
             <div className="flex-1">
-              <div className="flex items-center gap-2 flex-wrap"><h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>{task.title}</h4>{isFromTemplate && (<span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full flex items-center gap-1"><FiRepeat size={10} />Recurring</span>)}{task.centre_name && (<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{task.centre_name}</span>)}</div>
-              {task.description && (<p className="text-sm text-gray-600 mt-1">{task.description}</p>)}
-              <div className="flex flex-wrap items-center gap-3 mt-2"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[task.priority] || priorityColors.medium}`}>{task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}</span>{task.due_date && (<div className="flex items-center gap-1 text-sm text-gray-500"><FiCalendar size={14} /><span className="text-xs">{new Date(task.due_date).toLocaleDateString()}</span></div>)}<div className="flex items-center gap-1 text-sm text-gray-500"><FiUser size={14} /><span className="text-xs">{assignee?.name || `Staff #${task.assigned_to}`}</span></div></div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h4 className={`font-semibold text-sm ${task.status === 'completed' ? 'line-through text-slate-400' : 'text-slate-800'}`}>{task.title}</h4>
+                {isFromTemplate && (<span className="text-[10px] bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded-full flex items-center gap-1 font-bold uppercase tracking-wider"><FiRepeat size={9} />Recurring</span>)}
+                {task.centre_name && (<span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-semibold">{task.centre_name}</span>)}
+              </div>
+              {task.description && (<p className="text-xs text-slate-500 mt-1">{task.description}</p>)}
+              <div className="flex flex-wrap items-center gap-2 mt-2">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold uppercase tracking-wider ${priorityColors[task.priority] || priorityColors.medium}`}>{task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}</span>
+                {task.due_date && (<div className="flex items-center gap-1 text-xs text-slate-500 font-medium"><FiCalendar size={12} /><span>{new Date(task.due_date).toLocaleDateString()}</span></div>)}
+                <div className="flex items-center gap-1 text-xs text-slate-500 font-medium"><FiUser size={12} /><span>{assignee?.name || `Staff #${task.assigned_to}`}</span></div>
+              </div>
             </div>
           </div>
-          <button onClick={() => deleteTask(task.id)} className="p-1 text-gray-400 hover:text-red-500 transition flex-shrink-0"><FiTrash2 size={16} /></button>
+          <button onClick={() => deleteTask(task.id)} className="p-1.5 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition flex-shrink-0"><FiTrash2 size={14} /></button>
         </div>
       </motion.div>
     );
@@ -2856,58 +2886,65 @@ const MessengerPage = ({ user }) => {
     };
 
     return (
-      <motion.div key={template.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-white border rounded-lg p-4 shadow-sm hover:shadow-md transition">
+      <motion.div key={template.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition">
         <div className="flex justify-between items-start">
           <div className="flex-1">
-            <div className="flex items-center gap-2 flex-wrap mb-2"><h4 className="font-medium text-gray-800">{template.title}</h4>{template.is_global && (<span className="text-xs bg-purple-100 text-purple-800 px-2 py-0.5 rounded-full flex items-center gap-1"><FiGlobe size={10} />Global</span>)}<span className={`text-xs px-2 py-0.5 rounded-full ${template.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>{template.is_active ? 'Active' : 'Paused'}</span></div>
-            {template.description && (<p className="text-sm text-gray-600 mb-2">{template.description}</p>)}
-            <div className="flex flex-wrap items-center gap-3 text-sm text-gray-500"><div className="flex items-center gap-1"><FiRepeat size={14} /><span className="text-xs">{getRecurrenceText()}</span></div><div className="flex items-center gap-1"><FiUser size={14} /><span className="text-xs">{getAssignmentText()}</span></div>{template.due_offset_days > 0 && (<div className="flex items-center gap-1"><FiCalendar size={14} /><span className="text-xs">Due +{template.due_offset_days} days</span></div>)}{template.last_generated_at && (<div className="flex items-center gap-1"><FiClock size={14} /><span className="text-xs">Last: {new Date(template.last_generated_at).toLocaleDateString()}</span></div>)}</div>
+            <div className="flex items-center gap-2 flex-wrap mb-2">
+              <h4 className="font-semibold text-slate-800 text-sm">{template.title}</h4>
+              {template.is_global && (<span className="text-[10px] bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full flex items-center gap-1 font-bold uppercase tracking-wider"><FiGlobe size={9} />Global</span>)}
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${template.is_active ? 'bg-emerald-50 text-emerald-700 border-emerald-100' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>{template.is_active ? 'Active' : 'Paused'}</span>
+            </div>
+            {template.description && (<p className="text-xs text-slate-500 mb-2">{template.description}</p>)}
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 font-medium">
+              <div className="flex items-center gap-1"><FiRepeat size={12} /><span>{getRecurrenceText()}</span></div>
+              <div className="flex items-center gap-1"><FiUser size={12} /><span>{getAssignmentText()}</span></div>
+              {template.due_offset_days > 0 && (<div className="flex items-center gap-1"><FiCalendar size={12} /><span>Due +{template.due_offset_days} days</span></div>)}
+              {template.last_generated_at && (<div className="flex items-center gap-1"><FiClock size={12} /><span>Last: {new Date(template.last_generated_at).toLocaleDateString()}</span></div>)}
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => toggleTemplateStatus(template.id, template.is_active)} className={`p-2 rounded-lg transition ${template.is_active ? 'text-yellow-600 hover:bg-yellow-50' : 'text-green-600 hover:bg-green-50'}`} title={template.is_active ? 'Pause Template' : 'Activate Template'}>{template.is_active ? <FiPause size={16} /> : <FiPlay size={16} />}</button>
-            {canEditTemplate(template) && (<><button onClick={() => openTemplateModal(template)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition" title="Edit Template"><FiEdit size={16} /></button><button onClick={() => deleteTemplate(template.id)} className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition" title="Delete Template"><FiTrash2 size={16} /></button></>)}
+          <div className="flex items-center gap-1">
+            <button onClick={() => toggleTemplateStatus(template.id, template.is_active)} className={`p-2 rounded-lg transition ${template.is_active ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`} title={template.is_active ? 'Pause Template' : 'Activate Template'}>{template.is_active ? <FiPause size={15} /> : <FiPlay size={15} />}</button>
+            {canEditTemplate(template) && (
+              <>
+                <button onClick={() => openTemplateModal(template)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition" title="Edit Template"><FiEdit size={15} /></button>
+                <button onClick={() => deleteTemplate(template.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition" title="Delete Template"><FiTrash2 size={15} /></button>
+              </>
+            )}
           </div>
         </div>
       </motion.div>
     );
   };
 
-const renderTasksView = () => {
+  const renderTasksView = () => {
     const filteredTasks = getFilteredTasks();
     const pendingCount = tasks.filter(t => t.status === "pending" || !t.status).length;
     const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
     const completedCount = tasks.filter(t => t.status === "completed").length;
 
-    // --- Safely get assignee, prioritizing the REAL name from local storage ---
     const getAssigneeDetails = (task) => {
       if (!task.assigned_to) return null;
-      
-      // If the task belongs to the logged-in user
       if (String(task.assigned_to) === String(currentUser.id)) {
-        // Pull the actual name stored in localStorage
         const realName = localStorage.getItem("name") || task.assigned_to_name || currentUser.name;
         return {
           name: `${realName} (You)`,
           photo: user?.photo || localStorage.getItem('photo') || null
         };
       }
-      
-      // Otherwise, find them in the staff list
       return staffList.find(s => String(s.id) === String(task.assigned_to));
     };
 
-    // --- Styling Helpers ---
     const getPriorityStyles = (priority) => {
-      switch(priority?.toLowerCase()) {
+      switch (priority?.toLowerCase()) {
         case 'high': return 'bg-rose-50 text-rose-700 border-rose-200';
         case 'medium': return 'bg-amber-50 text-amber-700 border-amber-200';
         case 'low': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
-        default: return 'bg-gray-50 text-gray-700 border-gray-200';
+        default: return 'bg-slate-50 text-slate-700 border-slate-200';
       }
     };
 
     const getStatusStyles = (status) => {
-      switch(status) {
+      switch (status) {
         case 'completed': return 'bg-emerald-100 text-emerald-700';
         case 'in_progress': return 'bg-blue-100 text-blue-700';
         default: return 'bg-amber-100 text-amber-700';
@@ -2915,14 +2952,12 @@ const renderTasksView = () => {
     };
 
     const columns = [
-      { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-gray-500 h-4 w-4" /> },
-      { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500 h-4 w-4" /> },
-      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> }
+      { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-slate-500 h-4 w-4" />, dot: 'bg-slate-400' },
+      { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500 h-4 w-4" />, dot: 'bg-blue-500' },
+      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" />, dot: 'bg-emerald-500' }
     ];
 
-    // --- Drag & Drop Handlers ---
     const updateTaskStatus = async (taskId, newStatus) => {
-      // Optimistic UI update
       setTasks(prev => prev.map(t => String(t.id) === String(taskId) ? { ...t, status: newStatus } : t));
       try {
         const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
@@ -2935,9 +2970,9 @@ const renderTasksView = () => {
         });
         if (!res.ok) throw new Error();
         toast.success(`Task moved to ${newStatus.replace('_', ' ')}`);
-        fetchCalendarData(); // Refresh calendar sync
+        fetchCalendarData();
       } catch (err) {
-        fetchTasks(); // Revert on failure
+        fetchTasks();
         toast.error("Failed to update task");
       }
     };
@@ -2960,44 +2995,46 @@ const renderTasksView = () => {
     };
 
     return (
-      <div className="h-full overflow-y-auto p-6 bg-gray-50">
+      <div className="h-full overflow-y-auto p-6 bg-slate-50/60 custom-scrollbar">
         <div className="max-w-7xl mx-auto">
-          
           {/* Header */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-                <FiCheckSquare className="text-navy-700" /> Task Management
+              <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2 tracking-tight">
+                <span className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                  <FiCheckSquare className="text-white" size={18} />
+                </span>
+                Task Management
               </h1>
-              <p className="text-gray-500 text-sm mt-1">Manage tasks and recurring templates</p>
+              <p className="text-slate-500 text-sm mt-1.5 font-medium ml-12">Manage tasks and recurring templates</p>
             </div>
             <div className="flex gap-3">
               {canCreateRecurring() && (
-                <button onClick={() => openTemplateModal()} className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition flex items-center gap-2 shadow-sm text-sm font-medium">
+                <button onClick={() => openTemplateModal()} className="px-4 py-2.5 bg-white border border-purple-200 text-purple-700 rounded-xl hover:bg-purple-50 transition flex items-center gap-2 shadow-sm text-sm font-semibold">
                   <FiRepeat size={16} /> <span className="hidden sm:inline">New Template</span>
                 </button>
               )}
-              <button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm text-sm font-medium">
+              <button onClick={openTaskModal} className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition flex items-center gap-2 shadow-lg shadow-indigo-500/20 text-sm font-semibold">
                 <FiPlusCircle size={16} /> <span className="hidden sm:inline">New Task</span>
               </button>
             </div>
           </div>
 
-          {/* Compact Stats Grid */}
+          {/* Stats */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
-              { title: 'Total Tasks', value: tasks.length, color: 'bg-gray-600', icon: FiCheckSquare },
-              { title: 'To Do', value: pendingCount, color: 'bg-amber-500', icon: FiAlertCircle },
-              { title: 'In Progress', value: inProgressCount, color: 'bg-blue-500', icon: FiPlayCircle },
-              { title: 'Completed', value: completedCount, color: 'bg-emerald-500', icon: FiCheck },
+              { title: 'Total Tasks', value: tasks.length, gradient: 'from-slate-600 to-slate-700', icon: FiCheckSquare },
+              { title: 'To Do', value: pendingCount, gradient: 'from-amber-500 to-amber-600', icon: FiAlertCircle },
+              { title: 'In Progress', value: inProgressCount, gradient: 'from-blue-500 to-blue-600', icon: FiPlayCircle },
+              { title: 'Completed', value: completedCount, gradient: 'from-emerald-500 to-emerald-600', icon: FiCheck },
             ].map(stat => (
-              <motion.div key={stat.title} whileHover={{ y: -2 }} className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <motion.div key={stat.title} whileHover={{ y: -3 }} className="bg-white rounded-2xl border border-slate-200/80 p-4 shadow-sm hover:shadow-md transition-all">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-[10px] font-bold text-gray-500 mb-1 uppercase tracking-wider">{stat.title}</p>
-                    <p className="text-2xl font-black text-gray-900">{stat.value}</p>
+                    <p className="text-[10px] font-bold text-slate-500 mb-1 uppercase tracking-widest">{stat.title}</p>
+                    <p className="text-2xl font-black text-slate-900">{stat.value}</p>
                   </div>
-                  <div className={`p-2.5 rounded-xl ${stat.color}`}>
+                  <div className={`p-3 rounded-xl bg-gradient-to-br ${stat.gradient} shadow-md`}>
                     <stat.icon className="h-5 w-5 text-white" />
                   </div>
                 </div>
@@ -3005,11 +3042,11 @@ const renderTasksView = () => {
             ))}
           </div>
 
-          {/* Recurring Templates (Admins Only) */}
+          {/* Templates */}
           {canCreateRecurring() && templates.length > 0 && (
             <div className="mb-8">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
-                <FiRepeat className="text-purple-600" /> Recurring Templates
+              <h2 className="text-base font-bold text-slate-800 mb-3 flex items-center gap-2 uppercase tracking-wider">
+                <FiRepeat className="text-purple-600" size={16} /> Recurring Templates
               </h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
                 {templates.map(template => renderTemplate(template))}
@@ -3017,37 +3054,37 @@ const renderTasksView = () => {
             </div>
           )}
 
-          {/* Filters & View Toggle */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-2.5 rounded-xl border border-gray-200 shadow-sm">
+          {/* Filters */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-3 rounded-2xl border border-slate-200/80 shadow-sm">
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto">
-              <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
+              <FiFilter className="text-slate-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
               {['all', 'pending', 'in_progress', 'completed'].map(f => (
                 <button
                   key={f}
                   onClick={() => setTaskFilter(f)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 rounded-full text-xs font-bold capitalize transition-all whitespace-nowrap ${
                     taskFilter === f
-                      ? 'bg-navy-700 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 text-white shadow-md shadow-indigo-500/20'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                   }`}
                 >
                   {f.replace('_', ' ')}
                 </button>
               ))}
             </div>
-            <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 w-full sm:w-auto justify-center">
+            <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 w-full sm:w-auto justify-center">
               <button
                 onClick={() => setTaskViewMode('board')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  taskViewMode === 'board' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  taskViewMode === 'board' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 <FiLayout size={14} /> Board
               </button>
               <button
                 onClick={() => setTaskViewMode('list')}
-                className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${
-                  taskViewMode === 'list' ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                className={`px-4 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                  taskViewMode === 'list' ? 'bg-white shadow-sm text-indigo-700' : 'text-slate-500 hover:text-slate-700'
                 }`}
               >
                 <FiList size={14} /> List
@@ -3057,43 +3094,42 @@ const renderTasksView = () => {
 
           {loading ? (
             <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-navy-700 border-t-transparent"></div>
-              <p className="text-gray-500 mt-2 text-sm font-medium">Syncing tasks...</p>
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-4 border-indigo-600 border-t-transparent"></div>
+              <p className="text-slate-500 mt-3 text-sm font-medium">Syncing tasks...</p>
             </div>
           ) : tasks.length === 0 ? (
-            <div className="text-center py-16 bg-white rounded-xl border border-dashed border-gray-300 shadow-sm">
-              <FiCheckSquare className="mx-auto text-gray-300 text-5xl mb-3" />
-              <h3 className="text-lg font-bold text-gray-900 mb-1">No tasks assigned yet</h3>
-              <p className="text-gray-500 text-sm mb-4">Get started by creating your first task.</p>
-              <button onClick={openTaskModal} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition inline-flex items-center gap-2 text-sm font-medium shadow-sm">
+            <div className="text-center py-16 bg-white rounded-2xl border-2 border-dashed border-slate-200 shadow-sm">
+              <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                <FiCheckSquare className="text-slate-400" size={28} />
+              </div>
+              <h3 className="text-lg font-bold text-slate-900 mb-1">No tasks assigned yet</h3>
+              <p className="text-slate-500 text-sm mb-5">Get started by creating your first task.</p>
+              <button onClick={openTaskModal} className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition inline-flex items-center gap-2 text-sm font-semibold shadow-lg shadow-indigo-500/20">
                 <FiPlusCircle size={16} /> Create New Task
               </button>
             </div>
           ) : taskViewMode === 'board' ? (
-            
-            /* KANBAN BOARD VIEW */
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
               {columns.map(column => (
-                <div 
+                <div
                   key={column.id}
                   onDragOver={handleDragOver}
                   onDrop={(e) => handleDrop(e, column.id)}
-                  className="bg-gray-100/80 rounded-xl p-3 min-h-[50vh] flex flex-col border border-gray-200"
+                  className="bg-slate-100/70 rounded-2xl p-3 min-h-[50vh] flex flex-col border border-slate-200/80 backdrop-blur-sm"
                 >
-                  <div className="flex items-center justify-between mb-3 px-1">
-                    <div className="flex items-center gap-1.5">
+                  <div className="flex items-center justify-between mb-3 px-1.5">
+                    <div className="flex items-center gap-2">
                       {column.icon}
-                      <h3 className="font-bold text-gray-800 text-sm">{column.title}</h3>
+                      <h3 className="font-bold text-slate-800 text-sm">{column.title}</h3>
                     </div>
-                    <span className="bg-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-gray-200">
+                    <span className="bg-white text-slate-600 text-[10px] font-bold px-2 py-0.5 rounded-md shadow-sm border border-slate-200">
                       {tasks.filter(t => (t.status || 'pending') === column.id).length}
                     </span>
                   </div>
-                  
+
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
                       {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
-                        // Safely Map Staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
@@ -3106,40 +3142,36 @@ const renderTasksView = () => {
                             exit={{ opacity: 0, scale: 0.95 }}
                             draggable
                             onDragStart={(e) => handleDragStart(e, task.id)}
-                            className="bg-white border border-gray-200 rounded-xl p-3 shadow-sm hover:border-navy-300 hover:shadow transition-all cursor-grab active:cursor-grabbing group"
+                            className="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm hover:border-indigo-300 hover:shadow-md transition-all cursor-grab active:cursor-grabbing group"
                           >
                             <div className="flex items-start justify-between gap-2 mb-1.5">
-                              <h4 className={`text-sm font-bold text-gray-900 leading-tight ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                              <h4 className={`text-sm font-bold text-slate-900 leading-tight ${task.status === 'completed' ? 'line-through text-slate-400' : ''}`}>
                                 {task.title}
                               </h4>
-                              <button onClick={() => deleteTask(task.id)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                              <button onClick={() => deleteTask(task.id)} className="text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 <FiTrash2 size={14} />
                               </button>
                             </div>
-                            
+
                             {task.description && (
-                              <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">
+                              <p className="text-xs text-slate-500 line-clamp-2 mb-3 leading-relaxed">
                                 {task.description}
                               </p>
                             )}
 
-                            {/* Board Card Footer: Stacked Date/Priority & User Pill */}
-                            <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-50">
-                              
-                              {/* Left Side: Priority & Date Stacked */}
+                            <div className="flex items-end justify-between mt-2 pt-2.5 border-t border-slate-100">
                               <div className="flex flex-col gap-1.5">
-                                <span className={`w-fit text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                                <span className={`w-fit text-[9px] px-1.5 py-0.5 rounded-md uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
                                   {task.priority || 'Medium'}
                                 </span>
                                 {task.due_date && (
-                                  <div className="flex items-center gap-1 text-[10px] text-gray-500 font-medium" title="Due Date">
-                                    <FiCalendar /> {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                  <div className="flex items-center gap-1 text-[10px] text-slate-500 font-semibold" title="Due Date">
+                                    <FiCalendar size={10} /> {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                   </div>
                                 )}
                               </div>
-                              
-                              {/* Right Side: Photo + Name Pill */}
-                              <div className="flex items-center gap-1.5 bg-gray-50 pl-1 pr-2 py-1 rounded-full border border-gray-100 shadow-sm" title={assignee?.name || 'Unassigned'}>
+
+                              <div className="flex items-center gap-1.5 bg-slate-50 pl-1 pr-2 py-1 rounded-full border border-slate-100 shadow-sm" title={assignee?.name || 'Unassigned'}>
                                 <div className="w-5 h-5 rounded-full bg-indigo-50 flex items-center justify-center text-[9px] font-bold text-indigo-700 border border-indigo-100 overflow-hidden shrink-0">
                                   {assigneePhoto ? (
                                     <img src={assigneePhoto} alt="Assignee" className="w-full h-full object-cover" />
@@ -3147,61 +3179,62 @@ const renderTasksView = () => {
                                     assignee?.name?.charAt(0) || 'U'
                                   )}
                                 </div>
-                                <span className="text-[10px] font-bold text-gray-700 truncate max-w-[65px]">
+                                <span className="text-[10px] font-bold text-slate-700 truncate max-w-[65px]">
                                   {assignee?.name?.split(' ')[0] || 'Unassigned'}
                                 </span>
                               </div>
-
                             </div>
                           </motion.div>
                         );
                       })}
                     </AnimatePresence>
+
+                    {tasks.filter(t => (t.status || 'pending') === column.id).length === 0 && (
+                      <div className="text-center py-8 text-slate-400 text-xs font-medium">
+                        Drop tasks here
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
-
           ) : (
-
-            /* COMPACT LIST VIEW */
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="border-b border-gray-200 bg-gray-50/50">
-                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-10">Status</th>
-                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Task Name</th>
-                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-40">Assignee</th>
-                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-24">Priority</th>
-                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-28">Due Date</th>
-                      <th className="py-3 px-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider w-28">Stage</th>
-                      <th className="py-3 px-4 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider w-12"></th>
+                    <tr className="border-b border-slate-200 bg-slate-50/70">
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest w-10">Status</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest">Task Name</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest w-40">Assignee</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest w-24">Priority</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest w-28">Due Date</th>
+                      <th className="py-3 px-4 text-left text-[10px] font-bold text-slate-500 uppercase tracking-widest w-28">Stage</th>
+                      <th className="py-3 px-4 text-right text-[10px] font-bold text-slate-500 uppercase tracking-widest w-12"></th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
+                  <tbody className="divide-y divide-slate-100">
                     <AnimatePresence>
                       {filteredTasks.map(task => {
-                        // Apply mapped staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
 
                         return (
-                          <motion.tr 
+                          <motion.tr
                             key={task.id}
                             layout
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="hover:bg-gray-50 transition-colors group"
+                            className="hover:bg-slate-50/80 transition-colors group"
                           >
                             <td className="py-3 px-4">
                               <button
                                 onClick={() => updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
-                                className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
+                                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
                                   task.status === 'completed'
                                     ? 'bg-emerald-500 border-emerald-500 text-white'
-                                    : 'border-2 border-gray-300 text-transparent hover:border-emerald-500'
+                                    : 'border-2 border-slate-300 text-transparent hover:border-emerald-500'
                                 }`}
                               >
                                 <FiCheck size={12} strokeWidth={3} />
@@ -3209,7 +3242,7 @@ const renderTasksView = () => {
                             </td>
                             <td className="py-3 px-4 min-w-[200px]">
                               <div className="flex items-center gap-2">
-                                <p className={`text-sm font-semibold text-gray-900 ${task.status === 'completed' ? 'line-through text-gray-400' : ''}`}>
+                                <p className={`text-sm font-semibold text-slate-900 ${task.status === 'completed' ? 'line-through text-slate-400' : ''}`}>
                                   {task.title}
                                 </p>
                                 {task.template_id && (
@@ -3219,13 +3252,13 @@ const renderTasksView = () => {
                                 )}
                               </div>
                               {task.description && (
-                                <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
+                                <p className="text-xs text-slate-500 truncate max-w-md mt-0.5">
                                   {task.description}
                                 </p>
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
+                              <div className="flex items-center gap-2 text-xs text-slate-600 font-semibold">
                                 <div className="w-6 h-6 rounded-full bg-indigo-50 text-indigo-700 flex items-center justify-center text-[10px] font-bold border border-indigo-100 overflow-hidden shrink-0 shadow-sm">
                                   {assigneePhoto ? (
                                     <img src={assigneePhoto} alt="Assignee" className="w-full h-full object-cover" />
@@ -3237,27 +3270,27 @@ const renderTasksView = () => {
                               </div>
                             </td>
                             <td className="py-3 px-4">
-                              <span className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
+                              <span className={`inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-md uppercase tracking-wider font-bold border ${getPriorityStyles(task.priority)}`}>
                                 {task.priority || 'Medium'}
                               </span>
                             </td>
                             <td className="py-3 px-4">
                               {task.due_date ? (
-                                <span className="text-xs text-gray-600 font-medium flex items-center gap-1.5">
-                                  <FiCalendar className="text-gray-400" />
+                                <span className="text-xs text-slate-600 font-semibold flex items-center gap-1.5">
+                                  <FiCalendar className="text-slate-400" size={12} />
                                   {new Date(task.due_date).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                                 </span>
                               ) : (
-                                <span className="text-xs text-gray-400">-</span>
+                                <span className="text-xs text-slate-400">-</span>
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <span className={`px-2 py-1 rounded text-[9px] font-bold uppercase tracking-wider ${getStatusStyles(task.status || 'pending')}`}>
+                              <span className={`px-2 py-1 rounded-md text-[9px] font-bold uppercase tracking-wider ${getStatusStyles(task.status || 'pending')}`}>
                                 {(task.status || 'pending').replace('_', ' ')}
                               </span>
                             </td>
                             <td className="py-3 px-4 text-right">
-                              <button onClick={() => deleteTask(task.id)} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors opacity-0 group-hover:opacity-100">
+                              <button onClick={() => deleteTask(task.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-md transition-all opacity-0 group-hover:opacity-100">
                                 <FiTrash2 size={14} />
                               </button>
                             </td>
@@ -3269,8 +3302,8 @@ const renderTasksView = () => {
                 </table>
                 {filteredTasks.length === 0 && (
                   <div className="text-center py-10">
-                    <FiList className="h-8 w-8 text-gray-300 mx-auto mb-2" />
-                    <p className="text-sm font-medium text-gray-500">No tasks match your filter.</p>
+                    <FiList className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-slate-500">No tasks match your filter.</p>
                   </div>
                 )}
               </div>
@@ -3283,46 +3316,111 @@ const renderTasksView = () => {
 
   const renderCalendarView = () => {
     return (
-      <div className="h-full overflow-y-auto p-6 bg-gray-50">
-        {calendarLoading ? (<div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy-700"></div></div>) : calendarError ? (<div className="flex flex-col items-center justify-center h-64 text-red-500"><FiAlertCircle size={48} className="mb-4" /><p className="text-lg">Error loading calendar</p><p className="text-sm">{calendarError}</p><button onClick={fetchCalendarData} className="mt-4 px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2"><FiRefreshCw size={16} />Retry</button></div>) : (<CalendarView calendarData={calendarData} leavesData={leavesData} onAddEvent={openAddEventModal} onEditEvent={openEditEventModal} onDeleteEvent={handleDeleteEvent} onUpdateEvent={handleUpdateEvent} userRole={currentUser.role} centresMap={centresMap} />)}
+      <div className="h-full overflow-y-auto p-6 bg-slate-50/60 custom-scrollbar">
+        {calendarLoading ? (
+          <div className="flex items-center justify-center h-64">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+          </div>
+        ) : calendarError ? (
+          <div className="flex flex-col items-center justify-center h-64 text-rose-500">
+            <FiAlertCircle size={48} className="mb-4" />
+            <p className="text-lg font-bold">Error loading calendar</p>
+            <p className="text-sm text-slate-500">{calendarError}</p>
+            <button onClick={fetchCalendarData} className="mt-4 px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 text-white rounded-xl hover:from-indigo-700 hover:to-indigo-800 transition flex items-center gap-2 shadow-md shadow-indigo-500/20 font-semibold text-sm">
+              <FiRefreshCw size={16} />Retry
+            </button>
+          </div>
+        ) : (
+          <CalendarView
+            calendarData={calendarData}
+            leavesData={leavesData}
+            onAddEvent={openAddEventModal}
+            onEditEvent={openEditEventModal}
+            onDeleteEvent={handleDeleteEvent}
+            onUpdateEvent={handleUpdateEvent}
+            userRole={currentUser.role}
+            centresMap={centresMap}
+          />
+        )}
       </div>
     );
   };
 
+  const navItems = [
+    { id: 'chats', label: 'Chats', icon: FiMessageSquare, badge: conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0) },
+    { id: 'activity', label: 'Activity', icon: FiActivity },
+    { id: 'calendar', label: 'Calendar', icon: FiCalendar },
+    { id: 'files', label: 'Files', icon: FiGrid },
+    { id: 'tasks', label: 'Tasks', icon: FiCheckSquare },
+    { id: 'schedules', label: 'Schedules', icon: FiClock },
+  ];
+
   const renderNavigationSidebar = () => (
-    <div className="hidden md:flex flex-col items-center py-4 w-16 bg-white border-r border-gray-200 h-full flex-shrink-0">
-      <nav className="flex-1">
-        <ul className="space-y-6">
-          <li><button onClick={() => setActiveView("chats")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "chats" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition relative`} title="Chats"><FiMessageSquare size={20} />{conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0) > 0 && (<span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0)}</span>)}</button></li>
-          <li><button onClick={() => setActiveView("activity")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "activity" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Activity"><FiActivity size={20} /></button></li>
-          <li><button onClick={() => setActiveView("calendar")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "calendar" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Calendar"><FiCalendar size={20} /></button></li>
-          <li><button onClick={() => setActiveView("files")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "files" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Files"><FiGrid size={20} /></button></li>
-          <li><button onClick={() => setActiveView("tasks")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "tasks" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Tasks"><FiCheckSquare size={20} /></button></li>
-          <li><button onClick={() => setActiveView("schedules")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "schedules" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Schedules"><FiClock size={20} /></button></li>
+    <div className="hidden md:flex flex-col items-center py-5 w-[72px] bg-gradient-to-b from-slate-900 via-slate-900 to-indigo-950 h-full flex-shrink-0 shadow-xl border-r border-slate-800/50">
+      <div className="mb-6">
+        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <FiSend className="text-white" size={18} />
+        </div>
+      </div>
+
+      <nav className="flex-1 w-full px-3">
+        <ul className="space-y-2">
+          {navItems.map((item) => {
+            const isActive = activeView === item.id;
+            const Icon = item.icon;
+            return (
+              <li key={item.id} className="relative group">
+                <button
+                  onClick={() => setActiveView(item.id)}
+                  className={`relative w-full h-11 rounded-xl flex items-center justify-center transition-all duration-200 ${
+                    isActive
+                      ? "bg-white text-slate-900 shadow-lg"
+                      : "text-slate-400 hover:text-white hover:bg-white/10"
+                  }`}
+                >
+                  <Icon size={19} />
+                  {item.badge > 0 && (
+                    <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-gradient-to-br from-rose-400 to-rose-500 text-white text-[10px] rounded-full flex items-center justify-center px-1 font-bold ring-2 ring-slate-900">
+                      {item.badge > 99 ? '99+' : item.badge}
+                    </span>
+                  )}
+                </button>
+                <span className="absolute left-full ml-3 top-1/2 -translate-y-1/2 px-2.5 py-1.5 bg-slate-900 text-white text-xs font-semibold rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap transition-opacity z-50 shadow-xl border border-slate-700/50">
+                  {item.label}
+                </span>
+              </li>
+            );
+          })}
         </ul>
       </nav>
+
+      <div className="mt-auto w-full px-3">
+        <div className="w-full h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-slate-300 font-bold text-sm">
+          {currentUser.name?.charAt(0)?.toUpperCase() || 'U'}
+        </div>
+      </div>
     </div>
   );
 
   const renderPlaceholderView = (title) => (
-    <div className="flex flex-col items-center justify-center p-6 text-center h-full">
-      <div className="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 flex items-center justify-center mb-6">
-        {activeView === "chats" && <FiMessageSquare size={24} className="text-gray-500" />}
-        {activeView === "activity" && <FiActivity size={24} className="text-gray-500" />}
-        {activeView === "calendar" && <FiCalendar size={24} className="text-gray-500" />}
-        {activeView === "files" && <FiGrid size={24} className="text-gray-500" />}
-        {activeView === "tasks" && <FiCheckSquare size={24} className="text-gray-500" />}
-        {activeView === "schedules" && <FiClock size={24} className="text-gray-500" />}
+    <div className="flex flex-col items-center justify-center p-6 text-center h-full bg-slate-50/60">
+      <div className="w-20 h-20 bg-white border-2 border-dashed border-slate-200 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+        {activeView === "chats" && <FiMessageSquare size={28} className="text-slate-400" />}
+        {activeView === "activity" && <FiActivity size={28} className="text-slate-400" />}
+        {activeView === "calendar" && <FiCalendar size={28} className="text-slate-400" />}
+        {activeView === "files" && <FiGrid size={28} className="text-slate-400" />}
+        {activeView === "tasks" && <FiCheckSquare size={28} className="text-slate-400" />}
+        {activeView === "schedules" && <FiClock size={28} className="text-slate-400" />}
       </div>
-      <h3 className="text-xl font-bold text-gray-800 mb-2">{title} View</h3>
-      <p className="text-gray-500 max-w-md">{title} content will be displayed here. This is a placeholder view.</p>
+      <h3 className="text-xl font-bold text-slate-800 mb-2">{title} View</h3>
+      <p className="text-slate-500 max-w-md text-sm">{title} content will be displayed here. This is a placeholder view.</p>
     </div>
   );
 
   // ============== MAIN RETURN ==============
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden w-full">
+    <div className="flex h-screen bg-slate-50 overflow-hidden w-full">
       <AnimatePresence mode="wait">
         {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
@@ -3332,35 +3430,56 @@ const renderTasksView = () => {
       {renderEventModal()}
       {renderQuickNoteModal()}
 
-      {apiError && (<div className="fixed top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-50">{apiError}<button onClick={() => setApiError(null)} className="ml-4 px-2 py-1 bg-white text-red-500 rounded hover:bg-red-100 transition">Dismiss</button></div>)}
+      {apiError && (
+        <div className="fixed top-0 left-0 right-0 bg-rose-500 text-white p-2 text-center z-50 shadow-lg">
+          {apiError}
+          <button onClick={() => setApiError(null)} className="ml-4 px-2 py-1 bg-white text-rose-500 rounded-md hover:bg-rose-50 transition font-semibold text-xs">
+            Dismiss
+          </button>
+        </div>
+      )}
 
       <AnimatePresence>
         {isMobileMenuOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-gray-800/50 z-40 backdrop-blur-sm md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} className="bg-white w-4/5 h-full shadow-xl" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between p-4 border-b border-gray-200"><h2 className="text-gray-800 font-bold">Messages</h2><FiX onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 cursor-pointer" size={24} /></div>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-40 md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
+            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} className="bg-white w-4/5 h-full shadow-2xl" onClick={e => e.stopPropagation()}>
+              <div className="flex justify-between p-4 border-b border-slate-200">
+                <h2 className="text-slate-800 font-bold">Messages</h2>
+                <FiX onClick={() => setIsMobileMenuOpen(false)} className="text-slate-500 cursor-pointer" size={24} />
+              </div>
               {renderConversationList()}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-navy-700 text-white z-30 flex items-center px-4 shadow-lg">
-        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-white"><FiMenu size={24} /></button>
-        <h2 className="text-lg font-bold ml-4">{activeView === "chats" ? "Messages" : activeView === "tasks" ? "Tasks" : activeView === "calendar" ? "Calendar" : activeView === "files" ? "Files" : activeView === "activity" ? "Activity" : "Schedules"}</h2>
-        <div className="ml-auto flex gap-3"><FiBell />{activeView === "chats" && (<FiPlus onClick={() => setIsNewChatModalOpen(true)} />)}</div>
+      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-gradient-to-r from-slate-900 to-indigo-900 text-white z-30 flex items-center px-4 shadow-lg">
+        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-white">
+          <FiMenu size={24} />
+        </button>
+        <h2 className="text-lg font-bold ml-4 tracking-tight">
+          {activeView === "chats" ? "Messages" : activeView === "tasks" ? "Tasks" : activeView === "calendar" ? "Calendar" : activeView === "files" ? "Files" : activeView === "activity" ? "Activity" : "Schedules"}
+        </h2>
+        <div className="ml-auto flex gap-3">
+          <FiBell />
+          {activeView === "chats" && (<FiPlus onClick={() => setIsNewChatModalOpen(true)} />)}
+        </div>
       </div>
 
       <div className="flex flex-1 min-h-0 w-full">
         <div className="hidden md:block flex-shrink-0">{renderNavigationSidebar()}</div>
 
-        {activeView === "chats" && (<div className="hidden md:flex md:w-1/3 lg:w-1/4 h-full flex-col overflow-hidden border-r border-gray-200 flex-shrink-0">{renderConversationList()}</div>)}
+        {activeView === "chats" && (
+          <div className="hidden md:flex md:w-[340px] lg:w-[380px] h-full flex-col overflow-hidden border-r border-slate-200/80 flex-shrink-0">
+            {renderConversationList()}
+          </div>
+        )}
 
-        <div className={`flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-white ${activeView === "chats" && activeConversation && isContactPanelOpen ? 'lg:w-1/2' : 'lg:w-3/4'}`}>
+        <div className={`flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-white ${activeView === "chats" && activeConversation && isContactPanelOpen ? 'lg:w-1/2' : ''}`}>
           <div className="md:hidden flex-none h-16 w-full"></div>
           <div className="flex-1 flex flex-col overflow-hidden min-h-0 w-full">
             {activeView === "chats" ? (
-              <div className="flex h-[calc(120vh-220px)]">
+              <div className="flex h-full">
                 <Chat
                   activeConversation={activeConversation}
                   messages={messages}
@@ -3381,14 +3500,34 @@ const renderTasksView = () => {
                   onDeleteConversation={handleDeleteConversation}
                 />
               </div>
-            ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}
+            ) : activeView === "activity" ? (
+              <div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>
+            ) : activeView === "calendar" ? (
+              <div className="h-full overflow-y-auto">{renderCalendarView()}</div>
+            ) : activeView === "files" ? (
+              <div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>
+            ) : activeView === "tasks" ? (
+              <div className="h-full overflow-y-auto">{renderTasksView()}</div>
+            ) : activeView === "schedules" ? (
+              <div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>
+            ) : (
+              <div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>
+            )}
           </div>
         </div>
 
         {activeView === "chats" && activeConversation && (
           <>
-            <button onClick={() => setIsContactPanelOpen(!isContactPanelOpen)} className={`hidden lg:flex absolute top-1/2 -translate-y-1/2 z-20 w-6 h-24 bg-gray-100 hover:bg-gray-200 rounded-l-lg items-center justify-center transition-all duration-300 cursor-pointer ${isContactPanelOpen ? 'right-[25%]' : 'right-0'}`} style={{ transform: 'translateY(-50%)', marginRight: isContactPanelOpen ? '-12px' : '0' }}><FiChevronRight className={`text-gray-600 transition-transform ${isContactPanelOpen ? '' : 'rotate-180'}`} /></button>
-            <div className={`hidden lg:flex ${isContactPanelOpen ? 'lg:w-1/4' : 'w-0'} h-full flex-col overflow-hidden border-l border-gray-200 flex-shrink-0 transition-all duration-300 relative`}>{renderContactPanel()}</div>
+            <button
+              onClick={() => setIsContactPanelOpen(!isContactPanelOpen)}
+              className={`hidden lg:flex absolute top-1/2 -translate-y-1/2 z-20 w-6 h-24 bg-white hover:bg-slate-100 border border-slate-200 rounded-l-xl items-center justify-center transition-all duration-300 cursor-pointer shadow-md ${isContactPanelOpen ? 'right-[25%]' : 'right-0'}`}
+              style={{ transform: 'translateY(-50%)', marginRight: isContactPanelOpen ? '-12px' : '0' }}
+            >
+              <FiChevronRight className={`text-slate-600 transition-transform ${isContactPanelOpen ? '' : 'rotate-180'}`} />
+            </button>
+            <div className={`hidden lg:flex ${isContactPanelOpen ? 'lg:w-[25%] lg:min-w-[320px] lg:max-w-[400px]' : 'w-0'} h-full flex-col overflow-hidden border-l border-slate-200/80 flex-shrink-0 transition-all duration-300 relative`}>
+              {renderContactPanel()}
+            </div>
           </>
         )}
       </div>
@@ -3399,21 +3538,24 @@ const renderTasksView = () => {
 export default MessengerPage;
 
 const styles = `
-  :root { --navy-700: #1e3a8a; --navy-800: #172554; }
+  :root { --navy-700: #4f46e5; --navy-800: #4338ca; }
   .bg-navy-700 { background-color: var(--navy-700); }
   .bg-navy-800 { background-color: var(--navy-800); }
   .text-navy-700 { color: var(--navy-700); }
   .hover\\:bg-navy-800:hover { background-color: var(--navy-800); }
   .hover\\:text-navy-700:hover { color: var(--navy-700); }
   .border-navy-700 { border-color: var(--navy-700); }
-  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+  .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
   .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.3); }
+  .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(100,116,139,0.25); border-radius: 10px; }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(100,116,139,0.45); }
+  .hide-scrollbar::-webkit-scrollbar { display: none; }
+  .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
   .animate-pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
-  .fixed { -webkit-transform: translateZ(0); -moz-transform: translateZ(0); -ms-transform: translateZ(0); -o-transform: translateZ(0); transform: translateZ(0); backface-visibility: hidden; perspective: 1000px; }
+  .fixed { -webkit-transform: translateZ(0); transform: translateZ(0); backface-visibility: hidden; perspective: 1000px; }
   .lg\\:flex.absolute { pointer-events: auto; z-index: 30; }
+  .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 `;
 
 export const MessengerStyle = () => <style>{styles}</style>;
