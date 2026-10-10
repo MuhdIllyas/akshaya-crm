@@ -8,7 +8,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import {
   FiArrowUp, FiArrowDown, FiBarChart2, FiGlobe, FiMapPin,
-  FiLoader, FiPlus, FiSend, FiUserPlus
+  FiLoader, FiPlus, FiSend, FiUserPlus, FiChevronRight
 } from "react-icons/fi";
 
 // ==========================================
@@ -586,6 +586,63 @@ const StaffPerformanceChart = ({ staffData, scopeLabel = "Ranked across all cent
 // ==========================================
 // REVENUE CHART
 // ==========================================
+/* Revenue / expense mix: ranked bars, top 6 + "Other". Revenue rows with subcategories expand on click. */
+const MixBars = ({ rows, color, emptyText }) => {
+  const [open, setOpen] = useState(null);
+  const clean = (rows || [])
+    .map((r) => ({ name: r.category || "Uncategorised", amount: Number(r.amount) || 0, subs: r.subcategories || [] }))
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  if (clean.length === 0) return <p className="py-6 text-center text-sm text-slate-500">{emptyText}</p>;
+  const total = clean.reduce((a, r) => a + r.amount, 0);
+  const top = clean.slice(0, 6);
+  const rest = clean.slice(6).reduce((a, r) => a + r.amount, 0);
+  const list = rest > 0 ? [...top, { name: `Other (${clean.length - 6})`, amount: rest, subs: [], muted: true }] : top;
+  const max = Math.max(...list.map((r) => r.amount));
+  return (
+    <ul className="space-y-3">
+      {list.map((r) => {
+        const expandable = r.subs.length > 0 && !(r.subs.length === 1 && r.subs[0].name === "No subcategory");
+        const isOpen = open === r.name;
+        const Row = expandable ? "button" : "div";
+        return (
+          <li key={r.name}>
+            <Row
+              {...(expandable ? { type: "button", onClick: () => setOpen(isOpen ? null : r.name), "aria-expanded": isOpen } : {})}
+              className={`block w-full text-left ${expandable ? "rounded focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""}`}
+            >
+              <div className="flex items-baseline justify-between gap-3 text-sm">
+                <span className="flex min-w-0 items-center gap-1 font-medium text-slate-800" title={r.name}>
+                  {expandable && <FiChevronRight className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
+                  <span className="truncate">{r.name}</span>
+                </span>
+                <span className="whitespace-nowrap tabular-nums text-slate-900">
+                  {money(r.amount)} <span className="text-xs text-slate-500">{Math.round((r.amount / total) * 100)}%</span>
+                </span>
+              </div>
+              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
+                <div className="h-full rounded-full" style={{ width: `${(r.amount / max) * 100}%`, backgroundColor: r.muted ? "#94a3b8" : color }} />
+              </div>
+            </Row>
+            {isOpen && (
+              <ul className="mt-2 space-y-1 border-l-2 border-slate-100 pl-3">
+                {r.subs.map((sub) => (
+                  <li key={sub.name} className="flex items-baseline justify-between gap-3 text-xs">
+                    <span className="truncate text-slate-600" title={sub.name}>{sub.name}</span>
+                    <span className="whitespace-nowrap tabular-nums text-slate-700">
+                      {money(sub.amount)} <span className="text-slate-400">{Math.round((sub.amount / r.amount) * 100)}% · {sub.services} {sub.services === 1 ? "service" : "services"}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+};
+
 const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#0891b2", profit: "#059669", expenses: "#e11d48" };
 const TREND_LABELS = { revenue: "Revenue", serviceCharges: "Service charges", profit: "Profit", expenses: "Expenses" };
 const RevenueChart = ({ data, view }) => {
@@ -646,6 +703,7 @@ const SuperadminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
+  const [mixView, setMixView] = useState("revenue");
   const [period, setPeriod] = useState("month");
   const [dataPeriod, setDataPeriod] = useState("month"); // period the loaded data was fetched for
 
@@ -1120,6 +1178,27 @@ const SuperadminDashboard = () => {
             </div>
           </Panel>
         </div>
+      </div>
+
+      {/* Where the money comes from and goes */}
+      <div className="mt-4">
+        <Panel
+          title="Revenue and expense mix"
+          hint={mixView === "revenue" ? `${periodLabel}. Billed amount by service, click one to see subcategories` : `${periodLabel}. Approved expenses by category`}
+          action={
+            <Segmented
+              value={mixView}
+              onChange={setMixView}
+              options={[{ value: "revenue", label: "Revenue" }, { value: "expenses", label: "Expenses" }]}
+            />
+          }
+        >
+          <MixBars
+            rows={financials.breakdowns?.[mixView]}
+            color={TREND_COLORS[mixView]}
+            emptyText={mixView === "revenue" ? "No completed services in this period." : "No approved expenses in this period."}
+          />
+        </Panel>
       </div>
 
       {/* People */}
