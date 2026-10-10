@@ -364,16 +364,19 @@ const CentreProfitChart = ({ centres, selectedId = "all" }) => {
 
 // Team bars — with rank + % of total
 const TeamBars = ({ teams }) => {
-  const totalRev = teams.reduce((a, t) => a + (Number(t.revenue) || 0), 0) || 1;
-  const maxRev = Math.max(1, ...teams.map((t) => Number(t.revenue) || 0));
-  if (teams.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No team data.</p>;
+  // Ranked by service charges (what the team earns before its expenses)
+  const sc = (t) => Number(t.grossProfit) || 0;
+  const ranked = [...teams].sort((a, b) => sc(b) - sc(a));
+  const total = ranked.reduce((a, t) => a + sc(t), 0);
+  const max = Math.max(1, ...ranked.map(sc));
+  if (ranked.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No team data.</p>;
 
   return (
     <ul className="space-y-4">
-      {teams.map((t, i) => {
-        const rev = Number(t.revenue) || 0;
+      {ranked.map((t, i) => {
+        const charges = sc(t);
         const profit = Number(t.profit) || 0;
-        const pct = (rev / totalRev) * 100;
+        const pct = total > 0 ? (charges / total) * 100 : 0;
         return (
           <li key={t.id || i}>
             <div className="flex items-baseline justify-between gap-3">
@@ -396,16 +399,17 @@ const TeamBars = ({ teams }) => {
                   )}
                 </span>
               </span>
-              <span className={`text-sm font-semibold tabular-nums ${profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>
-                {money(profit)}
-              </span>
+              <span className="text-sm font-semibold tabular-nums text-slate-900">{money(charges)}</span>
             </div>
             <div className="relative mt-1.5 h-2 rounded-full bg-slate-100">
-              <div className="absolute inset-y-0 left-0 rounded-full bg-slate-300" style={{ width: `${(rev / maxRev) * 100}%` }} />
-              <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${(Math.max(0, profit) / maxRev) * 100}%` }} />
+              <div className="absolute inset-y-0 left-0 rounded-full bg-slate-300" style={{ width: `${(charges / max) * 100}%` }} />
+              <div className="absolute inset-y-0 left-0 rounded-full bg-emerald-500" style={{ width: `${(Math.max(0, profit) / max) * 100}%` }} />
             </div>
             <div className="mt-1 flex items-baseline justify-between gap-3 text-xs text-slate-500">
-              <span>Revenue {money(rev)}, expenses {money(t.expenses || 0)}</span>
+              <span>
+                Expenses {money(t.expenses || 0)}, profit{" "}
+                <span className={profit < 0 ? "font-medium text-rose-600" : "font-medium text-emerald-700"}>{money(profit)}</span>
+              </span>
               <span className="tabular-nums">{pct.toFixed(0)}% of total</span>
             </div>
           </li>
@@ -1314,7 +1318,7 @@ const SuperadminDashboard = () => {
       {/* People */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
         <StaffPerformanceChart staffData={topStaffList} scopeLabel={scoped ? "Ranked within this centre" : "Ranked across all centres"} />
-        <Panel title="Top teams" hint="Grey bar is revenue, green is profit">
+        <Panel title="Top teams" hint="Ranked by service charges. Green is profit after expenses">
           <TeamBars teams={topTeamsList} />
         </Panel>
       </div>

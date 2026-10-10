@@ -896,7 +896,7 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
             (tr.gross_profit - COALESCE(te.expenses, 0)) as net_profit
         FROM TeamRevenue tr
         LEFT JOIN TeamExpenses te ON tr.team_id = te.team_id
-        ORDER BY net_profit DESC
+        ORDER BY tr.gross_profit DESC, net_profit DESC, tr.team_name
     `;
     
     const result = await client.query(query, [startDate, endDate, centreId]);
@@ -917,7 +917,7 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
 
     return { 
         topTeams: formatted.slice(0, 5), 
-        worstTeams: [...formatted].sort((a, b) => a.profit - b.profit).slice(0, 5), 
+        worstTeams: [...formatted].sort((a, b) => a.grossProfit - b.grossProfit).slice(0, 5), 
         fullList: formatted 
     };
 }
