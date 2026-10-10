@@ -300,14 +300,18 @@ async function fetchFinancialOverview(client, dates, centreId = null) {
 
     const [revenueBreakdownResult, expenseBreakdownResult, revenueTrendResult, expenseTrendResult] = await Promise.all([
         client.query(`
-            SELECT sv.category_id, COALESCE(SUM(se.total_charges), 0) as total
+            SELECT sv.id as category_id, sv.name as category,
+                   sub.id as subcategory_id, sub.name as subcategory,
+                   COALESCE(SUM(se.total_charges), 0) as total,
+                   COUNT(*)::int as services
             FROM service_entries se
             JOIN services sv ON se.category_id = sv.id
+            LEFT JOIN subcategories sub ON sub.id = se.subcategory_id
             LEFT JOIN staff st ON st.id = se.staff_id
             WHERE se.status = 'completed'
             AND se.created_at >= $1 AND se.created_at <= $2
             AND ($3::int IS NULL OR st.centre_id = $3::int)
-            GROUP BY sv.category_id
+            GROUP BY sv.id, sv.name, sub.id, sub.name
             ORDER BY total DESC
         `, [startDate, endDate, centreId]),
 
@@ -409,12 +413,31 @@ function calculateFinancialMetrics(rawFinancial) {
     return {
         totals: { revenue: totalRevenue, expenses: totalExpenses, profit: netProfit, margin: parseFloat(profitMargin) },
         breakdowns: {
-            revenue: rawFinancial.revenueBreakdown.map(r => ({ category: r.category, amount: parseFloat(r.total) })),
+            revenue: groupRevenueByService(rawFinancial.revenueBreakdown),
             expenses: rawFinancial.expenseBreakdown.map(e => ({ category: e.category, amount: parseFloat(e.total) }))
         },
         trends: combinedTrend,
         charts 
     };
+}
+
+// Rolls (service, subcategory) rows up into services, each carrying its subcategory split.
+function groupRevenueByService(rows) {
+    const byService = new Map();
+    for (const r of rows) {
+        const amount = parseFloat(r.total) || 0;
+        let g = byService.get(r.category_id);
+        if (!g) {
+            g = { category: r.category, amount: 0, services: 0, subcategories: [] };
+            byService.set(r.category_id, g);
+        }
+        g.amount += amount;
+        g.services += r.services || 0;
+        g.subcategories.push({ name: r.subcategory || 'No subcategory', amount, services: r.services || 0 });
+    }
+    return [...byService.values()]
+        .map(g => ({ ...g, subcategories: g.subcategories.sort((a, b) => b.amount - a.amount) }))
+        .sort((a, b) => b.amount - a.amount);
 }
 
 /**
