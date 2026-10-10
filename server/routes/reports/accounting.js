@@ -794,17 +794,17 @@ router.get('/nightly-close', async (req, res) => {
   }
 });
 
-// ========== NIGHTLY CLOSE STATUS - ALL CENTRES (SUPERADMIN DASHBOARD) ==========
+// ========== NIGHTLY CLOSE STATUS - ALL CENTRES (SUPERADMIN) ==========
 router.get('/nightly-close/all', async (req, res) => {
   if (req.user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Superadmin access required' });
   }
-
+ 
   const client = await req.db.connect();
-
+ 
   try {
     const { date } = req.query; // optional, "YYYY-MM-DD"
-
+ 
     const result = await client.query(
       `
       SELECT * FROM (
@@ -838,7 +838,7 @@ router.get('/nightly-close/all', async (req, res) => {
       `,
       [date || null]
     );
-
+ 
     res.json({
       date: result.rows[0]?.accounting_date || date || null,
       rows: result.rows
@@ -846,6 +846,58 @@ router.get('/nightly-close/all', async (req, res) => {
   } catch (err) {
     console.error('Nightly close (all centres) error:', err);
     res.status(500).json({ error: 'Failed to load closing log' });
+  } finally {
+    client.release();
+  }
+});
+ 
+// ========== NIGHTLY CLOSE HISTORY - ALL CENTRES (SUPERADMIN) ==========
+// Returns one row per centre per day for the last N days (ending yesterday, IST).
+router.get('/nightly-close/history', async (req, res) => {
+  if (req.user.role !== 'superadmin') {
+    return res.status(403).json({ error: 'Superadmin access required' });
+  }
+ 
+  const days = Math.min(31, Math.max(7, parseInt(req.query.days, 10) || 14));
+  const client = await req.db.connect();
+ 
+  try {
+    const result = await client.query(
+      `
+      WITH today AS (
+        SELECT (NOW() AT TIME ZONE 'Asia/Kolkata')::date AS d
+      ),
+      days AS (
+        SELECT generate_series(t.d - $1::int, t.d - 1, INTERVAL '1 day')::date AS day
+        FROM today t
+      )
+      SELECT
+        c.id   AS centre_id,
+        c.name AS centre_name,
+        dy.day::text AS accounting_date,
+        d.actual_cash,
+        d.cash_variance,
+        CASE
+          WHEN d.centre_id IS NULL THEN 'not_closed'
+          WHEN d.checklist IS NULL THEN 'incomplete'
+          ELSE 'closed'
+        END AS status
+      FROM centres c
+      CROSS JOIN days dy
+      LEFT JOIN daily_accounting_closure d
+        ON d.centre_id = c.id AND d.accounting_date = dy.day
+      ORDER BY c.name, dy.day
+      `,
+      [days]
+    );
+ 
+    res.json({
+      days: [...new Set(result.rows.map(r => r.accounting_date))],
+      rows: result.rows
+    });
+  } catch (err) {
+    console.error('Nightly close history error:', err);
+    res.status(500).json({ error: 'Failed to load closing history' });
   } finally {
     client.release();
   }
