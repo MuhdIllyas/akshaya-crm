@@ -2827,7 +2827,7 @@ const renderTasksView = () => {
         ) : (
           <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
             {activeView === "activity" ? (
-              <ActivityPanel token={token} userRole={currentUser.role} />
+              <ActivityPanel token={token} userRole={currentUser.role} onOpenTasks={() => setActiveView("tasks")} />
             ) : activeView === "calendar" ? (
               renderCalendarView()
             ) : activeView === "files" ? (
