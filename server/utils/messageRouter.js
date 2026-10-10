@@ -128,21 +128,10 @@ export async function sendMessage({
     );
 
     /* =========================
-       7. CREATE ACTIVITY
+       7. NO ACTIVITY LOG FOR CHAT MESSAGES
+       Chat messages are private between participants, so they are never
+       written to the shared activities feed (it used to store the full text).
     ========================= */
-    await client.query(
-      `
-      INSERT INTO activities
-      (centre_id, related_type, related_id, action, description, performed_by, performed_by_role, created_at)
-      VALUES ($1,'conversation',$2,'message_sent',$3,$4,'staff',NOW())
-      `,
-      [
-        conversation.centre_id,
-        conversation_id,
-        message || "File sent",
-        sender_id
-      ]
-    );
 
     await client.query("COMMIT");
 

@@ -115,28 +115,37 @@ async function addStaffToConversation(conversationId, staffId) {
 // Check if user has permission for service action
 async function canAccessService(serviceEntryId, userId, userRole) {
   if (userRole === 'superadmin') return true;
+
+  // 1. Anyone (staff OR admin) who is the owner or an added participant can access
+  const memberRes = await pool.query(
+    `SELECT 1
+       FROM service_entries se
+      WHERE se.id = $1
+        AND (
+          se.staff_id = $2
+          OR EXISTS (
+            SELECT 1 FROM service_participants sp
+             WHERE sp.service_entry_id = se.id AND sp.staff_id = $2
+          )
+        )`,
+    [serviceEntryId, userId]
+  );
+  if (memberRes.rows.length) return true;
+
+  // 2. Admins can access every service belonging to their own centre
   if (userRole === 'admin') {
     const centreRes = await pool.query(
-      `SELECT staff.centre_id
-       FROM service_entries se
-       JOIN staff ON se.staff_id = staff.id
-       WHERE se.id = $1`,
-      [serviceEntryId]
-    );
-    if (centreRes.rows.length && centreRes.rows[0].centre_id === userId) return true;
-  }
-  if (userRole === 'staff') {
-    const partRes = await pool.query(
-      `SELECT 1 FROM service_participants WHERE service_entry_id = $1 AND staff_id = $2`,
+      `SELECT 1
+         FROM service_entries se
+         JOIN staff owner ON se.staff_id = owner.id
+         JOIN staff me    ON me.id = $2
+        WHERE se.id = $1
+          AND owner.centre_id = me.centre_id`,
       [serviceEntryId, userId]
     );
-    if (partRes.rows.length) return true;
-    const assignRes = await pool.query(
-      `SELECT 1 FROM service_entries WHERE id = $1 AND staff_id = $2`,
-      [serviceEntryId, userId]
-    );
-    if (assignRes.rows.length) return true;
+    if (centreRes.rows.length) return true;
   }
+
   return false;
 }
 
@@ -780,6 +789,7 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
         se.id,
         se.customer_name,
         se.phone,
+        se.workspace_closed_at,
         st.application_number,    -- FIXED: Lives in service_tracking
         s.name as service_name,
         s.name as category_name,
@@ -812,6 +822,155 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
     console.error("Summary fetch error:", err);
     res.status(500).json({ error: 'Failed to fetch service summary' });
   }
+});
+
+// Block every workspace route once the workspace is closed (summary still allowed)
+router.param('serviceEntryId', async (req, res, next, id) => {
+  try {
+    const r = await pool.query(
+      `SELECT workspace_closed_at FROM service_entries WHERE id = $1`,
+      [id]
+    );
+    const closed = !!r.rows[0]?.workspace_closed_at;
+    req.workspaceClosed = closed;
+    if (closed && !req.path.endsWith('/summary')) {
+      return res.status(410).json({ error: 'This workspace has been closed', closed: true });
+    }
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/servicecollaboration/:serviceEntryId/close
+router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
+  const { serviceEntryId } = req.params;
+
+  // ---- Permission checks happen BEFORE the transaction ----
+  const ownerRes = await pool.query(
+    `SELECT se.staff_id, s.centre_id, srv.name AS service_name
+       FROM service_entries se
+       JOIN staff s ON se.staff_id = s.id
+       LEFT JOIN services srv ON se.category_id = srv.id
+      WHERE se.id = $1`,
+    [serviceEntryId]
+  );
+  if (!ownerRes.rows.length) return res.status(404).json({ error: 'Service not found' });
+
+  const service = ownerRes.rows[0];
+  const isOwner = String(service.staff_id) === String(req.user.id);
+  const isAdmin = req.user.role === 'admin' && String(service.centre_id) === String(req.user.centre_id);
+  const isSuperadmin = req.user.role === 'superadmin';
+  if (!isOwner && !isAdmin && !isSuperadmin) {
+    return res.status(403).json({ error: 'Only the owner or an admin can close this workspace' });
+  }
+
+  const client = await pool.connect();
+  let filesToDelete = [];
+  let notifyStaffIds = [];
+  let convIds = [];
+
+  try {
+    await client.query('BEGIN');
+
+    // ---- Chat ----
+    const convRes = await client.query(
+      `SELECT id FROM chat_conversations WHERE context_type = 'service_entry' AND context_id = $1`,
+      [serviceEntryId]
+    );
+    convIds = convRes.rows.map(r => r.id);
+
+    if (convIds.length) {
+      const partRes = await client.query(
+        `SELECT DISTINCT staff_id FROM chat_participants WHERE conversation_id = ANY($1::int[])`,
+        [convIds]
+      );
+      notifyStaffIds = partRes.rows.map(r => r.staff_id);
+
+      const fileRes = await client.query(
+        `SELECT file_url FROM chat_messages
+          WHERE conversation_id = ANY($1::int[]) AND file_url IS NOT NULL`,
+        [convIds]
+      );
+      filesToDelete = fileRes.rows.map(r => r.file_url);
+
+      await client.query(
+        `DELETE FROM chat_mentions WHERE message_id IN
+           (SELECT id FROM chat_messages WHERE conversation_id = ANY($1::int[]))`, [convIds]);
+      await client.query(
+        `DELETE FROM chat_message_reads WHERE message_id IN
+           (SELECT id FROM chat_messages WHERE conversation_id = ANY($1::int[]))`, [convIds]);
+      await client.query(`DELETE FROM chat_typing_status WHERE conversation_id = ANY($1::int[])`, [convIds]);
+
+      // Unlink rows in other tables that point at the conversation (keeps the notes, drops the link)
+      await client.query(`UPDATE notes SET related_conversation_id = NULL WHERE related_conversation_id = ANY($1::int[])`, [convIds]);
+      await client.query(`UPDATE notifications SET conversation_id = NULL WHERE conversation_id = ANY($1::int[])`, [convIds]);
+
+      await client.query(`DELETE FROM chat_messages WHERE conversation_id = ANY($1::int[])`, [convIds]);
+      await client.query(`DELETE FROM chat_participants WHERE conversation_id = ANY($1::int[])`, [convIds]);
+      await client.query(`DELETE FROM chat_conversations WHERE id = ANY($1::int[])`, [convIds]);
+    }
+
+    // ---- Tasks ----
+    const taskRes = await client.query(
+      `SELECT id FROM tasks WHERE related_service_entry_id = $1`, [serviceEntryId]);
+    const taskIds = taskRes.rows.map(r => r.id);
+    if (taskIds.length) {
+      await client.query(`DELETE FROM calendar_events WHERE related_task_id = ANY($1::int[])`, [taskIds]);
+      await client.query(`DELETE FROM tasks WHERE id = ANY($1::int[])`, [taskIds]);
+    }
+
+    // ---- Collaborators ----
+    await client.query(`DELETE FROM service_participants WHERE service_entry_id = $1`, [serviceEntryId]);
+
+    // ---- Mark closed ----
+    await client.query(
+      `UPDATE service_entries SET workspace_closed_at = NOW(), workspace_closed_by = $2 WHERE id = $1`,
+      [serviceEntryId, req.user.id]
+    );
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    client.release();
+    console.error('Close workspace error:', err);
+    return res.status(500).json({ error: 'Failed to close workspace', details: err.message });
+  }
+  client.release();
+
+  // ---- After commit: remove files from disk, notify clients, log ----
+  for (const url of filesToDelete) {
+    try {
+      const p = path.join(process.cwd(), 'uploads', 'chat', path.basename(url));
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    } catch (e) {
+      console.error('File cleanup failed:', url, e.message);
+    }
+  }
+
+  if (req.io) {
+    for (const staffId of notifyStaffIds) {
+      for (const convId of convIds) {
+        req.io.to(`user:${staffId}`).emit('conversation_deleted', { conversationId: convId });
+      }
+    }
+  }
+
+  try {
+    await logActivity({
+      centre_id: service.centre_id,
+      related_type: 'service_entry',
+      related_id: serviceEntryId,
+      action: 'Workspace Closed',
+      description: `Workspace for ${service.service_name || 'service'} closed; chat and tasks removed`,
+      performed_by: req.user.id,
+      performed_by_role: req.user.role
+    });
+  } catch (e) {
+    console.error('Non-fatal: activity log failed', e.message);
+  }
+
+  res.json({ success: true });
 });
 
 export default router;

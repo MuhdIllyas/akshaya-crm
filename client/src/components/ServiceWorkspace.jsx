@@ -291,6 +291,11 @@ const ServiceWorkspace = () => {
   });
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
+  const [workspaceClosed, setWorkspaceClosed] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [closeConfirmText, setCloseConfirmText] = useState('');
+  const [closing, setClosing] = useState(false);
+
   const currentUser = useMemo(() => getCurrentUser(), []);
   const token = localStorage.getItem('token');
 
@@ -326,6 +331,10 @@ const ServiceWorkspace = () => {
           }),
         ]);
 
+        if (convRes.status === 410) {
+          setWorkspaceClosed(true);
+          return; // finally{} still clears loading
+        }
         if (convRes.ok) setConversation(await convRes.json());
         if (partsRes.ok) setParticipants(await partsRes.json());
         if (tasksRes.ok) setTasks(await tasksRes.json());
@@ -545,6 +554,25 @@ const ServiceWorkspace = () => {
     }
   };
 
+  const handleCloseWorkspace = async () => {
+    if (!serviceEntryId || closeConfirmText !== 'CLOSE') return;
+    setClosing(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/servicecollaboration/${serviceEntryId}/close`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Failed to close workspace');
+      toast.success('Workspace closed');
+      navigate('/dashboard/staff/track_service');
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setClosing(false);
+    }
+  };
+
   /* --------------------------- derived ---------------------------- */
   const serviceInfo = useMemo(() => {
     if (!service) return null;
@@ -587,6 +615,11 @@ const ServiceWorkspace = () => {
     };
   }, [tasks]);
 
+  const canCloseWorkspace =
+    currentUser?.role === 'admin' ||
+    currentUser?.role === 'superadmin' ||
+    participants.some(p => p.role === 'owner' && String(p.staff_id) === String(currentUser?.id));
+
   const navItems = useMemo(
     () => [
       { id: 'board', label: 'Board', icon: FiGrid, count: tasks.length },
@@ -605,6 +638,29 @@ const ServiceWorkspace = () => {
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600 font-medium">Loading service workspace...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (workspaceClosed) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center shadow-sm">
+          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FiCheckCircle className="h-8 w-8 text-gray-500" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Workspace closed</h2>
+          <p className="text-gray-600 mb-6">
+            The chat and tasks for this service were removed when the workspace was closed.
+            Service tracking and documents are still available.
+          </p>
+          <button
+            onClick={() => navigate('/dashboard/staff/track_service')}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Back to Track Service
+          </button>
         </div>
       </div>
     );
@@ -782,6 +838,17 @@ const ServiceWorkspace = () => {
                     <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
                       <span className="hidden sm:inline">New Task</span>
                     </PrimaryButton>
+
+                    {canCloseWorkspace && (
+                      <button
+                        onClick={() => { setCloseConfirmText(''); setShowCloseModal(true); }}
+                        className="flex items-center space-x-2 px-4 py-2 bg-white text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-all duration-200 shadow-sm"
+                      >
+                        <FiX className="h-4 w-4" />
+                        <span className="hidden sm:inline">Close Workspace</span>
+                      </button>
+                    )}
+
                   </div>
                 </div>
 
@@ -1249,6 +1316,37 @@ const ServiceWorkspace = () => {
                       );
                     })}
                   </div>
+                </FormField>
+              </div>
+            </Modal>
+          )}
+
+          {showCloseModal && (
+            <Modal
+              title="Close Workspace"
+              onClose={() => !closing && setShowCloseModal(false)}
+              onSubmit={handleCloseWorkspace}
+              submitLabel={closing ? 'Closing…' : 'Close permanently'}
+            >
+              <div className="space-y-4">
+                <div className="flex gap-3 p-3 rounded-xl bg-rose-50 border border-rose-200">
+                  <FiAlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-rose-800">
+                    <p className="font-semibold mb-1">This cannot be undone.</p>
+                    <p>
+                      All chat messages, chat files, {stats.total} task{stats.total === 1 ? '' : 's'} and
+                      the collaborator list will be permanently deleted. Service tracking and documents are kept.
+                    </p>
+                  </div>
+                </div>
+                <FormField label='Type "CLOSE" to confirm' required>
+                  <input
+                    type="text"
+                    value={closeConfirmText}
+                    onChange={(e) => setCloseConfirmText(e.target.value)}
+                    placeholder="CLOSE"
+                    className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                  />
                 </FormField>
               </div>
             </Modal>

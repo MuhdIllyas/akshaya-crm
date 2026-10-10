@@ -3,7 +3,110 @@ import pool from "../db.js";
 /* =========================================================
    1. CORE ORCHESTRATOR (The Switchboard)
 ========================================================= */
-export async function resolveConversation(params) {
+/* ---------- Direct-chat helpers ---------- */
+
+const toId = (v) => {
+  const n = parseInt(v, 10);
+  return Number.isNaN(n) ? null : n;
+};
+
+// Every caller (new chat button, task creation, mentions…) goes through this,
+// so small differences in how they build the request can't create duplicates.
+function normalizeParams(params) {
+  const p = { ...params };
+  p.channel = p.channel || "internal";
+  if (p.created_by != null) p.created_by = toId(p.created_by);
+  if (Array.isArray(p.participant_ids)) {
+    p.participant_ids = [...new Set(p.participant_ids.map(toId).filter((id) => id !== null))];
+  }
+  return p;
+}
+
+// A plain staff-to-staff chat (or a chat with yourself, e.g. a task assigned to yourself).
+// Any context other than service/customer (e.g. 'task') still counts as the same direct chat.
+function isDirectInternal(p) {
+  return (
+    p.channel === "internal" &&
+    !p.is_group &&
+    Array.isArray(p.participant_ids) &&
+    p.participant_ids.length >= 1 &&
+    p.participant_ids.length <= 2 &&
+    p.context_type !== "service_entry" &&
+    p.context_type !== "customer"
+  );
+}
+
+// Finds the existing non-group internal chat whose staff members are EXACTLY these people.
+async function findDirectConversation(db, sortedIds) {
+  const res = await db.query(
+    `SELECT c.* FROM chat_conversations c
+     WHERE c.channel = 'internal'
+       AND COALESCE(c.is_group, false) = false
+       AND (c.context_type IS NULL OR c.context_type NOT IN ('service_entry', 'customer'))
+       AND c.status IN ('active', 'archived')
+       AND EXISTS (SELECT 1 FROM chat_participants x WHERE x.conversation_id = c.id AND x.staff_id = $2)
+       AND (
+         SELECT array_agg(DISTINCT p.staff_id::int ORDER BY p.staff_id::int)
+         FROM chat_participants p
+         WHERE p.conversation_id = c.id AND p.participant_type = 'staff'
+       ) = $1::int[]
+     ORDER BY c.last_message_at DESC NULLS LAST, c.id ASC
+     LIMIT 1`,
+    [sortedIds, sortedIds[0]]
+  );
+  return res.rows[0] || null;
+}
+
+// Lookup + create inside one transaction with a lock on this pair of people,
+// so two requests at the same moment can't both create a chat.
+async function resolveDirectConversation(p) {
+  const sortedIds = [...p.participant_ids].sort((a, b) => a - b);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`dm:${sortedIds.join(":")}`]);
+
+    let conversation = await findDirectConversation(client, sortedIds);
+    if (conversation) {
+      if (conversation.status === "archived") {
+        await client.query(
+          `UPDATE chat_conversations SET status = 'active', archived_at = NULL WHERE id = $1`,
+          [conversation.id]
+        );
+        conversation.status = "active";
+      }
+      await client.query("COMMIT");
+      return conversation;
+    }
+
+    conversation = await createConversationRecord(
+      { ...p, context_type: null, context_id: null, is_group: false, centre_id: null },
+      null,
+      null,
+      client
+    );
+    for (const staffId of sortedIds) {
+      await addStaffToConversation(conversation.id, staffId, staffId === p.created_by ? "owner" : "member", client);
+    }
+    await client.query("COMMIT");
+    console.log("Created new direct conversation:", conversation.id, "between", sortedIds.join(" & "));
+    return conversation;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function resolveConversation(rawParams) {
+  const params = normalizeParams(rawParams);
+
+  // Staff-to-staff chats have their own duplicate-proof path
+  if (isDirectInternal(params)) {
+    return resolveDirectConversation(params);
+  }
+
   // 1. Look for an existing conversation
   let { conversation, externalContactId } = await findExistingConversation(params);
   
@@ -36,19 +139,7 @@ async function findExistingConversation(params) {
   const { channel, context_type, context_id, customer_id, phone_number, is_group, participant_ids, communication_account_id, centre_id } = params;
   let externalContactId = null;
 
-  // A. Internal Direct Staff Chat
-  if (channel === 'internal' && !is_group && participant_ids?.length === 2) {
-    const [staff1, staff2] = participant_ids;
-    const res = await pool.query(
-      `SELECT c.* FROM chat_conversations c
-       INNER JOIN chat_participants p1 ON c.id = p1.conversation_id AND p1.staff_id = $1
-       INNER JOIN chat_participants p2 ON c.id = p2.conversation_id AND p2.staff_id = $2
-       WHERE c.is_group = false AND c.channel = $3 AND c.status = 'active' AND c.context_type IS NULL
-       LIMIT 1`,
-      [staff1, staff2, channel]
-    );
-    if (res.rows.length) return { conversation: res.rows[0], externalContactId };
-  }
+  // A. Internal direct chats are handled by resolveDirectConversation()
 
   // B. Service Conversation
   if (context_type === "service_entry" && context_id) {
@@ -113,13 +204,13 @@ async function findOrCreateExternalContact(phone_number, communication_account_i
 /* =========================================================
    4. FACTORY SERVICE (Database Creation)
 ========================================================= */
-async function createConversationRecord(params, name, externalContactId) {
+async function createConversationRecord(params, name, externalContactId, db = pool) {
   const { is_group, channel, context_type, context_id, centre_id, customer_id, phone_number, created_by, participant_ids, communication_account_id } = params;
 
   const finalCustomerId = (context_type === "customer") ? customer_id : null;
   const finalContextType = (!is_group && participant_ids && participant_ids.length === 2 && channel === 'internal') ? null : context_type;
 
-  const insertRes = await pool.query(
+  const insertRes = await db.query(
     `INSERT INTO chat_conversations
     (name, is_group, channel, context_type, context_id, centre_id, 
      customer_id, phone_number, created_by, assigned_staff_id, communication_account_id, external_contact_id, status, created_at)
@@ -221,8 +312,8 @@ async function generateConversationName({ channel, context_type, context_id, cus
 /* =========================================================
    7. BASE UTILITIES (Exported Helpers)
 ========================================================= */
-export async function addStaffToConversation(conversationId, staffId, role = 'member') {
-  await pool.query(
+export async function addStaffToConversation(conversationId, staffId, role = 'member', db = pool) {
+  await db.query(
     `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
      VALUES ($1, $2, 'staff', $3, NOW()) ON CONFLICT (conversation_id, staff_id) DO NOTHING`,
     [conversationId, staffId, role]

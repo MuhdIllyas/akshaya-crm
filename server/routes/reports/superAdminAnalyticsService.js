@@ -130,6 +130,7 @@ export const getSuperAdminDashboard = async (filters = {}) => {
         if (modules.includes('health')) tasks.push(fetchHealthAnalytics(client, dates, centreId).then(r => data.health = r));
         if (modules.includes('activity')) tasks.push(fetchRecentActivities(client).then(r => data.activity = r));
         if (modules.includes('alerts')) tasks.push(fetchSystemAlerts(client, centreId).then(r => data.alerts = r));
+        if (modules.includes('targets')) tasks.push(fetchStaffTargets(client, centreId).then(r => data.targets = r));
         if (modules.includes('comparison')) tasks.push(fetchPeriodComparison(client, compareDates, centreId).then(r => data.comparison = r));
 
         await Promise.all(tasks);
@@ -160,6 +161,7 @@ function buildDashboard(data) {
             ...(data.customers && { customers: data.customers }), 
             ...(data.staff && { staff: data.staff }), 
             ...(data.teams && { teams: data.teams }), 
+            ...(data.targets && { targets: data.targets }),
             ...(data.activity && { activity: data.activity }) 
         },
         leaderboards: { 
@@ -302,7 +304,7 @@ async function fetchFinancialOverview(client, dates, centreId = null) {
         client.query(`
             SELECT sv.id as category_id, sv.name as category,
                    sub.id as subcategory_id, sub.name as subcategory,
-                   COALESCE(SUM(se.total_charges), 0) as total,
+                   COALESCE(SUM(se.service_charges), 0) as total,
                    COUNT(*)::int as services
             FROM service_entries se
             JOIN services sv ON se.category_id = sv.id
@@ -438,6 +440,95 @@ function groupRevenueByService(rows) {
     return [...byService.values()]
         .map(g => ({ ...g, subcategories: g.subcategories.sort((a, b) => b.amount - a.amount) }))
         .sort((a, b) => b.amount - a.amount);
+}
+
+/**
+ * STAFF TARGETS ENGINE
+ * Mirrors what staff see on their own dashboard (staffPerformance.js /workspace-init):
+ *  - monthly target  = staff_monthly_targets.target_amount (frozen snapshot for the current month)
+ *  - achieved        = SUM(service_charges) of completed services
+ *  - daily target    = ROUND(monthly target / days in month), every calendar day
+ * Always the CURRENT month and today, regardless of the dashboard period dropdown.
+ */
+async function fetchStaffTargets(client, centreId = null) {
+    const { rows } = await client.query(`
+        WITH cal AS (
+            SELECT date_trunc('month', CURRENT_DATE)::date AS month_start,
+                   EXTRACT(DAY FROM CURRENT_DATE)::int AS day_of_month,
+                   EXTRACT(DAY FROM (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day'))::int AS days_in_month
+        ),
+        daily AS (
+            SELECT se.staff_id, se.created_at::date AS day, SUM(se.service_charges) AS sc
+            FROM service_entries se
+            WHERE se.status = 'completed'
+              AND se.created_at >= date_trunc('month', CURRENT_DATE)
+            GROUP BY se.staff_id, se.created_at::date
+        )
+        SELECT
+            t.staff_id,
+            st.name AS staff_name,
+            st.centre_id,
+            c.name AS centre_name,
+            t.target_amount,
+            cal.day_of_month,
+            cal.days_in_month,
+            ROUND(t.target_amount / cal.days_in_month) AS daily_target,
+            COALESCE((SELECT SUM(d.sc) FROM daily d WHERE d.staff_id = t.staff_id), 0) AS month_achieved,
+            COALESCE((SELECT SUM(d.sc) FROM daily d WHERE d.staff_id = t.staff_id AND d.day = CURRENT_DATE), 0) AS today_achieved,
+            (SELECT COUNT(*) FROM daily d
+              WHERE d.staff_id = t.staff_id
+                AND d.day < CURRENT_DATE
+                AND d.sc >= ROUND(t.target_amount / cal.days_in_month))::int AS days_met
+        FROM staff_monthly_targets t
+        CROSS JOIN cal
+        JOIN staff st ON st.id = t.staff_id
+        LEFT JOIN centres c ON c.id = st.centre_id
+        WHERE t.month = cal.month_start
+          AND t.target_amount > 0
+          AND ($1::int IS NULL OR st.centre_id = $1::int)
+        ORDER BY st.name
+    `, [centreId]);
+
+    const num = (v) => parseFloat(v) || 0;
+    const staff = rows.map((r) => {
+        const target = num(r.target_amount);
+        const achieved = num(r.month_achieved);
+        const dailyTarget = num(r.daily_target);
+        const today = num(r.today_achieved);
+        const expected = target * (r.day_of_month / r.days_in_month);
+        return {
+            id: r.staff_id,
+            name: r.staff_name,
+            centreId: r.centre_id,
+            centre: r.centre_name || null,
+            target,
+            achieved,
+            progress: target > 0 ? (achieved / target) * 100 : 0,
+            dailyTarget,
+            today,
+            todayMet: dailyTarget > 0 && today >= dailyTarget,
+            daysMet: r.days_met || 0,
+            completeDays: Math.max(r.day_of_month - 1, 0),
+            onPace: achieved >= expected
+        };
+    });
+
+    const first = rows[0];
+    return {
+        dayOfMonth: first ? first.day_of_month : null,
+        daysInMonth: first ? first.days_in_month : null,
+        summary: {
+            staffCount: staff.length,
+            metToday: staff.filter((x) => x.todayMet).length,
+            onPace: staff.filter((x) => x.onPace).length,
+            reached: staff.filter((x) => x.progress >= 100).length,
+            totalTarget: staff.reduce((a, x) => a + x.target, 0),
+            totalAchieved: staff.reduce((a, x) => a + x.achieved, 0),
+            todayAchieved: staff.reduce((a, x) => a + x.today, 0),
+            todayTarget: staff.reduce((a, x) => a + x.dailyTarget, 0)
+        },
+        staff
+    };
 }
 
 /**
@@ -805,7 +896,7 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
             (tr.gross_profit - COALESCE(te.expenses, 0)) as net_profit
         FROM TeamRevenue tr
         LEFT JOIN TeamExpenses te ON tr.team_id = te.team_id
-        ORDER BY net_profit DESC
+        ORDER BY tr.gross_profit DESC, net_profit DESC, tr.team_name
     `;
     
     const result = await client.query(query, [startDate, endDate, centreId]);
@@ -826,7 +917,7 @@ async function fetchTeamAnalytics(client, dates, centreId = null) {
 
     return { 
         topTeams: formatted.slice(0, 5), 
-        worstTeams: [...formatted].sort((a, b) => a.profit - b.profit).slice(0, 5), 
+        worstTeams: [...formatted].sort((a, b) => a.grossProfit - b.grossProfit).slice(0, 5), 
         fullList: formatted 
     };
 }

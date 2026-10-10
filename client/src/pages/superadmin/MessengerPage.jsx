@@ -58,6 +58,9 @@ import CalendarView from "@/components/CalendarView";
 import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
 import Chat from '@/components/Chat';
+import ConversationList from "@/components/chat/ConversationList";
+import ConversationDetails from "@/components/chat/ConversationDetails";
+import MessengerNav from "@/components/chat/MessengerNav";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 
@@ -313,7 +316,12 @@ const MessengerPage = ({ user }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [isContactPanelOpen, setIsContactPanelOpen] = useState(true);
+  const [isContactPanelOpen, setIsContactPanelOpen] = useState(() => {
+    try { return localStorage.getItem("messenger_details_open") !== "false"; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("messenger_details_open", String(isContactPanelOpen)); } catch { /* storage unavailable */ }
+  }, [isContactPanelOpen]);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
 
@@ -337,6 +345,34 @@ const MessengerPage = ({ user }) => {
   const [socketConnected, setSocketConnected] = useState(false);
 
   const [serviceDetails, setServiceDetails] = useState(null);
+  const [serviceDetailsError, setServiceDetailsError] = useState(null);
+  const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false);
+
+  // Fit the messenger exactly into the space left by the dashboard layout
+  // (its top offset plus any padding/margins below it), so nothing gets pushed off-screen.
+  const messengerRootRef = useRef(null);
+  const [messengerHeight, setMessengerHeight] = useState(null);
+  useEffect(() => {
+    const measure = () => {
+      const el = messengerRootRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      let below = 0;
+      for (let node = el.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+        const cs = window.getComputedStyle(node);
+        below += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0) + (parseFloat(cs.marginBottom) || 0);
+      }
+      const viewport = window.visualViewport?.height || window.innerHeight;
+      setMessengerHeight(Math.max(420, Math.floor(viewport - top - Math.min(below, 96))));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, []);
   const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
 
   const lastMessageIdsRef = useRef(new Set());
@@ -459,22 +495,33 @@ const MessengerPage = ({ user }) => {
 
     if (activeConversation?.context_type === 'service_entry' && activeConversation.context_id) {
       setLoadingServiceDetails(true);
+      setServiceDetailsError(null);
       fetch(`${API_BASE_URL}/api/servicecollaboration/${activeConversation.context_id}/summary`, {
         headers: { Authorization: `Bearer ${token}` }
       })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        setServiceDetails(data);
-        setLoadingServiceDetails(false);
-      })
-      .catch(err => {
-        console.error("Failed to fetch service details", err);
-        setLoadingServiceDetails(false);
-      });
+        .then(async res => {
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error(body.error || body.message || `HTTP ${res.status}`);
+          }
+          return res.json();
+        })
+        .then(data => setServiceDetails(data))
+        .catch(err => {
+          console.error("Failed to fetch service details", err);
+          setServiceDetails(null);
+          setServiceDetailsError(err.message);
+        })
+        .finally(() => setLoadingServiceDetails(false));
     } else {
       setServiceDetails(null);
+      setServiceDetailsError(null);
     }
   }, [activeConversation?.id, token, API_BASE_URL]);
+
+  useEffect(() => {
+    setIsDetailsDrawerOpen(false);
+  }, [activeConversation?.id]);
 
   // ============== SOCKET.IO INTEGRATION ==============
   useEffect(() => {
@@ -1140,7 +1187,7 @@ const MessengerPage = ({ user }) => {
         }
       }
 
-      toast.success(channel === 'whatsapp' ? 'WhatsApp conversation started' : (isGroup ? 'Group created' : 'Conversation started'));
+      toast.success(channel === 'whatsapp' ? 'WhatsApp conversation started' : ((participants?.length > 1 || (name && participants?.length > 0)) ? 'Group created' : 'Conversation started'));
     } catch (err) {
       console.error('Error creating conversation:', err);
       toast.error(err.message || 'Failed to create conversation');
@@ -1882,650 +1929,43 @@ const MessengerPage = ({ user }) => {
     setIsEventModalOpen(true);
   };
 
-  // ============== FILTERED CONVERSATIONS ==============
+  // ============== LAYOUT HELPERS (UI moved into components/chat/*) ==============
 
-  const filteredConversations = conversations.filter(
-    (conv) => {
-      let displayName = conv.name;
-      if (!displayName && !conv.is_group) {
-        if (conv.channel === 'whatsapp') {
-          displayName = conv.context_name || conv.context_identifier || 'WhatsApp User';
-        } else if (conv.participants) {
-          const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
-          if (otherParticipants.length > 0) {
-          displayName = otherParticipants.map(p => p.name).join(', ');
-        }
-        }
-      }
-      if (!displayName) displayName = 'Unknown Chat';
+  const unreadTotal = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
+  const showChatOnMobile = activeView === "chats" && !!activeConversation;
 
-      const lastMessageText = conv.last_message || conv.lastMessage || '';
-      const searchLower = searchQuery.toLowerCase();
-      return (displayName.toLowerCase().includes(searchLower)) ||
-        (lastMessageText && lastMessageText.toLowerCase().includes(searchLower));
-    }
-  );
-
-  // ============== RENDER FUNCTIONS ==============
-
-  const renderConversationList = () => (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200 overflow-hidden">
-      <div className="flex-none p-4 border-b border-gray-200">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-navy-700 w-10 h-10 rounded-lg flex items-center justify-center">
-              <FiSend className="text-white" />
-            </div>
-            <h2 className="text-xl font-bold text-gray-800">Messages</h2>
-          </div>
-          <div className="flex gap-2">
-            <button className="p-2 rounded-full hover:bg-gray-100 transition relative">
-              <FiBell className="text-gray-600" />
-              {conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0) > 0 && (
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-              )}
-            </button>
-            <button
-              onClick={() => setIsNewChatModalOpen(true)}
-              className="p-2 rounded-full hover:bg-gray-100 transition"
-              title="New Chat"
-            >
-              <FiPlus className="text-gray-600" />
-            </button>
-          </div>
-        </div>
-        <div className="relative">
-          <FiSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search conversations..."
-            className="pl-12 pr-4 py-3 w-full rounded-xl bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-200 border border-gray-200 transition text-gray-700"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Recent Chats
-        </div>
-        {filteredConversations.length > 0 ? (
-          filteredConversations.map((c) => {
-            let displayName = c.name;
-            if (!displayName && !c.is_group) {
-              if (c.channel === 'whatsapp') {
-                displayName = c.context_name || c.context_identifier || 'WhatsApp User';
-              } else if (c.participants) {
-                const otherParticipants = c.participants.filter(p => p.staff_id !== currentUser.id);
-                if (otherParticipants.length > 0) {
-                  displayName = otherParticipants.map(p => p.name).join(', ');
-                }
-              }
-            }
-            if (!displayName) displayName = 'Unknown Chat';
-
-            const isAnyOnline = c.channel !== 'whatsapp' && c.participants?.some(p => p.staff_id !== currentUser.id && onlineUsers.has(String(p.staff_id)));
-
-            // 🔥 DYNAMIC PHOTO & GROUP DETECTOR
-            const otherParticipants = c.participants ? c.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
-            const isFunctionallyGroup = c.is_group || otherParticipants.length > 1;
-
-            let avatarPhoto = null;
-            if (!isFunctionallyGroup && otherParticipants.length === 1) {
-                if (otherParticipants[0]?.photo) {
-                    avatarPhoto = getAvatarUrl(otherParticipants[0].photo);
-                }
-            }
-
-            let lastMessageText = c.last_message || c.lastMessage || '';
-            const lastMessageSenderName = c.last_message_sender;
-            const lastMessageSenderId = c.last_message_sender_id;
-
-            // 👈 NEW: Hide raw IDs for tasks in the sidebar
-            if (!isNaN(lastMessageText) && lastMessageText.trim() !== '') {
-               lastMessageText = "📋 Sent a task";
-            } else if (lastMessageSenderId && String(lastMessageSenderId) !== String(currentUser.id) && lastMessageSenderName) {
-              lastMessageText = `${lastMessageSenderName}: ${lastMessageText}`;
-            }
-
-            if (!lastMessageText) {
-              lastMessageText = 'No messages yet';
-            }
-
-            return (
-              <motion.div
-                key={c.id}
-                whileHover={{ scale: 1.01 }}
-                whileTap={{ scale: 0.99 }}
-                onClick={() => setActiveConversation(c)}
-                className={`flex items-center p-4 cursor-pointer transition-all duration-200 ${activeConversation?.id === c.id
-                    ? "bg-blue-50 border-l-4 border-navy-700"
-                    : "hover:bg-gray-50 border-l-4 border-transparent"
-                  }`}
-              >
-                <div className="relative mr-3 flex-shrink-0">
-                  {avatarPhoto ? (
-                    <img 
-                      src={avatarPhoto} 
-                      alt={displayName} 
-                      className="w-12 h-12 rounded-xl object-cover border border-gray-200"
-                      onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                    />
-                  ) : null}
-                  
-                  {/* Fallback & Group Icon */}
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-white ${c.avatarColor || 'bg-navy-700'} ${avatarPhoto ? 'hidden' : ''}`}>
-                    {isFunctionallyGroup ? <FiUsers size={20} /> : displayName.charAt(0).toUpperCase()}
-                  </div>
-                  
-                  {/* Online Dot */}
-                  {!isFunctionallyGroup && isAnyOnline && (
-                    <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-white"></span>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex justify-between items-start">
-                    <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-1">
-                        <span className="font-semibold text-gray-800 truncate">{displayName}</span>
-                        {c.channel === 'whatsapp' && (
-                          <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 whitespace-nowrap flex items-center gap-1">
-                            <FiSmartphone size={10} /> WhatsApp
-                          </span>
-                        )}
-                      {c.context_type === 'service_entry' && (
-                        <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-purple-100 text-purple-700 whitespace-nowrap">
-                          Service
-                        </span>
-                      )}
-                    </div>
-                      {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
-                      {!isFunctionallyGroup && otherParticipants[0]?.centre_name && (
-                        <span className="text-[10px] text-gray-400 truncate mt-0.5 flex items-center gap-1">
-                          <FiMapPin size={10} /> {otherParticipants[0].centre_name}
-                        </span>
-                      )}
-                    </div>
-                    <span className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                      {c.last_message_at ? new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                    </span>
-                  </div>
-                  <div className="flex items-center mt-1">
-                    <p className="text-sm text-gray-500 truncate flex-1">
-                      {lastMessageText}
-                    </p>
-                    {c.unread > 0 && (
-                      <span className="bg-navy-700 text-xs text-white rounded-full px-1.5 py-0.5 ml-2 flex-shrink-0">
-                        {c.unread}
-                      </span>
-                    )}
-                  </div>
-                  {typingUsers[c.id]?.length > 0 && (
-                    <p className="text-xs text-navy-700 italic mt-1">
-                      {typingUsers[c.id].map(u => u.name).join(', ')} typing...
-                    </p>
-                  )}
-                </div>
-              </motion.div>
-            );
-          })
-        ) : (
-          <div className="text-center py-8 px-4">
-            <FiMessageSquare className="mx-auto text-gray-400 text-4xl mb-3" />
-            <p className="text-gray-500 mb-2">No conversations yet</p>
-            <button
-              onClick={() => setIsNewChatModalOpen(true)}
-              className="text-navy-700 font-medium hover:underline"
-            >
-              Start a new chat
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-
-  const renderContactPanel = () => {
-    if (!activeConversation) return null;
-
-    const onlineParticipants = activeConversation.participants?.filter(
-      p => p.staff_id !== currentUser.id && onlineUsers.has(String(p.staff_id))
-    ) || [];
-
-    let displayName = activeConversation.name;
-    if (!displayName && !activeConversation.is_group) {
-      if (activeConversation.channel === 'whatsapp') {
-        displayName = activeConversation.context_name || activeConversation.context_identifier || 'WhatsApp User';
-      } else if (activeConversation.participants) {
-        const otherParticipants = activeConversation.participants.filter(p => p.staff_id !== currentUser.id);
-        if (otherParticipants.length > 0) {
-          displayName = otherParticipants.map(p => p.name).join(', ');
-        }
-      }
-    }
-    if (!displayName) displayName = 'Unknown Chat';
-
-    const otherPanelParticipants = activeConversation.participants ? activeConversation.participants.filter(p => String(p.staff_id) !== String(currentUser.id)) : [];
-    const isFunctionallyGroup = activeConversation.is_group || otherPanelParticipants.length > 1;
-
-    let avatarPhoto = null;
-    if (!isFunctionallyGroup && otherPanelParticipants.length === 1) {
-        if (otherPanelParticipants[0]?.photo) {
-            avatarPhoto = getAvatarUrl(otherPanelParticipants[0].photo);
-        }
-    }
-
-    return (
-      <div className="flex flex-col h-full bg-white border-l border-gray-200 overflow-hidden">
-        <div className="flex-none p-6 flex flex-col items-center border-b border-gray-200">
-          <div className="relative">
-            <div className="w-24 h-24 rounded-full bg-navy-700 flex items-center justify-center text-white text-3xl mb-4">
-              {displayName?.[0] || '?'}
-            </div>
-            {!activeConversation.is_group && onlineParticipants.length > 0 && (
-              <span className="absolute bottom-4 right-0 w-4 h-4 bg-green-500 rounded-full border-2 border-white"></span>
-            )}
-          </div>
-          <h3 className="text-xl font-bold text-gray-800">{displayName}</h3>
-
-          {/* 🔥 Clean Centre Subtext for 1-on-1 chats */}
-          {!isFunctionallyGroup && otherPanelParticipants[0]?.centre_name && (
-            <p className="text-gray-500 text-sm flex items-center mt-1 text-center">
-              <FiMapPin className="mr-1" size={14} /> {otherPanelParticipants[0].centre_name}
-            </p>
-          )}
-
-          {activeConversation.channel === 'whatsapp' && (
-            <p className="text-green-600 text-sm flex items-center mt-1">
-              <FiSmartphone className="mr-1" size={14} /> WhatsApp
-            </p>
-          )}
-          {!activeConversation.is_group && activeConversation.channel !== 'whatsapp' && (
-            <p className="text-gray-500 flex items-center mt-1">
-              <BsCircleFill className={`${onlineParticipants.length > 0 ? 'text-green-500' : 'text-gray-400'} mr-2 text-xs`} />
-              {onlineParticipants.length > 0 ? 'Online' : 'Offline'}
-            </p>
-          )}
-          {activeConversation.is_group && (
-            <p className="text-gray-500 mt-1">
-              {activeConversation.participants?.length || 0} members
-              {onlineParticipants.length > 0 && (
-                <span className="ml-1 text-green-600">
-                  ({onlineParticipants.length} online)
-                </span>
-              )}
-            </p>
-          )}
-          {!socketConnected && (
-            <p className="text-xs text-yellow-600 mt-2 flex items-center gap-1">
-              <FiAlertCircle size={12} />
-              Reconnecting...
-            </p>
-          )}
-
-          {/* 🔥 ASSIGNMENT DROPDOWN (For WhatsApp & External Chats) */}
-          {(activeConversation.channel === 'whatsapp' || activeConversation.context_type === 'customer') && (
-            <div className="mt-4 w-full px-2">
-              <p className="text-xs text-gray-500 mb-1 font-semibold uppercase tracking-wider">Assign To</p>
-              <select
-                value={activeConversation.assigned_staff_id || ""}
-                onChange={(e) => handleAssignChat(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-200 rounded-lg px-2 py-1.5 text-sm text-gray-700 outline-none focus:ring-2 focus:ring-navy-700"
-              >
-                <option value="">Unassigned</option>
-                {staffList.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.role ? `(${s.role})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
-
-        <div className="flex-1 overflow-y-auto min-h-0 p-4">
-          <h4 className="font-semibold text-gray-700 mb-3 flex items-center">
-            <FiUsers className="mr-2" /> Participants
-          </h4>
-          <div className="space-y-3">
-            {activeConversation.participants?.map((p, index) => {
-              const isOnline = onlineUsers.has(String(p.staff_id));
-              const isCurrentUserParticipant = p.staff_id === currentUser.id;
-              const pPhoto = getAvatarUrl(p.photo);
-
-              return (
-                <div key={index} className="flex items-center">
-                  <div className="relative mr-3 flex-shrink-0">
-                    {pPhoto ? (
-                       <img src={pPhoto} alt={p.name} className="w-10 h-10 rounded-full object-cover border border-gray-200" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
-                    ) : null}
-                    
-                    <div className={`w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-xs text-gray-600 ${pPhoto ? 'hidden' : ''}`}>
-                      {p.name?.[0] || '?'}
-                    </div>
-                    
-                    {isOnline && (
-                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white"></span>
-                    )}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-gray-700 font-medium">
-                      {p.name} {isCurrentUserParticipant && '(You)'}
-                    </p>
-                    <p className="text-xs text-gray-500">{p.role || 'Member'} {p.centre_name && `• ${p.centre_name}`}</p>
-                  </div>
-                  {isOnline && (
-                    <span className="text-xs text-green-600">● Online</span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {activeConversation.context_type === 'service_entry' && (
-            <>
-              <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-                <FiBriefcase className="mr-2" /> Service Details
-              </h4>
-              
-              <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 mb-4">
-                <div className="mb-3 border-b border-gray-200 pb-3">
-                  <p className="text-sm font-bold text-gray-900 truncate" title={activeConversation.context_name}>
-                    {activeConversation.context_name || 'Service Request'}
-                  </p>
-                  {activeConversation.context_identifier && (
-                    <p className="text-xs text-navy-700 mt-1 font-mono font-medium">
-                      App #: {activeConversation.context_identifier}
-                    </p>
-                  )}
-                </div>
-
-                {loadingServiceDetails ? (
-                  <div className="animate-pulse space-y-2 py-2">
-                    <div className="h-3 bg-gray-200 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-200 rounded w-1/2"></div>
-                    <div className="h-3 bg-gray-200 rounded w-5/6"></div>
-                  </div>
-                ) : serviceDetails ? (
-                  <div className="space-y-3 text-xs">
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Service Type</p>
-                        <p className="font-medium text-gray-800">{serviceDetails.category_name || serviceDetails.service_name || 'N/A'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Subcategory</p>
-                        <p className="font-medium text-gray-800">{serviceDetails.subcategory_name || 'N/A'}</p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Status</p>
-                        <span className={`inline-block px-2 py-0.5 rounded font-medium text-[10px] uppercase tracking-wider ${
-                          serviceDetails.status === 'completed' ? 'bg-green-100 text-green-700' :
-                          serviceDetails.status === 'processing' ? 'bg-blue-100 text-blue-700' :
-                          'bg-yellow-100 text-yellow-700'
-                        }`}>
-                          {serviceDetails.status?.replace('-', ' ') || 'Pending'}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Current Step</p>
-                        <p className="font-medium text-navy-700 truncate" title={serviceDetails.current_step}>
-                          {serviceDetails.current_step || 'Initial Phase'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Priority</p>
-                        <p className={`font-medium ${
-                          serviceDetails.priority === 'High' ? 'text-red-600' :
-                          serviceDetails.priority === 'Medium' ? 'text-yellow-600' :
-                          'text-gray-800'
-                        }`}>
-                          {serviceDetails.priority || 'Normal'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Avg Time</p>
-                        <p className="font-medium text-gray-800 flex items-center gap-1">
-                          <FiClock size={10}/> {serviceDetails.average_time || 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Expiry Date</p>
-                        <p className="font-medium text-gray-800">
-                          {serviceDetails.expiry_date ? new Date(serviceDetails.expiry_date).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-500 mb-0.5">Last Updated</p>
-                        <p className="font-medium text-gray-800">
-                          {serviceDetails.updated_at ? new Date(serviceDetails.updated_at).toLocaleDateString() : 'N/A'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 border-t border-gray-200">
-                      <p className="text-gray-500 mb-0.5">Assigned To</p>
-                      <p className="font-medium text-gray-800 flex items-center gap-1">
-                        <FiUser size={12}/> {serviceDetails.assigned_staff_name || serviceDetails.staff_name || 'Unassigned'}
-                      </p>
-                    </div>
-
-                    {serviceDetails.notes && (
-                      <div className="pt-2 border-t border-gray-200">
-                        <p className="text-gray-500 mb-0.5">Notes</p>
-                        <p className="font-medium text-gray-700 italic">
-                          "{serviceDetails.notes}"
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="text-xs text-center text-gray-500 py-2">
-                    Unable to load service details.
-                  </div>
-                )}
-                
-                <button
-                  onClick={() => navigate(`/dashboard/staff/track_service/${activeConversation.context_id}`)}
-                  className="w-full mt-4 py-2 bg-navy-700 hover:bg-navy-800 text-white rounded-lg font-medium shadow-sm transition-colors flex items-center justify-center gap-2"
-                >
-                  <FiMapPin size={16} /> Open Tracking
-                </button>
-              </div>
-            </>
-          )}
-
-          <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-            <FiFile className="mr-2" /> Shared Files
-          </h4>
-          <div className="space-y-2">
-            {messages[activeConversation.id]?.filter(m => m.isFile && !m.isOptimistic).slice(0, 5).map(file => (
-              <motion.div
-                key={file.id}
-                whileHover={{ x: 5 }}
-                className="flex items-center p-3 hover:bg-gray-50 rounded-lg cursor-pointer transition"
-                onClick={() => {
-                  if (file.fileUrl) {
-                    const fullUrl = file.fileUrl.startsWith('http') ? file.fileUrl : `${API_BASE_URL}${file.fileUrl}`;
-                    window.open(fullUrl, '_blank');
-                  }
-                }}
-              >
-                <div className="bg-gray-100 p-2 rounded-lg mr-3">
-                  {file.messageType === 'image' ? (
-                    <FiImage className="text-gray-500" size={20} />
-                  ) : (
-                    <FiFile className="text-gray-500" size={20} />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-gray-700 font-medium truncate">{file.fileName || 'File'}</p>
-                  <p className="text-xs text-gray-500">
-                    {file.fileSize ? `${(file.fileSize / 1024).toFixed(1)} KB` : ''}
-                  </p>
-                </div>
-                <FiDownload className="text-gray-400" size={16} />
-              </motion.div>
-            ))}
-            {(!messages[activeConversation.id]?.filter(m => m.isFile && !m.isOptimistic).length) && (
-              <p className="text-sm text-gray-500 text-center py-4">No files shared yet</p>
-            )}
-          </div>
-
-          {/* 🔥 Notes Section */}
-          {activeConversation.channel !== 'whatsapp' && (
-            <>
-              <div className="flex justify-between items-center mb-3 mt-6">
-                <h4 className="font-semibold text-gray-700 flex items-center">
-                  <FiStar className="mr-2 text-yellow-500" /> Notes
-                </h4>
-                <button 
-                  onClick={() => setIsQuickNoteModalOpen(true)} 
-                  className="text-xs bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border border-yellow-200 px-2 py-1 rounded transition shadow-sm font-medium"
-                >
-                  + Add Note
-                </button>
-              </div>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
-                 {conversationNotes.map(note => (
-                   <div key={note.id} className="bg-[#fffdf2] border border-yellow-100 p-3 rounded-xl hover:shadow-sm transition">
-                      <p className="font-semibold text-sm text-yellow-900 truncate">{note.title || 'Note'}</p>
-                      <p className="text-xs text-yellow-800 mt-1 whitespace-pre-wrap">{note.content}</p>
-                      {note.origin_message_id && (
-                        <span className="text-[10px] text-yellow-600 mt-2 flex items-center gap-1 font-medium bg-yellow-100/50 inline-block px-1.5 py-0.5 rounded">
-                           <FiMessageSquare size={10} /> Converted from message
-                        </span>
-                      )}
-                   </div>
-                 ))}
-                 {conversationNotes.length === 0 && (
-                   <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
-                     <FiStar className="mx-auto text-gray-300 text-2xl mb-2" />
-                     <p className="text-xs text-gray-500 font-medium">No notes attached yet</p>
-                   </div>
-                 )}
-              </div>
-            </>
-          )}
-
-          {/* Tasks Section (Works for BOTH Service & Normal Chats) */}
-          {activeConversation.channel !== 'whatsapp' && (
-            <>
-              <h4 className="font-semibold text-gray-700 mb-3 mt-6 flex items-center">
-                <FiCheckSquare className="mr-2" /> Tasks
-              </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto pr-2 chat-scroll pb-4">
-                {(() => {
-                  // 1. Gather the relevant tasks
-                  let relevantTasks = [];
-                  
-                  if (activeConversation.context_type === 'service_entry') {
-                    // Service Chats: Get all tasks linked to this service entry
-                    relevantTasks = tasks.filter(t => String(t.related_service_entry_id) === String(activeConversation.context_id));
-                  } else {
-                    // Normal Chats: Extract tasks that were shared as messages in this specific chat!
-                    const uniqueTaskIds = new Set();
-                    const chatMessages = messages[activeConversation.id] || [];
-                    const taskMessages = chatMessages.filter(m => m.messageType === 'task' && !m.isDeleted);
-                    
-                    taskMessages.forEach(msg => {
-                      // Grab the live task data attached to the message, or fallback to the master task list
-                      const taskObj = msg.live_task_data || tasks.find(t => String(t.id) === String(msg.text));
-                      if (taskObj && !uniqueTaskIds.has(String(taskObj.id))) {
-                        uniqueTaskIds.add(String(taskObj.id));
-                        relevantTasks.push(taskObj);
-                      }
-                    });
-                  }
-
-                  // 2. Handle empty state
-                  if (relevantTasks.length === 0) {
-                    return (
-                      <div className="text-center py-4 bg-gray-50 rounded-xl border border-gray-100">
-                        <FiCheckSquare className="mx-auto text-gray-300 text-2xl mb-2" />
-                        <p className="text-xs text-gray-500 font-medium">No tasks in this conversation</p>
-                      </div>
-                    );
-                  }
-
-                  // 3. Render the tasks elegantly
-                  return relevantTasks.map(task => (
-                    <div key={task.id} className="bg-white p-3 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start">
-                        <div className="flex-1 min-w-0 pr-2">
-                          <p className={`font-semibold text-sm truncate ${task.status === 'completed' ? 'line-through text-gray-400' : 'text-gray-800'}`} title={task.title}>
-                            {task.title}
-                          </p>
-                          {task.description && (
-                            <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={task.description}>
-                              {task.description}
-                            </p>
-                          )}
-                          
-                          {/* Badges Row */}
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {task.assigned_to_name && (
-                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
-                                <FiUser size={10}/> {task.assigned_to_name}
-                              </span>
-                            )}
-                            {task.due_date && (
-                              <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1">
-                                <FiCalendar size={10}/> {new Date(task.due_date).toLocaleDateString('en-IN')}
-                              </span>
-                            )}
-                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              task.priority === 'high' ? 'bg-red-50 text-red-600 border border-red-100' :
-                              task.priority === 'medium' ? 'bg-yellow-50 text-yellow-600 border border-yellow-100' :
-                              'bg-green-50 text-green-600 border border-green-100'
-                            }`}>
-                              {task.priority || 'Normal'}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Completion Checkmark */}
-                        {task.status !== 'completed' ? (
-                          <button
-                            onClick={() => {
-                              // Dynamically trigger the correct API handler depending on the task type
-                              if (task.related_service_entry_id) {
-                                handleServiceTaskStatusUpdate(task.id, 'completed');
-                              } else {
-                                handleNormalTaskStatusUpdate(task.id, task.status);
-                              }
-                            }}
-                            className="shrink-0 p-1.5 bg-green-50 hover:bg-green-100 text-green-600 rounded-lg transition-colors border border-green-200"
-                            title="Mark Complete"
-                          >
-                            <FiCheck size={14} />
-                          </button>
-                        ) : (
-                          <div className="shrink-0 p-1.5 bg-gray-50 text-gray-400 rounded-lg border border-gray-100" title="Completed">
-                            <FiCheck size={14} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ));
-                })()}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    );
+  // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
+  const handleOpenDetails = () => {
+    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+    if (isWide) setIsContactPanelOpen(prev => !prev);
+    else setIsDetailsDrawerOpen(true);
   };
+
+  const handleCompleteTaskFromPanel = (task) => {
+    if (task.related_service_entry_id) handleServiceTaskStatusUpdate(task.id, 'completed');
+    else handleNormalTaskStatusUpdate(task.id, task.status);
+  };
+
+  const renderDetails = (onClose) => (
+    <ConversationDetails
+      conversation={activeConversation}
+      currentUser={currentUser}
+      onlineUsers={onlineUsers}
+      staffList={staffList}
+      onAssign={handleAssignChat}
+      serviceDetails={serviceDetails}
+      loadingServiceDetails={loadingServiceDetails}
+      serviceDetailsError={serviceDetailsError}
+      messages={activeConversation ? (messages[activeConversation.id] || []) : []}
+      notes={conversationNotes}
+      onAddNote={() => setIsQuickNoteModalOpen(true)}
+      tasks={tasks}
+      onCompleteTask={handleCompleteTaskFromPanel}
+      onOpenTracking={(id) => navigate(`/dashboard/staff/track_service/${id}`)}
+      socketConnected={socketConnected}
+      onClose={onClose}
+    />
+  );
 
   // 🔥 Save Quick Note Logic
   const handleCreateQuickNote = async () => {
@@ -3289,21 +2729,6 @@ const renderTasksView = () => {
     );
   };
 
-  const renderNavigationSidebar = () => (
-    <div className="hidden md:flex flex-col items-center py-4 w-16 bg-white border-r border-gray-200 h-full flex-shrink-0">
-      <nav className="flex-1">
-        <ul className="space-y-6">
-          <li><button onClick={() => setActiveView("chats")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "chats" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition relative`} title="Chats"><FiMessageSquare size={20} />{conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0) > 0 && (<span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">{conversations.reduce((acc, conv) => acc + (conv.unread || 0), 0)}</span>)}</button></li>
-          <li><button onClick={() => setActiveView("activity")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "activity" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Activity"><FiActivity size={20} /></button></li>
-          <li><button onClick={() => setActiveView("calendar")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "calendar" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Calendar"><FiCalendar size={20} /></button></li>
-          <li><button onClick={() => setActiveView("files")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "files" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Files"><FiGrid size={20} /></button></li>
-          <li><button onClick={() => setActiveView("tasks")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "tasks" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Tasks"><FiCheckSquare size={20} /></button></li>
-          <li><button onClick={() => setActiveView("schedules")} className={`p-3 rounded-lg flex items-center justify-center ${activeView === "schedules" ? "bg-navy-700 text-white" : "hover:bg-gray-100 text-gray-600"} transition`} title="Schedules"><FiClock size={20} /></button></li>
-        </ul>
-      </nav>
-    </div>
-  );
-
   const renderPlaceholderView = (title) => (
     <div className="flex flex-col items-center justify-center p-6 text-center h-full">
       <div className="bg-gray-200 border-2 border-dashed rounded-xl w-16 h-16 flex items-center justify-center mb-6">
@@ -3322,7 +2747,11 @@ const renderTasksView = () => {
   // ============== MAIN RETURN ==============
 
   return (
-    <div className="flex h-screen bg-white overflow-hidden w-full">
+    <div
+      ref={messengerRootRef}
+      style={{ height: messengerHeight ? `${messengerHeight}px` : "100dvh" }}
+      className="flex flex-col md:flex-row w-full overflow-hidden bg-slate-50"
+    >
       <AnimatePresence mode="wait">
         {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
@@ -3332,66 +2761,103 @@ const renderTasksView = () => {
       {renderEventModal()}
       {renderQuickNoteModal()}
 
-      {apiError && (<div className="fixed top-0 left-0 right-0 bg-red-500 text-white p-2 text-center z-50">{apiError}<button onClick={() => setApiError(null)} className="ml-4 px-2 py-1 bg-white text-red-500 rounded hover:bg-red-100 transition">Dismiss</button></div>)}
+      {apiError && (
+        <div className="fixed top-3 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 rounded-xl bg-rose-600 text-white text-sm px-4 py-2 shadow-lg">
+          {apiError}
+          <button onClick={() => setApiError(null)} className="text-xs font-medium underline">Dismiss</button>
+        </div>
+      )}
 
+      {/* Left rail (desktop) + bottom tab bar (mobile, hidden while a chat is open) */}
+      <MessengerNav
+        activeView={activeView}
+        onChange={setActiveView}
+        unreadTotal={unreadTotal}
+        hideMobileBar={showChatOnMobile}
+      />
+
+      <main className="flex-1 min-h-0 min-w-0 flex">
+        {activeView === "chats" ? (
+          <>
+            {/* Conversation list: full screen on mobile until a chat is opened */}
+            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[290px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
+              <ConversationList
+                conversations={conversations}
+                activeConversationId={activeConversation?.id}
+                currentUser={currentUser}
+                onlineUsers={onlineUsers}
+                typingUsers={typingUsers}
+                onSelect={setActiveConversation}
+                onNewChat={() => setIsNewChatModalOpen(true)}
+              />
+            </aside>
+
+            {/* Chat window */}
+            <section className={`${showChatOnMobile ? "flex" : "hidden"} md:flex flex-1 min-w-0 min-h-0 flex-col`}>
+              <Chat
+                activeConversation={activeConversation}
+                messages={messages}
+                currentUser={currentUser}
+                loadingChat={loadingChat}
+                typingUsers={typingUsers}
+                onSendMessage={handleSendMessage}
+                onDeleteMessage={handleDeleteMessage}
+                onOpenTaskModal={openTaskModal}
+                onOpenNewChatModal={() => setIsNewChatModalOpen(true)}
+                onBack={() => setActiveConversation(null)}
+                onlineUsers={onlineUsers}
+                serviceEntryId={activeConversation?.context_type === 'service_entry' ? activeConversation.context_id : null}
+                serviceInfo={{ tasks: tasks }}
+                allTasks={tasks}
+                onTaskStatusUpdate={handleServiceTaskStatusUpdate}
+                onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
+                onDeleteConversation={handleDeleteConversation}
+                onOpenDetails={handleOpenDetails}
+                isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
+              />
+            </section>
+
+            {/* Details column (wide screens only) */}
+            {activeConversation && isContactPanelOpen && (
+              <aside className="hidden lg:flex w-[300px] 2xl:w-[360px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+                {renderDetails(() => setIsContactPanelOpen(false))}
+              </aside>
+            )}
+          </>
+        ) : (
+          <div className="flex-1 min-w-0 min-h-0 overflow-y-auto">
+            {activeView === "activity" ? (
+              <ActivityPanel token={token} userRole={currentUser.role} onOpenTasks={() => setActiveView("tasks")} />
+            ) : activeView === "calendar" ? (
+              renderCalendarView()
+            ) : activeView === "files" ? (
+              <FilesView user={currentUser} />
+            ) : activeView === "tasks" ? (
+              renderTasksView()
+            ) : activeView === "schedules" ? (
+              renderPlaceholderView("Schedules")
+            ) : (
+              renderPlaceholderView("Chat")
+            )}
+          </div>
+        )}
+      </main>
+
+      {/* Details panel below 1024px: slides over the right edge, no backdrop, chat stays usable */}
       <AnimatePresence>
-        {isMobileMenuOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-gray-800/50 z-40 backdrop-blur-sm md:hidden" onClick={() => setIsMobileMenuOpen(false)}>
-            <motion.div initial={{ x: "-100%" }} animate={{ x: 0 }} exit={{ x: "-100%" }} className="bg-white w-4/5 h-full shadow-xl" onClick={e => e.stopPropagation()}>
-              <div className="flex justify-between p-4 border-b border-gray-200"><h2 className="text-gray-800 font-bold">Messages</h2><FiX onClick={() => setIsMobileMenuOpen(false)} className="text-gray-500 cursor-pointer" size={24} /></div>
-              {renderConversationList()}
-            </motion.div>
+        {activeView === "chats" && activeConversation && isDetailsDrawerOpen && (
+          <motion.div
+            key="details-drawer"
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="lg:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
+          >
+            {renderDetails(() => setIsDetailsDrawerOpen(false))}
           </motion.div>
         )}
       </AnimatePresence>
-
-      <div className="md:hidden fixed top-0 left-0 right-0 h-16 bg-navy-700 text-white z-30 flex items-center px-4 shadow-lg">
-        <button onClick={() => setIsMobileMenuOpen(true)} className="p-2 text-white"><FiMenu size={24} /></button>
-        <h2 className="text-lg font-bold ml-4">{activeView === "chats" ? "Messages" : activeView === "tasks" ? "Tasks" : activeView === "calendar" ? "Calendar" : activeView === "files" ? "Files" : activeView === "activity" ? "Activity" : "Schedules"}</h2>
-        <div className="ml-auto flex gap-3"><FiBell />{activeView === "chats" && (<FiPlus onClick={() => setIsNewChatModalOpen(true)} />)}</div>
-      </div>
-
-      <div className="flex flex-1 min-h-0 w-full">
-        <div className="hidden md:block flex-shrink-0">{renderNavigationSidebar()}</div>
-
-        {activeView === "chats" && (<div className="hidden md:flex md:w-1/3 lg:w-1/4 h-full flex-col overflow-hidden border-r border-gray-200 flex-shrink-0">{renderConversationList()}</div>)}
-
-        <div className={`flex-1 min-h-0 h-full flex flex-col overflow-hidden bg-white ${activeView === "chats" && activeConversation && isContactPanelOpen ? 'lg:w-1/2' : 'lg:w-3/4'}`}>
-          <div className="md:hidden flex-none h-16 w-full"></div>
-          <div className="flex-1 flex flex-col overflow-hidden min-h-0 w-full">
-            {activeView === "chats" ? (
-              <div className="flex h-[calc(120vh-220px)]">
-                <Chat
-                  activeConversation={activeConversation}
-                  messages={messages}
-                  currentUser={currentUser}
-                  loadingChat={loadingChat}
-                  typingUsers={typingUsers}
-                  onSendMessage={handleSendMessage}
-                  onDeleteMessage={handleDeleteMessage}
-                  onOpenTaskModal={openTaskModal}
-                  onOpenNewChatModal={() => setIsNewChatModalOpen(true)}
-                  onBack={() => setActiveConversation(null)}
-                  onlineUsers={onlineUsers}
-                  serviceEntryId={activeConversation?.context_type === 'service_entry' ? activeConversation.context_id : null}
-                  serviceInfo={{ tasks: tasks }}
-                  allTasks={tasks}
-                  onTaskStatusUpdate={handleServiceTaskStatusUpdate}
-                  onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
-                  onDeleteConversation={handleDeleteConversation}
-                />
-              </div>
-            ) : activeView === "activity" ? (<div className="h-full overflow-y-auto"><ActivityPanel token={token} userRole={currentUser.role} /></div>) : activeView === "calendar" ? (<div className="h-full overflow-y-auto">{renderCalendarView()}</div>) : activeView === "files" ? (<div className="h-full overflow-y-auto"><FilesView user={currentUser} /></div>) : activeView === "tasks" ? (<div className="h-full overflow-y-auto">{renderTasksView()}</div>) : activeView === "schedules" ? (<div className="h-full overflow-y-auto">{renderPlaceholderView("Schedules")}</div>) : (<div className="h-full overflow-y-auto">{renderPlaceholderView("Chat")}</div>)}
-          </div>
-        </div>
-
-        {activeView === "chats" && activeConversation && (
-          <>
-            <button onClick={() => setIsContactPanelOpen(!isContactPanelOpen)} className={`hidden lg:flex absolute top-1/2 -translate-y-1/2 z-20 w-6 h-24 bg-gray-100 hover:bg-gray-200 rounded-l-lg items-center justify-center transition-all duration-300 cursor-pointer ${isContactPanelOpen ? 'right-[25%]' : 'right-0'}`} style={{ transform: 'translateY(-50%)', marginRight: isContactPanelOpen ? '-12px' : '0' }}><FiChevronRight className={`text-gray-600 transition-transform ${isContactPanelOpen ? '' : 'rotate-180'}`} /></button>
-            <div className={`hidden lg:flex ${isContactPanelOpen ? 'lg:w-1/4' : 'w-0'} h-full flex-col overflow-hidden border-l border-gray-200 flex-shrink-0 transition-all duration-300 relative`}>{renderContactPanel()}</div>
-          </>
-        )}
-      </div>
     </div>
   );
 };
