@@ -115,28 +115,37 @@ async function addStaffToConversation(conversationId, staffId) {
 // Check if user has permission for service action
 async function canAccessService(serviceEntryId, userId, userRole) {
   if (userRole === 'superadmin') return true;
+
+  // 1. Anyone (staff OR admin) who is the owner or an added participant can access
+  const memberRes = await pool.query(
+    `SELECT 1
+       FROM service_entries se
+      WHERE se.id = $1
+        AND (
+          se.staff_id = $2
+          OR EXISTS (
+            SELECT 1 FROM service_participants sp
+             WHERE sp.service_entry_id = se.id AND sp.staff_id = $2
+          )
+        )`,
+    [serviceEntryId, userId]
+  );
+  if (memberRes.rows.length) return true;
+
+  // 2. Admins can access every service belonging to their own centre
   if (userRole === 'admin') {
     const centreRes = await pool.query(
-      `SELECT staff.centre_id
-       FROM service_entries se
-       JOIN staff ON se.staff_id = staff.id
-       WHERE se.id = $1`,
-      [serviceEntryId]
-    );
-    if (centreRes.rows.length && centreRes.rows[0].centre_id === userId) return true;
-  }
-  if (userRole === 'staff') {
-    const partRes = await pool.query(
-      `SELECT 1 FROM service_participants WHERE service_entry_id = $1 AND staff_id = $2`,
+      `SELECT 1
+         FROM service_entries se
+         JOIN staff owner ON se.staff_id = owner.id
+         JOIN staff me    ON me.id = $2
+        WHERE se.id = $1
+          AND owner.centre_id = me.centre_id`,
       [serviceEntryId, userId]
     );
-    if (partRes.rows.length) return true;
-    const assignRes = await pool.query(
-      `SELECT 1 FROM service_entries WHERE id = $1 AND staff_id = $2`,
-      [serviceEntryId, userId]
-    );
-    if (assignRes.rows.length) return true;
+    if (centreRes.rows.length) return true;
   }
+
   return false;
 }
 
