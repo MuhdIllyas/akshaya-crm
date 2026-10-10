@@ -45,6 +45,18 @@ const getAvatarUrl = (photoPath) => {
   return `${safeBase}${safePath}`;
 };
 
+// Stable colour per sender (WhatsApp-style group names)
+const SENDER_NAME_COLORS = [
+  'text-rose-600', 'text-emerald-600', 'text-sky-600', 'text-amber-600',
+  'text-purple-600', 'text-teal-600', 'text-pink-600', 'text-indigo-600',
+];
+const getSenderNameColor = (id) => {
+  const str = String(id ?? '');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
+  return SENDER_NAME_COLORS[Math.abs(hash) % SENDER_NAME_COLORS.length];
+};
+
 // Helper: check if last customer message is within 24 hours
 const isWithin24Hours = (lastMessageTime) => {
   if (!lastMessageTime) return false;
@@ -878,6 +890,15 @@ const Chat = ({
       }
   }
 
+  // Name/photo lookup by staff id (socket messages sometimes arrive without sender_name)
+  const participantNames = {};
+  const participantPhotos = {};
+  (activeConversation.participants || []).forEach(p => {
+    participantNames[String(p.staff_id)] = p.name;
+    if (p.photo) participantPhotos[String(p.photo ? p.staff_id : '')] = getAvatarUrl(p.photo);
+  });
+  const showSenderNames = isFunctionallyGroup && !isWhatsApp;
+
   return (
     <div className="flex flex-col w-full bg-white h-full min-h-0">
       {/* Fixed Header */}
@@ -1034,7 +1055,7 @@ const Chat = ({
         ref={messagesContainerRef}
         className="flex-1 min-h-0 overflow-y-auto bg-gray-50 chat-scroll"
       >
-        <div className="px-4 py-6 space-y-4">
+        <div className="px-4 py-6">
           {loadingChat ? (
             <div className="flex justify-center py-8">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
@@ -1047,13 +1068,22 @@ const Chat = ({
                   : `msg-${msg.id}`;
                 const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
                 const isNewTaskMessage = msg.messageType === "task";
+                const prevMsg = currentMessages[index - 1];
+                const isFirstInRun =
+                  !prevMsg ||
+                  String(prevMsg.senderId) !== String(msg.senderId) ||
+                  prevMsg.isSystem ||
+                  prevMsg.messageType === 'task' ||
+                  prevMsg.sender_type !== msg.sender_type;
+                const senderLabel = participantNames[String(msg.senderId)] || msg.sender || 'Unknown';
+                const senderPhoto = msg.sender_type !== 'customer' ? participantPhotos[String(msg.senderId)] : null;
                 return (
                   <motion.div
                     key={messageKey}
                     id={`msg-${msg.id}`}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group`}
+                    className={`flex ${msg.isCurrentUser ? "justify-end" : "justify-start"} group ${isFirstInRun ? 'mt-4' : 'mt-0.5'}`}
                   >
                   {isTaskMessage ? (
                     // ✅ EXISTING SERVICE TASK (DO NOT TOUCH)
@@ -1090,15 +1120,23 @@ const Chat = ({
                     ) : (
                       <div className={`flex max-w-xs lg:max-w-md ${!msg.isCurrentUser ? "flex-row" : "flex-row-reverse"}`}>
                         {!msg.isCurrentUser && (
-                          <div className="mr-2 flex-shrink-0 relative">
-                            <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs">
-                              {msg.sender_type === 'customer' ? (
-                                <FiUser size={14} className="text-gray-500" />
+                          <div className="mr-2 flex-shrink-0 relative w-8 self-start">
+                            {isFirstInRun && (
+                              senderPhoto ? (
+                                <img
+                                  src={senderPhoto}
+                                  alt={senderLabel}
+                                  className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                />
                               ) : (
-                                msg.sender?.[0] || '?'
-                              )}
-                            </div>
-                            {!isWhatsApp && isUserOnline(msg.senderId) && (
+                                <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-semibold text-gray-600">
+                                  {msg.sender_type === 'customer'
+                                    ? <FiUser size={14} className="text-gray-500" />
+                                    : senderLabel.charAt(0).toUpperCase()}
+                                </div>
+                              )
+                            )}
+                            {isFirstInRun && !isWhatsApp && isUserOnline(msg.senderId) && (
                               <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-green-500 rounded-full border-2 border-white" />
                             )}
                           </div>
@@ -1109,6 +1147,12 @@ const Chat = ({
                               : "bg-white text-gray-700 rounded-bl-none shadow-sm border border-gray-200"
                             } ${msg.isOptimistic ? 'opacity-70' : ''}`}
                         >
+                          {showSenderNames && !msg.isCurrentUser && !msg.isSystem && isFirstInRun && (
+                            <p className={`text-xs font-semibold mb-0.5 ${getSenderNameColor(msg.senderId)}`}>
+                              {senderLabel}
+                            </p>
+                          )}
+
                           {msg.isDeleted ? (
                             <p className="text-sm italic text-gray-400">This message was deleted</p>
                           ) : msg.isFile ? (

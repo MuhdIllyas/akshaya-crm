@@ -61,6 +61,22 @@ import Chat from '@/components/Chat';
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 
+// ============== CHAT CATEGORY TABS ==============
+const CHAT_TABS = [
+  { id: 'all',      label: 'All' },
+  { id: 'internal', label: 'Internal', icon: FiUsers },
+  { id: 'whatsapp', label: 'WhatsApp', icon: FiSmartphone },
+  { id: 'service',  label: 'Service',  icon: FiBriefcase },
+  { id: 'customer', label: 'Customer', icon: FiUser },
+];
+
+const getConversationCategory = (c) => {
+  if (c.channel === 'whatsapp') return 'whatsapp';
+  if (c.context_type === 'service_entry') return 'service';
+  if (c.context_type === 'customer') return 'customer';
+  return 'internal';
+};
+
 // ============== NEW CHAT MODAL (Grouped by Centre) ==============
 const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -311,6 +327,15 @@ const MessengerPage = ({ user }) => {
   const [activeView, setActiveView] = useState("chats");
   const [activeConversation, setActiveConversation] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  const [chatTab, setChatTab] = useState(() => {
+    try { return localStorage.getItem('messenger_chat_tab') || 'all'; } catch { return 'all'; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem('messenger_chat_tab', chatTab); } catch {}
+  }, [chatTab]);
+
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [isContactPanelOpen, setIsContactPanelOpen] = useState(true);
@@ -1884,27 +1909,43 @@ const MessengerPage = ({ user }) => {
 
   // ============== FILTERED CONVERSATIONS ==============
 
-  const filteredConversations = conversations.filter(
-    (conv) => {
-      let displayName = conv.name;
-      if (!displayName && !conv.is_group) {
-        if (conv.channel === 'whatsapp') {
-          displayName = conv.context_name || conv.context_identifier || 'WhatsApp User';
-        } else if (conv.participants) {
-          const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
-          if (otherParticipants.length > 0) {
+  // Counts per tab (ignores search, so badges stay accurate)
+  const tabStats = conversations.reduce((acc, c) => {
+    const cat = getConversationCategory(c);
+    acc[cat] = acc[cat] || { count: 0, unread: 0 };
+    acc[cat].count += 1;
+    acc[cat].unread += c.unread || 0;
+    acc.all.count += 1;
+    acc.all.unread += c.unread || 0;
+    return acc;
+  }, { all: { count: 0, unread: 0 } });
+
+  // Show "All", any tab that has chats, and the currently selected tab
+  const visibleTabs = CHAT_TABS.filter(
+    t => t.id === 'all' || t.id === chatTab || (tabStats[t.id]?.count || 0) > 0
+  );
+
+  const filteredConversations = conversations.filter((conv) => {
+    if (chatTab !== 'all' && getConversationCategory(conv) !== chatTab) return false;
+
+    let displayName = conv.name;
+    if (!displayName && !conv.is_group) {
+      if (conv.channel === 'whatsapp') {
+        displayName = conv.context_name || conv.context_identifier || 'WhatsApp User';
+      } else if (conv.participants) {
+        const otherParticipants = conv.participants.filter(p => p.staff_id !== currentUser.id);
+        if (otherParticipants.length > 0) {
           displayName = otherParticipants.map(p => p.name).join(', ');
         }
-        }
       }
-      if (!displayName) displayName = 'Unknown Chat';
-
-      const lastMessageText = conv.last_message || conv.lastMessage || '';
-      const searchLower = searchQuery.toLowerCase();
-      return (displayName.toLowerCase().includes(searchLower)) ||
-        (lastMessageText && lastMessageText.toLowerCase().includes(searchLower));
     }
-  );
+    if (!displayName) displayName = 'Unknown Chat';
+
+    const lastMessageText = conv.last_message || conv.lastMessage || '';
+    const searchLower = searchQuery.toLowerCase();
+    return displayName.toLowerCase().includes(searchLower) ||
+      (lastMessageText && lastMessageText.toLowerCase().includes(searchLower));
+  });
 
   // ============== RENDER FUNCTIONS ==============
 
@@ -1944,11 +1985,42 @@ const MessengerPage = ({ user }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+
+        <div className="flex gap-1.5 mt-3 overflow-x-auto pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none' }}>
+          {visibleTabs.map(tab => {
+            const s = tabStats[tab.id] || { count: 0, unread: 0 };
+            const active = chatTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setChatTab(tab.id)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition ${
+                  active
+                    ? 'bg-navy-700 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {Icon && <Icon size={12} />}
+                {tab.label}
+                {s.unread > 0 && (
+                  <span
+                    className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold flex items-center justify-center ${
+                      active ? 'bg-white text-navy-700' : 'bg-navy-700 text-white'
+                    }`}
+                  >
+                    {s.unread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto min-h-0">
         <div className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-          Recent Chats
+          {chatTab === 'all' ? 'Recent Chats' : `${CHAT_TABS.find(t => t.id === chatTab)?.label} Chats`}
         </div>
         {filteredConversations.length > 0 ? (
           filteredConversations.map((c) => {
@@ -2073,7 +2145,13 @@ const MessengerPage = ({ user }) => {
         ) : (
           <div className="text-center py-8 px-4">
             <FiMessageSquare className="mx-auto text-gray-400 text-4xl mb-3" />
-            <p className="text-gray-500 mb-2">No conversations yet</p>
+            <p className="text-gray-500 mb-2">
+              {searchQuery
+                ? 'No chats match your search'
+                : chatTab === 'all'
+                  ? 'No conversations yet'
+                  : `No ${CHAT_TABS.find(t => t.id === chatTab)?.label} chats`}
+            </p>
             <button
               onClick={() => setIsNewChatModalOpen(true)}
               className="text-navy-700 font-medium hover:underline"
