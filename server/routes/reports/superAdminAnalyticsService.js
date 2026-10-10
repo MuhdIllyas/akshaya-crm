@@ -4,6 +4,9 @@ import pool from "../../db.js";
  * UTILS
  * Standardizes date filters for all SQL queries.
  */
+const IST_OFFSET = '+05:30';
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+
 function getDateContext(filters = {}) {
     const { timeframe = 'today', customStartDate, customEndDate } = filters;
     const now = new Date();
@@ -50,10 +53,16 @@ function getDateContext(filters = {}) {
             break;
         case 'custom':
             if (!customStartDate || !customEndDate) throw new Error("Missing custom dates");
-            startDate = new Date(customStartDate);
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(customEndDate);
-            endDate.setHours(23, 59, 59, 999);
+            if (YMD.test(customStartDate) && YMD.test(customEndDate)) {
+                // "YYYY-MM-DD" => IST day boundaries, whatever timezone the server runs in
+                startDate = new Date(`${customStartDate}T00:00:00.000${IST_OFFSET}`);
+                endDate = new Date(`${customEndDate}T23:59:59.999${IST_OFFSET}`);
+            } else {
+                startDate = new Date(customStartDate);
+                startDate.setHours(0, 0, 0, 0);
+                endDate = new Date(customEndDate);
+                endDate.setHours(23, 59, 59, 999);
+            }
             break;
         default:
             startDate.setHours(0, 0, 0, 0);
@@ -61,6 +70,34 @@ function getDateContext(filters = {}) {
     }
 
     return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+}
+
+/**
+ * COMPARISON WINDOW
+ * The dashboard sends the aligned previous window (compareStart / compareEnd, ISO instants).
+ * If they are missing or unusable we fall back to the period of equal elapsed length
+ * immediately before the selected one. It never overlaps the selected period.
+ */
+function getCompareContext(filters, dates) {
+    const start = new Date(dates.startDate);
+    const end = new Date(dates.endDate);
+    const parse = (v) => {
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+    };
+
+    let prevStart = filters.compareStart ? parse(filters.compareStart) : null;
+    let prevEnd = filters.compareEnd ? parse(filters.compareEnd) : null;
+
+    if (!prevStart || !prevEnd || prevStart >= prevEnd) {
+        const elapsed = Math.max(Math.min(end.getTime(), Date.now()) - start.getTime(), 0);
+        prevEnd = new Date(start.getTime() - 1);
+        prevStart = new Date(prevEnd.getTime() - elapsed);
+    }
+    if (prevEnd.getTime() >= start.getTime()) prevEnd = new Date(start.getTime() - 1);
+    if (prevStart.getTime() > prevEnd.getTime()) prevStart = new Date(prevEnd.getTime());
+
+    return { startDate: prevStart.toISOString(), endDate: prevEnd.toISOString() };
 }
 
 /**
@@ -73,6 +110,7 @@ export const getSuperAdminDashboard = async (filters = {}) => {
     }
 
     const dates = getDateContext(filters);
+    const compareDates = getCompareContext(filters, dates);
     // Optional centre filter: "all"/missing => whole network (null)
     const rawCentre = filters.centreId;
     const centreId = rawCentre && rawCentre !== 'all' && Number.isInteger(Number(rawCentre)) ? Number(rawCentre) : null;
@@ -92,6 +130,7 @@ export const getSuperAdminDashboard = async (filters = {}) => {
         if (modules.includes('health')) tasks.push(fetchHealthAnalytics(client, dates, centreId).then(r => data.health = r));
         if (modules.includes('activity')) tasks.push(fetchRecentActivities(client).then(r => data.activity = r));
         if (modules.includes('alerts')) tasks.push(fetchSystemAlerts(client, centreId).then(r => data.alerts = r));
+        if (modules.includes('comparison')) tasks.push(fetchPeriodComparison(client, compareDates, centreId).then(r => data.comparison = r));
 
         await Promise.all(tasks);
         return buildDashboard(data);
@@ -110,7 +149,8 @@ function buildDashboard(data) {
         executive: { 
             ...(data.stats && { stats: data.stats }), 
             ...(data.health && { health: data.health }),
-            ...(data.alerts && { alerts: data.alerts }) 
+            ...(data.alerts && { alerts: data.alerts }),
+            ...(data.comparison && { comparison: data.comparison })
         },
         finance: { 
             ...(data.financials && { financials: data.financials }), 
@@ -926,4 +966,53 @@ async function fetchSystemAlerts(client, centreId = null) {
     });
 
     return alerts;
+}
+
+/**
+ * PREVIOUS-PERIOD TOTALS (for like-for-like change figures)
+ * Uses exactly the same definitions as the current-period stats:
+ *   revenue        = completed services, total_charges
+ *   serviceCharges = completed services, service_charges
+ *   expenses       = approved / auto-approved, non-reversal
+ *   profit         = serviceCharges - expenses
+ */
+async function fetchPeriodComparison(client, compareDates, centreId = null) {
+    const { startDate, endDate } = compareDates;
+
+    const [servicesResult, expensesResult] = await Promise.all([
+        client.query(`
+            SELECT
+                COALESCE(SUM(se.total_charges), 0) as revenue,
+                COALESCE(SUM(se.service_charges), 0) as service_charges,
+                COUNT(se.id) as services
+            FROM service_entries se
+            LEFT JOIN staff st ON st.id = se.staff_id
+            WHERE se.status = 'completed'
+            AND se.created_at >= $1 AND se.created_at <= $2
+            AND ($3::int IS NULL OR st.centre_id = $3::int)
+        `, [startDate, endDate, centreId]),
+        client.query(`
+            SELECT COALESCE(SUM(amount), 0) as expenses
+            FROM expenses
+            WHERE status IN ('approved', 'auto_approved')
+            AND (is_reversal IS NULL OR is_reversal = FALSE)
+            AND expense_date >= $1 AND expense_date <= $2
+            AND ($3::int IS NULL OR centre_id = $3::int)
+        `, [startDate, endDate, centreId])
+    ]);
+
+    const revenue = parseFloat(servicesResult.rows[0].revenue) || 0;
+    const serviceCharges = parseFloat(servicesResult.rows[0].service_charges) || 0;
+    const expenses = parseFloat(expensesResult.rows[0].expenses) || 0;
+
+    return {
+        range: { startDate, endDate },
+        previous: {
+            revenue,
+            serviceCharges,
+            expenses,
+            profit: serviceCharges - expenses,
+            services: parseInt(servicesResult.rows[0].services, 10) || 0
+        }
+    };
 }

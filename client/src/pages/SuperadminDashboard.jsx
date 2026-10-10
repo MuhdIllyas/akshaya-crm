@@ -60,6 +60,58 @@ const getPeriodRange = (period) => {
   return { start: fmt(start), end: today };
 };
 
+// ==========================================
+// COMPARISON WINDOW (like-for-like)
+// ==========================================
+// Compares the selected period so far with the same elapsed time in the previous period,
+// e.g. on 10 Oct at 07:07, "This Month" is measured against 1 Sep to 10 Sep at 07:07.
+// Comparing against a full earlier window would understate the current period.
+const COMPARE_LABELS = {
+  today: "yesterday, same time",
+  week: "same days last week",
+  month: "same days last month",
+  "3months": "3 months earlier",
+  "6months": "6 months earlier",
+  year: "same days last year",
+};
+
+const getComparisonRange = (period) => {
+  const { start } = getPeriodRange(period);
+  const [y, m, d] = start.split("-").map(Number);
+  const istMidnight = (ymd) => new Date(`${ymd}T00:00:00+05:30`);
+  const ymd = (dt) => dt.toISOString().split("T")[0]; // dt is built with Date.UTC, so no timezone drift
+
+  let prevStart;
+  switch (period) {
+    case "today":   prevStart = new Date(Date.UTC(y, m - 1, d - 1)); break;
+    case "week":    prevStart = new Date(Date.UTC(y, m - 1, d - 7)); break;
+    case "3months": prevStart = new Date(Date.UTC(y, m - 1 - 3, 1)); break;
+    case "6months": prevStart = new Date(Date.UTC(y, m - 1 - 6, 1)); break;
+    case "year":    prevStart = new Date(Date.UTC(y - 1, 0, 1)); break;
+    case "month":
+    default:        prevStart = new Date(Date.UTC(y, m - 2, 1));
+  }
+
+  const curStartMs = istMidnight(start).getTime();
+  const prevStartMs = istMidnight(ymd(prevStart)).getTime();
+  const elapsed = Math.max(Date.now() - curStartMs, 0);
+  // never let the earlier window run into the current one (e.g. 31 Mar vs a 28-day February)
+  const prevEndMs = Math.min(prevStartMs + elapsed, curStartMs - 1);
+
+  return {
+    start: new Date(prevStartMs).toISOString(),
+    end: new Date(prevEndMs).toISOString(),
+    label: COMPARE_LABELS[period] || COMPARE_LABELS.month,
+  };
+};
+
+// % change vs the previous period. null when a percentage would mislead (no or negative baseline).
+const pctChange = (current, previous) => {
+  const c = Number(current), p = Number(previous);
+  if (!Number.isFinite(c) || !Number.isFinite(p) || p <= 0) return null;
+  return Math.round(((c - p) / p) * 100);
+};
+
 const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN")}`;
 
 const todayIST = () =>
@@ -165,17 +217,32 @@ const MiniStat = ({ label, value, hint }) => (
 );
 
 // KPI — label / hero number / context / sparkline
-const Kpi = ({ label, value, delta, note, context, spark, sparkColor, tone = "text-slate-900" }) => {
-  const v = Number(delta);
-  const hasDelta = Number.isFinite(v) && v !== 0;
+// "vs ₹1,98,000" with the comparison basis on its own line underneath
+const CompareNote = ({ value, label }) => (
+  <>
+    vs {value}
+    <span className="block">{label}</span>
+  </>
+);
+
+const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context, spark, sparkColor, tone = "text-slate-900" }) => {
+  const v = delta === null || delta === undefined ? NaN : Number(delta);
+  const hasDelta = Number.isFinite(v);
+  const isGood = goodWhen === "down" ? v < 0 : v > 0;
+  const badgeTone = v === 0 ? "bg-slate-100 text-slate-600" : isGood ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+  const shown = Math.abs(v) > 999 ? "999%+" : `${Math.abs(v)}%`;
   return (
     <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex items-start justify-between gap-2">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
         {hasDelta && (
-          <span className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${v > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-            {v > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
-            {Math.abs(v)}%
+          <span
+            title={v === 0 ? `Same as ${compareLabel || "the previous period"}` : `${shown} ${v > 0 ? "higher" : "lower"} than ${compareLabel || "the previous period"}`}
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}
+          >
+            {v > 0 && <FiArrowUp className="h-3 w-3" aria-hidden="true" />}
+            {v < 0 && <FiArrowDown className="h-3 w-3" aria-hidden="true" />}
+            {shown}
           </span>
         )}
       </div>
@@ -580,6 +647,7 @@ const SuperadminDashboard = () => {
   const [dashboard, setDashboard] = useState(null);
   const [revenueView, setRevenueView] = useState("revenue");
   const [period, setPeriod] = useState("month");
+  const [dataPeriod, setDataPeriod] = useState("month"); // period the loaded data was fetched for
 
   const [closingDate, setClosingDate] = useState("");
   const [closingData, setClosingData] = useState({ date: "", rows: [] });
@@ -621,15 +689,18 @@ const SuperadminDashboard = () => {
         if (!token) throw new Error("No token");
 
         const { start, end } = getPeriodRange(period);
+        const prevRange = getComparisonRange(period);
 
         const response = await axios.get(
           `${import.meta.env.VITE_API_URL}/api/analytics/superadmin/dashboard`,
           {
             params: {
-              modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights",
+              modules: "stats,financials,leaderboards,health,alerts,customers,staff,teams,wallets,insights,comparison",
               timeframe: "custom",
               customStartDate: start,
               customEndDate: end,
+              compareStart: prevRange.start,
+              compareEnd: prevRange.end,
               centreId: centreId === "all" ? undefined : centreId
             },
             headers: { Authorization: `Bearer ${token}` },
@@ -638,6 +709,7 @@ const SuperadminDashboard = () => {
         );
 
         setDashboard(response.data);
+        setDataPeriod(period);
         setLoading(false);
       } catch (err) {
         if (axios.isCancel(err)) return;
@@ -689,6 +761,7 @@ const SuperadminDashboard = () => {
 
   const { executive = {}, finance = {}, operations = {}, leaderboards = {} } = dashboard || {};
   const { stats = {}, health = {}, alerts = [], insights = [] } = executive;
+  const previous = executive.comparison?.previous || null;
   const { financials = {}, wallets = {} } = finance;
   const chartData = financials.charts || {};
   const revenueChartData = chartData[revenueView] || [];
@@ -699,7 +772,7 @@ const SuperadminDashboard = () => {
   const worst = centres.worst || {};
 
   const {
-    totalCentres, totalStaff, totalCustomers, customerGrowth, revenueGrowthPercent,
+    totalCentres, totalStaff, totalCustomers, customerGrowth,
     newCentresThisMonth, todayRevenue, todayServices, pendingServices, delayedServices,
     inProgressServices, admins, staffCount
   } = stats;
@@ -855,9 +928,10 @@ const SuperadminDashboard = () => {
         <Kpi
           label="Revenue"
           value={formatCurrency(monthlyRevenue)}
-          delta={revenueGrowthPercent}
+          delta={previous ? pctChange(monthlyRevenue, previous.revenue) : null}
+          compareLabel={COMPARE_LABELS[dataPeriod]}
           context={periodLabel}
-          note="this month vs last month"
+          note={previous ? <CompareNote value={formatCurrency(previous.revenue)} label={COMPARE_LABELS[dataPeriod]} /> : "Total billed"}
           spark={revSpark}
           sparkColor="#4f46e5"
         />
@@ -865,8 +939,10 @@ const SuperadminDashboard = () => {
           label="Profit"
           value={formatCurrency(netProfit)}
           tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
+          delta={previous ? pctChange(netProfit, previous.profit) : null}
+          compareLabel={COMPARE_LABELS[dataPeriod]}
           context={margin !== undefined ? `${margin}% margin` : "after expenses"}
-          note="Net of expenses"
+          note={previous ? <CompareNote value={formatCurrency(previous.profit)} label={COMPARE_LABELS[dataPeriod]} /> : "Net of expenses"}
           spark={profitSpark}
           sparkColor="#059669"
         />
