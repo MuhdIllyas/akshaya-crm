@@ -342,6 +342,32 @@ const MessengerPage = ({ user }) => {
   const [serviceDetails, setServiceDetails] = useState(null);
   const [serviceDetailsError, setServiceDetailsError] = useState(null);
   const [isDetailsDrawerOpen, setIsDetailsDrawerOpen] = useState(false);
+
+  // Fit the messenger exactly into the space left by the dashboard layout
+  // (its top offset plus any padding/margins below it), so nothing gets pushed off-screen.
+  const messengerRootRef = useRef(null);
+  const [messengerHeight, setMessengerHeight] = useState(null);
+  useEffect(() => {
+    const measure = () => {
+      const el = messengerRootRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      let below = 0;
+      for (let node = el.parentElement; node && node !== document.documentElement; node = node.parentElement) {
+        const cs = window.getComputedStyle(node);
+        below += (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.borderBottomWidth) || 0) + (parseFloat(cs.marginBottom) || 0);
+      }
+      const viewport = window.visualViewport?.height || window.innerHeight;
+      setMessengerHeight(Math.max(420, Math.floor(viewport - top - Math.min(below, 96))));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, []);
   const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
 
   const lastMessageIdsRef = useRef(new Set());
@@ -1905,7 +1931,7 @@ const MessengerPage = ({ user }) => {
 
   // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
   const handleOpenDetails = () => {
-    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1280px)").matches;
+    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1536px)").matches;
     if (isWide) setIsContactPanelOpen(prev => !prev);
     else setIsDetailsDrawerOpen(true);
   };
@@ -2716,7 +2742,11 @@ const renderTasksView = () => {
   // ============== MAIN RETURN ==============
 
   return (
-    <div className="flex flex-col md:flex-row h-[100dvh] w-full overflow-hidden bg-slate-50">
+    <div
+      ref={messengerRootRef}
+      style={{ height: messengerHeight ? `${messengerHeight}px` : "100dvh" }}
+      className="flex flex-col md:flex-row w-full overflow-hidden bg-slate-50"
+    >
       <AnimatePresence mode="wait">
         {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
@@ -2778,13 +2808,13 @@ const renderTasksView = () => {
                 onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
                 onDeleteConversation={handleDeleteConversation}
                 onOpenDetails={handleOpenDetails}
-                isDetailsOpen={isContactPanelOpen}
+                isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
               />
             </section>
 
             {/* Details column (wide screens only) */}
             {activeConversation && isContactPanelOpen && (
-              <aside className="hidden xl:flex w-[340px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+              <aside className="hidden 2xl:flex w-[360px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
                 {renderDetails(() => setIsContactPanelOpen(false))}
               </aside>
             )}
@@ -2816,7 +2846,7 @@ const renderTasksView = () => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="xl:hidden fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px]"
+            className="2xl:hidden fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px]"
             onClick={() => setIsDetailsDrawerOpen(false)}
           >
             <motion.div

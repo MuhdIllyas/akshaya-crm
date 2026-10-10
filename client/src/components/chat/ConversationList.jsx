@@ -127,7 +127,6 @@ const ConversationList = ({
           {visibleTabs.map((t) => {
             const s = tabStats[t.id] || { count: 0, unread: 0 };
             const active = tab === t.id;
-            const Icon = t.icon;
             return (
               <button
                 key={t.id}
@@ -138,7 +137,6 @@ const ConversationList = ({
                     : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"
                 }`}
               >
-                {Icon && <Icon size={12} />}
                 {t.label}
                 {s.unread > 0 && (
                   <span
@@ -156,7 +154,7 @@ const ConversationList = ({
       </div>
 
       {/* List */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2">
+      <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2" style={{ scrollbarWidth: "thin" }}>
         {filtered.length > 0 ? (
           filtered.map((c) => {
             const name = getConversationDisplayName(c, currentUser.id);

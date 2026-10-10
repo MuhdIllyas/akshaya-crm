@@ -6,8 +6,6 @@ import {
   FiMoreVertical,
   FiChevronLeft,
   FiPlus,
-  FiVideo as FiVideoCall,
-  FiPhoneCall,
   FiUserPlus,
   FiStar,
   FiInfo,
@@ -903,8 +901,6 @@ const Chat = ({
         </button>
 
         <div className="flex items-center gap-0.5 relative">
-          <HeaderButton title="Video call" className="hidden lg:flex"><FiVideoCall size={18} /></HeaderButton>
-          <HeaderButton title="Voice call" className="hidden lg:flex"><FiPhoneCall size={17} /></HeaderButton>
           {windowClosed && (
             <HeaderButton onClick={() => setShowTemplateModal(true)} title="Send template" className="bg-emerald-50 !text-emerald-700 hover:!bg-emerald-100">
               <FiMessageSquare size={17} />
@@ -967,6 +963,7 @@ const Chat = ({
       <div
         ref={messagesContainerRef}
         className="flex-1 min-h-0 overflow-y-auto bg-slate-50 chat-scroll"
+        style={{ scrollbarWidth: "thin" }}
         onClick={() => setSelectedMsgId(null)}
       >
         <div className="px-3 sm:px-6 py-4 max-w-4xl mx-auto">
@@ -1039,7 +1036,7 @@ const Chat = ({
                 const isImage = msg.messageType === "image" && msg.fileUrl && !msg.isDeleted;
                 body = (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} group`}>
-                    <div className={`flex items-end gap-2 max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+                    <div className={`relative flex items-end gap-2 max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
                       {/* Avatar (groups only, first message of a run) */}
                       {!isOwn && showSenderNames && (
                         <div className="w-8 shrink-0 self-start">
@@ -1127,7 +1124,7 @@ const Chat = ({
                       {/* Actions: hover on desktop, tap bubble on mobile */}
                       {!msg.isOptimistic && !msg.isDeleted && msg.messageType === "text" && (
                         <div
-                          className={`flex items-center gap-1 self-center transition-opacity ${
+                          className={`absolute top-1/2 -translate-y-1/2 z-10 flex items-center gap-1 transition-opacity ${isOwn ? "right-full mr-1.5" : "left-full ml-1.5"} ${
                             selected ? "opacity-100" : "opacity-0 pointer-events-none md:pointer-events-auto md:group-hover:opacity-100"
                           }`}
                         >

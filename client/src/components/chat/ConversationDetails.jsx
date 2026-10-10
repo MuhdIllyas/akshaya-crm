@@ -162,7 +162,7 @@ const ConversationDetails = ({
         )}
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto">
+      <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
         {/* Profile */}
         <div className="px-5 py-6 flex flex-col items-center text-center">
           <ChatAvatar
