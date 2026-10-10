@@ -123,7 +123,7 @@ const ConversationList = ({
           )}
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto -mx-1 px-1 pb-0.5" style={{ scrollbarWidth: "none" }}>
+        <div className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-0.5" style={{ scrollbarWidth: "none" }}>
           {visibleTabs.map((t) => {
             const s = tabStats[t.id] || { count: 0, unread: 0 };
             const active = tab === t.id;
@@ -131,7 +131,7 @@ const ConversationList = ({
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                className={`shrink-0 flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium transition ${
+                className={`shrink-0 flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium transition ${
                   active
                     ? "bg-navy-700 text-white"
                     : "bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50"

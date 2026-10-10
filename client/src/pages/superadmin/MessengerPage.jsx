@@ -316,7 +316,12 @@ const MessengerPage = ({ user }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
-  const [isContactPanelOpen, setIsContactPanelOpen] = useState(true);
+  const [isContactPanelOpen, setIsContactPanelOpen] = useState(() => {
+    try { return localStorage.getItem("messenger_details_open") !== "false"; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem("messenger_details_open", String(isContactPanelOpen)); } catch { /* storage unavailable */ }
+  }, [isContactPanelOpen]);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
 
@@ -1931,7 +1936,7 @@ const MessengerPage = ({ user }) => {
 
   // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
   const handleOpenDetails = () => {
-    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1536px)").matches;
+    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
     if (isWide) setIsContactPanelOpen(prev => !prev);
     else setIsDetailsDrawerOpen(true);
   };
@@ -2775,7 +2780,7 @@ const renderTasksView = () => {
         {activeView === "chats" ? (
           <>
             {/* Conversation list: full screen on mobile until a chat is opened */}
-            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-80 lg:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
+            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[290px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
               <ConversationList
                 conversations={conversations}
                 activeConversationId={activeConversation?.id}
@@ -2814,7 +2819,7 @@ const renderTasksView = () => {
 
             {/* Details column (wide screens only) */}
             {activeConversation && isContactPanelOpen && (
-              <aside className="hidden 2xl:flex w-[360px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+              <aside className="hidden lg:flex w-[300px] 2xl:w-[360px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
                 {renderDetails(() => setIsContactPanelOpen(false))}
               </aside>
             )}
@@ -2838,27 +2843,18 @@ const renderTasksView = () => {
         )}
       </main>
 
-      {/* Details drawer (phones, tablets, small laptops) */}
+      {/* Details panel below 1024px: slides over the right edge, no backdrop, chat stays usable */}
       <AnimatePresence>
         {activeView === "chats" && activeConversation && isDetailsDrawerOpen && (
           <motion.div
             key="details-drawer"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="2xl:hidden fixed inset-0 z-40 bg-slate-900/30 backdrop-blur-[2px]"
-            onClick={() => setIsDetailsDrawerOpen(false)}
+            initial={{ x: "100%" }}
+            animate={{ x: 0 }}
+            exit={{ x: "100%" }}
+            transition={{ type: "spring", damping: 30, stiffness: 300 }}
+            className="lg:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
           >
-            <motion.div
-              initial={{ x: "100%" }}
-              animate={{ x: 0 }}
-              exit={{ x: "100%" }}
-              transition={{ type: "spring", damping: 30, stiffness: 300 }}
-              className="absolute inset-y-0 right-0 w-full sm:w-[380px] bg-white shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {renderDetails(() => setIsDetailsDrawerOpen(false))}
-            </motion.div>
+            {renderDetails(() => setIsDetailsDrawerOpen(false))}
           </motion.div>
         )}
       </AnimatePresence>
