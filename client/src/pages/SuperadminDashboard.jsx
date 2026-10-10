@@ -611,7 +611,6 @@ const MixDonut = ({ rows, totalLabel, emptyText }) => {
             <Pie data={list} dataKey="amount" nameKey="name" innerRadius="64%" outerRadius="100%" paddingAngle={list.length > 1 ? 2 : 0} stroke="none" isAnimationActive={false}>
               {list.map((r) => <Cell key={r.name} fill={r.color} />)}
             </Pie>
-            <Tooltip formatter={(v, n) => [money(v), n]} />
           </PieChart>
         </ResponsiveContainer>
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
@@ -630,14 +629,16 @@ const MixDonut = ({ rows, totalLabel, emptyText }) => {
                 {...(expandable ? { type: "button", onClick: () => setOpen(isOpen ? null : r.name), "aria-expanded": isOpen } : {})}
                 className={`flex w-full items-center gap-2 rounded px-1 py-1 text-left text-sm ${expandable ? "hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""}`}
               >
+                <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                  {expandable && <FiChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
+                </span>
                 <span className="h-2.5 w-2.5 flex-shrink-0 rounded-sm" style={{ backgroundColor: r.color }} />
-                <span className="min-w-0 flex-1 truncate font-medium text-slate-800" title={r.name}>{r.name}</span>
-                {expandable && <FiChevronRight className={`h-3.5 w-3.5 flex-shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
-                <span className="whitespace-nowrap tabular-nums text-slate-900">{money(r.amount)}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-800" title={r.name}>{r.name}</span>
+                <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">{money(r.amount)}</span>
                 <span className="w-9 text-right text-xs tabular-nums text-slate-500">{Math.round((r.amount / total) * 100)}%</span>
               </Row>
               {isOpen && (
-                <ul className="mb-1 ml-[18px] space-y-1 border-l-2 border-slate-100 pl-3">
+                <ul className="mb-1 ml-[34px] space-y-1 border-l-2 border-slate-100 pl-3">
                   {r.subs.map((sub) => (
                     <li key={sub.name} className="flex items-baseline justify-between gap-3 text-xs">
                       <span className="truncate text-slate-600" title={sub.name}>{sub.name}</span>
