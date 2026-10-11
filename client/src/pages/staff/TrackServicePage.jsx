@@ -9,7 +9,7 @@ import {
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
   FiPlus, FiGrid, FiColumns, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
-  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave, FiMove
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave, FiMove, FiHash
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -472,7 +472,7 @@ const TrackServicePage = () => {
         time: timeStr,
         // Format ISO String instantly so it doesn't show 2026-09-21T00:00:00.000Z in UI
         estimatedDelivery: trackingEntry.estimated_delivery && !isNaN(new Date(trackingEntry.estimated_delivery)) ? formatDate(trackingEntry.estimated_delivery) : 'Not set',
-        expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? new Date(trackingEntry.expiry_date).toISOString() : 'N/A',
+        expiryDate: trackingEntry.expiry_date && !isNaN(new Date(trackingEntry.expiry_date)) ? formatDate(trackingEntry.expiry_date) : 'N/A',
         createdAt: trackingEntry.created_at || trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
         duration: null,
@@ -1064,20 +1064,27 @@ const TrackServicePage = () => {
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
-                <div className="flex items-center space-x-4 mt-2">
-                  <div className="flex items-center space-x-1 text-gray-600">
-                    <FiPhone className="h-4 w-4" />
-                    <span className="text-sm">{selectedService.phone || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-gray-600">
-                    <FiMail className="h-4 w-4" />
-                    <span className="text-sm">{selectedService.email || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center space-x-1 text-gray-600">
-                    <FiCreditCard className="h-4 w-4" />
-                    <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
-                  </div>
+                <div className="flex items-center space-x-4 mt-2 flex-wrap gap-y-2">
+  
+                {/* Tracking ID Display */}
+                <div className="flex items-center space-x-1 text-gray-800 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200">
+                  <FiHash className="h-3.5 w-3.5 text-indigo-600" />
+                  <span className="text-sm font-bold">{selectedService.trackingId}</span>
                 </div>
+
+                <div className="flex items-center space-x-1 text-gray-600">
+                  <FiPhone className="h-4 w-4" />
+                  <span className="text-sm">{selectedService.phone || 'N/A'}</span>
+                </div>
+                <div className="flex items-center space-x-1 text-gray-600">
+                  <FiMail className="h-4 w-4" />
+                  <span className="text-sm">{selectedService.email || 'N/A'}</span>
+                </div>
+                <div className="flex items-center space-x-1 text-gray-600">
+                  <FiCreditCard className="h-4 w-4" />
+                  <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
+                </div>
+              </div>
               </div>
             </div>
             <div className="flex space-x-2 mt-4 lg:mt-0">
