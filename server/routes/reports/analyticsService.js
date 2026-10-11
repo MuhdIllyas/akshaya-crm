@@ -54,10 +54,10 @@ const fetchStaffAnalytics = async (client, centreId, dates) => {
     client.query(`
       SELECT s.name as staff_name, COUNT(se.id) as service_count, COALESCE(SUM(se.service_charges), 0) as total_revenue
       FROM staff s 
-      LEFT JOIN service_entries se ON s.id = se.staff_id AND se.created_at::date >= $2
+      LEFT JOIN service_entries se ON s.id = se.staff_id AND se.created_at::date >= $2 AND se.created_at::date <= $3
       WHERE s.centre_id = $1 AND s.role = 'staff'
       GROUP BY s.id, s.name ORDER BY total_revenue DESC LIMIT 5
-    `, [centreId, dates.firstDayOfMonth])
+    `, [centreId, dates.periodFrom || dates.firstDayOfMonth, dates.periodTo || dates.today])
   ]);
   return { staff: staffRes.rows[0], attendance: attendanceRes.rows, performance: staffPerfRes.rows };
 };
@@ -191,8 +191,8 @@ const fetchCustomerAnalytics = async (client, centreId, dates) => {
   const reviewsRes = await client.query(`
     SELECT COUNT(*) as review_count, COALESCE(AVG(staff_rating), 0) as avg_rating
     FROM service_reviews sr JOIN staff s ON sr.staff_id = s.id
-    WHERE s.centre_id = $1 AND sr.is_submitted = true AND sr.submitted_at::date >= $2
-  `, [centreId, dates.firstDayOfMonth]);
+    WHERE s.centre_id = $1 AND sr.is_submitted = true AND sr.submitted_at::date >= $2 AND sr.submitted_at::date <= $3
+  `, [centreId, dates.periodFrom || dates.firstDayOfMonth, dates.periodTo || dates.today]);
   return reviewsRes.rows[0];
 };
 
@@ -310,6 +310,118 @@ const fetchStaffTargets = async (client, centreId) => {
     },
     staff
   };
+};
+
+
+// ==========================================
+// PERIOD SUPPORT (dashboard period dropdown)
+// ==========================================
+// The dashboard sends ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD (India dates) and, optionally,
+// ?compareStart=&compareEnd= for the like-for-like earlier window.
+// Without them everything falls back to "this month so far", which matches the old behaviour.
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const DAY_MS = 24 * 60 * 60 * 1000;
+const daysBetween = (from, to) => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS) + 1;
+
+const resolvePeriod = (filters = {}, dates) => {
+  let from = dates.firstDayOfMonth;
+  let to = dates.today;
+  const ok = (a, b) => YMD.test(a) && YMD.test(b) && a <= b && daysBetween(a, b) <= 800 && !isNaN(Date.parse(`${a}T00:00:00Z`)) && !isNaN(Date.parse(`${b}T00:00:00Z`));
+
+  if (ok(filters.startDate, filters.endDate)) { from = filters.startDate; to = filters.endDate; }
+
+  const days = daysBetween(from, to);
+  let compare = null;
+  if (ok(filters.compareStart, filters.compareEnd) && filters.compareEnd < from) {
+    compare = { from: filters.compareStart, to: filters.compareEnd };
+  }
+  return { from, to, days, bucket: days > 60 ? 'month' : 'day', compare };
+};
+
+// Completed services + approved expenses for one centre over a date range
+const fetchPeriodTotals = async (client, centreId, from, to) => {
+  const [svc, exp] = await Promise.all([
+    client.query(`
+      SELECT
+        COALESCE(SUM(se.total_charges), 0)   AS revenue,
+        COALESCE(SUM(se.service_charges), 0) AS service_charges,
+        COUNT(*)                             AS services,
+        COALESCE(AVG(se.total_charges), 0)   AS avg_order
+      FROM service_entries se
+      JOIN staff s ON se.staff_id = s.id
+      WHERE s.centre_id = $1 AND se.status = 'completed'
+        AND se.created_at::date >= $2 AND se.created_at::date <= $3
+    `, [centreId, from, to]),
+    client.query(`
+      SELECT COALESCE(SUM(amount), 0) AS expenses
+      FROM expenses
+      WHERE centre_id = $1
+        AND status IN ('approved', 'auto_approved')
+        AND (is_reversal IS NULL OR is_reversal = FALSE)
+        AND expense_date >= $2 AND expense_date <= $3
+    `, [centreId, from, to])
+  ]);
+  const revenue = Number(svc.rows[0].revenue);
+  const serviceCharges = Number(svc.rows[0].service_charges);
+  const expenses = Number(exp.rows[0].expenses);
+  return {
+    revenue,
+    serviceCharges,
+    expenses,
+    netProfit: serviceCharges - expenses,
+    services: Number(svc.rows[0].services),
+    avgOrder: Math.round(Number(svc.rows[0].avg_order))
+  };
+};
+
+// Per-day (or per-month for long ranges) series for the trend chart and KPI sparklines
+const fetchPeriodSeries = async (client, centreId, period) => {
+  const fmt = period.bucket === 'month' ? 'YYYY-MM' : 'YYYY-MM-DD';
+  const [svc, exp] = await Promise.all([
+    client.query(`
+      SELECT TO_CHAR(se.created_at, '${fmt}') AS label,
+             COALESCE(SUM(se.total_charges), 0)   AS revenue,
+             COALESCE(SUM(se.service_charges), 0) AS service_charges
+      FROM service_entries se
+      JOIN staff s ON se.staff_id = s.id
+      WHERE s.centre_id = $1 AND se.status = 'completed'
+        AND se.created_at::date >= $2 AND se.created_at::date <= $3
+      GROUP BY label
+    `, [centreId, period.from, period.to]),
+    client.query(`
+      SELECT TO_CHAR(expense_date, '${fmt}') AS label, COALESCE(SUM(amount), 0) AS expenses
+      FROM expenses
+      WHERE centre_id = $1
+        AND status IN ('approved', 'auto_approved')
+        AND (is_reversal IS NULL OR is_reversal = FALSE)
+        AND expense_date >= $2 AND expense_date <= $3
+      GROUP BY label
+    `, [centreId, period.from, period.to])
+  ]);
+
+  const map = new Map();
+  const slot = (label) => {
+    if (!map.has(label)) map.set(label, { label, revenue: 0, serviceCharges: 0, expenses: 0 });
+    return map.get(label);
+  };
+  svc.rows.forEach((r) => { const x = slot(r.label); x.revenue = Number(r.revenue); x.serviceCharges = Number(r.service_charges); });
+  exp.rows.forEach((r) => { slot(r.label).expenses = Number(r.expenses); });
+
+  // fill empty buckets so the chart shows quiet days as zero instead of skipping them
+  const labels = [];
+  if (period.bucket === 'month') {
+    let [y, m] = period.from.split('-').map(Number);
+    const [ey, em] = period.to.split('-').map(Number);
+    while (y < ey || (y === ey && m <= em)) { labels.push(`${y}-${String(m).padStart(2, '0')}`); m++; if (m > 12) { m = 1; y++; } }
+  } else {
+    for (let t = Date.parse(`${period.from}T00:00:00Z`); t <= Date.parse(`${period.to}T00:00:00Z`); t += DAY_MS) {
+      labels.push(new Date(t).toISOString().slice(0, 10));
+    }
+  }
+  return labels.map((label) => {
+    const x = map.get(label) || { label, revenue: 0, serviceCharges: 0, expenses: 0 };
+    return { ...x, netProfit: x.serviceCharges - x.expenses };
+  });
 };
 
 // ✅ Service Revenue Fetcher
@@ -2036,7 +2148,9 @@ const buildDashboardResponse = (analytics) => {
     charts: buildDashboardCharts(analytics),
     lists: buildDashboardLists(analytics),
     alerts: buildDashboardAlerts(analytics),
-    targets: analytics.targets
+    targets: analytics.targets,
+    // Period-aware block used by the dashboard's period dropdown
+    period: analytics.period
   };
 };
 
@@ -2044,8 +2158,11 @@ const buildDashboardResponse = (analytics) => {
 // MAIN EXPORT
 // ==========================================
 
-export const getDashboardAnalytics = async (centreId) => {
+export const getDashboardAnalytics = async (centreId, filters = {}) => {
   const dates = getDateContext();
+  const period = resolvePeriod(filters, dates);
+  dates.periodFrom = period.from;
+  dates.periodTo = period.to;
   const client = await pool.connect();
 
   try {
@@ -2059,6 +2176,12 @@ export const getDashboardAnalytics = async (centreId) => {
       fetchCustomerAnalytics(client, centreId, dates),
       fetchActivityAnalytics(client, centreId, dates),
       fetchStaffTargets(client, centreId)
+    ]);
+
+    const [periodTotals, periodSeries, previousTotals] = await Promise.all([
+      fetchPeriodTotals(client, centreId, period.from, period.to),
+      fetchPeriodSeries(client, centreId, period),
+      period.compare ? fetchPeriodTotals(client, centreId, period.compare.from, period.compare.to) : Promise.resolve(null)
     ]);
 
     // 2. CALCULATE LAYER
@@ -2076,7 +2199,16 @@ export const getDashboardAnalytics = async (centreId) => {
       wallets,
       customer,
       activity,
-      targets
+      targets,
+      period: {
+        from: period.from,
+        to: period.to,
+        days: period.days,
+        bucket: period.bucket,
+        totals: periodTotals,
+        series: periodSeries,
+        compare: period.compare ? { from: period.compare.from, to: period.compare.to, totals: previousTotals } : null
+      }
     };
 
     // 5. PRESENTATION BUILDER

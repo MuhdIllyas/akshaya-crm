@@ -316,7 +316,80 @@ const RevenueChart = ({ data, view, height = 280 }) => {
 // ==========================================
 // ADMIN-ONLY PIECES
 // ==========================================
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+// ---- Period filter (same options and IST day boundaries as the superadmin dashboard) ----
+const PERIOD_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "3months", label: "Last 3 Months" },
+  { value: "6months", label: "Last 6 Months" },
+  { value: "year", label: "This Year" },
+];
+
+const COMPARE_LABELS = {
+  week: "same days last week",
+  month: "same days last month",
+  "3months": "3 months earlier",
+  "6months": "6 months earlier",
+  year: "same days last year",
+};
+
+const ymd = (dt) => dt.toISOString().split("T")[0]; // dt is built with Date.UTC, so no timezone drift
+
+const getPeriodRange = (period) => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [y, m, d] = today.split("-").map(Number);
+  let start;
+  switch (period) {
+    case "today": start = new Date(Date.UTC(y, m - 1, d)); break;
+    case "week": {
+      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
+      break;
+    }
+    case "3months": start = new Date(Date.UTC(y, m - 3, 1)); break;
+    case "6months": start = new Date(Date.UTC(y, m - 6, 1)); break;
+    case "year": start = new Date(Date.UTC(y, 0, 1)); break;
+    case "month":
+    default: start = new Date(Date.UTC(y, m - 1, 1));
+  }
+  return { start: ymd(start), end: today };
+};
+
+// Earlier window of the same number of days, starting where the previous period started.
+// Never runs into the current period (e.g. 31 Mar against a 28-day February). null for "today".
+const getCompareRange = (period) => {
+  if (period === "today") return null;
+  const { start, end } = getPeriodRange(period);
+  const [y, m, d] = start.split("-").map(Number);
+  let prevStart;
+  switch (period) {
+    case "week": prevStart = new Date(Date.UTC(y, m - 1, d - 7)); break;
+    case "3months": prevStart = new Date(Date.UTC(y, m - 4, 1)); break;
+    case "6months": prevStart = new Date(Date.UTC(y, m - 7, 1)); break;
+    case "year": prevStart = new Date(Date.UTC(y - 1, 0, 1)); break;
+    case "month":
+    default: prevStart = new Date(Date.UTC(y, m - 2, 1));
+  }
+  const days = Math.round((Date.parse(end) - Date.parse(start)) / 86400000) + 1;
+  const cur = Date.parse(start);
+  const prevEnd = Math.min(prevStart.getTime() + (days - 1) * 86400000, cur - 86400000);
+  return { start: ymd(prevStart), end: ymd(new Date(prevEnd)) };
+};
+
+// % change vs the earlier window; null when a percentage would mislead (no or negative baseline)
+const pctChange = (current, previous) => {
+  const c = Number(current), p = Number(previous);
+  if (!Number.isFinite(c) || !Number.isFinite(p) || p <= 0) return null;
+  return Math.round(((c - p) / p) * 100);
+};
+
+const CompareNote = ({ value, label }) => (
+  <>
+    vs {value}
+    <span className="block">{label}</span>
+  </>
+);
 
 // One row in the "Needs attention" strip: coloured dot, count/label, optional click-through
 const AttentionTile = ({ tone, title, detail, onClick }) => {
@@ -351,7 +424,7 @@ const TopStaffBars = ({ staff }) => {
     .sort((a, b) => b.charges - a.charges)
     .slice(0, 5);
   if (rows.length === 0 || rows.every((r) => r.charges === 0)) {
-    return <p className="py-10 text-center text-sm text-slate-500">No services completed this month yet.</p>;
+    return <p className="py-10 text-center text-sm text-slate-500">No services completed in this period.</p>;
   }
   const max = Math.max(1, ...rows.map((r) => r.charges));
   return (
@@ -438,26 +511,38 @@ const AdminDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [updatedAt, setUpdatedAt] = useState(null);
   const [trendView, setTrendView] = useState("revenue");
+  const [period, setPeriod] = useState("month");
+  const [dataPeriod, setDataPeriod] = useState("month"); // period the data on screen belongs to
   const isMounted = useRef(true);
+  const requestId = useRef(0);
 
   const load = useCallback(async (manual = false) => {
-    if (manual) setRefreshing(true);
+    const myId = ++requestId.current;
+    setRefreshing(true);
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard`, {
+      const { start, end } = getPeriodRange(period);
+      const cmp = getCompareRange(period);
+      const qs = new URLSearchParams({ startDate: start, endDate: end });
+      if (cmp) { qs.set("compareStart", cmp.start); qs.set("compareEnd", cmp.end); }
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard?${qs}`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       if (!res.ok) throw new Error("Failed to fetch dashboard data");
       const json = await res.json();
-      if (!isMounted.current) return;
+      if (!isMounted.current || myId !== requestId.current) return; // a newer request superseded this one
       setData(json);
+      setDataPeriod(period);
       setUpdatedAt(new Date());
     } catch (err) {
       console.error("Failed to load dashboard data:", err);
-      if (isMounted.current) toast.error("Failed to load dashboard data");
+      if (isMounted.current && myId === requestId.current) {
+        toast.error("Failed to load dashboard data");
+        if (!manual) setPeriod(dataPeriod); // fall back to what is on screen
+      }
     } finally {
-      if (isMounted.current) { setLoading(false); setRefreshing(false); }
+      if (isMounted.current && myId === requestId.current) { setLoading(false); setRefreshing(false); }
     }
-  }, []);
+  }, [period]);
 
   useEffect(() => {
     isMounted.current = true;
@@ -491,15 +576,18 @@ const AdminDashboard = () => {
   const reviews = data.customerSatisfaction || { rating: "0.0", count: 0 };
   const targets = data.targets || null;
 
-  // ---- Monthly trend (current year, Jan up to this month) ----
-  const year = new Date().getFullYear();
-  const upTo = new Date().getMonth() + 1;
-  const ft = charts.financialTrend || {};
-  const seriesKey = { revenue: "revenueCollected", serviceCharges: "grossProfit", profit: "netProfit", expenses: "operatingExpenses" };
-  const trendData = MONTHS.slice(0, upTo).map((_, i) => ({
-    label: `${year}-${String(i + 1).padStart(2, "0")}`,
-    value: Number((ft[seriesKey[trendView]] || [])[i]) || 0,
-  }));
+  // ---- Selected period: totals, earlier window and day/month series ----
+  const periodData = data.period || {};
+  const pt = periodData.totals || {};
+  const prev = periodData.compare?.totals || null;
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === dataPeriod)?.label || "";
+  const periodLower = periodLabel.toLowerCase();
+  const compareLabel = COMPARE_LABELS[dataPeriod];
+  const series = periodData.series || [];
+  const seriesKey = { revenue: "revenue", serviceCharges: "serviceCharges", profit: "netProfit", expenses: "expenses" };
+  const trendData = series.map((p) => ({ label: p.label, value: Number(p[seriesKey[trendView]]) || 0 }));
+  const sparkOf = (key) => (series.length > 1 ? series.map((p) => Number(p[key]) || 0) : undefined);
+  const presentSpark = (charts.attendanceTrend || []).length > 1 ? charts.attendanceTrend.map((d) => Number(d.present) || 0) : undefined;
 
   // ---- Wallet split ----
   const walletParts = [
@@ -528,7 +616,7 @@ const AdminDashboard = () => {
 
   const present = Number(stats.presentToday) || 0;
   const staffTotal = Number(stats.totalStaff) || 0;
-  const netProfit = Number(stats.todayNetProfit) || 0;
+  const netProfit = Number(pt.netProfit) || 0;
   const to = (path) => () => navigate(path);
 
   return (
@@ -538,10 +626,21 @@ const AdminDashboard = () => {
         <div>
           <h1 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
           <p className="text-sm text-slate-500">
-            Your centre today
+            Your centre · {periodLabel}
             {updatedAt && <span> · updated {updatedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</span>}
           </p>
         </div>
+        <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+          aria-label="Select period"
+        >
+          {PERIOD_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
         <button
           type="button"
           onClick={() => load(true)}
@@ -551,6 +650,7 @@ const AdminDashboard = () => {
           <FiRefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
           Refresh
         </button>
+        </div>
       </div>
 
       {/* Needs attention */}
@@ -579,33 +679,51 @@ const AdminDashboard = () => {
       {/* KPIs */}
       <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
-          label="Service charges today"
-          value={money(stats.todayGrossProfit)}
-          note={`Billed ${money(stats.todayRevenueCollected)}`}
+          label="Service charges"
+          value={money(pt.serviceCharges)}
+          delta={prev ? pctChange(pt.serviceCharges, prev.serviceCharges) : null}
+          compareLabel={compareLabel}
+          context={periodLabel}
+          note={prev ? <CompareNote value={money(prev.serviceCharges)} label={compareLabel} /> : "Earned on completed services"}
+          spark={sparkOf("serviceCharges")}
+          sparkColor="#0891b2"
         />
         <Kpi
-          label="Net profit today"
+          label="Revenue billed"
+          value={money(pt.revenue)}
+          delta={prev ? pctChange(pt.revenue, prev.revenue) : null}
+          compareLabel={compareLabel}
+          context={periodLabel}
+          note={prev ? <CompareNote value={money(prev.revenue)} label={compareLabel} /> : "Total billed to customers"}
+          spark={sparkOf("revenue")}
+          sparkColor="#4f46e5"
+        />
+        <Kpi
+          label="Net profit"
           value={money(netProfit)}
           tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
-          note={`After ${money(stats.todayOperatingExpenses)} expenses`}
-        />
-        <Kpi
-          label="Cash in hand"
-          value={money(stats.cashInHand)}
-          note={`All wallets ${money(stats.totalWalletBalance)}`}
+          delta={prev ? pctChange(netProfit, prev.netProfit) : null}
+          compareLabel={compareLabel}
+          context={`After ${money(pt.expenses)} expenses`}
+          note={prev ? <CompareNote value={money(prev.netProfit)} label={compareLabel} /> : "Service charges less expenses"}
+          spark={sparkOf("netProfit")}
+          sparkColor="#059669"
         />
         <Kpi
           label="Present today"
           value={`${present} of ${staffTotal}`}
           context={`${stats.attendanceRate ?? 0}% attendance`}
-          note="Active staff"
+          note="Last 7 days shown"
+          spark={presentSpark}
+          sparkColor="#1baf7a"
         />
       </div>
-      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <MiniStat label="Open services" value={openItems.reduce((a, i) => a + i.value, 0)} hint="Pending, in progress, delayed" />
-        <MiniStat label="Avg order today" value={money(stats.averageOrderValue)} hint="Per completed service" />
-        <MiniStat label="Customer rating" value={`${reviews.rating} / 5`} hint={`${reviews.count} ${Number(reviews.count) === 1 ? "review" : "reviews"} this month`} />
-        <MiniStat label="Services completed" value={stats.servicesCompleted ?? 0} hint="All time, this centre" />
+        <MiniStat label="Expenses" value={money(pt.expenses)} hint={periodLabel} />
+        <MiniStat label="Services completed" value={pt.services ?? 0} hint={periodLabel} />
+        <MiniStat label="Avg order" value={money(pt.avgOrder)} hint="Per completed service" />
+        <MiniStat label="Customer rating" value={`${reviews.rating} / 5`} hint={`${reviews.count} ${Number(reviews.count) === 1 ? "review" : "reviews"} · ${periodLower}`} />
       </div>
 
       {/* Trend + wallet */}
@@ -613,7 +731,7 @@ const AdminDashboard = () => {
         <div className="xl:col-span-8">
           <Panel
             title="Trend"
-            hint={`${year}, month by month`}
+            hint={`${periodLabel}, ${periodData.bucket === "month" ? "month by month" : "day by day"}`}
             action={
               <Segmented
                 value={trendView}
@@ -671,7 +789,7 @@ const AdminDashboard = () => {
 
       {/* People */}
       <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel title="Top staff" hint="This month, ranked by service charges">
+        <Panel title="Top staff" hint={`${periodLabel}, ranked by service charges`}>
           <TopStaffBars staff={lists.topStaff} />
         </Panel>
         <Panel title="Attendance" hint="Last 7 days">
