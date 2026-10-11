@@ -5,31 +5,30 @@ import pool from "../../db.js";
 // UTILS
 // ==========================================
 
-const TZ = "Asia/Kolkata";
-
-// "YYYY-MM-DD" in IST
-const toISTDate = (d) => d.toLocaleDateString("en-CA", { timeZone: TZ });
-
-// shift a "YYYY-MM-DD" string by N days without timezone drift
-const shiftDate = (ymd, days) => {
-  const d = new Date(`${ymd}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + days);
-  return d.toISOString().split("T")[0];
-};
-
 const getDateContext = () => {
-  const today = toISTDate(new Date());
+  const dateObj = new Date();
+  const today = dateObj.toISOString().split('T')[0];
+  const currentYear = dateObj.getFullYear();
   const currentMonthStr = today.substring(0, 7);
+  const firstDayOfMonth = `${currentMonthStr}-01`;
+  
+  const yesterdayDate = new Date(dateObj);
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = yesterdayDate.toISOString().split('T')[0];
+  
+  const sevenDaysAgoDate = new Date(dateObj);
+  sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
+  const sevenDaysAgo = sevenDaysAgoDate.toISOString().split('T')[0];
 
-  return {
-    today,
-    yesterday: shiftDate(today, -1),
-    sevenDaysAgo: shiftDate(today, -6),
-    currentYear: Number(today.substring(0, 4)),
-    currentMonthStr,
-    firstDayOfMonth: `${currentMonthStr}-01`,
-    fromDate: today,
-    toDate: today,
+  return { 
+    today, 
+    yesterday, 
+    sevenDaysAgo, 
+    currentYear, 
+    currentMonthStr, 
+    firstDayOfMonth,
+    fromDate: today, 
+    toDate: today    
   };
 };
 
@@ -220,11 +219,8 @@ const fetchActivityAnalytics = async (client, centreId, dates) => {
       ORDER BY wt.created_at DESC LIMIT 10
     `, [centreId]),
     client.query(`
-      SELECT actual_cash, cash_variance, closed_at
-      FROM daily_accounting_closure
-      WHERE centre_id = $1
-        AND accounting_date = $2
-        AND checklist IS NOT NULL
+      SELECT actual_cash, cash_variance FROM daily_accounting_closure 
+      WHERE centre_id = $1 AND accounting_date = $2
     `, [centreId, dates.yesterday])
   ]);
 
@@ -232,6 +228,87 @@ const fetchActivityAnalytics = async (client, centreId, dates) => {
     pendingPayments: pendingPaymentRes.rows[0],
     transactions: transactionsRes.rows, 
     closing: closingRes.rows[0] || null 
+  };
+};
+
+
+// Staff targets for ONE centre (same rules staff see on their own dashboard):
+//  monthly target = staff_monthly_targets.target_amount (frozen for the month)
+//  achieved       = SUM(service_charges) of completed services
+//  daily target   = ROUND(monthly target / days in month), every calendar day
+const fetchStaffTargets = async (client, centreId) => {
+  const { rows } = await client.query(`
+    WITH cal AS (
+      SELECT date_trunc('month', CURRENT_DATE)::date AS month_start,
+             EXTRACT(DAY FROM CURRENT_DATE)::int AS day_of_month,
+             EXTRACT(DAY FROM (date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day'))::int AS days_in_month
+    ),
+    daily AS (
+      SELECT se.staff_id, se.created_at::date AS day, SUM(se.service_charges) AS sc
+      FROM service_entries se
+      WHERE se.status = 'completed'
+        AND se.created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY se.staff_id, se.created_at::date
+    )
+    SELECT
+      t.staff_id,
+      st.name AS staff_name,
+      t.target_amount,
+      cal.day_of_month,
+      cal.days_in_month,
+      ROUND(t.target_amount / cal.days_in_month) AS daily_target,
+      COALESCE((SELECT SUM(d.sc) FROM daily d WHERE d.staff_id = t.staff_id), 0) AS month_achieved,
+      COALESCE((SELECT SUM(d.sc) FROM daily d WHERE d.staff_id = t.staff_id AND d.day = CURRENT_DATE), 0) AS today_achieved,
+      (SELECT COUNT(*) FROM daily d
+        WHERE d.staff_id = t.staff_id
+          AND d.day < CURRENT_DATE
+          AND d.sc >= ROUND(t.target_amount / cal.days_in_month))::int AS days_met
+    FROM staff_monthly_targets t
+    CROSS JOIN cal
+    JOIN staff st ON st.id = t.staff_id
+    WHERE t.month = cal.month_start
+      AND t.target_amount > 0
+      AND st.centre_id = $1
+    ORDER BY st.name
+  `, [centreId]);
+
+  const num = (v) => parseFloat(v) || 0;
+  const staff = rows.map((r) => {
+    const target = num(r.target_amount);
+    const achieved = num(r.month_achieved);
+    const dailyTarget = num(r.daily_target);
+    const today = num(r.today_achieved);
+    const expected = target * (r.day_of_month / r.days_in_month);
+    return {
+      id: r.staff_id,
+      name: r.staff_name,
+      target,
+      achieved,
+      progress: target > 0 ? (achieved / target) * 100 : 0,
+      dailyTarget,
+      today,
+      todayMet: dailyTarget > 0 && today >= dailyTarget,
+      daysMet: r.days_met || 0,
+      completeDays: Math.max(r.day_of_month - 1, 0),
+      onPace: achieved >= expected
+    };
+  });
+
+  const first = rows[0];
+  return {
+    dayOfMonth: first ? first.day_of_month : null,
+    daysInMonth: first ? first.days_in_month : null,
+    summary: {
+      staffCount: staff.length,
+      metToday: staff.filter((x) => x.todayMet).length,
+      onPace: staff.filter((x) => x.onPace).length,
+      reached: staff.filter((x) => x.progress >= 100).length,
+      totalTarget: staff.reduce((a, x) => a + x.target, 0),
+      totalAchieved: staff.reduce((a, x) => a + x.achieved, 0),
+      todayAchieved: staff.reduce((a, x) => a + x.today, 0),
+      todayTarget: staff.reduce((a, x) => a + x.dailyTarget, 0)
+    },
+    staff
   };
 };
 
@@ -1958,7 +2035,8 @@ const buildDashboardResponse = (analytics) => {
     },
     charts: buildDashboardCharts(analytics),
     lists: buildDashboardLists(analytics),
-    alerts: buildDashboardAlerts(analytics)
+    alerts: buildDashboardAlerts(analytics),
+    targets: analytics.targets
   };
 };
 
@@ -1972,14 +2050,15 @@ export const getDashboardAnalytics = async (centreId) => {
 
   try {
     // 1. FETCH LAYER
-    const [staff, hr, services, rawFinancials, wallets, customer, activity] = await Promise.all([
+    const [staff, hr, services, rawFinancials, wallets, customer, activity, targets] = await Promise.all([
       fetchStaffAnalytics(client, centreId, dates),
       fetchHRAnalytics(client, centreId, dates),
       fetchServiceAnalytics(client, centreId, dates),
       fetchFinancialAnalytics(client, centreId, dates),
       fetchWalletAnalytics(client, centreId),
       fetchCustomerAnalytics(client, centreId, dates),
-      fetchActivityAnalytics(client, centreId, dates)
+      fetchActivityAnalytics(client, centreId, dates),
+      fetchStaffTargets(client, centreId)
     ]);
 
     // 2. CALCULATE LAYER
@@ -1996,7 +2075,8 @@ export const getDashboardAnalytics = async (centreId) => {
       financials,
       wallets,
       customer,
-      activity
+      activity,
+      targets
     };
 
     // 5. PRESENTATION BUILDER
