@@ -1,1113 +1,697 @@
 // src/pages/AdminDashboard.jsx
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 import {
-  FiUsers, FiClock, FiCalendar, FiDollarSign,
-  FiTrendingUp, FiBarChart2, FiCheckCircle, FiAlertCircle,
-  FiUserCheck, FiUserX, FiShoppingBag, FiMessageSquare,
-  FiPackage, FiCreditCard, FiActivity, FiBell,
-  FiArrowUp, FiArrowDown, FiRefreshCw, FiEye,
-  FiFileText, FiAward, FiPercent, FiStar,
-  FiLogIn, FiLogOut, FiHome, FiBriefcase,
-  FiSmartphone, FiDatabase, FiPieChart
-} from 'react-icons/fi';
-import { motion } from 'framer-motion';
+  BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie
+} from "recharts";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-} from 'chart.js';
-import { Bar, Line, Doughnut } from 'react-chartjs-2';
+  FiArrowUp, FiArrowDown, FiRefreshCw, FiLoader, FiChevronRight
+} from "react-icons/fi";
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler
-);
+// ==========================================
+// SHARED PRIMITIVES (same look as the superadmin dashboard)
+// ==========================================
+const money = (n) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 
-// Import services
-import {
-  getStaffList,
-  getAllAttendance,
-  getPendingLeaves,
-  getSalaryData,
-  getCalendarData
-} from '/src/services/salaryService';
-
-import { getServiceEntries, getTrackingEntries } from '/src/services/serviceService';
-
-// ---------------------------------------------------------------------
-// Safe Toast Implementation
-// ---------------------------------------------------------------------
-const createSafeToast = () => {
-  let toast = null;
-  
-  import('react-toastify').then((module) => {
-    toast = module.toast;
-  }).catch((error) => {
-    console.warn('Toast notifications disabled:', error);
-    toast = {
-      success: (msg) => console.log('SUCCESS:', msg),
-      error: (msg) => console.error('ERROR:', msg),
-      info: (msg) => console.info('INFO:', msg),
-      warn: (msg) => console.warn('WARN:', msg),
-    };
-  });
-
-  return {
-    success: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.success) {
-          toast.success(message, { position: "top-right", autoClose: 3000, ...options });
-        } else {
-          console.log('SUCCESS:', message);
-        }
-      }, 0);
-    },
-    error: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.error) {
-          toast.error(message, { position: "top-right", autoClose: 3000, ...options });
-        } else {
-          console.error('ERROR:', message);
-        }
-      }, 0);
-    },
-    info: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.info) {
-          toast.info(message, { position: "top-right", autoClose: 2000, ...options });
-        } else {
-          console.info('INFO:', message);
-        }
-      }, 0);
-    },
-    warn: (message, options = {}) => {
-      setTimeout(() => {
-        if (toast && toast.warn) {
-          toast.warn(message, { position: "top-right", autoClose: 3000, ...options });
-        } else {
-          console.warn('WARN:', message);
-        }
-      }, 0);
-    }
-  };
+const shortINR = (v) => {
+  const n = Number(v) || 0;
+  const s = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a >= 10000000) return `${s}₹${(a / 10000000).toFixed(1)}Cr`;
+  if (a >= 100000) return `${s}₹${(a / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `${s}₹${(a / 1000).toFixed(0)}k`;
+  return `${s}₹${a}`;
 };
 
-const toast = createSafeToast();
-
-// ---------------------------------------------------------------------
-// UI Components (StatCard, QuickActionCard, DashboardCard, RecentActivityItem)
-// ---------------------------------------------------------------------
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick }) => (
-  <motion.div
-    whileHover={{ y: -4, scale: 1.02 }}
-    onClick={onClick}
-    className={`bg-white rounded-xl border border-gray-200 p-6 hover:shadow-xl transition-all duration-300 cursor-pointer ${onClick ? 'hover:border-indigo-300' : ''}`}
-  >
-    <div className="flex items-center justify-between">
-      <div className="flex-1">
-        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-        <div className="flex items-end space-x-2">
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          {trend !== undefined && (
-            <div className={`flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-gray-500'}`}>
-              {trend > 0 ? <FiArrowUp className="h-3 w-3" /> : <FiArrowDown className="h-3 w-3" />}
-              <span>{Math.abs(trend)}%</span>
-            </div>
-          )}
-        </div>
-        <p className="text-sm text-gray-500 mt-1">{subtitle}</p>
+const Panel = ({ title, hint, summary, action, children, className = "" }) => (
+  <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
+    <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
+      <div className="min-w-0">
+        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
+        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
       </div>
-      <div className={`p-3 rounded-xl ${color} shadow-md`}>
-        <Icon className="h-6 w-6 text-white" />
-      </div>
+      {action}
     </div>
-  </motion.div>
+    {summary && <div className="px-5 pt-3">{summary}</div>}
+    <div className="flex-1 px-5 pb-5 pt-3">{children}</div>
+  </section>
 );
 
-const QuickActionCard = ({ title, description, icon: Icon, color, onClick, buttonText = "View" }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-all duration-300"
-  >
-    <div className="flex items-start space-x-3">
-      <div className={`p-2 rounded-lg ${color}`}>
-        <Icon className="h-5 w-5 text-white" />
+const Segmented = ({ options, value, onChange }) => (
+  <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5" role="tablist">
+    {options.map((o) => (
+      <button
+        key={o.value}
+        role="tab"
+        aria-selected={value === o.value}
+        onClick={() => onChange(o.value)}
+        className={`whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+          value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+        }`}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+);
+
+const Sparkline = ({ data = [], color = "#4f46e5" }) => {
+  const pts = data.map(Number).filter(Number.isFinite);
+  if (pts.length < 2) return null;
+  const w = 104, h = 36;
+  const max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
+  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="flex-shrink-0">
+      <polygon points={`0,${h} ${line} ${w},${h}`} fill={color} opacity="0.12" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const MiniStat = ({ label, value, hint }) => (
+  <div className="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5">
+    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+    <p className="mt-0.5 text-lg font-semibold tabular-nums leading-tight tracking-tight text-slate-900">
+      {value}
+    </p>
+    {hint && <p className="mt-0.5 truncate text-[11px] text-slate-500">{hint}</p>}
+  </div>
+);
+
+const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context, spark, sparkColor, tone = "text-slate-900" }) => {
+  const v = delta === null || delta === undefined ? NaN : Number(delta);
+  const hasDelta = Number.isFinite(v);
+  const isGood = goodWhen === "down" ? v < 0 : v > 0;
+  const badgeTone = v === 0 ? "bg-slate-100 text-slate-600" : isGood ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+  const shown = Math.abs(v) > 999 ? "999%+" : `${Math.abs(v)}%`;
+  return (
+    <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+        {hasDelta && (
+          <span
+            title={v === 0 ? `Same as ${compareLabel || "the previous period"}` : `${shown} ${v > 0 ? "higher" : "lower"} than ${compareLabel || "the previous period"}`}
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}
+          >
+            {v > 0 && <FiArrowUp className="h-3 w-3" aria-hidden="true" />}
+            {v < 0 && <FiArrowDown className="h-3 w-3" aria-hidden="true" />}
+            {shown}
+          </span>
+        )}
       </div>
-      <div className="flex-1">
-        <h3 className="font-semibold text-gray-900 text-sm mb-1">{title}</h3>
-        <p className="text-xs text-gray-600 mb-3">{description}</p>
-        <button
-          onClick={onClick}
-          className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-xs font-medium"
-        >
-          {buttonText}
+      <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
+      {context && <p className="mt-1 text-xs text-slate-500">{context}</p>}
+      <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
+        <p className="text-xs text-slate-500">{note}</p>
+        {spark && <Sparkline data={spark} color={sparkColor} />}
+      </div>
+    </div>
+  );
+};
+
+const StatusDonut = ({ items, label = "open" }) => {
+  const total = items.reduce((a, i) => a + (Number(i.value) || 0), 0);
+  const slices = total ? items.map((i) => ({ ...i, value: Number(i.value) || 0 })) : [{ name: "none", value: 1, color: "#e2e8f0" }];
+  return (
+    <div className="flex items-center gap-5">
+      <div className="relative h-32 w-32 flex-shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={slices} dataKey="value" innerRadius={42} outerRadius={60} paddingAngle={total ? 2 : 0} stroke="none">
+              {slices.map((s, k) => <Cell key={k} fill={s.color} />)}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
+          <p className="text-2xl font-semibold tabular-nums text-slate-900">{total}</p>
+          <p className="text-[11px] text-slate-500">{label}</p>
+        </div>
+      </div>
+      <ul className="flex-1 space-y-2 text-sm">
+        {items.map((i) => {
+          const pct = total ? Math.round(((Number(i.value) || 0) / total) * 100) : 0;
+          return (
+            <li key={i.name} className="flex items-center justify-between">
+              <span className="flex items-center gap-2 text-slate-600">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: i.color }} />
+                {i.name}
+              </span>
+              <span className="flex items-baseline gap-2">
+                <span className="text-[11px] text-slate-400">{pct}%</span>
+                <span className="font-semibold tabular-nums text-slate-900">{i.value ?? 0}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
+const TargetBar = ({ value, max, tone }) => (
+  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className={`h-full rounded-full ${tone}`} style={{ width: `${max > 0 ? Math.min((value / max) * 100, 100) : 0}%` }} />
+  </div>
+);
+
+const StaffTargets = ({ targets, scoped }) => {
+  const [filter, setFilter] = useState("all");
+  const [showAll, setShowAll] = useState(false);
+  const staff = targets?.staff || [];
+  const sum = targets?.summary || {};
+  if (staff.length === 0) {
+    return <p className="py-8 text-center text-sm text-slate-500">No staff targets are set for this month yet.</p>;
+  }
+  const rows = [...staff]
+    .filter((x) => (filter === "met" ? x.todayMet : filter === "notyet" ? !x.todayMet : true))
+    .sort((a, b) => b.progress - a.progress || a.name.localeCompare(b.name));
+  const visible = showAll ? rows : rows.slice(0, 8);
+  const monthPct = sum.totalTarget > 0 ? Math.round((sum.totalAchieved / sum.totalTarget) * 100) : 0;
+
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Met today's target</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+            {sum.metToday} <span className="text-sm font-normal text-slate-500">of {sum.staffCount} staff</span>
+          </p>
+          <p className="text-xs text-slate-500">{money(sum.todayAchieved)} of {money(sum.todayTarget)} today</p>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">On pace this month</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+            {sum.onPace} <span className="text-sm font-normal text-slate-500">of {sum.staffCount} staff</span>
+          </p>
+          <p className="text-xs text-slate-500">{sum.reached} already reached the full target</p>
+        </div>
+        <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Month so far</p>
+          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+            {monthPct}% <span className="text-sm font-normal text-slate-500">of target</span>
+          </p>
+          <p className="text-xs text-slate-500">{money(sum.totalAchieved)} of {money(sum.totalTarget)}</p>
+        </div>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-slate-500">Day {targets.dayOfMonth} of {targets.daysInMonth}. Daily target is the monthly target divided by days in the month</p>
+        <Segmented
+          value={filter}
+          onChange={(v) => { setFilter(v); setShowAll(false); }}
+          options={[{ value: "all", label: "All" }, { value: "met", label: "Met today" }, { value: "notyet", label: "Not yet" }]}
+        />
+      </div>
+
+      {rows.length === 0 ? (
+        <p className="py-6 text-center text-sm text-slate-500">No staff in this view.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-slate-100">
+          {visible.map((x) => {
+            const monthTone = x.progress >= 100 ? "bg-emerald-500" : x.onPace ? "bg-indigo-500" : "bg-amber-500";
+            return (
+              <li key={x.id} className="grid grid-cols-1 gap-x-6 gap-y-2 py-3 md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.3fr)_4.5rem] md:items-center">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium text-slate-900">{x.name}</p>
+                  {!scoped && <p className="truncate text-xs text-slate-500">{x.centre || "No centre"}</p>}
+                </div>
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-slate-500">Today</span>
+                    <span className={`tabular-nums ${x.todayMet ? "font-semibold text-emerald-700" : "text-slate-700"}`}>
+                      {x.todayMet ? "Met · " : ""}{money(x.today)} / {money(x.dailyTarget)}
+                    </span>
+                  </div>
+                  <TargetBar value={x.today} max={x.dailyTarget} tone={x.todayMet ? "bg-emerald-500" : "bg-indigo-500"} />
+                </div>
+                <div>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-slate-500">
+                      Month <span className={x.progress >= 100 ? "text-emerald-700" : x.onPace ? "text-slate-500" : "text-amber-700"}>
+                        {x.progress >= 100 ? "· reached" : x.onPace ? "· on pace" : "· behind pace"}
+                      </span>
+                    </span>
+                    <span className="tabular-nums text-slate-700">
+                      {money(x.achieved)} / {money(x.target)} <span className="font-semibold text-slate-900">{Math.round(x.progress)}%</span>
+                    </span>
+                  </div>
+                  <TargetBar value={x.achieved} max={x.target} tone={monthTone} />
+                </div>
+                <div className="text-xs text-slate-500 md:text-right" title="Past days this month on which the daily target was met">
+                  <span className="font-semibold tabular-nums text-slate-900">{x.daysMet}</span>/{x.completeDays} days
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {rows.length > 8 && (
+        <button type="button" onClick={() => setShowAll((v) => !v)}
+          className="mt-2 text-xs font-medium text-indigo-600 hover:text-indigo-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
+          {showAll ? "Show fewer" : `Show all ${rows.length}`}
         </button>
-      </div>
-    </div>
-  </motion.div>
-);
-
-const DashboardCard = ({ title, icon: Icon, children, className = "", headerAction }) => (
-  <div className={`bg-white rounded-xl border border-gray-200 overflow-hidden ${className}`}>
-    <div className="p-4 border-b border-gray-200">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-2">
-          {Icon && <Icon className="h-4 w-4 text-indigo-600" />}
-          <h3 className="font-semibold text-gray-900 text-sm">{title}</h3>
-        </div>
-        {headerAction}
-      </div>
-    </div>
-    <div className="p-4">
-      {children}
-    </div>
-  </div>
-);
-
-const RecentActivityItem = ({ icon: Icon, title, description, time, color = "text-blue-600", bg = "bg-blue-50" }) => (
-  <div className="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded-lg transition-colors">
-    <div className={`p-1.5 rounded ${bg} flex-shrink-0`}>
-      <Icon className={`h-3 w-3 ${color}`} />
-    </div>
-    <div className="flex-1 min-w-0">
-      <p className="text-xs font-medium text-gray-900 truncate">{title}</p>
-      <p className="text-xs text-gray-600 truncate">{description}</p>
-    </div>
-    <span className="text-xs text-gray-500 flex-shrink-0">{time}</span>
-  </div>
-);
-
-// ---------------------------------------------------------------------
-// Helper Functions
-// ---------------------------------------------------------------------
-const normalizeDate = (dateStr) => {
-  try {
-    if (!dateStr) return '';
-    let date;
-    if (dateStr instanceof Date) date = dateStr;
-    else if (typeof dateStr === 'string' && dateStr.includes('GMT')) date = new Date(dateStr);
-    else if (typeof dateStr === 'string' && dateStr.includes('T')) date = new Date(dateStr);
-    else if (typeof dateStr === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateStr)) date = new Date(dateStr + 'T00:00:00');
-    else date = new Date(dateStr);
-    if (isNaN(date.getTime())) return '';
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-  } catch (e) {
-    console.error('Error normalizing date:', e);
-    return '';
-  }
-};
-
-const getCurrentMonth = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, '0');
-  return `${year}-${month}`;
-};
-
-const getCurrentDate = () => {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-};
-
-const getLast12Months = () => {
-  const months = [];
-  const now = new Date();
-  
-  for (let i = 11; i >= 0; i--) {
-    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    months.push({
-      value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-      label: date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
-    });
-  }
-  
-  return months;
-};
-
-// Safe array function
-const safeArray = (data) => {
-  if (Array.isArray(data)) return data;
-  if (data && typeof data === 'object') {
-    if (data.data && Array.isArray(data.data)) return data.data;
-    if (data.results && Array.isArray(data.results)) return data.results;
-    if (data.items && Array.isArray(data.items)) return data.items;
-    if (data.rows && Array.isArray(data.rows)) return data.rows;
-  }
-  return [];
-};
-
-
-// ---------------------------------------------------------------------
-// Chart Components
-// ---------------------------------------------------------------------
-const AttendanceTrendChart = ({ attendanceData = [] }) => {
-  // Backend now returns an array of objects: { day: 'Mon', present: 5, late: 1 }
-  const chartData = {
-    labels: attendanceData.map(d => d.day),
-    datasets: [
-      {
-        label: 'Present',
-        data: attendanceData.map(d => Number(d.present) || 0),
-        backgroundColor: 'rgba(16, 185, 129, 0.5)',
-        borderColor: 'rgb(16, 185, 129)',
-        borderWidth: 2,
-        tension: 0.4,
-        fill: true,
-      },
-      {
-        label: 'Late',
-        data: attendanceData.map(d => Number(d.late) || 0),
-        backgroundColor: 'rgba(245, 158, 11, 0.5)',
-        borderColor: 'rgb(245, 158, 11)',
-        borderWidth: 2,
-        tension: 0.4,
-        fill: true,
-      },
-    ],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'top', labels: { font: { size: 11 } } },
-    },
-    scales: {
-      y: { beginAtZero: true, ticks: { font: { size: 10 } } },
-      x: { ticks: { font: { size: 10 } } }
-    },
-  };
-
-  return (
-    <div className="h-48">
-      {attendanceData.length > 0 ? (
-        <Line data={chartData} options={options} />
-      ) : (
-         <div className="h-full flex items-center justify-center">
-          <p className="text-gray-500 text-sm">No attendance data</p>
-        </div>
       )}
     </div>
   );
 };
 
-const ServiceStatusChart = ({ services = {} }) => {
-  const data = {
-    labels: ['Pending', 'In Progress', 'Completed', 'Delayed'],
-    datasets: [{
-      data: [
-        Number(services?.pending || services?.pending_services || 0), // Maps to new V3 key
-        Number(services?.in_progress || services?.in_progress_services || 0),
-        Number(services?.completed || services?.completed_services || 0),
-        Number(services?.delayed || services?.delayed_services || 0)
-      ],
-      backgroundColor: [
-        'rgba(245, 158, 11, 0.8)',
-        'rgba(59, 130, 246, 0.8)',
-        'rgba(16, 185, 129, 0.8)',
-        'rgba(239, 68, 68, 0.8)',
-      ],
-      borderColor: [
-        'rgb(245, 158, 11)',
-        'rgb(59, 130, 246)',
-        'rgb(16, 185, 129)',
-        'rgb(239, 68, 68)',
-      ],
-      borderWidth: 2,
-    }],
+const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#0891b2", profit: "#059669", expenses: "#e11d48" };
+const TREND_LABELS = { revenue: "Revenue", serviceCharges: "Service charges", profit: "Profit", expenses: "Expenses" };
+
+const RevenueChart = ({ data, view, height = 280 }) => {
+  if (!data || data.length === 0) {
+    return <div className="flex h-[240px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
+  }
+
+  const fmt = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+
+  const formatLabel = (label) => {
+    if (!label) return '';
+    if (label.length === 7) {
+      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
+    }
+    if (label.length === 10) return label.slice(5);
+    return label;
   };
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { position: 'right', labels: { font: { size: 10 }, boxWidth: 10 } },
-    },
-    cutout: '65%',
-  };
+  const short = (v) => shortINR(v);
+  const color = TREND_COLORS[view] || TREND_COLORS.revenue;
+  const seriesName = TREND_LABELS[view] || "Revenue";
+  const gid = `fill-${view}`;
 
-  const hasData = Object.values(services).some(val => Number(val) > 0);
+  const Tip = ({ active, payload }) =>
+    active && payload?.length ? (
+      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
+        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
+        <p className="text-slate-400">{seriesName}</p>
+      </div>
+    ) : null;
 
   return (
-    <div className="h-48">
-      {hasData ? (
-        <Doughnut data={data} options={options} />
-      ) : (
-        <div className="h-full flex items-center justify-center">
-          <p className="text-gray-500 text-sm">No service data available</p>
-        </div>
-      )}
-    </div>
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.55} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={16} />
+        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip content={<Tip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
+        <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
+      </BarChart>
+    </ResponsiveContainer>
   );
 };
 
-const RevenueChart = ({ monthlyRevenueData = [], labels = [] }) => {
-  const chartData = {
-    labels: labels.length > 0 ? labels : ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
-    datasets: [
-      {
-        label: 'Revenue (₹)',
-        data: monthlyRevenueData,
-        backgroundColor: 'rgba(99, 102, 241, 0.5)',
-        borderColor: 'rgb(99, 102, 241)',
-        borderWidth: 2,
-        borderRadius: 4,
-      }
-    ],
-  };
 
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            let label = context.dataset.label || '';
-            if (label) label += ': ';
-            if (context.parsed.y !== null) {
-              label += '₹' + context.parsed.y.toLocaleString('en-IN');
-            }
-            return label;
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function(value) {
-            return '₹' + (value / 1000).toFixed(0) + 'k';
-          },
-          font: { size: 10 }
-        },
-      },
-      x: {
-        ticks: { font: { size: 10 } }
-      }
-    },
-  };
+// ==========================================
+// ADMIN-ONLY PIECES
+// ==========================================
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+// One row in the "Needs attention" strip: coloured dot, count/label, optional click-through
+const AttentionTile = ({ tone, title, detail, onClick }) => {
+  const dot = { ok: "bg-emerald-500", warn: "bg-amber-500", bad: "bg-rose-500", idle: "bg-slate-300" }[tone] || "bg-slate-300";
+  const Tag = onClick ? "button" : "div";
   return (
-    <div className="h-48">
-      <Bar data={chartData} options={options} />
-    </div>
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      className={`flex w-full items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left ${
+        onClick ? "transition-colors hover:border-indigo-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""
+      }`}
+    >
+      <span className={`mt-1.5 h-2.5 w-2.5 flex-shrink-0 rounded-full ${dot}`} aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-slate-900">{title}</span>
+        <span className="mt-0.5 block text-xs text-slate-500">{detail}</span>
+      </span>
+      {onClick && <FiChevronRight className="mt-1 h-4 w-4 flex-shrink-0 text-slate-300" aria-hidden="true" />}
+    </Tag>
   );
 };
 
-const DailyRevenueChart = ({ dailyData = [], labels = [] }) => {
-  const chartData = {
-    labels: labels.length > 0 ? labels : Array.from({ length: 7 }, (_, i) => {
-      const date = new Date();
-      date.setDate(date.getDate() - (6 - i));
-      return date.toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
-    }),
-    datasets: [
-      {
-        label: 'Daily Revenue',
-        data: dailyData,
-        backgroundColor: 'rgba(16, 185, 129, 0.5)',
-        borderColor: 'rgb(16, 185, 129)',
-        borderWidth: 2,
-        tension: 0.4,
-        fill: true,
-      }
-    ],
-  };
-
-  const options = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: { display: false },
-      tooltip: {
-        callbacks: {
-          label: function(context) {
-            return '₹' + context.parsed.y.toLocaleString('en-IN');
-          }
-        }
-      }
-    },
-    scales: {
-      y: {
-        beginAtZero: true,
-        ticks: {
-          callback: function(value) {
-            return '₹' + (value / 1000).toFixed(0) + 'k';
-          },
-          font: { size: 10 }
-        }
-      },
-      x: {
-        ticks: { font: { size: 10 } }
-      }
-    },
-  };
-
-  return (
-    <div className="h-48">
-      <Line data={chartData} options={options} />
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------
-// NEW WIDGET COMPONENTS
-// ---------------------------------------------------------------------
-const StaffLeaderboard = ({ staffData = [] }) => {
-  const topStaff = [...staffData]
-    .sort((a, b) => (Number(b.total_revenue) || 0) - (Number(a.total_revenue) || 0))
+// Top staff this month, ranked by service charges
+const TopStaffBars = ({ staff }) => {
+  const rows = [...(staff || [])]
+    .map((s) => ({
+      name: s.staff_name || s.name,
+      services: Number(s.service_count) || 0,
+      charges: Number(s.total_revenue) || 0,
+    }))
+    .sort((a, b) => b.charges - a.charges)
     .slice(0, 5);
-
-  if (topStaff.length === 0) return <div className="p-4 text-sm text-gray-500 text-center">No staff data available yet.</div>;
-
+  if (rows.length === 0 || rows.every((r) => r.charges === 0)) {
+    return <p className="py-10 text-center text-sm text-slate-500">No services completed this month yet.</p>;
+  }
+  const max = Math.max(1, ...rows.map((r) => r.charges));
   return (
-    <div className="space-y-4">
-      {topStaff.map((staff, i) => (
-        <div key={i} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg border border-transparent hover:border-gray-100 transition-all">
-          <div className="flex items-center space-x-3">
-            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${i === 0 ? 'bg-amber-100 text-amber-700' : i === 1 ? 'bg-gray-200 text-gray-700' : i === 2 ? 'bg-orange-100 text-orange-700' : 'bg-indigo-50 text-indigo-700'}`}>
-              #{i + 1}
-            </div>
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{staff.staff_name || staff.name}</p>
-              <p className="text-xs text-gray-500">{staff.service_count || 0} services completed</p>
-            </div>
+    <ul className="space-y-4">
+      {rows.map((r, i) => (
+        <li key={`${r.name}-${i}`}>
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">{i + 1}</span>
+              <span className="truncate text-sm font-medium text-slate-900">{r.name}</span>
+            </span>
+            <span className="text-sm font-semibold tabular-nums text-slate-900">{money(r.charges)}</span>
           </div>
-          <div className="text-right">
-            <p className="text-sm font-bold text-emerald-600">₹{Number(staff.total_revenue || 0).toLocaleString('en-IN')}</p>
+          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div className="h-full rounded-full bg-cyan-600" style={{ width: `${(r.charges / max) * 100}%` }} />
           </div>
-        </div>
+          <p className="mt-1 text-xs text-slate-500">{r.services} {r.services === 1 ? "service" : "services"}</p>
+        </li>
       ))}
-    </div>
+    </ul>
   );
 };
 
-const LiveTransactionFeed = ({ transactions = [] }) => {
-  if (transactions.length === 0) return <div className="p-4 text-sm text-gray-500 text-center">No recent transactions.</div>;
-
+// Attendance, last 7 days: present vs late
+const AttendanceBars = ({ data }) => {
+  const rows = (data || []).map((d) => ({ day: d.day, present: Number(d.present) || 0, late: Number(d.late) || 0 }));
+  if (rows.length === 0) return <p className="py-10 text-center text-sm text-slate-500">No attendance recorded in the last 7 days.</p>;
   return (
-    <div className="space-y-3 max-h-72 overflow-y-auto pr-2">
-      {transactions.map((txn, i) => {
-        const isCredit = txn.transactionType === 'credit';
+    <>
+      <div className="mb-2 flex gap-4 text-xs text-slate-600">
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "#1baf7a" }} />Present</span>
+        <span className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm" style={{ background: "#eb6834" }} />Late</span>
+      </div>
+      <ResponsiveContainer width="100%" height={200}>
+        <BarChart data={rows} margin={{ top: 6, right: 8, left: -12, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+          <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748b" }} axisLine={false} tickLine={false} />
+          <Tooltip cursor={{ fill: "rgba(100,116,139,0.08)" }} />
+          <Bar dataKey="present" name="Present" fill="#1baf7a" radius={[3, 3, 0, 0]} maxBarSize={22} />
+          <Bar dataKey="late" name="Late" fill="#eb6834" radius={[3, 3, 0, 0]} maxBarSize={22} />
+        </BarChart>
+      </ResponsiveContainer>
+    </>
+  );
+};
+
+const TransactionList = ({ rows }) => {
+  if (!rows || rows.length === 0) return <p className="py-6 text-center text-sm text-slate-500">No recent wallet transactions.</p>;
+  return (
+    <ul className="grid grid-cols-1 gap-x-8 xl:grid-cols-2">
+      {rows.map((t, i) => {
+        const credit = t.transactionType === "credit";
         return (
-          <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-            <div className="flex items-center space-x-3">
-              <div className={`p-2 rounded-full ${isCredit ? 'bg-emerald-100' : 'bg-rose-100'}`}>
-                {isCredit ? <FiArrowDown className="h-4 w-4 text-emerald-600" /> : <FiArrowUp className="h-4 w-4 text-rose-600" />}
-              </div>
-              <div>
-                <p className="text-xs font-semibold text-gray-900 truncate max-w-[150px]">{txn.category || 'Transaction'}</p>
-                <p className="text-[10px] text-gray-500">{txn.localTime || new Date().toLocaleTimeString()} • {txn.fromWalletName || txn.toWalletName || 'Wallet'}</p>
-              </div>
-            </div>
-            <span className={`text-sm font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {isCredit ? '+' : '-'}₹{Number(txn.amount).toLocaleString('en-IN')}
+          <li key={i} className="flex items-center justify-between gap-3 border-b border-slate-100 py-2.5 last:border-b-0">
+            <span className="flex min-w-0 items-center gap-3">
+              <span className={`flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full ${credit ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                {credit ? <FiArrowDown className="h-3.5 w-3.5" aria-hidden="true" /> : <FiArrowUp className="h-3.5 w-3.5" aria-hidden="true" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-slate-900">{t.category || "Transaction"}</span>
+                <span className="block truncate text-xs text-slate-500">{t.localTime || ""}{t.localTime && t.walletName ? " · " : ""}{t.walletName || ""}</span>
+              </span>
             </span>
-          </div>
+            <span className={`whitespace-nowrap text-sm font-semibold tabular-nums ${credit ? "text-emerald-700" : "text-rose-700"}`}>
+              {credit ? "+" : "-"}{money(Math.abs(Number(t.amount) || 0))}
+            </span>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 };
 
-const NightlyCloseAlert = ({ closingData }) => {
-  const row = closingData?.data ?? closingData;
+// ==========================================
+// MAIN DASHBOARD
+// ==========================================
+const WALLET_COLORS = { cash: "#2a78d6", bank: "#eb6834", digital: "#1baf7a" };
 
-  if (!row || row.cash_variance === undefined || row.cash_variance === null) {
-    return (
-      <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start space-x-3">
-        <FiAlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
-        <div>
-          <h4 className="text-sm font-semibold text-amber-900">Yesterday's Register Unclosed</h4>
-          <p className="text-xs text-amber-700 mt-1">The accounting day for yesterday was not formally closed. Please verify cash balances.</p>
-        </div>
-      </div>
-    );
-  }
-
-  const variance = Number(row.cash_variance || 0);
-  const isPerfect = variance === 0;
-
-  return (
-    <div className={`p-4 rounded-xl border flex items-start space-x-3 ${isPerfect ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-      {isPerfect ? <FiCheckCircle className="h-5 w-5 text-emerald-600 mt-0.5" /> : <FiAlertCircle className="h-5 w-5 text-rose-600 mt-0.5" />}
-      <div>
-        <h4 className={`text-sm font-semibold ${isPerfect ? 'text-emerald-900' : 'text-rose-900'}`}>
-          {isPerfect ? "Register Closed Perfectly" : "Cash Variance Detected"}
-        </h4>
-        <p className={`text-xs mt-1 ${isPerfect ? 'text-emerald-700' : 'text-rose-700'}`}>
-          {isPerfect 
-            ? "Yesterday's physical cash matched the digital ledger exactly." 
-            : `Yesterday's closing reported a variance of ₹${variance.toLocaleString('en-IN')}. Check the accounting logs.`}
-        </p>
-      </div>
-    </div>
-  );
-};
-
-// ---------------------------------------------------------------------
-// MAIN DASHBOARD COMPONENT
-// ---------------------------------------------------------------------
 const AdminDashboard = () => {
-  const [stats, setStats] = useState({
-    totalStaff: 0,
-    presentToday: 0,
-    pendingLeaves: 0,
-    pendingServices: 0,
-    monthlyRevenue: 0,
-    attendanceRate: 0,
-    salaryPending: 0,
-    servicesCompleted: 0,
-    averageOrderValue: 0,  // new
-    
-    // Financial stats
-    todayRevenue: 0,
-    todayExpenses: 0,
-    todayProfit: 0,
-    pendingPayments: 0,
-    cashInHand: 0,
-    bankBalance: 0,
-    digitalBalance: 0,
-    totalWalletBalance: 0,
-  });
-  
+  const navigate = useNavigate();
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [recentActivity, setRecentActivity] = useState([]);
-  const [services, setServices] = useState({});
-  const [attendanceData, setAttendanceData] = useState([]);
-  const [salaryData, setSalaryData] = useState([]);
-  const [staffList, setStaffList] = useState([]);
-  
-  // Financial data states
-  const [dailyRevenueData, setDailyRevenueData] = useState([]);
-  const [dailyRevenueLabels, setDailyRevenueLabels] = useState([]);
-  const [monthlyRevenueData, setMonthlyRevenueData] = useState([]);
-  const [monthlyRevenueLabels, setMonthlyRevenueLabels] = useState([]);
-  const [pendingPaymentsList, setPendingPaymentsList] = useState([]);
-  const [walletSummary, setWalletSummary] = useState([]);
-  
-  // New widget states
-  const [topStaffData, setTopStaffData] = useState([]);
-  const [recentTransactions, setRecentTransactions] = useState([]);
-  const [yesterdayClosing, setYesterdayClosing] = useState(null);
-  const [reviewStats, setReviewStats] = useState({ rating: 0, count: 0 });
-  
-  const [currentMonth] = useState(getCurrentMonth());
-  const isMountedRef = useRef(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatedAt, setUpdatedAt] = useState(null);
+  const [trendView, setTrendView] = useState("revenue");
+  const isMounted = useRef(true);
 
-  // Load dashboard data
-  useEffect(() => {
-    isMountedRef.current = true;
-    
-    const loadDashboardData = async () => {
-      setLoading(true);
-      try {
-        const token = localStorage.getItem('token');
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        
-        if (!res.ok) throw new Error("Failed to fetch dashboard data");
-        const dashboardData = await res.json();
-
-        if (!isMountedRef.current) return;
-
-        // 1. We manually append monthlyRevenue so the top stat card still works
-        setStats({
-          ...dashboardData.stats,
-          monthlyRevenue: dashboardData.charts?.financialTrend?.revenueCollected?.[new Date().getMonth()] || 0
-        });
-        setReviewStats(dashboardData.customerSatisfaction);
-        setAttendanceData(dashboardData.charts.attendanceTrend);
-        setServices(dashboardData.charts.serviceStatus);
-        setDailyRevenueData([]);
-        setDailyRevenueLabels([]);
-        setMonthlyRevenueData(dashboardData.charts?.financialTrend?.revenueCollected || []);
-        setTopStaffData(dashboardData.lists.topStaff);
-        setRecentTransactions(dashboardData.lists.recentTransactions);
-        setYesterdayClosing(dashboardData.alerts.yesterdayClosing);
-
-        // Generate Recent Activity Notification Feed
-        const activities = [];
-        if (dashboardData.stats.todayRevenueCollected > 0) {
-          activities.push({
-            icon: FiDollarSign,
-            title: 'Revenue recorded',
-            description: `₹${dashboardData.stats.todayRevenueCollected.toLocaleString('en-IN')} collected today`,
-            time: 'Today',
-            color: 'text-emerald-600',
-            bg: 'bg-emerald-50'
-          });
-        }
-        if (dashboardData.stats.pendingPayments > 0) {
-          activities.push({
-            icon: FiAlertCircle,
-            title: 'Pending payments',
-            description: `${dashboardData.stats.pendingPayments} customers owe ₹${dashboardData.stats.pendingPaymentsTotal.toLocaleString('en-IN')}`,
-            time: 'Due now',
-            color: 'text-amber-600',
-            bg: 'bg-amber-50'
-          });
-        }
-        if (dashboardData.stats.pendingLeaves > 0) {
-          activities.push({
-            icon: FiCalendar,
-            title: 'Leave requests',
-            description: `${dashboardData.stats.pendingLeaves} pending approval`,
-            time: 'Today',
-            color: 'text-blue-600',
-            bg: 'bg-blue-50'
-          });
-        }
-        if (dashboardData.stats.pendingServices > 0) {
-          activities.push({
-            icon: FiShoppingBag,
-            title: 'Pending services',
-            description: `${dashboardData.stats.pendingServices} need attention`,
-            time: 'Active',
-            color: 'text-indigo-600',
-            bg: 'bg-indigo-50'
-          });
-        }
-        setRecentActivity(activities.slice(0, 5));
-
-        toast.success(`Dashboard metrics synced.`);
-
-      } catch (error) {
-        console.error('Failed to load dashboard data:', error);
-        if (isMountedRef.current) {
-          toast.error('Failed to load dashboard data');
-          setRecentActivity([
-            {
-              icon: FiAlertCircle,
-              title: 'Data load error',
-              description: 'Some data may be unavailable',
-              time: 'Just now',
-              color: 'text-rose-600',
-              bg: 'bg-rose-50'
-            }
-          ]);
-        }
-      } finally {
-        if (isMountedRef.current) setLoading(false);
-      }
-    };
-
-    loadDashboardData();
-    
-    return () => { isMountedRef.current = false; };
+  const load = useCallback(async (manual = false) => {
+    if (manual) setRefreshing(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch dashboard data");
+      const json = await res.json();
+      if (!isMounted.current) return;
+      setData(json);
+      setUpdatedAt(new Date());
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+      if (isMounted.current) toast.error("Failed to load dashboard data");
+    } finally {
+      if (isMounted.current) { setLoading(false); setRefreshing(false); }
+    }
   }, []);
 
-  // Handle refresh (kept minimal, only refreshing financial summary & pending payments)
-  const handleRefresh = async () => {
-    toast.info('Refreshing data...');
-    setLoading(true);
-    
-    try {
-      const token = localStorage.getItem('token');
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/analytics/admin/dashboard`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (!res.ok) throw new Error("Failed to fetch dashboard data");
-      const dashboardData = await res.json();
-      
-      if (!isMountedRef.current) return;
-      
-      setStats(dashboardData.stats);
-      setReviewStats(dashboardData.customerSatisfaction);
-      setAttendanceData(dashboardData.charts.attendanceTrend);
-      setServices(dashboardData.charts.serviceStatus); 
-      setDailyRevenueData(dashboardData.charts.dailyRevenue.data);
-      setDailyRevenueLabels(dashboardData.charts.dailyRevenue.labels);
-      setMonthlyRevenueData(dashboardData.charts.monthlyRevenue);
-      setTopStaffData(dashboardData.lists.topStaff);
-      setRecentTransactions(dashboardData.lists.recentTransactions);
-      setYesterdayClosing(dashboardData.alerts.yesterdayClosing);
-      
-      toast.success('Data refreshed successfully');
-    } catch (error) {
-      console.error('Refresh failed:', error);
-      if (isMountedRef.current) toast.error('Failed to refresh data');
-    } finally {
-      if (isMountedRef.current) setLoading(false);
-    }
-  };
+  useEffect(() => {
+    isMounted.current = true;
+    load();
+    return () => { isMounted.current = false; };
+  }, [load]);
 
-  // Navigation handlers
-  const navigateToAttendance = () => window.location.href = '/dashboard/admin/attendancemanagement';
-  const navigateToLeaves = () => window.location.href = '/dashboard/admin/attendancemanagement?tab=leave';
-  const navigateToSalary = () => window.location.href = '/dashboard/admin/attendancemanagement?tab=salary';
-  const navigateToServices = () => window.location.href = '/dashboard/admin/servicelogs';
-  const navigateToWallets = () => window.location.href = '/dashboard/admin/wallets';
-  const navigateToReports = () => window.location.href = '/dashboard/admin/reports';
-  const navigateToPendingPayments = () => window.location.href = '/dashboard/admin/reports?tab=pendingPayments';
-
-  if (loading) {
+  if (loading && !data) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading dashboard...</p>
-        </div>
+      <div className="flex h-full min-h-[400px] items-center justify-center">
+        <FiLoader className="h-8 w-8 animate-spin text-indigo-600" />
       </div>
     );
   }
 
+  if (!data) {
+    return (
+      <div className="flex h-full min-h-[400px] flex-col items-center justify-center gap-3 text-center">
+        <p className="text-sm text-slate-600">Could not load the dashboard.</p>
+        <button onClick={() => load(true)} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+          Try again
+        </button>
+      </div>
+    );
+  }
+
+  const stats = data.stats || {};
+  const charts = data.charts || {};
+  const lists = data.lists || {};
+  const closing = data.alerts?.yesterdayClosing ?? null;
+  const reviews = data.customerSatisfaction || { rating: "0.0", count: 0 };
+  const targets = data.targets || null;
+
+  // ---- Monthly trend (current year, Jan up to this month) ----
+  const year = new Date().getFullYear();
+  const upTo = new Date().getMonth() + 1;
+  const ft = charts.financialTrend || {};
+  const seriesKey = { revenue: "revenueCollected", serviceCharges: "grossProfit", profit: "netProfit", expenses: "operatingExpenses" };
+  const trendData = MONTHS.slice(0, upTo).map((_, i) => ({
+    label: `${year}-${String(i + 1).padStart(2, "0")}`,
+    value: Number((ft[seriesKey[trendView]] || [])[i]) || 0,
+  }));
+
+  // ---- Wallet split ----
+  const walletParts = [
+    { label: "Cash", value: stats.cashInHand, color: WALLET_COLORS.cash },
+    { label: "Bank", value: stats.bankBalance, color: WALLET_COLORS.bank },
+    { label: "Digital", value: stats.digitalBalance, color: WALLET_COLORS.digital },
+  ];
+  const walletSum = walletParts.reduce((a, p) => a + (Number(p.value) || 0), 0) || 1;
+
+  // ---- Open services (excludes the lifetime "completed" count) ----
+  const ss = charts.serviceStatus || {};
+  const openItems = [
+    { name: "Pending", value: Number(ss.pending) || 0, color: "#eda100" },
+    { name: "In progress", value: Number(ss.in_progress) || 0, color: "#2a78d6" },
+    { name: "Delayed", value: Number(ss.delayed) || 0, color: "#e11d48" },
+  ];
+
+  // ---- Yesterday's register ----
+  const hasClosing = closing && closing.cash_variance !== undefined && closing.cash_variance !== null;
+  const variance = hasClosing ? Number(closing.cash_variance) : 0;
+  const closingTile = !hasClosing
+    ? { tone: "bad", title: "Yesterday's register not closed", detail: "Verify cash balances and close the day" }
+    : variance === 0
+    ? { tone: "ok", title: "Yesterday's register closed", detail: "Cash matched the ledger exactly" }
+    : { tone: "bad", title: "Cash variance yesterday", detail: `${money(Math.abs(variance))} ${variance < 0 ? "short" : "over"}. Check the accounting logs` };
+
+  const present = Number(stats.presentToday) || 0;
+  const staffTotal = Number(stats.totalStaff) || 0;
+  const netProfit = Number(stats.todayNetProfit) || 0;
+  const to = (path) => () => navigate(path);
+
   return (
-    <div className="h-full overflow-y-auto p-6">
+    <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6">
       {/* Header */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-            <p className="text-gray-600">Welcome back! Here's your business overview.</p>
-            <p className="text-sm text-gray-500 mt-1">
-              Last updated: {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-          <div className="flex items-center space-x-3">
-            <button
-              onClick={handleRefresh}
-              className="flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              <FiRefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-              <span className="text-sm">Refresh</span>
-            </button>
-            <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors relative">
-              <FiBell className="h-5 w-5 text-gray-600" />
-              <span className="absolute top-1 right-1 w-2 h-2 bg-rose-500 rounded-full"></span>
-            </button>
-          </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+          <p className="text-sm text-slate-500">
+            Your centre today
+            {updatedAt && <span> · updated {updatedAt.toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit" })}</span>}
+          </p>
         </div>
-      </div>
-
-      {/* Stats Grid - Row 1: Staff & Operations */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard
-          title="Total Staff"
-          value={stats.totalStaff}
-          subtitle={`${stats.attendanceRate}% present today`}
-          icon={FiUsers}
-          color="bg-blue-500"
-          trend={stats.attendanceRate > 80 ? 2.5 : -1.5}
-          onClick={navigateToAttendance}
-        />
-        <StatCard
-          title="Pending Leaves"
-          value={stats.pendingLeaves}
-          subtitle="Requiring approval"
-          icon={FiCalendar}
-          color="bg-amber-500"
-          trend={stats.pendingLeaves > 5 ? 8.7 : -2.3}
-          onClick={navigateToLeaves}
-        />
-        <StatCard
-          title="Active Services"
-          value={stats.pendingServices}
-          subtitle={`${stats.servicesCompleted} completed`}
-          icon={FiShoppingBag}
-          color="bg-indigo-500"
-          trend={stats.pendingServices > 10 ? 12.3 : -5.6}
-          onClick={navigateToServices}
-        />
-        <StatCard
-          title="Monthly Revenue"
-          value={`₹${(stats.monthlyRevenue / 1000).toFixed(0)}k`}
-          subtitle={`${stats.salaryPending} salaries pending`}
-          icon={FiDollarSign}
-          color="bg-emerald-500"
-          trend={stats.monthlyRevenue > 500000 ? 15.2 : 3.4}
-          onClick={navigateToSalary}
-        />
-      </div>
-
-      {/* Row 2: Financial Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-        <StatCard
-          title="Today's Revenue"
-          value={`₹${(stats.todayRevenueCollected || 0).toLocaleString('en-IN')}`}
-          subtitle={`₹${(stats.todayNetProfit || 0).toLocaleString('en-IN')} profit`}
-          trend={stats.todayNetProfit > 0 ? 8.5 : -2.1}
-          icon={FiTrendingUp}
-          color="bg-emerald-600"
-          onClick={navigateToReports}
-        />
-        <StatCard
-          title="Pending Payments"
-          value={`₹${(stats.pendingPaymentsTotal || 0).toLocaleString('en-IN')}`}
-          subtitle={`${stats.pendingPayments || 0} customers`}
-          icon={FiAlertCircle}
-          color="bg-amber-600"
-          trend={stats.pendingPayments > 10 ? 12.3 : -5.6}
-          onClick={navigateToPendingPayments}
-        />
-        <StatCard
-          title="Cash in Hand"
-          value={`₹${(stats.cashInHand || 0).toLocaleString('en-IN')}`}
-          subtitle="Physical cash"
-          icon={FiHome}
-          color="bg-blue-600"
-          onClick={navigateToReports}
-        />
-        <StatCard
-          title="Total Wallets"
-          value={`₹${(stats.totalWalletBalance || 0).toLocaleString('en-IN')}`}
-          subtitle="All accounts"
-          icon={FiSmartphone}
-          color="bg-purple-600"
-          onClick={navigateToWallets}
-        />
-      </div>
-
-      {/* Row 3: New Performance Metrics */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
-        <StatCard
-          title="Average Order Value"
-          value={`₹${(stats.averageOrderValue || 0).toLocaleString('en-IN')}`}
-          subtitle="Per completed service today"
-          icon={FiShoppingBag}
-          color="bg-teal-600"
-        />
-        <StatCard
-          title="Customer Satisfaction"
-          value={`${reviewStats.rating} / 5`}
-          subtitle={`Based on ${reviewStats.count} reviews this month`}
-          icon={FiStar}
-          color="bg-yellow-500"
-          onClick={() => window.location.href = '/admin/reports?tab=reviews'}
-        />
-      </div>
-
-      {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
-        <DashboardCard 
-          title="Attendance Trends (Last 7 Days)" 
-          icon={FiTrendingUp}
-          headerAction={
-            <button onClick={navigateToAttendance} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-              View Details
-            </button>
-          }
+        <button
+          type="button"
+          onClick={() => load(true)}
+          disabled={refreshing}
+          className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:opacity-60"
         >
-          <AttendanceTrendChart attendanceData={attendanceData} />
-        </DashboardCard>
-        
-        <DashboardCard 
-          title="Service Status" 
-          icon={FiBarChart2}
-          headerAction={
-            <button onClick={navigateToServices} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-              View All
-            </button>
-          }
-        >
-          <ServiceStatusChart services={services} />
-        </DashboardCard>
+          <FiRefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} aria-hidden="true" />
+          Refresh
+        </button>
       </div>
 
-      {/* Monthly Revenue Chart */}
-      <div className="mt-6">
-        <DashboardCard 
-          title="Monthly Revenue Overview" 
-          icon={FiBarChart2}
-          headerAction={
-            <div className="flex items-center space-x-2">
-              <select className="border border-gray-300 rounded px-2 py-1 text-xs">
-                <option>Last 12 Months</option>
-                <option>This Year</option>
-                <option>Last Year</option>
-              </select>
-              <button onClick={navigateToReports} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                Export
-              </button>
+      {/* Needs attention */}
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <AttentionTile {...closingTile} onClick={to("/dashboard/admin/reports")} />
+        <AttentionTile
+          tone={stats.pendingLeaves > 0 ? "warn" : "ok"}
+          title={stats.pendingLeaves > 0 ? `${stats.pendingLeaves} leave ${stats.pendingLeaves === 1 ? "request" : "requests"} waiting` : "No leave requests waiting"}
+          detail={stats.pendingLeaves > 0 ? "Needs your approval" : "All caught up"}
+          onClick={to("/dashboard/admin/attendancemanagement?tab=leave")}
+        />
+        <AttentionTile
+          tone={stats.salaryPending > 0 ? "warn" : "ok"}
+          title={stats.salaryPending > 0 ? `${stats.salaryPending} ${stats.salaryPending === 1 ? "salary" : "salaries"} pending` : "Salaries up to date"}
+          detail={stats.salaryPending > 0 ? "For this month" : "Nothing pending this month"}
+          onClick={to("/dashboard/admin/attendancemanagement?tab=salary")}
+        />
+        <AttentionTile
+          tone={stats.pendingPayments > 0 ? "warn" : "ok"}
+          title={stats.pendingPayments > 0 ? `${money(stats.pendingPaymentsTotal)} to collect` : "No payments due"}
+          detail={stats.pendingPayments > 0 ? `${stats.pendingPayments} ${stats.pendingPayments === 1 ? "service" : "services"} not fully paid` : "Everything collected"}
+          onClick={to("/dashboard/admin/reports?tab=pendingPayments")}
+        />
+      </div>
+
+      {/* KPIs */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi
+          label="Service charges today"
+          value={money(stats.todayGrossProfit)}
+          note={`Billed ${money(stats.todayRevenueCollected)}`}
+        />
+        <Kpi
+          label="Net profit today"
+          value={money(netProfit)}
+          tone={netProfit < 0 ? "text-rose-600" : "text-slate-900"}
+          note={`After ${money(stats.todayOperatingExpenses)} expenses`}
+        />
+        <Kpi
+          label="Cash in hand"
+          value={money(stats.cashInHand)}
+          note={`All wallets ${money(stats.totalWalletBalance)}`}
+        />
+        <Kpi
+          label="Present today"
+          value={`${present} of ${staffTotal}`}
+          context={`${stats.attendanceRate ?? 0}% attendance`}
+          note="Active staff"
+        />
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <MiniStat label="Open services" value={openItems.reduce((a, i) => a + i.value, 0)} hint="Pending, in progress, delayed" />
+        <MiniStat label="Avg order today" value={money(stats.averageOrderValue)} hint="Per completed service" />
+        <MiniStat label="Customer rating" value={`${reviews.rating} / 5`} hint={`${reviews.count} ${Number(reviews.count) === 1 ? "review" : "reviews"} this month`} />
+        <MiniStat label="Services completed" value={stats.servicesCompleted ?? 0} hint="All time, this centre" />
+      </div>
+
+      {/* Trend + wallet */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+        <div className="xl:col-span-8">
+          <Panel
+            title="Trend"
+            hint={`${year}, month by month`}
+            action={
+              <Segmented
+                value={trendView}
+                onChange={setTrendView}
+                options={[
+                  { value: "revenue", label: "Revenue" },
+                  { value: "serviceCharges", label: "Service charges" },
+                  { value: "profit", label: "Profit" },
+                  { value: "expenses", label: "Expenses" },
+                ]}
+              />
+            }
+          >
+            <RevenueChart data={trendData} view={trendView} height={340} />
+          </Panel>
+        </div>
+        <div className="flex flex-col gap-4 xl:col-span-4">
+          <Panel title="Wallet position" hint="This centre">
+            <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">{money(stats.totalWalletBalance)}</p>
+            <div className="mt-3 flex h-3 gap-0.5 overflow-hidden rounded-full bg-slate-100">
+              {walletParts.filter((p) => (Number(p.value) || 0) > 0).map((p) => (
+                <div key={p.label} title={`${p.label}: ${money(p.value)}`} style={{ width: `${((Number(p.value) || 0) / walletSum) * 100}%`, minWidth: 8, background: p.color }} />
+              ))}
             </div>
-          }
-        >
-          <RevenueChart monthlyRevenueData={monthlyRevenueData} labels={monthlyRevenueLabels} />
-        </DashboardCard>
-      </div>
-
-      {/* New Widgets Row: Leaderboard & Live Feed */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-        
-        {/* Top Performing Staff Leaderboard */}
-        <div className="lg:col-span-1">
-          <DashboardCard 
-            title="Top Performing Staff" 
-            icon={FiAward}
-            headerAction={<span className="text-xs font-medium text-gray-500">This Month</span>}
-          >
-            <StaffLeaderboard staffData={topStaffData} />
-          </DashboardCard>
-        </div>
-
-        {/* Live Transaction Feed */}
-        <div className="lg:col-span-1">
-          <DashboardCard 
-            title="Live Transactions" 
-            icon={FiActivity}
-            headerAction={<button onClick={navigateToReports} className="text-xs text-indigo-600">View Ledger</button>}
-          >
-            <LiveTransactionFeed transactions={recentTransactions} />
-          </DashboardCard>
-        </div>
-
-        {/* System Alerts & Expenses */}
-        <div className="lg:col-span-1 space-y-4">
-          <NightlyCloseAlert closingData={yesterdayClosing} />
-          
-          <DashboardCard title="Quick Metrics" icon={FiPieChart}>
-             <div className="space-y-4">
-                <div>
-                   <div className="flex justify-between text-sm mb-1">
-                     <span className="text-gray-600">Today's Profit Margin</span>
-                     <span className="font-bold text-gray-900">
-                      {stats.todayRevenueCollected > 0 ? Math.round((stats.todayNetProfit / stats.todayRevenueCollected) * 100) : 0}%
+            <ul className="mt-3 space-y-1.5 text-sm">
+              {walletParts.map((p) => {
+                const pct = ((Number(p.value) || 0) / walletSum) * 100;
+                return (
+                  <li key={p.label} className="flex items-center justify-between">
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color }} />
+                      {p.label}
                     </span>
-                   </div>
-                   <div className="w-full bg-gray-200 rounded-full h-2">
-                     <div className="bg-indigo-600 h-2 rounded-full" style={{ width: `${stats.todayRevenueCollected > 0 ? Math.max(0, Math.min((stats.todayNetProfit / stats.todayRevenueCollected) * 100, 100)) : 0}%` }}></div>
-                   </div>
-                </div>
-             </div>
-          </DashboardCard>
+                    <span className="flex items-baseline gap-2">
+                      <span className="text-[11px] tabular-nums text-slate-400">{pct > 0 && pct < 1 ? "<1" : pct.toFixed(0)}%</span>
+                      <span className="font-medium tabular-nums text-slate-900">{money(p.value)}</span>
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          </Panel>
+          <Panel title="Open services" hint="Waiting to be finished">
+            <StatusDonut items={openItems} label="open" />
+          </Panel>
         </div>
-
       </div>
 
-      {/* Quick Actions & Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
-        <div className="lg:col-span-2">
-          <DashboardCard title="Quick Actions" icon={FiActivity}>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <QuickActionCard
-                title="Process Salaries"
-                description={`${stats.salaryPending} salaries pending for ${getCurrentMonth()}`}
-                icon={FiCreditCard}
-                color="bg-green-500"
-                buttonText="Process"
-                onClick={navigateToSalary}
-              />
-              <QuickActionCard
-                title="Review Leaves"
-                description={`${stats.pendingLeaves} leave requests pending`}
-                icon={FiCalendar}
-                color="bg-amber-500"
-                onClick={navigateToLeaves}
-              />
-              <QuickActionCard
-                title="Collect Payments"
-                description={`${stats.pendingPayments} customers owe ₹${(stats.pendingPaymentsTotal || 0).toLocaleString('en-IN')}`}
-                icon={FiDollarSign}
-                color="bg-emerald-500"
-                buttonText="Collect"
-                onClick={navigateToPendingPayments}
-              />
-              <QuickActionCard
-                title="View Reports"
-                description="Financial & performance reports"
-                icon={FiFileText}
-                color="bg-indigo-500"
-                buttonText="View"
-                onClick={navigateToReports}
-              />
-            </div>
-          </DashboardCard>
-        </div>
-        
-        <DashboardCard 
-          title="Recent Activity" 
-          icon={FiBell}
-          headerAction={<button className="text-xs text-gray-500 hover:text-gray-700">See All</button>}
+      {/* Staff targets */}
+      <div className="mt-4">
+        <Panel title="Staff targets" hint="Today's daily target and this month's target">
+          <StaffTargets targets={targets} scoped />
+        </Panel>
+      </div>
+
+      {/* People */}
+      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel title="Top staff" hint="This month, ranked by service charges">
+          <TopStaffBars staff={lists.topStaff} />
+        </Panel>
+        <Panel title="Attendance" hint="Last 7 days">
+          <AttendanceBars data={charts.attendanceTrend} />
+        </Panel>
+      </div>
+
+      {/* Money movement */}
+      <div className="mt-4">
+        <Panel
+          title="Recent wallet transactions"
+          hint="Latest 10 movements"
+          action={
+            <button type="button" onClick={to("/dashboard/admin/wallets")} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
+              Open wallets
+            </button>
+          }
         >
-          <div className="space-y-1">
-            {recentActivity.map((activity, index) => (
-              <RecentActivityItem key={index} {...activity} />
-            ))}
-          </div>
-        </DashboardCard>
-      </div>
-
-      {/* Wallet & Payment Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
-        <DashboardCard title="Wallet Summary" icon={FiDatabase}>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
-              <div className="flex items-center">
-                <FiHome className="h-4 w-4 text-blue-600 mr-2" />
-                <span className="text-sm font-medium text-gray-700">Cash in Hand</span>
-              </div>
-              <span className="font-bold text-gray-900">₹{(stats.cashInHand || 0).toLocaleString('en-IN')}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg">
-              <div className="flex items-center">
-                <FiCreditCard className="h-4 w-4 text-indigo-600 mr-2" />
-                <span className="text-sm font-medium text-gray-700">Bank Balance</span>
-              </div>
-              <span className="font-bold text-gray-900">₹{(stats.bankBalance || 0).toLocaleString('en-IN')}</span>
-            </div>
-            <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
-              <div className="flex items-center">
-                <FiSmartphone className="h-4 w-4 text-purple-600 mr-2" />
-                <span className="text-sm font-medium text-gray-700">Digital Balance</span>
-              </div>
-              <span className="font-bold text-gray-900">₹{(stats.digitalBalance || 0).toLocaleString('en-IN')}</span>
-            </div>
-            <div className="pt-2">
-              <button onClick={navigateToReports} className="text-xs text-indigo-600 hover:text-indigo-700 font-medium">
-                View All Wallets →
-              </button>
-            </div>
-          </div>
-        </DashboardCard>
-
-          <DashboardCard title="Today's Financial Summary" icon={FiPieChart}>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Revenue Collected</span>
-              <span className="font-bold text-emerald-600">₹{(stats.todayRevenueCollected || 0).toLocaleString('en-IN')}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-gray-600">Operating Expenses</span>
-              <span className="font-bold text-rose-600">₹{(stats.todayOperatingExpenses || 0).toLocaleString('en-IN')}</span>
-            </div>
-            <div className="border-t border-gray-200 pt-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Net Profit</span>
-                <span className={`font-bold ${(stats.todayNetProfit || 0) >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                  ₹{(stats.todayNetProfit || 0).toLocaleString('en-IN')}
-                </span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
-                <div 
-                  className={`h-2 rounded-full ${(stats.todayNetProfit || 0) >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
-                  style={{ width: `${stats.todayRevenueCollected > 0 ? Math.min(Math.abs((stats.todayNetProfit / stats.todayRevenueCollected) * 100), 100) : 0}%` }}
-                ></div>
-              </div>
-            </div>
-          </div>
-        </DashboardCard>
+          <TransactionList rows={lists.recentTransactions} />
+        </Panel>
       </div>
     </div>
   );
