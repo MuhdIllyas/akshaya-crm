@@ -32,7 +32,7 @@ router.get("/dashboard", async (req, res) => {
     const centreId = req.user.centre_id;
     if (!centreId) return res.status(400).json({ error: "No centre assigned to this user" });
 
-    const data = await getDashboardAnalytics(centreId);
+    const data = await getDashboardAnalytics(centreId, req.query);
     res.json(data);
   } catch (err) {
     console.error("Admin Analytics Error:", err);
@@ -46,7 +46,7 @@ router.get("/my-centre", async (req, res) => {
     const centreId = req.user.centre_id;
     if (!centreId) return res.status(400).json({ error: "No centre assigned to this user" });
 
-    const data = await getDashboardAnalytics(centreId);
+    const data = await getDashboardAnalytics(centreId, req.query);
     res.json(data);
   } catch (err) {
     console.error("Admin Analytics Error:", err);
