@@ -1967,9 +1967,18 @@ const ServiceEntry = () => {
                                   <option value="private">🔒 Private</option>
                                   <option value="mentioned_only">👥 Mentions Only</option>
                                 </select>
-                                <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 px-3 py-1.5 rounded shadow-sm hover:bg-indigo-50 transition">
-                                  <input type="checkbox" checked={svc.createTask} onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)} className="rounded text-indigo-600" />
-                                  Convert to Task
+                                <label className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded shadow-sm border transition ${
+                                    svc.initialNote?.trim()
+                                      ? 'cursor-pointer text-indigo-700 bg-white border-indigo-200 hover:bg-indigo-50'
+                                      : 'cursor-not-allowed text-gray-400 bg-gray-50 border-gray-200'
+                                  }`}
+                                    title={svc.initialNote?.trim() ? '' : 'Write a note first'}>
+                                    <input type="checkbox"
+                                      checked={svc.createTask}
+                                      disabled={!svc.initialNote?.trim()}
+                                      onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)}
+                                      className="rounded text-indigo-600" />
+                                    Convert to Task
                                 </label>
                               </div>
 
