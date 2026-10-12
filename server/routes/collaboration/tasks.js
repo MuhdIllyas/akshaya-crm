@@ -3,10 +3,7 @@ import pool from "../../db.js";
 import jwt from "jsonwebtoken";
 import { io } from "../../server.js";
 import { logActivity } from "../../utils/activityLogger.js";
-import { resolveConversation } from "../../utils/conversationService.js";
-
-import notificationService from "../../utils/notificationService.js";
-import { notificationTemplates } from "../../utils/notificationTemplates.js";
+import { createTask } from "../../services/taskService.js";
 
 const router = express.Router();
 
@@ -28,372 +25,135 @@ const authenticateToken = (req, res, next) => {
 router.use(authenticateToken);
 
 /* ================================
-   CREATE TASK OR TEMPLATE
+   RECURRING TEMPLATE CREATION
 ================================ */
-router.post("/add", async (req, res) => {
+async function createRecurringTemplate(req) {
+  const {
+    title,
+    description,
+    assigned_to,
+    priority = "medium",
+    is_global = false,
+    recurrence_type,
+    recurrence_interval = 1,
+    recurrence_day,
+    recurrence_date,
+    due_offset_days = 0,
+    assignment_mode = "centre_admin",
+  } = req.body;
+
+  if (!["admin", "superadmin"].includes(req.user.role)) {
+    throw new Error("Only admin or superadmin can create recurring tasks");
+  }
+  if (req.user.role === "admin" && is_global) {
+    throw new Error("Admin cannot create global recurring tasks");
+  }
+
   const client = await pool.connect();
-
   try {
-    const {
-      title,
-      description,
-      assigned_to,
-      due_date,
-      priority = "medium",
-      related_service_id,
-      related_service_entry_id,
-      related_customer_id,
-      is_global = false,
-
-      // 🔁 Recurring fields
-      recurrence_type,
-      recurrence_interval = 1,
-      recurrence_day,
-      recurrence_date,
-      due_offset_days = 0,
-      assignment_mode = "centre_admin"
-    } = req.body;
-
-    if (!title) {
-      return res.status(400).json({ error: "Title required" });
-    }
-
     await client.query("BEGIN");
 
-    /* =====================================================
-       🔁 RECURRING TEMPLATE CREATION
-    ====================================================== */
-    if (recurrence_type) {
+    let centreId = is_global ? null : req.user.centre_id;
+    let templateAssignedTo = null;
 
-      if (!["admin", "superadmin"].includes(req.user.role)) {
-        throw new Error("Only admin or superadmin can create recurring tasks");
+    // (Previously this block was duplicated; the 2nd copy undid the superadmin fix.)
+    if (assignment_mode === "specific_staff") {
+      if (!assigned_to) throw new Error("assigned_to required for specific_staff mode");
+
+      const staffRes = await client.query(`SELECT centre_id FROM staff WHERE id=$1`, [assigned_to]);
+      if (staffRes.rows.length === 0) throw new Error("Staff not found");
+
+      const staffCentreId = staffRes.rows[0].centre_id;
+      if (req.user.role === "superadmin") {
+        centreId = staffCentreId;
+      } else if (staffCentreId !== centreId) {
+        throw new Error("Staff must belong to same centre");
       }
-
-      if (req.user.role === "admin" && is_global) {
-        throw new Error("Admin cannot create global recurring tasks");
-      }
-
-      let centreId = is_global ? null : req.user.centre_id;
-      let templateAssignedTo = null;
-
-      if (assignment_mode === "specific_staff") {
-
-        if (!assigned_to) {
-          throw new Error("assigned_to required for specific_staff mode");
-        }
-
-        const staffRes = await client.query(
-          `SELECT centre_id FROM staff WHERE id=$1`,
-          [assigned_to]
-        );
-
-        if (staffRes.rows.length === 0)
-          throw new Error("Staff not found");
-
-        const staffCentreId = staffRes.rows[0].centre_id;
-
-        // 🔥 IMPORTANT FIX
-        if (req.user.role === "superadmin") {
-          centreId = staffCentreId;
-        } else {
-          if (staffCentreId !== centreId)
-            throw new Error("Staff must belong to same centre");
-        }
-
-        templateAssignedTo = assigned_to;
-      }
-
-      // ✅ specific_staff support
-      if (assignment_mode === "specific_staff") {
-
-        if (!assigned_to) {
-          throw new Error("assigned_to required for specific_staff mode");
-        }
-
-        const staffRes = await client.query(
-          `SELECT centre_id FROM staff WHERE id=$1`,
-          [assigned_to]
-        );
-
-        if (staffRes.rows.length === 0)
-          throw new Error("Staff not found");
-
-        if (!is_global && staffRes.rows[0].centre_id !== centreId)
-          throw new Error("Staff must belong to same centre");
-
-        templateAssignedTo = assigned_to;
-      }
-
-      const templateRes = await client.query(
-        `INSERT INTO task_templates
-         (centre_id, title, description, priority,
-          assigned_to, assigned_by, assigned_by_role,
-          is_active, is_global,
-          recurrence_type, recurrence_interval,
-          recurrence_day, recurrence_date,
-          due_offset_days, assignment_mode)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,
-                 $9,$10,$11,$12,$13,$14)
-         RETURNING *`,
-        [
-          centreId,
-          title,
-          description || null,
-          priority,
-          templateAssignedTo,
-          req.user.id,
-          req.user.role,
-          is_global,
-          recurrence_type,
-          recurrence_interval,
-          recurrence_day || null,
-          recurrence_date || null,
-          due_offset_days,
-          assignment_mode
-        ]
-      );
-
-      await client.query("COMMIT");
-
-      // ========== ACTIVITY LOGGING ==========
-      // Log recurring task template creation
-      await logActivity({
-        centre_id: centreId,
-        related_type: 'task_template',
-        related_id: templateRes.rows[0].id,
-        action: 'Recurring Task Template Created',
-        description: `Created recurring task template: ${title} (${recurrence_type})`,
-        performed_by: req.user.id,
-        performed_by_role: req.user.role
-      });
-      // ======================================
-
-      return res.status(201).json({
-        message: "Recurring template created successfully",
-        template: templateRes.rows[0]
-      });
+      templateAssignedTo = assigned_to;
     }
 
-    /* =====================================================
-       NORMAL ONE-TIME TASK
-    ====================================================== */
-
-    if (!["admin", "superadmin", "staff"].includes(req.user.role)) {
-      throw new Error("Permission denied");
-    }
-
-    let centreId = req.user.centre_id;
-
-    if (req.user.role === "superadmin") {
-      if (!assigned_to) throw new Error("assigned_to required");
-
-      const staffRes = await client.query(
-        `SELECT centre_id FROM staff WHERE id=$1`,
-        [assigned_to]
-      );
-
-      if (staffRes.rows.length === 0)
-        throw new Error("Assigned staff not found");
-
-      centreId = staffRes.rows[0].centre_id;
-    }
-
-    // Get assigned staff name for logging
-    const assignedStaffRes = await client.query(
-      `SELECT name FROM staff WHERE id=$1`,
-      [assigned_to]
-    );
-    const assignedStaffName = assignedStaffRes.rows[0]?.name || 'Unknown';
-
-    /* ================================
-   🔥 1. RESOLVE CONVERSATION FIRST
-    ================================ */
-    let conversationInput = {
-      channel: "internal",
-      created_by: req.user.id
-    };
-
-    if (related_service_entry_id) {
-      conversationInput.context_type = "service_entry";
-      conversationInput.context_id = related_service_entry_id;
-      conversationInput.centre_id = centreId;
-      conversationInput.is_group = true;
-    } else if (related_customer_id) {
-      conversationInput.context_type = "customer";
-      conversationInput.customer_id = related_customer_id;
-      conversationInput.centre_id = centreId;
-      conversationInput.is_group = true;
-    } else {
-      // SAFE PARTICIPANT ARRAY: Only add assigned_to if it exists
-      const participants = [req.user.id];
-      if (assigned_to && assigned_to !== req.user.id) {
-        participants.push(assigned_to);
-      }
-      conversationInput.participant_ids = participants;
-
-      conversationInput.is_group = false;
-      conversationInput.centre_id = null;
-    }
-
-    const conversation = await resolveConversation(conversationInput);
-
-    /* ================================
-   🔥 2. INSERT TASK (Now with conversation_id)
-    ================================ */
-    const insertRes = await client.query(
-      `INSERT INTO tasks
-       (centre_id,title,description,
-        assigned_to,assigned_by,assigned_by_role,
-        priority,due_date,
-        related_service_id,
-        related_service_entry_id,
-        related_customer_id,
-        conversation_id) 
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+    const templateRes = await client.query(
+      `INSERT INTO task_templates
+       (centre_id, title, description, priority,
+        assigned_to, assigned_by, assigned_by_role,
+        is_active, is_global,
+        recurrence_type, recurrence_interval,
+        recurrence_day, recurrence_date,
+        due_offset_days, assignment_mode)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,true,$8,$9,$10,$11,$12,$13,$14)
        RETURNING *`,
       [
         centreId,
         title,
         description || null,
-        assigned_to,
+        priority,
+        templateAssignedTo,
         req.user.id,
         req.user.role,
-        priority,
-        due_date || null,
-        related_service_id || null,
-        related_service_entry_id || null,
-        related_customer_id || null,
-        conversation.id // <--- Safely passed here
+        is_global,
+        recurrence_type,
+        recurrence_interval,
+        recurrence_day || null,
+        recurrence_date || null,
+        due_offset_days,
+        assignment_mode,
       ]
     );
-
-    const task = insertRes.rows[0];
-
-    /* ================================
-      🔥 3. INSERT CHAT MESSAGE (TASK)
-    ================================ */
-    const msgRes = await client.query(
-      `INSERT INTO chat_messages
-      (conversation_id, sender_type, sender_id, message, message_type, created_at)
-      VALUES ($1,'staff',$2,$3,'task',NOW())
-      RETURNING *`,
-      [
-        conversation.id,
-        req.user.id,
-        task.id.toString() 
-      ]
-    );
-    const savedMsg = msgRes.rows[0];
-
-    // 🔥 NEW: Calculate unread counts inside the transaction before committing
-    const participantsRes = await client.query(
-      `SELECT staff_id FROM chat_participants WHERE conversation_id = $1`,
-      [conversation.id]
-    );
-
-    const participantUpdates = [];
-    for (const p of participantsRes.rows) {
-      if (p.staff_id !== req.user.id) {
-        const unreadCountRes = await client.query(
-          `SELECT COUNT(*) as count
-           FROM chat_messages m
-           LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
-           WHERE m.conversation_id = $2 
-             AND m.sender_id != $1
-             AND r.id IS NULL
-             AND m.is_deleted = false`,
-          [p.staff_id, conversation.id]
-        );
-        participantUpdates.push({
-          staff_id: p.staff_id,
-          unread: parseInt(unreadCountRes.rows[0].count)
-        });
-      }
-    }
-
-    if (due_date) {
-      await client.query(
-        `INSERT INTO calendar_events
-         (date, title, type, event_type,
-          description, centre_id,
-          related_task_id, created_by, created_at)
-         VALUES ($1,$2,'task','task',$3,$4,$5,$6,NOW())`,
-        [
-          due_date,
-          title,
-          description || null,
-          centreId,
-          task.id,
-          req.user.id
-        ]
-      );
-    }
 
     await client.query("COMMIT");
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log task creation
     await logActivity({
       centre_id: centreId,
-      related_type: 'task',
-      related_id: task.id,
-      action: 'Task Created',
-      description: `Created task: ${title} - assigned to ${assignedStaffName}${due_date ? ` (due: ${due_date})` : ''}`,
+      related_type: "task_template",
+      related_id: templateRes.rows[0].id,
+      action: "Recurring Task Template Created",
+      description: `Created recurring task template: ${title} (${recurrence_type})`,
       performed_by: req.user.id,
-      performed_by_role: req.user.role
+      performed_by_role: req.user.role,
     });
-    // ======================================
 
-    // 🔥 NOTIFICATION ENGINE TRIGGER
-    // We only notify if the task is assigned to someone (and optionally, not themselves)
-    if (assigned_to && assigned_to !== req.user.id) {
-      try {
-        await notificationService.createNotification({
-          recipientStaffId: assigned_to,       
-          senderStaffId: req.user.id,          
-          centreId: centreId,
-          relatedEntityType: 'task',
-          relatedEntityId: task.id,
-          ...notificationTemplates.taskAssigned({
-            taskTitle: title,
-            metadata: { 
-              dueDate: due_date || 'No due date',
-              assignedBy: req.user.role 
-            }
-          })
-        });
-      } catch (notifErr) {
-        console.error("Non-fatal: Failed to send task notification:", notifErr);
-      }
-    }
+    return templateRes.rows[0];
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
 
-    // 🔥 NEW: Format message payload perfectly for the frontend
-    const messagePayload = {
-      ...savedMsg,
-      data: task,
-      live_task_data: task
-    };
+/* ================================
+   CREATE TASK OR TEMPLATE
+================================ */
+router.post("/add", async (req, res) => {
+  try {
+    if (!req.body.title) return res.status(400).json({ error: "Title required" });
 
-    // 1. Emit to active chat windows (if they currently have the chat open)
-    io.to(`conversation_${conversation.id}`).emit("new_message", messagePayload);
-
-    // 2. 🔥 NEW: Emit to global user rooms so sidebar badges update instantly
-    for (const update of participantUpdates) {
-      io.to(`user:${update.staff_id}`).emit("new_message", messagePayload);
-      io.to(`user:${update.staff_id}`).emit("unread_update", {
-        conversationId: conversation.id,
-        unread: update.unread
+    if (req.body.recurrence_type) {
+      const template = await createRecurringTemplate(req);
+      return res.status(201).json({
+        message: "Recurring template created successfully",
+        template,
       });
     }
 
-    res.status(201).json(task);
+    const { task } = await createTask({
+      actor: req.user,
+      title: req.body.title,
+      description: req.body.description || null,
+      assigned_to: req.body.assigned_to,
+      due_date: req.body.due_date || null,
+      priority: req.body.priority || "medium",
+      related_service_id: req.body.related_service_id || null,
+      related_service_entry_id: req.body.related_service_entry_id || null,
+      related_customer_id: req.body.related_customer_id || null,
+      note_id: req.body.note_id || null,
+      source: "manual",
+    });
 
+    res.status(201).json(task);
   } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("TASK CREATION ERROR:", err); 
+    console.error("TASK CREATION ERROR:", err);
     res.status(400).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 
@@ -489,12 +249,13 @@ router.patch("/:id/status", async (req, res) => {
       [id]
     );
 
-    if (taskRes.rows.length === 0)
+    if (taskRes.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Task not found" });
+    }
 
     const task = taskRes.rows[0];
 
-    // Get assigned staff name for logging
     const staffRes = await client.query(
       `SELECT name FROM staff WHERE id=$1`,
       [task.assigned_to]
@@ -505,6 +266,7 @@ router.patch("/:id/status", async (req, res) => {
       req.user.role !== "superadmin" &&
       task.centre_id !== req.user.centre_id
     ) {
+      await client.query("ROLLBACK");
       return res.status(403).json({ error: "Not allowed" });
     }
 
@@ -512,6 +274,7 @@ router.patch("/:id/status", async (req, res) => {
       req.user.role === "staff" &&
       task.assigned_to !== req.user.id
     ) {
+      await client.query("ROLLBACK");
       return res.status(403).json({ error: "Not allowed" });
     }
 
@@ -536,8 +299,6 @@ router.patch("/:id/status", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log task status update
     const action = status === 'completed' ? 'Task Completed' : `Task Status Updated to ${status}`;
     const description = status === 'completed' 
       ? `Task completed: ${task.title} (assigned to ${assignedStaffName})`
@@ -552,19 +313,17 @@ router.patch("/:id/status", async (req, res) => {
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
-    // 🔥 NOTIFICATION ENGINE TRIGGER
-    // If completed, notify the person who originally assigned the task
+    // Notify the creator on completion (system-created tasks have no assigned_by)
     if (status === "completed" && task.assigned_by && task.assigned_by !== req.user.id) {
       try {
+        const { default: notificationService } = await import("../../utils/notificationService.js");
         await notificationService.createNotification({
-          recipientStaffId: task.assigned_by,  // Person who created the task
-          senderStaffId: req.user.id,          // Person who completed it
+          recipientStaffId: task.assigned_by,
+          senderStaffId: req.user.id,
           centreId: task.centre_id,
           relatedEntityType: 'task',
           relatedEntityId: task.id,
-          // Since we might not have added taskCompleted to templates yet, we can do it manually or use generic
           type: 'task_completed',
           category: 'work',
           title: 'Task Completed',
@@ -585,7 +344,7 @@ router.patch("/:id/status", async (req, res) => {
     res.json({ success: true });
 
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -613,7 +372,6 @@ router.delete("/:id", async (req, res) => {
 
     const task = taskRes.rows[0];
 
-    // Get assigned staff name for logging
     const staffRes = await client.query(
       `SELECT name FROM staff WHERE id=$1`,
       [task.assigned_to]
@@ -639,8 +397,6 @@ router.delete("/:id", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log task deletion
     await logActivity({
       centre_id: task.centre_id,
       related_type: 'task',
@@ -650,14 +406,13 @@ router.delete("/:id", async (req, res) => {
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     io.to(`centre_${task.centre_id}`).emit("taskDeleted", { id });
 
     res.json({ message: "Task deleted" });
 
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
@@ -678,13 +433,11 @@ router.get("/templates", async (req, res) => {
       WHERE recurrence_type IS NOT NULL
     `;
 
-    // Role-based filtering
     if (req.user.role !== "superadmin") {
       query += ` AND (centre_id = $1 OR is_global = true)`;
       values.push(req.user.centre_id);
     }
 
-    // Optional service filter
     if (related_service_id) {
       query += ` AND related_service_id = $${values.length + 1}`;
       values.push(related_service_id);
@@ -730,19 +483,20 @@ router.patch("/template/:id", async (req, res) => {
       [id]
     );
 
-    if (templateRes.rows.length === 0)
+    if (templateRes.rows.length === 0) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "Template not found" });
+    }
 
     const template = templateRes.rows[0];
 
-    // Permission check
-    if (req.user.role === "admin") {
-      if (template.centre_id !== req.user.centre_id) {
-        return res.status(403).json({ error: "Not allowed" });
-      }
+    if (req.user.role === "admin" && template.centre_id !== req.user.centre_id) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Not allowed" });
     }
 
     if (req.user.role === "staff") {
+      await client.query("ROLLBACK");
       return res.status(403).json({ error: "Not allowed" });
     }
 
@@ -777,8 +531,6 @@ router.patch("/template/:id", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log recurring template update
     await logActivity({
       centre_id: template.centre_id,
       related_type: 'task_template',
@@ -788,12 +540,11 @@ router.patch("/template/:id", async (req, res) => {
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     res.json({ message: "Recurring template updated successfully" });
 
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
@@ -817,11 +568,8 @@ router.patch("/template/:id/toggle", async (req, res) => {
 
     const template = templateRes.rows[0];
 
-    // Permission check
-    if (req.user.role === "admin") {
-      if (template.centre_id !== req.user.centre_id) {
-        return res.status(403).json({ error: "Not allowed" });
-      }
+    if (req.user.role === "admin" && template.centre_id !== req.user.centre_id) {
+      return res.status(403).json({ error: "Not allowed" });
     }
 
     if (req.user.role === "staff") {
@@ -837,8 +585,6 @@ router.patch("/template/:id/toggle", async (req, res) => {
       [id]
     );
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log template pause/resume
     const newStatus = result.rows[0].is_active ? 'resumed' : 'paused';
     await logActivity({
       centre_id: template.centre_id,
@@ -849,7 +595,6 @@ router.patch("/template/:id/toggle", async (req, res) => {
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     res.json({
       message: result.rows[0].is_active
@@ -883,18 +628,14 @@ router.delete("/template/:id", async (req, res) => {
 
     const template = templateRes.rows[0];
 
-    // Permission check
-    if (req.user.role === "admin") {
-      if (template.centre_id !== req.user.centre_id) {
-        throw new Error("Not allowed");
-      }
+    if (req.user.role === "admin" && template.centre_id !== req.user.centre_id) {
+      throw new Error("Not allowed");
     }
 
     if (req.user.role === "staff") {
       throw new Error("Not allowed");
     }
 
-    // Delete the template (tasks generated from it will remain)
     await client.query(
       `DELETE FROM task_templates WHERE id=$1`,
       [id]
@@ -902,8 +643,6 @@ router.delete("/template/:id", async (req, res) => {
 
     await client.query("COMMIT");
 
-    // ========== ACTIVITY LOGGING ==========
-    // Log template deletion
     await logActivity({
       centre_id: template.centre_id,
       related_type: 'task_template',
@@ -913,12 +652,11 @@ router.delete("/template/:id", async (req, res) => {
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
-    // ======================================
 
     res.json({ message: "Template deleted successfully" });
 
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     res.status(400).json({ error: err.message });
   } finally {
     client.release();
