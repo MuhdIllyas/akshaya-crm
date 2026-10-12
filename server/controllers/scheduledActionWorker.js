@@ -104,6 +104,9 @@ async function executeAction(action) {
     if (entry?.status === "cancelled") {
       return markCancelled(action, "Service entry was cancelled");
     }
+    if (action.action_type === "staff_task" && entry?.workspace_closed_at) {
+      return markCancelled(action, "Service workspace was closed");
+    }
     const expiresAt = action.payload?.expires_at;
     if (expiresAt && new Date(expiresAt) <= new Date()) {
       return markCancelled(action, "Expired: the scheduled time had already passed when it was picked up");

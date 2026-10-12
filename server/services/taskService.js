@@ -40,6 +40,7 @@ export async function createTask(input, externalClient = null) {
     assigned_to,
     due_date = null,
     priority = "medium",
+    status = "pending",
     related_service_id = null,
     related_service_entry_id = null,
     related_customer_id = null,
@@ -132,8 +133,8 @@ export async function createTask(input, externalClient = null) {
           assigned_to, assigned_by, assigned_by_role,
           priority, due_date,
           related_service_id, related_service_entry_id, related_customer_id,
-          conversation_id, note_id, source, scheduled_action_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+          conversation_id, note_id, source, scheduled_action_id, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING *`,
       [
         centreId,
@@ -151,6 +152,7 @@ export async function createTask(input, externalClient = null) {
         toId(note_id),
         source,
         scheduled_action_id,
+        status,
       ]
     );
     task = insertRes.rows[0];
