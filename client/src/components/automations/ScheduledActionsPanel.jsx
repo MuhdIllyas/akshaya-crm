@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
 import { FiZap, FiPlus, FiSend, FiX, FiClock, FiAlertCircle, FiRotateCcw, FiEdit2, FiCheck } from 'react-icons/fi';
 import AutomationBuilder, { TypeIcon } from './AutomationBuilder';
-import { validateDraft, toApiAction, formatWhen, toLocalInput } from './automationUtils';
+import { validateDraft, toApiAction, formatWhen, toLocalInput } from '@/utils/automations/automationUtils';
 import {
   getEntryAutomations, createAutomations, cancelAutomation,
   runAutomationNow, rescheduleAutomation, getPresets,
