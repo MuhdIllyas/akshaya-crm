@@ -1,4 +1,5 @@
 // routes/automations.js
+// Mount in server.js:  app.use("/api/automations", automationRoutes);
 
 import express from "express";
 import jwt from "jsonwebtoken";
@@ -370,6 +371,129 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+/* ================================
+   GET /   — all schedules for the Messenger "Schedules" view
+   Query:
+     status   upcoming (default) | failed | done | cancelled | all
+     type     whatsapp_template | staff_task
+     search   customer name / phone / label
+     mine     true -> created by me OR task assigned to me
+     centre_id (superadmin only)
+     from, to  YYYY-MM-DD (IST, on run_at)
+     limit, offset
+================================ */
+const STATUS_GROUPS = {
+  upcoming: ["pending", "processing"],
+  failed: ["failed"],
+  done: ["done"],
+  cancelled: ["cancelled"],
+};
+
+const ASSIGNEE_SQL = `CASE WHEN sa.payload->>'assigned_to' ~ '^[0-9]+$'
+                           THEN (sa.payload->>'assigned_to')::int END`;
+
+function buildScope(req, values) {
+  const where = [];
+  const add = (sql, v) => {
+    values.push(v);
+    where.push(sql.replace("?", `$${values.length}`));
+  };
+
+  if (req.user.role === "superadmin") {
+    if (req.query.centre_id) add("sa.centre_id = ?", Number(req.query.centre_id));
+  } else {
+    add("sa.centre_id = ?", Number(req.user.centre_id));
+  }
+
+  if (req.query.type) add("sa.action_type = ?", String(req.query.type));
+
+  if (req.query.mine === "true") {
+    values.push(Number(req.user.id));
+    const n = values.length;
+    where.push(`(sa.created_by = $${n} OR ${ASSIGNEE_SQL} = $${n})`);
+  }
+
+  if (req.query.search && String(req.query.search).trim()) {
+    values.push(`%${String(req.query.search).trim()}%`);
+    const n = values.length;
+    where.push(`(se.customer_name ILIKE $${n} OR sa.customer_phone ILIKE $${n}
+                 OR se.phone ILIKE $${n} OR sa.payload->>'label' ILIKE $${n})`);
+  }
+
+  if (req.query.from) add(`(sa.run_at AT TIME ZONE '${TZ}')::date >= ?::date`, String(req.query.from));
+  if (req.query.to) add(`(sa.run_at AT TIME ZONE '${TZ}')::date <= ?::date`, String(req.query.to));
+
+  return where;
+}
+
+router.get("/", async (req, res) => {
+  try {
+    const statusKey = STATUS_GROUPS[req.query.status] || req.query.status === "all" ? req.query.status : "upcoming";
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
+
+    const FROM = `
+      FROM scheduled_actions sa
+      LEFT JOIN service_entries se ON se.id = sa.service_entry_id
+      LEFT JOIN services s ON s.id = se.category_id
+      LEFT JOIN staff cb ON cb.id = sa.created_by
+      LEFT JOIN staff asg ON asg.id = ${ASSIGNEE_SQL}
+      LEFT JOIN centres c ON c.id = sa.centre_id
+      LEFT JOIN tasks t ON t.scheduled_action_id = sa.id`;
+
+    // ---- list ----
+    const listValues = [];
+    const listWhere = buildScope(req, listValues);
+    if (statusKey !== "all") {
+      listValues.push(STATUS_GROUPS[statusKey]);
+      listWhere.push(`sa.status = ANY($${listValues.length}::text[])`);
+    }
+    const orderBy =
+      statusKey === "upcoming"
+        ? "sa.run_at ASC"
+        : "COALESCE(sa.executed_at, sa.cancelled_at, sa.updated_at) DESC";
+
+    listValues.push(limit + 1, offset);
+    const listRes = await pool.query(
+      `SELECT sa.*,
+              se.customer_name, se.phone AS entry_phone, se.category_id, se.subcategory_id,
+              s.name AS service_name,
+              cb.name AS created_by_name,
+              asg.name AS assignee_name,
+              c.name AS centre_name,
+              t.id AS task_id, t.status AS task_status
+       ${FROM}
+       ${listWhere.length ? "WHERE " + listWhere.join(" AND ") : ""}
+       ORDER BY ${orderBy}
+       LIMIT $${listValues.length - 1} OFFSET $${listValues.length}`,
+      listValues
+    );
+
+    const hasMore = listRes.rows.length > limit;
+    const items = hasMore ? listRes.rows.slice(0, limit) : listRes.rows;
+
+    // ---- counts (same scope, ignoring the status tab) ----
+    const countValues = [];
+    const countWhere = buildScope(req, countValues);
+    const countRes = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (WHERE sa.status IN ('pending','processing'))::int AS upcoming,
+         COUNT(*) FILTER (WHERE sa.status = 'pending'
+           AND (sa.run_at AT TIME ZONE '${TZ}')::date = (NOW() AT TIME ZONE '${TZ}')::date)::int AS today,
+         COUNT(*) FILTER (WHERE sa.status = 'failed')::int AS failed,
+         COUNT(*) FILTER (WHERE sa.status = 'done' AND sa.executed_at > NOW() - INTERVAL '7 days')::int AS done_7d
+       ${FROM}
+       ${countWhere.length ? "WHERE " + countWhere.join(" AND ") : ""}`,
+      countValues
+    );
+
+    res.json({ items, hasMore, counts: countRes.rows[0] });
+  } catch (err) {
+    console.error("SCHEDULES LIST ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 });
 

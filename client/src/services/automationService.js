@@ -27,3 +27,8 @@ export const runAutomationNow = (id) => client.post(`/${id}/run-now`).then((r) =
 
 export const rescheduleAutomation = (id, runAt) =>
   client.patch(`/${id}/reschedule`, { run_at: runAt }).then((r) => r.data);
+
+// All schedules for the Messenger "Schedules" view
+// params: { status, type, search, mine, centre_id, from, to, limit, offset }
+export const listSchedules = (params = {}) =>
+  client.get('/', { params }).then((r) => r.data);

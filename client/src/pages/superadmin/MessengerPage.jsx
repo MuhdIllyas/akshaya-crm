@@ -61,6 +61,7 @@ import Chat from '@/components/Chat';
 import ConversationList from "@/components/chat/ConversationList";
 import ConversationDetails from "@/components/chat/ConversationDetails";
 import MessengerNav from "@/components/chat/MessengerNav";
+import SchedulesView from "@/components/automations/SchedulesView";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 
@@ -2835,7 +2836,7 @@ const renderTasksView = () => {
             ) : activeView === "tasks" ? (
               renderTasksView()
             ) : activeView === "schedules" ? (
-              renderPlaceholderView("Schedules")
+              <SchedulesView currentUser={currentUser} centresMap={centresMap} />
             ) : (
               renderPlaceholderView("Chat")
             )}
