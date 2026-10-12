@@ -77,6 +77,9 @@ import serviceTrackingDocumentsRoutes from "./routes/serviceTrackingDocuments.js
 //Contact Route
 import contactRoutes from "./routes/contact.js";
 
+//Task Automations
+import automationRoutes from "./routes/automations.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -464,6 +467,9 @@ app.use("/api/servicetracking", serviceTrackingDocumentsRoutes);
 
 /* Contact us - for public access */
 app.use("/api/contact", contactRoutes);
+
+/* Task Automations */
+app.use("/api/automations", automationRoutes);
 
 /* ================================
    STATIC FILES

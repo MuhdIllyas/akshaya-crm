@@ -7,7 +7,7 @@ import {
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
   FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip, FiPackage,
   FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget,
-  FiMail, FiFlag, FiActivity
+  FiMail, FiFlag, FiActivity, FiZap
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -32,6 +32,10 @@ import NotesPanel from '/src/components/notes/NotesPanel';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import axios from 'axios';
+import AutomationBuilder from '@/components/automations/AutomationBuilder';
+import ScheduledActionsPanel from '@/components/automations/ScheduledActionsPanel';
+import { validateDraft, toApiAction } from '@/utils/automations/automationUtils';
+import { getPresets , createAutomations } from '@/services/automationService';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -56,7 +60,10 @@ const createEmptyService = () => {
     trackingStatus: 'pending',
     aadhaar: '',
     email: '',
-    customerRemarks: ''
+    customerRemarks: '',
+
+    // --- SCHEDULED REMINDERS ---
+    automations: []
   };
 };
 
@@ -168,6 +175,13 @@ const ServiceEntry = () => {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const isEditMode = Boolean(editingEntryId);
   const [staffList, setStaffList] = useState([]);
+
+  const [automationPresets, setAutomationPresets] = useState([]);
+  const [showAutomationErrors, setShowAutomationErrors] = useState(false);
+
+  useEffect(() => {
+    getPresets().then(setAutomationPresets).catch(err => console.error('Failed to load automation presets', err));
+  }, []);
 
   const [centreDetails, setCentreDetails] = useState({
     name: 'Akshaya e Centre',
@@ -1027,6 +1041,7 @@ const ServiceEntry = () => {
       if (field === 'category') {
         const cat = categories.find(c => c.id === parseInt(value));
         if (cat) {
+          svc.automations = [];
           svc.serviceWalletId = cat.wallet_id ? parseInt(cat.wallet_id) : svc.serviceWalletId;
           svc.requiresWallet = cat.requires_wallet || false;
           svc.hasExpiry = cat.has_expiry || false;
@@ -1164,8 +1179,14 @@ const ServiceEntry = () => {
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
+      if (svc.createTask && !svc.initialNote?.trim()) errors.push(`${prefix}Write a note before converting it to a task`);
       if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
       if (svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email)) errors.push(`${prefix}Please enter a valid email address`);
+      (svc.automations || []).forEach((draft) => {
+        const preset = automationPresets.find(p => p.id === draft.presetId);
+        if (!preset) return errors.push(`${prefix}Reminder type not found`);
+        validateDraft(preset, draft).forEach(e => errors.push(`${prefix}${preset.name}: ${e}`));
+      });
     });
 
     if (formData.payments.length === 0) errors.push('At least one payment is required');
@@ -1176,9 +1197,11 @@ const ServiceEntry = () => {
     if (!staffId) errors.push('Staff ID missing. Please log in again.');
 
     if (errors.length > 0) {
+      setShowAutomationErrors(true);
       errors.forEach(err => toast.error(err, { autoClose: 5000 }));
       return;
     }
+    setShowAutomationErrors(false);
 
     const payload = {
       tokenId: formData.tokenId || null,
@@ -1329,6 +1352,23 @@ const ServiceEntry = () => {
                     console.error(`Failed to save note/task for Entry:`, noteErr);
                   }
                 }
+
+                if (svcFormData.automations?.length) {
+                  try {
+                    const res = await createAutomations(
+                      svc.serviceEntryId || svc.id,
+                      svcFormData.automations.map(d =>
+                        toApiAction(d, { service_name: getServiceLabel(svcFormData.category, svcFormData.subcategory) })
+                      )
+                    );
+                    toast.success(`⏰ ${res.created.length} reminder(s) scheduled`);
+                  } catch (autoErr) {
+                    toast.error(
+                      `Entry saved, but reminders were not scheduled: ${autoErr.response?.data?.error || autoErr.message}. Open the entry to schedule them again.`,
+                      { autoClose: 10000 }
+                    );
+                  }
+                }
               });
 
               await Promise.allSettled(backgroundPromises);
@@ -1384,6 +1424,19 @@ const ServiceEntry = () => {
       return subcategory ? subcategory.name : 'N/A';
     }
     return 'N/A';
+  };
+
+  const getSuggestedDocs = (categoryId, subcategoryId) => {
+    const cat = categories.find(c => c.id === parseInt(categoryId));
+    if (!cat) return [];
+    const catDocs = cat.required_documents?.filter(d => !d.sub_category_id) || [];
+    const subDocs = cat.subcategories?.find(s => s.id === parseInt(subcategoryId))?.required_documents || [];
+    return [...new Set([...catDocs, ...subDocs].map(d => d.document_name).filter(Boolean))];
+  };
+
+  const getServiceLabel = (categoryId, subcategoryId) => {
+    const sub = getSubcategoryName(categoryId, subcategoryId);
+    return sub !== 'N/A' ? sub : getCategoryName(categoryId);
   };
 
   const formatPayments = (payments = [], totalCharge = 0) => {
@@ -1603,7 +1656,8 @@ const ServiceEntry = () => {
                     const tabDefs = [
                       { id: 'service',  label: 'Service',  icon: FiCreditCard, badge: null },
                       ...(!isEditMode ? [{ id: 'tracking', label: 'Tracking', icon: FiPackage, badge: trackingFilledCount || null, dot: statusIsActive }] : []),
-                      ...(!isEditMode ? [{ id: 'notes', label: 'Notes', icon: FiMessageCircle, badge: svc.initialNote ? 1 : null }] : [])
+                      ...(!isEditMode ? [{ id: 'notes', label: 'Notes', icon: FiMessageCircle, badge: svc.initialNote ? 1 : null }] : []),
+                      ...(!isEditMode ? [{ id: 'automations', label: 'Reminders', icon: FiZap, badge: svc.automations?.length || null }] : [])
                     ];
 
                     return (
@@ -1999,6 +2053,23 @@ const ServiceEntry = () => {
                               )}
                             </div>
                           )}
+
+                          {/* ---------- AUTOMATIONS TAB (hidden in edit mode) ---------- */}
+                          {activeTab === 'automations' && !isEditMode && (
+                            <AutomationBuilder
+                              value={svc.automations || []}
+                              onChange={(next) => handleCartChange(index, 'automations', next)}
+                              presets={automationPresets}
+                              categoryId={svc.category}
+                              subcategoryId={svc.subcategory}
+                              staffList={staffList}
+                              suggestedDocs={getSuggestedDocs(svc.category, svc.subcategory)}
+                              customerName={formData.customerName}
+                              serviceName={getServiceLabel(svc.category, svc.subcategory)}
+                              defaultAssignee={svc.assignedTo || userId}
+                              showErrors={showAutomationErrors}
+                            />
+                          )}
                         </div>
                       </motion.div>
                     );
@@ -2220,6 +2291,20 @@ const ServiceEntry = () => {
               contextId={editingEntryId}
               embedded={true}
               showHeader={false}
+            />
+          </div>
+
+          <div className="mt-4 bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+            <ScheduledActionsPanel
+              serviceEntryId={editingEntryId}
+              categoryId={formData.services[0]?.category}
+              subcategoryId={formData.services[0]?.subcategory}
+              customerName={formData.customerName}
+              serviceName={getServiceLabel(formData.services[0]?.category, formData.services[0]?.subcategory)}
+              staffList={staffList}
+              suggestedDocs={getSuggestedDocs(formData.services[0]?.category, formData.services[0]?.subcategory)}
+              presets={automationPresets}
+              defaultAssignee={userId}
             />
           </div>
         </div>
@@ -2575,6 +2660,19 @@ const ServiceEntry = () => {
                 contextId={selectedEntry.id} 
                 embedded={true} 
                 showHeader={false}
+              />
+            </div>
+            <div className="mt-6 border-t border-gray-200 pt-5">
+              <ScheduledActionsPanel
+                serviceEntryId={selectedEntry.id}
+                categoryId={selectedEntry.category}
+                subcategoryId={selectedEntry.subcategory}
+                customerName={selectedEntry.customerName}
+                serviceName={getServiceLabel(selectedEntry.category, selectedEntry.subcategory)}
+                staffList={staffList}
+                suggestedDocs={getSuggestedDocs(selectedEntry.category, selectedEntry.subcategory)}
+                presets={automationPresets}
+                defaultAssignee={userId}
               />
             </div>
           </div>
