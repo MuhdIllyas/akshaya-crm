@@ -7,7 +7,7 @@ import { previewAutomation } from '/src/services/automationService';
 import {
   presetsForService, newDraft, describeTrigger, describeTriggers, validateDraft,
   formatWhen, toLocalInput, isWhatsAppPreset,
-} from './automationUtils';
+} from '@/utils/automations/automationUtils';
 
 const inputCls =
   'w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm';
