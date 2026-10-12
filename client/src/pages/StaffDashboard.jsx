@@ -818,7 +818,7 @@ const StaffDashboard = () => {
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
-            🎯 New monthly target set! 📊 Track progress live, ✅ meet your daily goal. Let's hit it! 🚀
+            🎨 New Messenger UI active! 🐛 Bug fixes deployed for peak performance. Stay sharp, team! ⚡
           </div>
         </div>
       </div>
