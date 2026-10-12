@@ -8,7 +8,7 @@ import {
   FiAlertCircle, FiCalendar, FiUser, FiPhone, FiMessageSquare, FiUserCheck, FiZap,
 } from 'react-icons/fi';
 import { TypeIcon } from './AutomationBuilder';
-import { formatWhen, toLocalInput } from './automationUtils';
+import { formatWhen, toLocalInput } from '@/utils/automations/automationUtils';
 import {
   listSchedules, cancelAutomation, runAutomationNow, rescheduleAutomation,
 } from '/src/services/automationService';
