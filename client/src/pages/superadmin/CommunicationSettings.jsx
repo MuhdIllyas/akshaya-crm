@@ -30,6 +30,7 @@ const CommunicationSettings = () => {
     { key: "token_generated", label: "New Token Generated" },
     { key: "reengagement_message", label: "Reengagement Request" },
     { key: "document_ready", label: "Document Ready - Public" },
+    { key: "passport_appointment_reminder", label: "Passport Appointment Reminder" }
   ];
 
   useEffect(() => {
