@@ -446,7 +446,8 @@ const TrackServicePage = () => {
 
       // Grouping date must strictly use created_at to avoid moving items to "today" when updated
       const createdDate = new Date(trackingEntry.created_at || trackingEntry.updated_at || Date.now());
-      const dateStr = createdDate.toISOString().split('T')[0];
+      // Group by the IST calendar day (toISOString would use UTC and shift early-morning entries)
+      const dateStr = createdDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
@@ -728,6 +729,9 @@ const TrackServicePage = () => {
       if (subcategoryFilter !== 'all') {
         transformedServices = transformedServices.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
       }
+
+      // Newest first: the same order the queue/table shows, so Prev/Next walks the visible list
+      transformedServices.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       setServices(transformedServices);
       setIsSidebarVisible(true);
@@ -1346,7 +1350,7 @@ const TrackServicePage = () => {
                     <span className={`text-xs font-semibold ${step.completed || current ? 'text-gray-900' : 'text-gray-500'}`}>{step.name}</span>
                   </div>
                   <p className="text-[11px] text-gray-500 mt-1.5 pl-7">
-                    {step.completed && step.date ? formatTimelineDate(step.date) : current ? 'In this step' : 'Pending'}
+                    {step.completed ? (step.date ? formatTimelineDate(step.date) : 'Done') : current ? 'In this step' : 'Not started'}
                   </p>
                 </li>
               );
@@ -2037,7 +2041,7 @@ const TrackServicePage = () => {
       {totalPages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm">
           <span className="text-gray-600">
-            Showing <b>{(currentPage - 1) * limit + 1}</b>–<b>{Math.min(currentPage * limit, totalRecords)}</b> of <b>{totalRecords}</b>
+            Showing <b>{(currentPage - 1) * limit + 1}</b>–<b>{(currentPage - 1) * limit + services.length}</b> of <b>{totalRecords}</b>
           </span>
           <div className="flex items-center gap-2">
             <button
@@ -2134,19 +2138,30 @@ const TrackServicePage = () => {
      METRICS: one status bar + counts (also the status filter)
   ===================================================================== */
 
+  // Counts can arrive as text ("12") from PostgreSQL COUNT(), and under a few key names
+  const statNum = (...vals) => {
+    for (const v of vals) {
+      if (v === null || v === undefined || v === '') continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+  const gs = globalStats || {};
   const METRIC_SEGMENTS = [
-    { key: 'Pending', count: globalStats.pending, bar: 'bg-amber-500' },
-    { key: 'In Progress', count: globalStats.in_progress, bar: 'bg-blue-600' },
-    { key: 'Resubmit', count: globalStats.resubmit, bar: 'bg-orange-500' },
-    { key: 'Delayed', count: globalStats.delayed, bar: 'bg-rose-600' },
-    { key: 'Completed', count: globalStats.completed, bar: 'bg-emerald-600' },
-    { key: 'Paid', count: globalStats.paid, bar: 'bg-green-500' },
-  ].filter(s => typeof s.count === 'number');
+    { key: 'Pending', count: statNum(gs.pending), bar: 'bg-amber-500' },
+    { key: 'In Progress', count: statNum(gs.in_progress, gs.inProgress), bar: 'bg-blue-600' },
+    { key: 'Resubmit', count: statNum(gs.resubmit), bar: 'bg-orange-500' },
+    { key: 'Delayed', count: statNum(gs.delayed, gs.rejected), bar: 'bg-rose-600' },
+    { key: 'Completed', count: statNum(gs.completed), bar: 'bg-emerald-600' },
+    { key: 'Paid', count: statNum(gs.paid), bar: 'bg-green-500' },
+  ].filter(s => s.count !== null);
 
   const renderMetrics = () => {
-    const total = globalStats.total || METRIC_SEGMENTS.reduce((a, s) => a + (s.count || 0), 0) || 0;
+    const total = statNum(gs.total) ?? METRIC_SEGMENTS.reduce((a, s) => a + (s.count || 0), 0);
     const pct = (n) => (total ? Math.round(((n || 0) / total) * 100) : 0);
-    const onTime = globalStats.sla_compliance != null ? Math.round(globalStats.sla_compliance) : null;
+    const onTimeRaw = statNum(gs.sla_compliance, gs.slaCompliance);
+    const onTime = onTimeRaw !== null ? Math.round(onTimeRaw) : null;
 
     return (
       <section className="bg-white rounded-xl border border-gray-200 p-4" aria-label="Applications by status">
@@ -2217,7 +2232,7 @@ const TrackServicePage = () => {
      QUEUE VIEW: list on the left, the selected application on the right
   ===================================================================== */
 
-  const todayKey = new Date().toISOString().split('T')[0];
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const isOverdue = (s) =>
     s.rawEstimatedDelivery &&
     !['Completed', 'Paid'].includes(s.status) &&
@@ -2281,7 +2296,9 @@ const TrackServicePage = () => {
         <aside className={`bg-white rounded-xl border border-gray-200 overflow-hidden lg:sticky lg:top-4 ${selectedService ? 'hidden lg:block' : ''}`}>
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
             <span>
-              {totalRecords ? <>Showing {(currentPage - 1) * limit + 1}–{Math.min(currentPage * limit, totalRecords)} of {totalRecords}</> : `${services.length} shown`}
+              {services.length === 0
+                ? 'No applications'
+                : <>Showing {(currentPage - 1) * limit + 1}–{(currentPage - 1) * limit + services.length}{totalRecords ? ` of ${totalRecords}` : ''}</>}
             </span>
             {totalPages > 1 && (
               <span className="flex items-center gap-1">
