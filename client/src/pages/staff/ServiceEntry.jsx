@@ -29,6 +29,7 @@ import api from '@/services/serviceService';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import NotesPanel from '/src/components/notes/NotesPanel';
+import ApplicationNumberField from '/src/components/tracking/ApplicationNumberField';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import axios from 'axios';
@@ -1825,14 +1826,15 @@ const ServiceEntry = () => {
                           {activeTab === 'tracking' && !isEditMode && (
                             <div className="space-y-3">
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                                {/* Application No */}
-                                <div>
+                                {/* Application No (full width so long numbers stay readable) */}
+                                <div className="md:col-span-3">
                                   <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
-                                  <input type="text" placeholder="e.g., APP12345"
+                                  <ApplicationNumberField
+                                    mode="form"
                                     value={svc.applicationNumber}
-                                    onChange={(e) => handleCartChange(index, 'applicationNumber', e.target.value)}
-                                    maxLength="50"
-                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white shadow-sm" />
+                                    placeholder="Type or paste the application number"
+                                    onChange={(v) => handleCartChange(index, 'applicationNumber', v)}
+                                  />
                                 </div>
 
                                 {/* Aadhaar */}

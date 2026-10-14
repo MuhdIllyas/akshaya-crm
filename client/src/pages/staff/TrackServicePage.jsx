@@ -34,6 +34,13 @@ import {
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
+import ApplicationNumberField, { AppNoDisplay, cleanAppNo } from '/src/components/tracking/ApplicationNumberField';
+
+// Numbers typed with spaces ("2003 7006 3049") should still match the stored number
+const normalizeSearch = (term) => {
+  const t = String(term || '').trim();
+  return /^[\d\s-]+$/.test(t) ? t.replace(/[\s-]+/g, '') : t;
+};
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -463,7 +470,7 @@ const TrackServicePage = () => {
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
-        applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
+        applicationNumber: trackingEntry.application_number || '',
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
@@ -651,7 +658,7 @@ const TrackServicePage = () => {
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
         setTrackingFormData({
-          applicationNumber: transformed[0].applicationNumber || `APP${transformed[0].serviceEntryId}`,
+          applicationNumber: transformed[0].applicationNumber || '',
           currentStep: transformed[0].currentStep || 'Submitted',
           estimatedDelivery: formatDateForInput(transformed[0].rawEstimatedDelivery) || '',
           averageTime: transformed[0].averageTime || '7 days',
@@ -695,7 +702,7 @@ const TrackServicePage = () => {
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
-        search: debouncedSearch || undefined,
+        search: normalizeSearch(debouncedSearch) || undefined,
         aadhaar: debouncedAadhaar || undefined
       };
 
@@ -942,7 +949,7 @@ const TrackServicePage = () => {
       const newProgress = calculateProgress(selectedService.status, trackingFormData.currentStep);
       
       const payload = {
-        applicationNumber: trackingFormData.applicationNumber || null,
+        applicationNumber: cleanAppNo(trackingFormData.applicationNumber) || null,
         currentStep: trackingFormData.currentStep || null,
         estimatedDelivery: trackingFormData.estimatedDelivery || null,
         averageTime: trackingFormData.averageTime || '7 days',
@@ -983,7 +990,7 @@ const TrackServicePage = () => {
       const updatedServices = services.map(service =>
         service.id === selectedService.id ? {
           ...service,
-          applicationNumber: trackingFormData.applicationNumber || `APP${service.serviceEntryId}`,
+          applicationNumber: trackingFormData.applicationNumber || '',
           currentStep: trackingFormData.currentStep || 'Submitted',
           estimatedDelivery: formatDate(trackingFormData.estimatedDelivery),
           averageTime: trackingFormData.averageTime || '7 days',
@@ -1003,7 +1010,7 @@ const TrackServicePage = () => {
       setServices(updatedServices);
       setSelectedService({
         ...selectedService,
-        applicationNumber: trackingFormData.applicationNumber || `APP${selectedService.serviceEntryId}`,
+        applicationNumber: trackingFormData.applicationNumber || '',
         currentStep: trackingFormData.currentStep || 'Submitted',
         estimatedDelivery: formatDate(trackingFormData.estimatedDelivery),
         averageTime: trackingFormData.averageTime || '7 days',
@@ -1032,7 +1039,7 @@ const TrackServicePage = () => {
     await fetchDocuments(service.id);
 
     setTrackingFormData({
-      applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
+      applicationNumber: service.applicationNumber || '',
       currentStep: service.currentStep || 'Submitted',
       estimatedDelivery: formatDateForInput(service.rawEstimatedDelivery) || '',
       averageTime: service.averageTime || '7 days',
@@ -1132,6 +1139,12 @@ const TrackServicePage = () => {
               <span className="inline-flex items-center gap-1 font-mono font-semibold text-gray-800">
                 <FiHash className="h-3.5 w-3.5 text-[#172a45]" />{service.trackingId}
               </span>
+              {service.applicationNumber && (
+                <span className="inline-flex items-center gap-1 text-gray-800">
+                  <span className="text-gray-500">App no.</span>
+                  <AppNoDisplay value={service.applicationNumber} className="font-semibold" />
+                </span>
+              )}
               <a href={`tel:${service.phone}`} className="inline-flex items-center gap-1 hover:text-[#172a45]">
                 <FiPhone className="h-3.5 w-3.5" />{service.phone || 'N/A'}
               </a>
@@ -1232,18 +1245,11 @@ const TrackServicePage = () => {
           {/* App number */}
           <div>
             <label className={`${sectionLabel} block mb-1.5`}>Application number</label>
-            <input
-              key={`${service.id}-${service.applicationNumber}`}
-              type="text"
-              defaultValue={service.applicationNumber || ''}
-              placeholder="Enter application number"
-              maxLength={50}
-              onBlur={(e) => {
-                const v = e.target.value.trim();
-                if (v !== (service.applicationNumber || '')) handleInlineTrackingUpdate(service, { applicationNumber: v });
-              }}
-              onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-              className={`${fieldCls} font-mono`}
+            <ApplicationNumberField
+              key={service.id}
+              value={service.applicationNumber || ''}
+              placeholder="Type or paste the number"
+              onSave={(v) => handleInlineTrackingUpdate(service, { applicationNumber: v })}
             />
           </div>
 
@@ -1364,7 +1370,7 @@ const TrackServicePage = () => {
             <h3 className="text-sm font-bold text-gray-900 mb-2">Service details</h3>
             <dl className="divide-y divide-gray-100 text-sm">
               {[
-                ['Application no.', service.applicationNumber || 'N/A'],
+                ['Application no.', <AppNoDisplay value={service.applicationNumber} empty="Not added yet" />],
                 ['Created', formatDate(service.createdAt)],
                 ['Last updated', formatDate(service.updatedAt)],
                 ['Estimated delivery', service.estimatedDelivery || 'Not set'],
@@ -1513,7 +1519,7 @@ const TrackServicePage = () => {
       status: statusFilter === 'all' ? undefined : apiStatus,
       staff: staffFilter === 'all' ? undefined : staffFilter,
       expiry: expiryFilter === 'all' ? undefined : expiryFilter,
-      search: debouncedSearch || undefined,
+      search: normalizeSearch(debouncedSearch) || undefined,
       aadhaar: debouncedAadhaar || undefined
     };
 
@@ -1700,7 +1706,7 @@ const TrackServicePage = () => {
         </div>
         <p className="text-xs text-gray-500 truncate mb-2" title={service.serviceType}>{service.serviceType || 'Unknown'}</p>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-mono text-gray-400 truncate">{service.applicationNumber || 'N/A'}</span>
+          <AppNoDisplay value={service.applicationNumber} showCopy={false} empty="No app no." className="text-[11px] text-gray-400 truncate" />
           <PriorityPill priority={service.priority} />
         </div>
         <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
@@ -1950,17 +1956,11 @@ const TrackServicePage = () => {
                         )}
                       </td>
                       <td className="px-4 py-2.5">
-                        <input
-                          key={`${service.id}-${service.applicationNumber}`}
-                          type="text"
-                          defaultValue={service.applicationNumber || ''}
-                          onBlur={(e) => {
-                            const v = e.target.value.trim();
-                            if (v !== (service.applicationNumber || '')) handleInlineTrackingUpdate(service, { applicationNumber: v });
-                          }}
-                          onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                          className="w-full text-xs font-mono border border-transparent hover:border-gray-200 focus:border-[#172a45] rounded-md px-2 py-1 bg-transparent focus:bg-white outline-none"
+                        <ApplicationNumberField
+                          variant="cell"
+                          value={service.applicationNumber || ''}
                           placeholder="Add app no."
+                          onSave={(v) => handleInlineTrackingUpdate(service, { applicationNumber: v })}
                         />
                       </td>
                       <td className="px-4 py-2.5">
@@ -2267,7 +2267,7 @@ const TrackServicePage = () => {
             {service.subcategoryName && service.subcategoryName !== 'N/A' && <span className="text-gray-400"> / {service.subcategoryName}</span>}
           </p>
           <div className="flex items-center justify-between gap-2 mt-1.5 text-[11px]">
-            <span className="font-mono text-gray-500 truncate">{service.applicationNumber || 'No app no.'}</span>
+            <AppNoDisplay value={service.applicationNumber} showCopy={false} className="text-gray-500 truncate" />
             <span className="flex items-center gap-2 flex-shrink-0">
               {service.rawEstimatedDelivery && (
                 <span className={overdue ? 'text-rose-700 font-semibold' : 'text-gray-500'}>
@@ -2635,13 +2635,16 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
     <h3 className="font-semibold text-gray-900">Update Tracking Information</h3>
     <form onSubmit={onSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <FormField 
-          label="Application Number"
-          name="applicationNumber"
-          value={formData.applicationNumber}
-          onChange={onFormChange}
-          placeholder="Enter application number (optional)"
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Application Number</label>
+          <ApplicationNumberField
+            mode="form"
+            name="applicationNumber"
+            value={formData.applicationNumber}
+            placeholder="Type or paste the number (optional)"
+            onChange={(v) => onFormChange({ target: { name: 'applicationNumber', value: v } })}
+          />
+        </div>
         <FormSelect
           label="Current Step"
           name="currentStep"
