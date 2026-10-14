@@ -1772,7 +1772,8 @@ const TrackServicePage = () => {
     { key: 'Paid', label: 'Paid', count: globalStats.paid },
   ];
 
-  const TIME_RANGE_LABELS = { week: 'Last 7 days', month: 'This month', year: 'This year', all: 'All time' };
+  // Rolling periods, matching the backend (based on last activity)
+  const TIME_RANGE_LABELS = { week: 'Last 7 days', month: 'Last 30 days', year: 'Last 12 months', all: 'All time' };
 
   const activeFilterChips = [
     statusFilter !== 'all' && { key: 'status', label: `Status: ${statusFilter}`, clear: () => setStatusFilter('all') },

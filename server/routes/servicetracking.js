@@ -727,133 +727,120 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
 /**
  * GET /api/servicetracking/entries - Get service tracking entries with filters
  */
+
+/* =====================================================================
+   SHARED FILTERS for GET /entries and GET /stats
+   One place, so the list and the counts can never disagree.
+===================================================================== */
+const TIME_RANGE_SQL = {
+  week: `st.updated_at >= NOW() - INTERVAL '7 days'`,
+  month: `st.updated_at >= NOW() - INTERVAL '30 days'`,
+  quarter: `st.updated_at >= NOW() - INTERVAL '90 days'`,
+  year: `st.updated_at >= NOW() - INTERVAL '365 days'`,
+};
+
+function buildTrackingFilters(query, user) {
+  const {
+    centre_id, status, priority, start_date, end_date, timeRange,
+    staff, search, aadhaar, expiry, date, service, subcategory, reviewed,
+  } = query;
+
+  const conditions = [];
+  const values = [];
+  const add = (sql, value) => {
+    values.push(value);
+    conditions.push(sql.replace(/\?/g, `$${values.length}`));
+  };
+
+  // Access control
+  if (user.role !== 'superadmin') {
+    add(`se_staff.centre_id = ?`, user.centre_id);
+  } else if (centre_id && centre_id !== 'all') {
+    add(`se_staff.centre_id = ?`, parseInt(centre_id, 10));
+  }
+
+  if (status && status !== 'all') add(`st.status = ?`, status);
+  if (priority && priority !== 'all') add(`st.priority = ?`, priority);
+  if (start_date) add(`st.updated_at >= ?`, start_date);
+  if (end_date) add(`st.updated_at <= ?`, end_date);
+  if (TIME_RANGE_SQL[timeRange]) conditions.push(TIME_RANGE_SQL[timeRange]);
+
+  if (service && service !== 'all') {
+    if (!isNaN(service)) add(`s.id = ?`, parseInt(service, 10));
+    else add(`s.name = ?`, service);
+  }
+  if (subcategory && subcategory !== 'all') {
+    if (!isNaN(subcategory)) add(`sub.id = ?`, parseInt(subcategory, 10));
+    else add(`sub.name = ?`, subcategory);
+  }
+
+  // "Created on" a specific day
+  if (date) add(`se.created_at::date = ?::date`, date);
+
+  if (staff && staff !== 'all') {
+    if (!isNaN(staff)) add(`st2.id = ?`, parseInt(staff, 10));
+    else add(`st2.name = ?`, staff);
+  }
+
+  if (search && String(search).trim()) {
+    add(`(se.customer_name ILIKE ? OR se.phone ILIKE ? OR st.application_number ILIKE ?)`, `%${String(search).trim()}%`);
+  }
+  if (aadhaar && String(aadhaar).trim()) add(`st.aadhaar ILIKE ?`, `%${String(aadhaar).trim()}%`);
+
+  if (expiry === 'upcoming') {
+    conditions.push(`se.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' AND st.status NOT IN ('completed', 'paid')`);
+  } else if (expiry === 'overdue') {
+    conditions.push(`se.expiry_date < CURRENT_DATE AND st.status NOT IN ('completed', 'paid')`);
+  }
+
+  if (reviewed === 'true') conditions.push(`sr.id IS NOT NULL`);
+
+  return {
+    whereClause: conditions.length ? `WHERE ${conditions.join(' AND ')}` : '',
+    values,
+  };
+}
+
+// At most ONE submitted review per application, so joins never duplicate rows
+const TRACKING_FROM = `
+  FROM service_tracking st
+  LEFT JOIN service_entries se ON st.service_entry_id = se.id
+  LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
+  LEFT JOIN services s ON se.category_id = s.id
+  LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+  LEFT JOIN staff st2 ON st.assigned_to = st2.id
+  LEFT JOIN LATERAL (
+    SELECT r.id, r.service_rating, r.staff_rating, r.review_text, r.submitted_at
+    FROM service_reviews r
+    WHERE r.is_submitted = true
+      AND (r.tracking_id = st.id
+           OR (se.customer_service_id IS NOT NULL AND r.booking_id = se.customer_service_id))
+    ORDER BY r.submitted_at DESC NULLS LAST, r.id DESC
+    LIMIT 1
+  ) sr ON true
+`;
+
 router.get('/entries', authenticateToken, async (req, res) => {
-const { 
-    centre_id, status, priority, start_date, end_date,
-    page = 1, limit = 50, timeRange, staff, search, aadhaar, expiry, date, service, subcategory, reviewed
-  } = req.query;
-  
+  const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 10000);
+
   const client = await pool.connect();
 
   try {
-    const queryConditions = [];
-    const queryValues = [];
-    let paramIndex = 1;
+    const { whereClause, values } = buildTrackingFilters(req.query, req.user);
 
-    // 1. Role / Centre Filtering
-    if (req.user.role !== 'superadmin') {
-      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
-      queryValues.push(req.user.centre_id);
-    } else if (centre_id && centre_id !== 'all') {
-      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
-      queryValues.push(parseInt(centre_id));
-    }
+    // 1. Total (same FROM and WHERE as the data query, so the numbers always match)
+    const countResult = await client.query(
+      `SELECT COUNT(*)::int AS count ${TRACKING_FROM} ${whereClause}`,
+      values
+    );
+    const totalRecords = countResult.rows[0].count;
+    const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
+    const offset = (page - 1) * limit;
 
-    // 2. Existing Filters
-    if (status && status !== 'all') {
-      queryConditions.push(`st.status = $${paramIndex++}`);
-      queryValues.push(status);
-    }
-    if (priority && priority !== 'all') {
-      queryConditions.push(`st.priority = $${paramIndex++}`);
-      queryValues.push(priority);
-    }
-    if (start_date) {
-      queryConditions.push(`st.updated_at >= $${paramIndex++}`);
-      queryValues.push(start_date);
-    }
-    if (end_date) {
-      queryConditions.push(`st.updated_at <= $${paramIndex++}`);
-      queryValues.push(end_date);
-    }
-
-    // 3. NEW: Time Range Filter (Fixes your 7 days / 30 days dropdown)
-    if (timeRange === 'week') {
-      queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
-    } else if (timeRange === 'month') {
-      queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
-    } else if (timeRange === 'quarter') {
-      queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
-    }
-
-    // 4. Server-Side Data Filters
-    if (service && service !== 'all') {
-      if (!isNaN(service)) {
-        queryConditions.push(`s.id = $${paramIndex++}`);
-        queryValues.push(parseInt(service, 10));
-      } else {
-        queryConditions.push(`s.name = $${paramIndex++}`);
-        queryValues.push(service);
-      }
-    }
-    
-    if (subcategory && subcategory !== 'all') {
-      if (!isNaN(subcategory)) {
-        queryConditions.push(`sub.id = $${paramIndex++}`);
-        queryValues.push(parseInt(subcategory, 10));
-      } else {
-        queryConditions.push(`sub.name = $${paramIndex++}`);
-        queryValues.push(subcategory);
-      }
-    }
-    
-    if (date) {
-      queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
-      queryValues.push(date);
-    }
-    
-    if (staff && staff !== 'all') {
-      if (!isNaN(staff)) {
-        queryConditions.push(`st2.id = $${paramIndex++}`);
-        queryValues.push(parseInt(staff, 10));
-      } else {
-        queryConditions.push(`st2.name = $${paramIndex++}`);
-        queryValues.push(staff);
-      }
-    }
-    if (search) {
-      queryConditions.push(`(se.customer_name ILIKE $${paramIndex} OR se.phone ILIKE $${paramIndex} OR st.application_number ILIKE $${paramIndex})`);
-      queryValues.push(`%${search}%`);
-      paramIndex++;
-    }
-    if (aadhaar) {
-      queryConditions.push(`st.aadhaar ILIKE $${paramIndex++}`);
-      queryValues.push(`%${aadhaar}%`);
-    }
-    if (expiry && expiry !== 'all') {
-      if (expiry === 'upcoming') {
-          queryConditions.push(`se.expiry_date >= CURRENT_DATE AND st.status != 'completed'`);
-      } else if (expiry === 'overdue') {
-          queryConditions.push(`se.expiry_date < CURRENT_DATE AND st.status != 'completed'`);
-      }
-    }
-
-    if (reviewed === 'true') {
-      queryConditions.push(`sr.is_submitted = true`);
-    }
-
-    let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
-
-    // 5. Pagination: Get Total Count
-    const countQuery = `
-      SELECT COUNT(*) 
-      FROM service_tracking st
-      LEFT JOIN service_entries se ON st.service_entry_id = se.id
-      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
-      LEFT JOIN staff st2 ON st.assigned_to = st2.id
-      LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id) 
-      ${whereClause}
-    `;
-    const countResult = await client.query(countQuery, queryValues);
-    const totalRecords = parseInt(countResult.rows[0].count);
-    const totalPages = Math.ceil(totalRecords / parseInt(limit));
-    const offset = (parseInt(page) - 1) * parseInt(limit);
-
-    // 6. Pagination: Fetch Exact Data
+    // 2. Page of data
     const dataQuery = `
-      SELECT 
+      SELECT
         st.*,
         se.created_at,
         se.customer_name, se.phone, se.service_charges, se.department_charges, se.total_charges,
@@ -861,53 +848,38 @@ const {
         s.name AS service_name, sub.name AS subcategory_name,
         st2.name AS assigned_to_name, se_staff.centre_id,
         sr.service_rating, sr.staff_rating, sr.review_text, sr.submitted_at,
-        
-        -- NEW: Calculate payments directly in the database
+
         COALESCE((
-          SELECT SUM(amount::numeric) 
-          FROM payments p 
+          SELECT SUM(amount::numeric)
+          FROM payments p
           WHERE p.service_entry_id = se.id AND p.status = 'received'
         ), 0) AS total_received,
         COALESCE((
           SELECT json_agg(json_build_object('method', p.method, 'amount', p.amount, 'status', p.status))
-          FROM payments p 
+          FROM payments p
           WHERE p.service_entry_id = se.id
         ), '[]'::json) AS payment_details_array,
-        
+
         COALESCE((
-          SELECT json_agg(json_build_object('id', sts.id, 'name', sts.name, 'completed', sts.completed, 'date', sts.date, 'created_at', sts.created_at, 'step_order', sts.step_order, 'estimated_days', sts.estimated_days))
+          SELECT json_agg(json_build_object('id', sts.id, 'name', sts.name, 'completed', sts.completed, 'date', sts.date, 'created_at', sts.created_at, 'step_order', sts.step_order, 'estimated_days', sts.estimated_days) ORDER BY sts.step_order)
           FROM service_tracking_steps sts WHERE sts.service_tracking_id = st.id
         ), '[]'::json) AS steps
-      FROM service_tracking st
-      LEFT JOIN service_entries se ON st.service_entry_id = se.id
-      LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
-      LEFT JOIN staff st2 ON st.assigned_to = st2.id
-      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      LEFT JOIN service_reviews sr ON (sr.tracking_id = st.id OR sr.booking_id = se.customer_service_id) AND sr.is_submitted = true
+      ${TRACKING_FROM}
       ${whereClause}
-      ORDER BY se.created_at DESC, st.updated_at DESC
-      LIMIT $${paramIndex++} OFFSET $${paramIndex++}
+      ORDER BY se.created_at DESC NULLS LAST, st.updated_at DESC, st.id DESC
+      LIMIT $${values.length + 1} OFFSET $${values.length + 2}
     `;
-    
-    const dataValues = [...queryValues, parseInt(limit), offset];
-    const result = await client.query(dataQuery, dataValues);
 
-    // Apply formatting to estimated_delivery
+    const result = await client.query(dataQuery, [...values, limit, offset]);
+
     const formattedData = result.rows.map(row => ({
       ...row,
       estimated_delivery: formatYMD(row.estimated_delivery)
     }));
 
-    // Return payload wrapping data and pagination metadata
     res.json({
       data: formattedData,
-      pagination: { 
-        totalRecords, 
-        totalPages, 
-        currentPage: parseInt(page), 
-        limit: parseInt(limit) 
-      }
+      pagination: { totalRecords, totalPages, currentPage: page, limit }
     });
 
   } catch (err) {
@@ -922,113 +894,39 @@ const {
  * GET /api/servicetracking/stats - Get global counts for KPI cards
  */
 router.get('/stats', authenticateToken, async (req, res) => {
-  // 1. Add start_date and end_date here:
-  const { 
-    centre_id, status, timeRange, staff, date, service, subcategory, start_date, end_date, reviewed
-  } = req.query;
-  
   const client = await pool.connect();
 
   try {
-    const queryConditions = [];
-    const queryValues = [];
-    let paramIndex = 1;
+    const { whereClause, values } = buildTrackingFilters(req.query, req.user);
 
-    // Access control
-    if (req.user.role !== 'superadmin') {
-      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
-      queryValues.push(req.user.centre_id);
-    } else if (centre_id && centre_id !== 'all') {
-      queryConditions.push(`se_staff.centre_id = $${paramIndex++}`);
-      queryValues.push(parseInt(centre_id));
-    }
-
-    // Time ranges
-    if (timeRange === 'week') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '7 days'`);
-    else if (timeRange === 'month') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '30 days'`);
-    else if (timeRange === 'quarter') queryConditions.push(`st.updated_at >= NOW() - INTERVAL '90 days'`);
-
-    // 2. ADD CUSTOM DATE FILTERS HERE:
-    if (start_date) {
-      queryConditions.push(`st.updated_at >= $${paramIndex++}`);
-      queryValues.push(start_date);
-    }
-    if (end_date) {
-      queryConditions.push(`st.updated_at <= $${paramIndex++}`);
-      queryValues.push(end_date);
-    }
-
-    // Advanced Filters
-    if (service && service !== 'all') {
-      if (!isNaN(service)) {
-        queryConditions.push(`s.id = $${paramIndex++}`);
-        queryValues.push(parseInt(service, 10));
-      } else {
-        queryConditions.push(`s.name = $${paramIndex++}`);
-        queryValues.push(service);
-      }
-    }
-    
-    if (subcategory && subcategory !== 'all') {
-      if (!isNaN(subcategory)) {
-        queryConditions.push(`sub.id = $${paramIndex++}`);
-        queryValues.push(parseInt(subcategory, 10));
-      } else {
-        queryConditions.push(`sub.name = $${paramIndex++}`);
-        queryValues.push(subcategory);
-      }
-    }
-    
-    if (date) {
-      queryConditions.push(`st.updated_at::date = $${paramIndex++}`);
-      queryValues.push(date);
-    }
-    
-    if (status && status !== 'all') {
-      queryConditions.push(`st.status = $${paramIndex++}`);
-      queryValues.push(status);
-    }
-    
-    if (staff && staff !== 'all') {
-      if (!isNaN(staff)) {
-        queryConditions.push(`st2.id = $${paramIndex++}`);
-        queryValues.push(parseInt(staff, 10));
-      } else {
-        queryConditions.push(`st2.name = $${paramIndex++}`);
-        queryValues.push(staff);
-      }
-    }
-
-    if (reviewed === 'true') {
-      queryConditions.push(`sr.is_submitted = true`);
-    }
-
-    let whereClause = queryConditions.length > 0 ? `WHERE ` + queryConditions.join(' AND ') : '';
-
+    // "On time" = finished (completed or paid) on or before the promised delivery date.
+    // Applications without a delivery date are left out of the percentage.
     const statsQuery = `
-      SELECT 
-        COUNT(*) as total,
-        COUNT(*) FILTER (WHERE st.status = 'completed') as completed,
-        COUNT(*) FILTER (WHERE st.status = 'in_progress') as in_progress,
-        COUNT(*) FILTER (WHERE st.status = 'pending') as pending,
-        COUNT(*) FILTER (WHERE st.status = 'rejected') as delayed,
-        COALESCE(
-            (COUNT(*) FILTER (WHERE st.status = 'completed' AND st.updated_at <= se.expiry_date)::float / 
-            NULLIF(COUNT(*) FILTER (WHERE st.status = 'completed'), 0)) * 100
-        , 100) as sla_compliance
-      FROM service_tracking st
-      LEFT JOIN service_entries se ON st.service_entry_id = se.id
-      LEFT JOIN staff se_staff ON se.staff_id = se_staff.id
-      LEFT JOIN services s ON se.category_id = s.id
-      LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
-      LEFT JOIN staff st2 ON st.assigned_to = st2.id
-      LEFT JOIN service_reviews sr ON st.id = sr.tracking_id
+      SELECT
+        COUNT(*)::int                                                AS total,
+        COUNT(*) FILTER (WHERE st.status = 'pending')::int           AS pending,
+        COUNT(*) FILTER (WHERE st.status = 'in_progress')::int       AS in_progress,
+        COUNT(*) FILTER (WHERE st.status = 'resubmit')::int          AS resubmit,
+        COUNT(*) FILTER (WHERE st.status = 'rejected')::int          AS delayed,
+        COUNT(*) FILTER (WHERE st.status = 'completed')::int         AS completed,
+        COUNT(*) FILTER (WHERE st.status = 'paid')::int              AS paid,
+        COUNT(*) FILTER (WHERE st.status NOT IN ('completed', 'paid')
+                           AND st.estimated_delivery < CURRENT_DATE)::int AS overdue,
+        ROUND((
+          COUNT(*) FILTER (WHERE st.status IN ('completed', 'paid')
+                             AND st.estimated_delivery IS NOT NULL
+                             AND st.updated_at::date <= st.estimated_delivery)::numeric
+          / NULLIF(COUNT(*) FILTER (WHERE st.status IN ('completed', 'paid')
+                                      AND st.estimated_delivery IS NOT NULL), 0)
+        ) * 100, 1)::float                                           AS sla_compliance
+      ${TRACKING_FROM}
       ${whereClause}
     `;
-    
-    const result = await client.query(statsQuery, queryValues);
+
+    const result = await client.query(statsQuery, values);
     res.json(result.rows[0]);
   } catch (err) {
+    console.error('servicetracking.js: Error fetching stats:', err);
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
@@ -1242,7 +1140,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   
   try {
-    console.log('servicetracking.js: Fetching single tracking entry with ID:', id);
     
     // First, get the tracking entry with review data
     const trackingQuery = `
@@ -1334,6 +1231,11 @@ router.get('/:id', authenticateToken, async (req, res) => {
     }
     
     const serviceEntry = serviceEntryResult.rows[0];
+
+    // Staff and admins may only open applications from their own centre
+    if (req.user.role !== 'superadmin' && Number(serviceEntry.centre_id) !== Number(req.user.centre_id)) {
+      return res.status(403).json({ error: 'You do not have access to this application' });
+    }
     
     // Get assigned staff name
     let assignedToName = null;
@@ -1408,7 +1310,6 @@ router.get('/:id', authenticateToken, async (req, res) => {
       submitted_at: tracking.submitted_at
     };
     
-    console.log('servicetracking.js: Fetched single tracking entry with reviews:', JSON.stringify(response, null, 2));
     res.json(response);
     
   } catch (err) {
