@@ -9,7 +9,7 @@ import {
 } from 'react-icons/fi';
 import { TypeIcon } from './AutomationBuilder';
 import ServiceLinkChip from './ServiceLinkChip';
-import { formatWhen, toLocalInput } from './automationUtils';
+import { formatWhen, toLocalInput } from '@/utils/automations/automationUtils';
 import {
   listSchedules, cancelAutomation, runAutomationNow, rescheduleAutomation,
 } from '/src/services/automationService';
