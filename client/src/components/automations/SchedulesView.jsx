@@ -5,10 +5,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-toastify';
 import {
   FiClock, FiSearch, FiRefreshCw, FiSend, FiX, FiEdit2, FiCheck, FiRotateCcw,
-  FiAlertCircle, FiCalendar, FiUser, FiPhone, FiMessageSquare, FiUserCheck, FiZap,
+  FiAlertCircle, FiCalendar, FiUser, FiPhone, FiUserCheck, FiZap,
 } from 'react-icons/fi';
 import { TypeIcon } from './AutomationBuilder';
-import { formatWhen, toLocalInput } from '@/utils/automations/automationUtils';
+import ServiceLinkChip from './ServiceLinkChip';
+import { formatWhen, toLocalInput } from './automationUtils';
 import {
   listSchedules, cancelAutomation, runAutomationNow, rescheduleAutomation,
 } from '/src/services/automationService';
@@ -381,9 +382,7 @@ function ScheduleRow({ a, tab, showCentre, busy, editing, setEditing, act }) {
             {whatsapp && phone && (
               <span className="inline-flex items-center gap-1"><FiPhone className="h-3 w-3 text-gray-400" />{phone}</span>
             )}
-            {a.service_name && (
-              <span className="inline-flex items-center gap-1"><FiMessageSquare className="h-3 w-3 text-gray-400" />{a.service_name}</span>
-            )}
+            {a.service_entry_id && <ServiceLinkChip item={a} />}
             {!whatsapp && a.assignee_name && (
               <span className="inline-flex items-center gap-1"><FiUserCheck className="h-3 w-3 text-gray-400" />{a.assignee_name}</span>
             )}

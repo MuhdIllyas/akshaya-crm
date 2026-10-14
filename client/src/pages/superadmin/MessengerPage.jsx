@@ -62,6 +62,7 @@ import ConversationList from "@/components/chat/ConversationList";
 import ConversationDetails from "@/components/chat/ConversationDetails";
 import MessengerNav from "@/components/chat/MessengerNav";
 import SchedulesView from "@/components/automations/SchedulesView";
+import ServiceLinkChip from "@/components/automations/ServiceLinkChip";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 
@@ -1504,10 +1505,10 @@ const MessengerPage = ({ user }) => {
     setLoading(true);
     setApiError(null);
     try {
-      let url = `${API_BASE_URL}/api/tasks/all`;
+      let url = `${API_BASE_URL}/api/tasks/all?limit=500`;
 
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
-        url += `?centre_id=${currentUser.centreId}`;
+        url += `&centre_id=${currentUser.centreId}`;
       }
 
       const res = await fetch(url, {
@@ -2564,6 +2565,12 @@ const renderTasksView = () => {
                               </p>
                             )}
 
+                            {task.related_service_entry_id && (
+                              <div className="mb-2">
+                                <ServiceLinkChip item={task} compact />
+                              </div>
+                            )}
+
                             {/* Board Card Footer: Stacked Date/Priority & User Pill */}
                             <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-50">
                               
@@ -2663,6 +2670,11 @@ const renderTasksView = () => {
                                 <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
                                   {task.description}
                                 </p>
+                              )}
+                              {task.related_service_entry_id && (
+                                <div className="mt-1">
+                                  <ServiceLinkChip item={task} />
+                                </div>
                               )}
                             </td>
                             <td className="py-3 px-4">

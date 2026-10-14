@@ -169,59 +169,59 @@ router.get("/all", async (req, res) => {
       created_by,
       due_before,
       overdue,
+      related_service_entry_id,
       page = 1,
       limit = 20
     } = req.query;
 
-    const pageNum = parseInt(page);
-    const limitNum = parseInt(limit);
+    const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+    const limitNum = Math.min(Math.max(parseInt(limit, 10) || 20, 1), 500);
     const offset = (pageNum - 1) * limitNum;
 
     const values = [];
     const conditions = [];
+    const add = (sql, v) => {
+      values.push(v);
+      conditions.push(sql.replace("?", `$${values.length}`));
+    };
 
-    if (req.user.role !== "superadmin") {
-      conditions.push(`centre_id = $${values.length + 1}`);
-      values.push(req.user.centre_id);
-    }
+    if (req.user.role !== "superadmin") add("t.centre_id = ?", req.user.centre_id);
+    if (status) add("t.status = ?", status);
+    if (priority) add("t.priority = ?", priority);
+    if (assigned_to) add("t.assigned_to = ?", assigned_to);
+    if (created_by) add("t.assigned_by = ?", created_by);
+    if (due_before) add("t.due_date <= ?", due_before);
+    if (related_service_entry_id) add("t.related_service_entry_id = ?", related_service_entry_id);
+    if (overdue === "true") conditions.push(`t.due_date < NOW() AND t.status != 'completed'`);
 
-    if (status) {
-      conditions.push(`status = $${values.length + 1}`);
-      values.push(status);
-    }
-
-    if (priority) {
-      conditions.push(`priority = $${values.length + 1}`);
-      values.push(priority);
-    }
-
-    if (assigned_to) {
-      conditions.push(`assigned_to = $${values.length + 1}`);
-      values.push(assigned_to);
-    }
-
-    if (created_by) {
-      conditions.push(`assigned_by = $${values.length + 1}`);
-      values.push(created_by);
-    }
-
-    if (due_before) {
-      conditions.push(`due_date <= $${values.length + 1}`);
-      values.push(due_before);
-    }
-
-    if (overdue === "true") {
-      conditions.push(`due_date < NOW() AND status != 'completed'`);
-    }
-
-    let query = `SELECT * FROM tasks`;
+    // Service info so the UI can show which service a task belongs to
+    // and link straight to its tracking page.
+    let query = `
+      SELECT t.*,
+             se.customer_name   AS service_customer_name,
+             se.phone           AS service_phone,
+             srv.name           AS service_name,
+             sub.name           AS service_subcategory_name,
+             trk.id             AS tracking_id,
+             trk.application_number
+      FROM tasks t
+      LEFT JOIN service_entries se ON se.id = t.related_service_entry_id
+      LEFT JOIN services srv       ON srv.id = se.category_id
+      LEFT JOIN subcategories sub  ON sub.id = se.subcategory_id
+      LEFT JOIN LATERAL (
+        SELECT st.id, st.application_number
+        FROM service_tracking st
+        WHERE st.service_entry_id = se.id
+        ORDER BY st.id DESC
+        LIMIT 1
+      ) trk ON true`;
 
     if (conditions.length > 0) {
       query += " WHERE " + conditions.join(" AND ");
     }
 
-    query += ` ORDER BY created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
     values.push(limitNum, offset);
+    query += ` ORDER BY t.created_at DESC LIMIT $${values.length - 1} OFFSET $${values.length}`;
 
     const result = await pool.query(query, values);
 

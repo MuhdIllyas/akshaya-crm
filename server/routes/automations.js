@@ -6,6 +6,7 @@ import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { buildContext, cleanParam, parseIST } from "../utils/automationParams.js";
 import { logActivity } from "../utils/activityLogger.js";
+import runScheduledActions from "../controllers/scheduledActionWorker.js";
 
 const router = express.Router();
 
@@ -442,7 +443,15 @@ router.get("/", async (req, res) => {
       LEFT JOIN staff cb ON cb.id = sa.created_by
       LEFT JOIN staff asg ON asg.id = ${ASSIGNEE_SQL}
       LEFT JOIN centres c ON c.id = sa.centre_id
-      LEFT JOIN tasks t ON t.scheduled_action_id = sa.id`;
+      LEFT JOIN tasks t ON t.scheduled_action_id = sa.id
+      LEFT JOIN subcategories sub ON sub.id = se.subcategory_id
+      LEFT JOIN LATERAL (
+        SELECT st.id, st.application_number
+        FROM service_tracking st
+        WHERE st.service_entry_id = se.id
+        ORDER BY st.id DESC
+        LIMIT 1
+      ) trk ON true`;
 
     // ---- list ----
     const listValues = [];
@@ -464,7 +473,9 @@ router.get("/", async (req, res) => {
               cb.name AS created_by_name,
               asg.name AS assignee_name,
               c.name AS centre_name,
-              t.id AS task_id, t.status AS task_status
+              t.id AS task_id, t.status AS task_status,
+              sub.name AS subcategory_name,
+              trk.id AS tracking_id, trk.application_number
        ${FROM}
        ${listWhere.length ? "WHERE " + listWhere.join(" AND ") : ""}
        ORDER BY ${orderBy}
@@ -566,7 +577,10 @@ router.post("/:id/run-now", async (req, res) => {
         WHERE id = $1 AND status IN ('pending', 'failed')`,
       [action.id]
     );
-    res.json({ message: "Queued — will run within a minute" });
+    // Run it now instead of waiting for the next minute tick
+    runScheduledActions().catch((e) => console.error("[SCHEDULED] run-now failed:", e.message));
+
+    res.json({ message: action.action_type === "staff_task" ? "Creating the task now" : "Sending now" });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
