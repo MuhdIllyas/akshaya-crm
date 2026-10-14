@@ -233,6 +233,56 @@ router.get("/all", async (req, res) => {
 });
 
 /* ================================
+   SERVICE LINK RESOLVER
+   GET /service-link?task_id=12  or  ?entry_id=34
+   -> { service_entry_id, tracking_id, service_name, customer_name }
+   Used by the calendar "View Details" button when an event
+   doesn't carry a tracking id itself.
+================================ */
+router.get("/service-link", async (req, res) => {
+  try {
+    const taskId = parseInt(req.query.task_id, 10);
+    let entryId = parseInt(req.query.entry_id, 10);
+
+    if (!entryId && taskId) {
+      const t = await pool.query(
+        `SELECT related_service_entry_id, centre_id FROM tasks WHERE id = $1`,
+        [taskId]
+      );
+      if (!t.rows.length) return res.status(404).json({ error: "Task not found" });
+      if (req.user.role !== "superadmin" && Number(t.rows[0].centre_id) !== Number(req.user.centre_id)) {
+        return res.status(403).json({ error: "Not allowed" });
+      }
+      entryId = t.rows[0].related_service_entry_id;
+    }
+
+    if (!entryId) return res.status(404).json({ error: "Not linked to a service" });
+
+    const r = await pool.query(
+      `SELECT se.id AS service_entry_id, se.customer_name, srv.name AS service_name,
+              st.centre_id,
+              (SELECT trk.id FROM service_tracking trk
+                WHERE trk.service_entry_id = se.id
+                ORDER BY trk.id DESC LIMIT 1) AS tracking_id
+         FROM service_entries se
+         LEFT JOIN services srv ON srv.id = se.category_id
+         LEFT JOIN staff st ON st.id = se.staff_id
+        WHERE se.id = $1`,
+      [entryId]
+    );
+    const row = r.rows[0];
+    if (!row) return res.status(404).json({ error: "Service entry not found" });
+    if (req.user.role !== "superadmin" && Number(row.centre_id) !== Number(req.user.centre_id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ================================
    UPDATE STATUS
 ================================ */
 router.patch("/:id/status", async (req, res) => {

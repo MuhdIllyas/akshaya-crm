@@ -619,6 +619,20 @@ function CalendarView({
 // ----------------------------------------------------------------------
 //  EventModal (Staff Name Fix)
 // ----------------------------------------------------------------------
+// Only events that point at an actual service entry can open tracking.
+// Plain tasks, or tasks that only name a service category, can't.
+const canOpenServiceTracking = (event) => {
+  if (!event) return false;
+  const id = String(event.id || "");
+  return Boolean(
+    event.tracking_id ||
+    event.related_service_entry_id ||
+    event.service_entry_id ||
+    id.startsWith("expiry-") ||
+    id.startsWith("delivery-")
+  );
+};
+
 function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService }) {
   if (!event) return null;
 
@@ -742,7 +756,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
                 </div>
                 
                 {/* 🔥 The new View Service shortcut button */}
-                {onViewService && (
+                {onViewService && canOpenServiceTracking(event) && (
                   <button
                     onClick={() => {
                       onViewService(event);
@@ -1714,6 +1728,52 @@ export default function CalendarPage() {
   };
 
 
+  // 🔥 Open the tracking page for any event linked to a service.
+  // Uses the tracking id when the event has one; otherwise asks the
+  // backend to resolve it from the task or the service entry.
+  const openServiceTracking = async (event) => {
+    const eventIdStr = String(event.id || "");
+    const isTask = event.type === "task" || event.event_type === "task";
+
+    let trackingId =
+      event.tracking_id ||
+      (eventIdStr.startsWith("delivery-") ? eventIdStr.replace("delivery-", "") : null);
+
+    if (!trackingId) {
+      const entryId =
+        event.related_service_entry_id ||
+        event.service_entry_id ||
+        (eventIdStr.startsWith("expiry-") ? eventIdStr.replace("expiry-", "") : null);
+      const taskId = event.related_task_id || event.task_id || (isTask ? event.id : null);
+
+      const query = entryId ? `entry_id=${entryId}` : taskId ? `task_id=${taskId}` : null;
+
+      if (query) {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/service-link?${query}`, {
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          });
+          if (res.ok) {
+            const data = await res.json();
+            trackingId = data.tracking_id;
+            if (!trackingId && data.service_entry_id) {
+              toast.info("This service has no tracking record yet.");
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("Could not resolve service tracking:", err);
+        }
+      }
+    }
+
+    if (trackingId) {
+      navigate(`/dashboard/staff/track_service/${trackingId}`);
+    } else {
+      toast.error("Cannot open: this item is not linked to a tracked service.");
+    }
+  };
+
   // 🔥 Smart handler to complete different types of events directly from the calendar
   const handleCompleteAction = async (eventObj, updateData) => {
     try {
@@ -1753,8 +1813,9 @@ export default function CalendarPage() {
       // 3. HANDLE TASKS
       else if (eventObj.type === "task" || eventObj.event_type === "task") {
         try {
-          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${eventObj.id}/status`, {
-            method: "PUT",
+          const taskId = eventObj.related_task_id || eventObj.task_id || eventObj.id;
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${taskId}/status`, {
+            method: "PATCH",
             headers: {
               "Content-Type": "application/json",
               Authorization: `Bearer ${localStorage.getItem("token")}`,
@@ -1890,32 +1951,7 @@ export default function CalendarPage() {
           onEdit={openEditModal}
 
           // 🔥 Updated Unified Navigation Handler
-          onViewService={(event) => {
-            const eventIdStr = String(event.id || "");
-            let targetTrackingId;
-            
-            // 1. FOR EXPIRIES
-            if (eventIdStr.startsWith("expiry-")) {
-              // We MUST use the tracking_id fetched from the backend!
-              targetTrackingId = event.tracking_id; 
-            } 
-            // 2. FOR DELIVERIES
-            else if (eventIdStr.startsWith("delivery-")) {
-              // The event ID itself contains the tracking ID
-              targetTrackingId = eventIdStr.replace("delivery-", ""); 
-            } 
-            // 3. FALLBACK FOR CUSTOM TASKS
-            else if (event.tracking_id) {
-              targetTrackingId = event.tracking_id;
-            }
-
-            // 4. NAVIGATE
-            if (targetTrackingId) {
-              navigate(`/dashboard/staff/track_service/${targetTrackingId}`); 
-            } else {
-              toast.error("Cannot open: No tracking steps exist for this service yet.");
-            }
-          }}
+          onViewService={(event) => openServiceTracking(event)}
         />
       )}
 
