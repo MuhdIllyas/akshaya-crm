@@ -332,6 +332,8 @@ const MessengerPage = ({ user }) => {
   const [quickNoteForm, setQuickNoteForm] = useState({ title: "", content: "" });
 
   const [taskFilter, setTaskFilter] = useState("all");
+  // "mine" = assigned to me or created by me; "all" = everyone in the centre
+  const [taskScope, setTaskScope] = useState(currentUser.role === "staff" ? "mine" : "all");
   const [taskViewMode, setTaskViewMode] = useState("board");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
@@ -842,6 +844,7 @@ const MessengerPage = ({ user }) => {
     // Check if we need to open the Tasks tab
     if (location.state.openTasksView) {
       setActiveView("tasks");
+      if (location.state.tasksScope) setTaskScope(location.state.tasksScope);
       window.history.replaceState({}, document.title);
       return;
     }
@@ -1806,12 +1809,19 @@ const MessengerPage = ({ user }) => {
     setIsTemplateModalOpen(true);
   };
 
+  const isMyTask = (task) =>
+    String(task.assigned_to) === String(currentUser.id) ||
+    String(task.assigned_by) === String(currentUser.id);
+
+  const getScopedTasks = () => (taskScope === "mine" ? tasks.filter(isMyTask) : tasks);
+
   const getFilteredTasks = () => {
+    const scoped = getScopedTasks();
     switch (taskFilter) {
-      case "pending": return tasks.filter(task => task.status === "pending" || !task.status);
-      case "in_progress": return tasks.filter(task => task.status === "in_progress");
-      case "completed": return tasks.filter(task => task.status === "completed");
-      default: return tasks;
+      case "pending": return scoped.filter(task => task.status === "pending" || !task.status);
+      case "in_progress": return scoped.filter(task => task.status === "in_progress");
+      case "completed": return scoped.filter(task => task.status === "completed");
+      default: return scoped;
     }
   };
 
@@ -2316,9 +2326,10 @@ const MessengerPage = ({ user }) => {
 
 const renderTasksView = () => {
     const filteredTasks = getFilteredTasks();
-    const pendingCount = tasks.filter(t => t.status === "pending" || !t.status).length;
-    const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
-    const completedCount = tasks.filter(t => t.status === "completed").length;
+    const scopedTasks = getScopedTasks();
+    const pendingCount = scopedTasks.filter(t => t.status === "pending" || !t.status).length;
+    const inProgressCount = scopedTasks.filter(t => t.status === "in_progress").length;
+    const completedCount = scopedTasks.filter(t => t.status === "completed").length;
 
     // --- Safely get assignee, prioritizing the REAL name from local storage ---
     const getAssigneeDetails = (task) => {
@@ -2428,7 +2439,7 @@ const renderTasksView = () => {
           {/* Compact Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
-              { title: 'Total Tasks', value: tasks.length, color: 'bg-gray-600', icon: FiCheckSquare },
+              { title: taskScope === 'mine' ? 'My Tasks' : 'Total Tasks', value: scopedTasks.length, color: 'bg-gray-600', icon: FiCheckSquare },
               { title: 'To Do', value: pendingCount, color: 'bg-amber-500', icon: FiAlertCircle },
               { title: 'In Progress', value: inProgressCount, color: 'bg-blue-500', icon: FiPlayCircle },
               { title: 'Completed', value: completedCount, color: 'bg-emerald-500', icon: FiCheck },
@@ -2462,6 +2473,23 @@ const renderTasksView = () => {
           {/* Filters & View Toggle */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-2.5 rounded-xl border border-gray-200 shadow-sm">
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto">
+              <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 flex-shrink-0">
+                {[
+                  { id: 'mine', label: 'Mine', icon: FiUser },
+                  { id: 'all', label: 'Everyone', icon: FiUsers },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setTaskScope(opt.id)}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      taskScope === opt.id ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <opt.icon size={12} /> {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="w-px h-5 bg-gray-200 flex-shrink-0" />
               <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
               {['all', 'pending', 'in_progress', 'completed'].map(f => (
                 <button

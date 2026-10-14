@@ -5,7 +5,6 @@ import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
 import AdminDashboard from "./pages/AdminDashboard";
-import StaffTasks from "./pages/staff/StaffTasks";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
@@ -465,9 +464,10 @@ const App = () => {
               path="staff/calendar"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><CalendarPage /></ProtectedRoute>}
             />
+            {/* My Tasks now lives in Messenger → Tasks (old links and bookmarks still work) */}
             <Route
               path="staff/tasks"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><StaffTasks /></ProtectedRoute>}
+              element={<Navigate to="/dashboard/staff/messenger" replace state={{ openTasksView: true, tasksScope: "mine" }} />}
             />
             <Route
               path="staff/notes"
