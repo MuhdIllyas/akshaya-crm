@@ -9,7 +9,7 @@ import { io } from "../server.js";
 import { triggerNotification } from "../utils/communication/notificationEngine.js";
 import { createTask, SYSTEM_ACTOR } from "../services/taskService.js";
 import { buildActionParams, PermanentError } from "../utils/automationParams.js";
-import { getUnreadCount } from "../utils/messageRouter.js";
+import { sendMessage } from "../utils/messageRouter.js";
 import { logActivity } from "../utils/activityLogger.js";
 import notificationService from "../utils/notificationService.js";
 
@@ -253,39 +253,19 @@ async function logWhatsAppToChats(action, entry, phone, params, externalId) {
   }
 }
 
+// Uses the shared message router, so unread badges and the sidebar update
+// exactly like any other chat message.
 async function insertSystemChatMessage({ conversationId, message, messageType, direction, externalId = null }) {
-  const { rows } = await pool.query(
-    `INSERT INTO chat_messages
-       (conversation_id, sender_type, sender_id, message, message_type, direction, external_message_id, created_at)
-     VALUES ($1, 'system', NULL, $2, $3, $4, $5, NOW())
-     RETURNING *`,
-    [conversationId, message, messageType, direction, externalId]
-  );
-  const saved = rows[0];
-
-  await pool.query(
-    `UPDATE chat_conversations SET last_message_at = NOW(), updated_at = NOW() WHERE id = $1`,
-    [conversationId]
-  );
-
-  io.to(`conversation:${conversationId}`).emit("new_message", { ...saved, sender_name: "System" });
-
-  const participants = await pool.query(
-    `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
-    [conversationId]
-  );
-  for (const { staff_id } of participants.rows) {
-    const unread = await getUnreadCount(staff_id, conversationId);
-    io.to(`user:${staff_id}`).emit("unread_update", { conversationId: Number(conversationId), unread });
-    io.to(`user:${staff_id}`).emit("conversation_updated", {
-      conversationId: Number(conversationId),
-      lastMessage: message,
-      lastMessageSenderId: null,
-      lastMessageSender: "System",
-      time: saved.created_at,
-      unread,
-    });
-  }
+  return sendMessage({
+    conversation_id: conversationId,
+    sender_id: null,
+    sender_type: "system",
+    message,
+    message_type: messageType,
+    direction,
+    external_message_id: externalId,
+    io,
+  });
 }
 
 /* =========================================================
