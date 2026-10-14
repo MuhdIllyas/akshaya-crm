@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -235,6 +235,25 @@ const TrackServicePage = () => {
   };
 
   const [activeTab, setActiveTab] = useState('overview');
+  // Width of the detail area (see renderServiceDetail)
+  const [detailWidth, setDetailWidth] = useState(0);
+  const [quickUpdateOpen, setQuickUpdateOpen] = useState(() => {
+    try { return localStorage.getItem('trackQuickUpdateOpen') !== '0'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('trackQuickUpdateOpen', quickUpdateOpen ? '1' : '0'); } catch { /* ignore */ }
+  }, [quickUpdateOpen]);
+  const detailObserver = useRef(null);
+  const detailMeasureRef = useCallback((node) => {
+    detailObserver.current?.disconnect();
+    detailObserver.current = null;
+    if (!node) return;
+    setDetailWidth(Math.round(node.getBoundingClientRect().width));
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => setDetailWidth(Math.round(entry.contentRect.width)));
+    ro.observe(node);
+    detailObserver.current = ro;
+  }, []);
   const [trackingFormData, setTrackingFormData] = useState({
     applicationNumber: '',
     currentStep: '',
@@ -1177,18 +1196,15 @@ const TrackServicePage = () => {
     </div>
   );
 
-  // Right-hand panel: everything staff change day to day, one click each
-  const renderQuickUpdate = (service) => {
+  // Quick update panel: everything staff change day to day, one click each.
+  // layout = 'side' (narrow column next to the tabs) or 'top' (wide strip above the tabs,
+  // used when the detail area is too narrow for a side column, e.g. the drawer or a laptop screen).
+  const renderQuickUpdate = (service, { layout = 'side', cols = 1 } = {}) => {
     const steps = stepOptions.map(s => s.value);
     const currentOrder = STEP_ORDER[service.currentStep] || 1;
 
-    return (
-      <div className="space-y-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
-          <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-            <FiEdit className="h-4 w-4 text-[#172a45]" /> Quick update
-          </h3>
-
+    const statusBlock = (
+      <>
           {/* Status */}
           <div>
             <p className={`${sectionLabel} mb-2`}>Status</p>
@@ -1213,7 +1229,10 @@ const TrackServicePage = () => {
               })}
             </div>
           </div>
-
+      </>
+    );
+    const stepBlock = (
+      <>
           {/* Step */}
           <div>
             <p className={`${sectionLabel} mb-2`}>Current step</p>
@@ -1241,7 +1260,10 @@ const TrackServicePage = () => {
               })}
             </div>
           </div>
-
+      </>
+    );
+    const appNoBlock = (
+      <>
           {/* App number */}
           <div>
             <label className={`${sectionLabel} block mb-1.5`}>Application number</label>
@@ -1252,7 +1274,10 @@ const TrackServicePage = () => {
               onSave={(v) => handleInlineTrackingUpdate(service, { applicationNumber: v })}
             />
           </div>
-
+      </>
+    );
+    const assignedBlock = (
+      <>
           {/* Assigned */}
           <div>
             <label className={`${sectionLabel} block mb-1.5`}>Assigned to</label>
@@ -1265,7 +1290,10 @@ const TrackServicePage = () => {
               {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
             </select>
           </div>
-
+      </>
+    );
+    const deliveryBlock = (
+      <>
           {/* Delivery */}
           <div>
             <label className={`${sectionLabel} block mb-1.5`}>Estimated delivery</label>
@@ -1276,7 +1304,10 @@ const TrackServicePage = () => {
               className={fieldCls}
             />
           </div>
-
+      </>
+    );
+    const priorityBlock = (
+      <>
           {/* Priority */}
           <div>
             <p className={`${sectionLabel} mb-1.5`}>Priority</p>
@@ -1297,9 +1328,9 @@ const TrackServicePage = () => {
               })}
             </div>
           </div>
-        </div>
-
-        {/* Payment */}
+      </>
+    );
+    const paymentCard = (
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
@@ -1322,6 +1353,82 @@ const TrackServicePage = () => {
             <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">{service.paymentDetails}</p>
           )}
         </div>
+    );
+
+    const title = (
+      <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+        <FiEdit className="h-4 w-4 text-[#172a45]" /> Quick update
+      </h3>
+    );
+
+    if (layout === 'top') {
+      const gridCls = cols >= 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1';
+      return (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setQuickUpdateOpen(o => !o)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-3"
+            aria-expanded={quickUpdateOpen}
+          >
+            {title}
+            <span className="flex items-center gap-2 text-xs text-gray-500">
+              {!quickUpdateOpen && <StatusPill status={service.status} />}
+              <FiChevronDown className={`h-4 w-4 transition-transform ${quickUpdateOpen ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+          {quickUpdateOpen && (
+            <div className={`grid ${gridCls} gap-x-5 gap-y-4 px-4 pb-4 border-t border-gray-100 pt-4`}>
+              <div className="space-y-4 min-w-0">{statusBlock}{priorityBlock}</div>
+              <div className="min-w-0">{stepBlock}</div>
+              {cols === 2 ? (
+                <div className="col-span-2 grid grid-cols-2 gap-x-5 gap-y-4">
+                  <div className="col-span-2">{appNoBlock}</div>
+                  <div>{assignedBlock}</div>
+                  <div>{deliveryBlock}</div>
+                </div>
+              ) : (
+                <div className="space-y-4 min-w-0">
+                  {appNoBlock}
+                  {assignedBlock}
+                  {deliveryBlock}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
+          {title}
+          {statusBlock}
+          {stepBlock}
+          {appNoBlock}
+          {assignedBlock}
+          {deliveryBlock}
+          {priorityBlock}
+        </div>
+        {paymentCard}
+      </div>
+    );
+  };
+
+  const renderPaymentCard = (service) => {
+    const cfg = paymentStatusConfig[service.paymentStatus] || paymentStatusConfig.default;
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm">
+        <span className="flex items-center gap-2 font-bold text-gray-900">
+          <FiDollarSign className="h-4 w-4 text-emerald-600" /> Payment
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>{service.paymentStatus}</span>
+        </span>
+        <span className="flex flex-wrap gap-x-5 gap-y-1 text-gray-600">
+          <span>Service <span className="font-mono">₹{(service.serviceCharge || 0).toFixed(2)}</span></span>
+          <span>Department <span className="font-mono">₹{(service.departmentCharge || 0).toFixed(2)}</span></span>
+          <span className="font-bold text-gray-900">Total <span className="font-mono">₹{(service.totalCharge || 0).toFixed(2)}</span></span>
+        </span>
       </div>
     );
   };
@@ -1486,20 +1593,31 @@ const TrackServicePage = () => {
     </div>
   );
 
-  // Full detail layout: header on top, tabs on the left, quick update on the right
-  const renderServiceDetail = (service, { inDrawer = false } = {}) => (
-    <div className="space-y-4">
-      {renderDetailHeader(service)}
-      <div className={`grid grid-cols-1 gap-4 ${inDrawer ? 'xl:grid-cols-3' : 'lg:grid-cols-3'}`}>
-        <div className={`${inDrawer ? 'xl:col-span-2' : 'lg:col-span-2'} min-w-0`}>
-          {renderDetailTabs(service)}
-        </div>
-        <aside className={inDrawer ? '' : 'lg:sticky lg:top-4 self-start'}>
-          {renderQuickUpdate(service)}
-        </aside>
+  // Full detail layout. Measures its own width (not the screen width), because the same
+  // detail shows full page, inside the queue split view and inside the drawer.
+  //  - wide (>= 1060px): tabs on the left, quick update column on the right
+  //  - narrower: quick update as a collapsible strip on top, tabs full width below
+  const renderServiceDetail = (service) => {
+    const wide = detailWidth >= 1060;
+    const cols = detailWidth >= 760 ? 3 : detailWidth >= 520 ? 2 : 1;
+    return (
+      <div ref={detailMeasureRef} className="space-y-4 min-w-0">
+        {renderDetailHeader(service)}
+        {detailWidth === 0 ? null : wide ? (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 min-w-0">{renderDetailTabs(service)}</div>
+            <aside className="sticky top-4 self-start">{renderQuickUpdate(service)}</aside>
+          </div>
+        ) : (
+          <>
+            {renderQuickUpdate(service, { layout: 'top', cols })}
+            {renderDetailTabs(service)}
+            {renderPaymentCard(service)}
+          </>
+        )}
       </div>
-    </div>
-  );
+    );
+  };
 
   // Kept for compatibility with any code that still calls it
   const renderDetailPane = () => (selectedService ? renderServiceDetail(selectedService) : null);
@@ -2127,7 +2245,7 @@ const TrackServicePage = () => {
               </div>
             </div>
             <div ref={detailPanelRef} className="flex-1 overflow-y-auto p-4">
-              {renderServiceDetail(selectedService, { inDrawer: true })}
+              {renderServiceDetail(selectedService)}
             </div>
           </motion.div>
         </>
@@ -2383,7 +2501,7 @@ const TrackServicePage = () => {
                   <FiExternalLink className="h-3.5 w-3.5" /> Open on its own page
                 </button>
               </div>
-              {renderServiceDetail(selectedService, { inDrawer: true })}
+              {renderServiceDetail(selectedService)}
             </div>
           ) : (
             <div className="hidden lg:flex flex-col items-center justify-center text-center bg-white rounded-xl border border-dashed border-gray-300 py-24 px-6">
@@ -2866,12 +2984,12 @@ const EnhancedDocumentsView = ({
           </p>
         </div>
         <div className="flex items-center gap-2 ml-11 sm:ml-0">
-          <div className="px-3 py-1.5 bg-gray-100 rounded-lg">
+          <div className="px-3 py-1.5 bg-gray-100 rounded-lg whitespace-nowrap">
             <span className="text-xs font-medium text-gray-600">
               {documents.length} {documents.length === 1 ? 'file' : 'files'}
             </span>
           </div>
-          <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+          <div className="px-3 py-1.5 bg-emerald-50 rounded-lg whitespace-nowrap border border-emerald-200">
             <span className="text-xs font-medium text-emerald-700">
               {documents.filter(d => d.visible_to_customer).length} visible
             </span>
@@ -2886,9 +3004,10 @@ const EnhancedDocumentsView = ({
           <h4 className="text-sm font-semibold text-gray-900">Upload New Document</h4>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Wraps by the space it has (not the screen size), so it also fits the drawer */}
+          <div className="flex flex-wrap gap-4">
             {/* Label */}
-            <div className="lg:col-span-4">
+            <div className="flex-[1_1_200px] min-w-0">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
                 Document Label <span className="text-rose-500">*</span>
               </label>
@@ -2902,7 +3021,7 @@ const EnhancedDocumentsView = ({
             </div>
 
             {/* File Drop Zone */}
-            <div className="lg:col-span-5">
+            <div className="flex-[2_1_260px] min-w-0">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
                 File <span className="text-rose-500">*</span>
               </label>
@@ -2938,14 +3057,14 @@ const EnhancedDocumentsView = ({
                     <span className="text-sm text-gray-500 truncate flex-1">
                       {dragActive ? 'Drop file here' : 'Click or drag file to upload'}
                     </span>
-                    <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">PDF, DOC, IMG</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">PDF, DOC, IMG</span>
                   </>
                 )}
               </div>
             </div>
 
             {/* Visibility + Button */}
-            <div className="lg:col-span-3 flex flex-col">
+            <div className="flex-[1_1_220px] min-w-0 flex flex-col">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
                 Visibility
               </label>
@@ -2966,7 +3085,7 @@ const EnhancedDocumentsView = ({
                 <button
                   type="submit"
                   disabled={uploadingDocument || !file || !label.trim()}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#172a45] text-white text-xs font-semibold rounded-lg hover:bg-[#1e3a5f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                  className="flex-1 whitespace-nowrap flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#172a45] text-white text-xs font-semibold rounded-lg hover:bg-[#1e3a5f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                 >
                   {uploadingDocument ? (
                     <>
