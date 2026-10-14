@@ -64,7 +64,7 @@ class ErrorBoundary extends React.Component {
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-6 py-2 bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] transition-colors"
             >
               Refresh Page
             </button>
@@ -240,7 +240,13 @@ const TrackServicePage = () => {
     priority: 'medium'
   });
   
-  const [viewMode, setViewMode] = useState('grid');
+  const [viewMode, setViewModeState] = useState(() => {
+    try { return localStorage.getItem('trackServiceView') || 'queue'; } catch { return 'queue'; }
+  });
+  const setViewMode = (mode) => {
+    setViewModeState(mode);
+    try { localStorage.setItem('trackServiceView', mode); } catch { /* storage unavailable */ }
+  };
   const [exportOpen, setExportOpen] = useState(false);
 
   useEffect(() => {
@@ -1089,15 +1095,15 @@ const TrackServicePage = () => {
     );
   };
 
-  const sectionLabel = 'text-[11px] font-bold text-gray-500 uppercase tracking-wider';
-  const fieldCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500';
+  const sectionLabel = 'text-xs font-semibold text-gray-500';
+  const fieldCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]';
 
   // Header: who, what, contact, main actions
   const renderDetailHeader = (service) => (
     <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
       <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
         <div className="flex items-start gap-4 min-w-0">
-          <div className="w-12 h-12 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-lg font-bold flex-shrink-0">
+          <div className="w-12 h-12 rounded-xl bg-[#172a45] text-white flex items-center justify-center text-lg font-bold flex-shrink-0">
             {(service.customerName || '?').charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0">
@@ -1120,9 +1126,9 @@ const TrackServicePage = () => {
             </p>
             <div className="flex items-center gap-x-4 gap-y-1 mt-2 flex-wrap text-xs text-gray-600">
               <span className="inline-flex items-center gap-1 font-mono font-semibold text-gray-800">
-                <FiHash className="h-3.5 w-3.5 text-indigo-600" />{service.trackingId}
+                <FiHash className="h-3.5 w-3.5 text-[#172a45]" />{service.trackingId}
               </span>
-              <a href={`tel:${service.phone}`} className="inline-flex items-center gap-1 hover:text-indigo-600">
+              <a href={`tel:${service.phone}`} className="inline-flex items-center gap-1 hover:text-[#172a45]">
                 <FiPhone className="h-3.5 w-3.5" />{service.phone || 'N/A'}
               </a>
               {service.email && (
@@ -1163,7 +1169,7 @@ const TrackServicePage = () => {
       <div className="space-y-4">
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
           <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-            <FiEdit className="h-4 w-4 text-indigo-600" /> Quick update
+            <FiEdit className="h-4 w-4 text-[#172a45]" /> Quick update
           </h3>
 
           {/* Status */}
@@ -1204,11 +1210,11 @@ const TrackServicePage = () => {
                     key={step}
                     onClick={() => !current && handleInlineTrackingUpdate(service, { currentStep: step })}
                     className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs text-left transition ${
-                      current ? 'bg-indigo-50 text-indigo-800 font-bold' : 'hover:bg-gray-50 text-gray-600'
+                      current ? 'bg-blue-50 text-[#172a45] font-bold' : 'hover:bg-gray-50 text-gray-600'
                     }`}
                   >
                     <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
-                      done ? 'bg-emerald-500 text-white' : current ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-500'
+                      done ? 'bg-emerald-500 text-white' : current ? 'bg-[#172a45] text-white' : 'bg-gray-200 text-gray-500'
                     }`}>
                       {done ? <FiCheckCircle className="h-3 w-3" /> : order}
                     </span>
@@ -1319,21 +1325,21 @@ const TrackServicePage = () => {
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold text-gray-900">Progress</h3>
-            <span className="text-sm font-bold text-indigo-600">{service.progress}%</span>
+            <span className="text-sm font-bold text-[#172a45]">{service.progress}%</span>
           </div>
           <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
-            <div className="bg-indigo-600 h-2 rounded-full transition-all duration-500" style={{ width: `${service.progress}%` }} />
+            <div className="bg-[#172a45] h-2 rounded-full transition-all duration-500" style={{ width: `${service.progress}%` }} />
           </div>
           <ol className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             {displaySteps.map((step, i) => {
               const current = step.name === service.currentStep;
               return (
                 <li key={step.id || i} className={`rounded-lg border p-3 ${
-                  current ? 'border-indigo-300 bg-indigo-50' : step.completed ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50'
+                  current ? 'border-blue-300 bg-blue-50' : step.completed ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50'
                 }`}>
                   <div className="flex items-center gap-2">
                     <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                      step.completed ? 'bg-emerald-500 text-white' : current ? 'bg-indigo-600 text-white' : 'bg-gray-300 text-white'
+                      step.completed ? 'bg-emerald-500 text-white' : current ? 'bg-[#172a45] text-white' : 'bg-gray-300 text-white'
                     }`}>
                       {step.completed ? <FiCheckCircle className="h-3 w-3" /> : i + 1}
                     </span>
@@ -1414,7 +1420,7 @@ const TrackServicePage = () => {
             onClick={() => setActiveTab(tab.id)}
             className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
               activeTab === tab.id
-                ? 'border-indigo-600 text-indigo-700 bg-white'
+                ? 'border-[#172a45] text-[#172a45] bg-white'
                 : 'border-transparent text-gray-500 hover:text-gray-800'
             }`}
           >
@@ -1682,7 +1688,7 @@ const TrackServicePage = () => {
         onClick={onClick}
         className={`p-3 rounded-lg border bg-white cursor-grab active:cursor-grabbing transition-all ${
           isDragging ? 'opacity-40' : ''
-        } ${isSelected ? 'border-indigo-400 ring-2 ring-indigo-200 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'}`}
+        } ${isSelected ? 'border-[#172a45] ring-2 ring-blue-200 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'}`}
       >
         <div className="flex items-start justify-between gap-2 mb-1">
           <p className="text-sm font-semibold text-gray-900 truncate" title={service.customerName}>{service.customerName || 'Unknown'}</p>
@@ -1695,7 +1701,7 @@ const TrackServicePage = () => {
         </div>
         <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
           <span className="text-gray-500 truncate">{service.assignedTo || 'Unassigned'}</span>
-          <span className="text-indigo-600 font-medium flex-shrink-0">{service.estimatedDelivery}</span>
+          <span className="text-[#172a45] font-medium flex-shrink-0">{service.estimatedDelivery}</span>
         </div>
       </div>
     );
@@ -1714,7 +1720,7 @@ const TrackServicePage = () => {
               onDragOver={(e) => { e.preventDefault(); setDragOverColumn(statusKey); }}
               onDragLeave={() => setDragOverColumn(null)}
               onDrop={(e) => { e.preventDefault(); handleColumnDrop(statusKey); }}
-              className={`w-72 flex-shrink-0 rounded-xl border-2 transition-colors ${isDragOver ? `${cfg.border} bg-indigo-50/50` : 'border-gray-200 bg-gray-50'}`}
+              className={`w-72 flex-shrink-0 rounded-xl border-2 transition-colors ${isDragOver ? `${cfg.border} bg-blue-50/50` : 'border-gray-200 bg-gray-50'}`}
             >
               <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg border-b ${cfg.border} ${cfg.bg}`}>
                 <div className="flex items-center gap-2">
@@ -1791,36 +1797,11 @@ const TrackServicePage = () => {
     searchTerm && { key: 'search', label: `"${searchTerm}"`, clear: () => setSearchTerm('') },
   ].filter(Boolean);
 
-  const selectCls = 'px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer';
-  const cellSelect = 'w-full text-xs bg-white border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-indigo-500 hover:border-gray-300 cursor-pointer';
+  const selectCls = 'px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45] cursor-pointer';
+  const cellSelect = 'w-full text-xs bg-white border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-[#172a45] hover:border-gray-300 cursor-pointer';
 
   const renderToolbar = () => (
     <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-      {/* Status tabs with counts */}
-      <div className="flex overflow-x-auto border-b border-gray-200 scrollbar-hide">
-        {STATUS_TABS.map(tab => {
-          const active = statusFilter === tab.key;
-          const cfg = statusConfig[tab.key];
-          return (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                active ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500 hover:text-gray-800'
-              }`}
-            >
-              {cfg && <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />}
-              {tab.label}
-              {typeof tab.count === 'number' && (
-                <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-full ${active ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {tab.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
       {/* Main filter row */}
       <div className="p-3 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[220px]">
@@ -1828,7 +1809,7 @@ const TrackServicePage = () => {
           <input
             type="text"
             placeholder="Search name, phone or application no."
-            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45]"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
@@ -1858,7 +1839,7 @@ const TrackServicePage = () => {
         <button
           onClick={() => setShowAdvancedFilters(v => !v)}
           className={`px-3 py-2 text-sm rounded-lg border flex items-center gap-1.5 transition ${
-            showAdvancedFilters ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+            showAdvancedFilters ? 'bg-blue-50 border-blue-200 text-[#172a45]' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
           }`}
         >
           <FiSliders className="h-4 w-4" /> More
@@ -1900,15 +1881,15 @@ const TrackServicePage = () => {
       {activeFilterChips.length > 0 && (
         <div className="px-3 pb-3 flex flex-wrap items-center gap-1.5">
           {activeFilterChips.map(chip => (
-            <span key={chip.key} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-indigo-50 text-indigo-700 text-xs font-medium border border-indigo-100">
+            <span key={chip.key} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-blue-50 text-[#172a45] text-xs font-medium border border-blue-100">
               {chip.label}
-              <button onClick={chip.clear} className="p-0.5 rounded-full hover:bg-indigo-100" title="Remove filter">
+              <button onClick={chip.clear} className="p-0.5 rounded-full hover:bg-blue-100" title="Remove filter">
                 <FiX className="h-3 w-3" />
               </button>
             </span>
           ))}
           <button onClick={handleClearFilters} className="text-xs font-semibold text-gray-500 hover:text-gray-800 px-2">Clear all</button>
-          <button onClick={handleSaveView} className="text-xs font-semibold text-indigo-600 hover:text-indigo-800 px-2 flex items-center gap-1">
+          <button onClick={handleSaveView} className="text-xs font-semibold text-[#172a45] hover:text-[#172a45] px-2 flex items-center gap-1">
             <FiSave className="h-3 w-3" /> Save as my default
           </button>
         </div>
@@ -1949,11 +1930,11 @@ const TrackServicePage = () => {
                   return (
                     <tr
                       key={service.id}
-                      className={`border-b border-gray-100 transition-colors ${selected ? 'bg-indigo-50' : 'hover:bg-gray-50'}`}
+                      className={`border-b border-gray-100 transition-colors ${selected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                     >
                       <td className="px-4 py-2.5">
                         <button onClick={() => handleServiceSelect(service)} className="text-left group">
-                          <div className="text-sm font-semibold text-gray-900 group-hover:text-indigo-700 whitespace-nowrap">{service.customerName}</div>
+                          <div className="text-sm font-semibold text-gray-900 group-hover:text-[#172a45] whitespace-nowrap">{service.customerName}</div>
                           <div className="text-xs text-gray-500">{service.phone || 'N/A'}</div>
                         </button>
                       </td>
@@ -1973,7 +1954,7 @@ const TrackServicePage = () => {
                             if (v !== (service.applicationNumber || '')) handleInlineTrackingUpdate(service, { applicationNumber: v });
                           }}
                           onKeyDown={(e) => { if (e.key === 'Enter') e.currentTarget.blur(); }}
-                          className="w-full text-xs font-mono border border-transparent hover:border-gray-200 focus:border-indigo-500 rounded-md px-2 py-1 bg-transparent focus:bg-white outline-none"
+                          className="w-full text-xs font-mono border border-transparent hover:border-gray-200 focus:border-[#172a45] rounded-md px-2 py-1 bg-transparent focus:bg-white outline-none"
                           placeholder="Add app no."
                         />
                       </td>
@@ -2025,7 +2006,7 @@ const TrackServicePage = () => {
                           <button
                             onClick={() => handleServiceSelect(service)}
                             title="Open details"
-                            className={`p-1.5 rounded-md ${selected ? 'text-indigo-700 bg-indigo-100' : 'text-gray-400 hover:text-indigo-600 hover:bg-indigo-50'}`}
+                            className={`p-1.5 rounded-md ${selected ? 'text-[#172a45] bg-blue-100' : 'text-gray-400 hover:text-[#172a45] hover:bg-blue-50'}`}
                           >
                             <FiChevronRight className="h-4 w-4" />
                           </button>
@@ -2044,7 +2025,7 @@ const TrackServicePage = () => {
                   <p className="text-base font-medium text-gray-900">No applications found</p>
                   <p className="text-sm mt-1">Try a different period or remove some filters.</p>
                   {activeFilterChips.length > 0 && (
-                    <button onClick={handleClearFilters} className="mt-3 text-sm font-semibold text-indigo-600 hover:text-indigo-800">Clear all filters</button>
+                    <button onClick={handleClearFilters} className="mt-3 text-sm font-semibold text-[#172a45] hover:text-[#172a45]">Clear all filters</button>
                   )}
                 </td>
               </tr>
@@ -2126,7 +2107,7 @@ const TrackServicePage = () => {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => navigate(`/dashboard/staff/track_service/${selectedService.id}`)}
-                  className="px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-50 rounded-lg flex items-center gap-1.5"
+                  className="px-3 py-1.5 text-xs font-semibold text-[#172a45] hover:bg-blue-50 rounded-lg flex items-center gap-1.5"
                   title="Open on its own page (shareable link)"
                 >
                   <FiExternalLink className="h-3.5 w-3.5" /> Open full page
@@ -2150,6 +2131,255 @@ const TrackServicePage = () => {
   );
 
   /* =====================================================================
+     METRICS: one status bar + counts (also the status filter)
+  ===================================================================== */
+
+  const METRIC_SEGMENTS = [
+    { key: 'Pending', count: globalStats.pending, bar: 'bg-amber-500' },
+    { key: 'In Progress', count: globalStats.in_progress, bar: 'bg-blue-600' },
+    { key: 'Resubmit', count: globalStats.resubmit, bar: 'bg-orange-500' },
+    { key: 'Delayed', count: globalStats.delayed, bar: 'bg-rose-600' },
+    { key: 'Completed', count: globalStats.completed, bar: 'bg-emerald-600' },
+    { key: 'Paid', count: globalStats.paid, bar: 'bg-green-500' },
+  ].filter(s => typeof s.count === 'number');
+
+  const renderMetrics = () => {
+    const total = globalStats.total || METRIC_SEGMENTS.reduce((a, s) => a + (s.count || 0), 0) || 0;
+    const pct = (n) => (total ? Math.round(((n || 0) / total) * 100) : 0);
+    const onTime = globalStats.sla_compliance != null ? Math.round(globalStats.sla_compliance) : null;
+
+    return (
+      <section className="bg-white rounded-xl border border-gray-200 p-4" aria-label="Applications by status">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+          <div>
+            <p className="text-sm text-gray-500">{TIME_RANGE_LABELS[timeRange]}</p>
+            <p className="text-3xl font-bold text-[#172a45] leading-tight tabular-nums">
+              {total} <span className="text-base font-medium text-gray-500">applications</span>
+            </p>
+          </div>
+          {onTime != null && (
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Delivered on time</p>
+              <p className={`text-2xl font-bold tabular-nums ${onTime >= 90 ? 'text-emerald-700' : onTime >= 75 ? 'text-amber-700' : 'text-rose-700'}`}>
+                {onTime}%
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* The status bar */}
+        <div className="flex h-3 w-full rounded-full overflow-hidden bg-gray-100" role="img"
+          aria-label={METRIC_SEGMENTS.map(s => `${s.key} ${s.count}`).join(', ')}>
+          {METRIC_SEGMENTS.map(s => (s.count > 0 ? (
+            <button
+              key={s.key}
+              onClick={() => setStatusFilter(statusFilter === s.key ? 'all' : s.key)}
+              title={`${s.key}: ${s.count}`}
+              style={{ width: `${pct(s.count)}%` }}
+              className={`${s.bar} h-full transition-opacity ${statusFilter !== 'all' && statusFilter !== s.key ? 'opacity-25' : ''}`}
+            />
+          ) : null))}
+        </div>
+
+        {/* Counts, which are also the status filter */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 mt-3">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`text-left rounded-lg px-3 py-2 transition ${statusFilter === 'all' ? 'bg-[#172a45] text-white' : 'hover:bg-gray-50'}`}
+          >
+            <span className={`block text-xs ${statusFilter === 'all' ? 'text-blue-100' : 'text-gray-500'}`}>All</span>
+            <span className="block text-lg font-bold tabular-nums">{total}</span>
+          </button>
+          {METRIC_SEGMENTS.map(s => {
+            const active = statusFilter === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setStatusFilter(active ? 'all' : s.key)}
+                className={`text-left rounded-lg px-3 py-2 transition ${active ? 'bg-[#172a45] text-white' : 'hover:bg-gray-50'}`}
+              >
+                <span className={`flex items-center gap-1.5 text-xs ${active ? 'text-blue-100' : 'text-gray-500'}`}>
+                  <span className={`w-2 h-2 rounded-full ${s.bar}`} /> {s.key}
+                </span>
+                <span className="block text-lg font-bold tabular-nums">
+                  {s.count}
+                  <span className={`ml-1 text-xs font-medium ${active ? 'text-blue-100' : 'text-gray-400'}`}>{pct(s.count)}%</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
+  /* =====================================================================
+     QUEUE VIEW: list on the left, the selected application on the right
+  ===================================================================== */
+
+  const todayKey = new Date().toISOString().split('T')[0];
+  const isOverdue = (s) =>
+    s.rawEstimatedDelivery &&
+    !['Completed', 'Paid'].includes(s.status) &&
+    formatDateForInput(s.rawEstimatedDelivery) < todayKey;
+
+  const initials = (name) =>
+    (name || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
+  const renderQueueItem = (service) => {
+    const selected = selectedService?.id === service.id;
+    const cfg = statusConfig[service.status] || statusConfig['Pending'];
+    const overdue = isOverdue(service);
+    return (
+      <li key={service.id}>
+        <button
+          onClick={() => handleServiceSelect(service)}
+          className={`w-full text-left pl-3 pr-3 py-3 border-l-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#172a45] ${
+            selected ? 'bg-blue-50/70 border-[#172a45]' : 'border-transparent hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className={`text-sm truncate ${selected ? 'font-bold text-[#172a45]' : 'font-semibold text-gray-900'}`}>
+              {service.customerName}
+            </p>
+            <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.bg} ${cfg.color}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} /> {service.status}
+            </span>
+          </div>
+          <p className="text-xs text-gray-600 truncate mt-0.5">
+            {service.serviceType}
+            {service.subcategoryName && service.subcategoryName !== 'N/A' && <span className="text-gray-400"> / {service.subcategoryName}</span>}
+          </p>
+          <div className="flex items-center justify-between gap-2 mt-1.5 text-[11px]">
+            <span className="font-mono text-gray-500 truncate">{service.applicationNumber || 'No app no.'}</span>
+            <span className="flex items-center gap-2 flex-shrink-0">
+              {service.rawEstimatedDelivery && (
+                <span className={overdue ? 'text-rose-700 font-semibold' : 'text-gray-500'}>
+                  {overdue ? 'Overdue ' : 'Due '}{service.estimatedDelivery}
+                </span>
+              )}
+              <span
+                className="w-5 h-5 rounded-full bg-gray-200 text-gray-700 text-[9px] font-bold flex items-center justify-center"
+                title={service.assignedTo || 'Unassigned'}
+              >
+                {service.assignedToId ? initials(service.assignedTo) : '–'}
+              </span>
+            </span>
+          </div>
+        </button>
+      </li>
+    );
+  };
+
+  const renderQueue = () => {
+    const groups = Object.entries(servicesByDate).sort(([a], [b]) =>
+      a === 'Unknown Date' ? 1 : b === 'Unknown Date' ? -1 : b.localeCompare(a)
+    );
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] gap-4 items-start">
+        {/* Queue */}
+        <aside className={`bg-white rounded-xl border border-gray-200 overflow-hidden lg:sticky lg:top-4 ${selectedService ? 'hidden lg:block' : ''}`}>
+          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <span>
+              {totalRecords ? <>Showing {(currentPage - 1) * limit + 1}–{Math.min(currentPage * limit, totalRecords)} of {totalRecords}</> : `${services.length} shown`}
+            </span>
+            {totalPages > 1 && (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+                  aria-label="Previous page"
+                >
+                  <FiChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="tabular-nums">{currentPage}/{totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+                  aria-label="Next page"
+                >
+                  <FiChevronRight className="h-4 w-4" />
+                </button>
+              </span>
+            )}
+          </div>
+          <div className="max-h-[calc(100vh-180px)] overflow-y-auto">
+            {services.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm font-medium text-gray-900">No applications match</p>
+                <p className="text-xs text-gray-500 mt-1">Try another period, or clear the filters.</p>
+                {activeFilterChips.length > 0 && (
+                  <button onClick={handleClearFilters} className="mt-3 text-sm font-semibold text-[#172a45] underline">Clear filters</button>
+                )}
+              </div>
+            ) : (
+              groups.map(([date, rows]) => (
+                <div key={date}>
+                  <p className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur px-3 py-1.5 text-xs font-semibold text-gray-600 border-y border-gray-100">
+                    {date === 'Unknown Date' ? date : date === todayKey ? 'Today' : formatDate(date)}
+                    <span className="ml-1.5 font-normal text-gray-400">{rows.length}</span>
+                  </p>
+                  <ul className="divide-y divide-gray-100">{rows.map(renderQueueItem)}</ul>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+
+        {/* Selected application */}
+        <div className="min-w-0">
+          {selectedService ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setSelectedService(null)}
+                  className="lg:hidden flex items-center gap-1.5 text-sm font-medium text-gray-600"
+                >
+                  <FiArrowLeft className="h-4 w-4" /> Back to queue
+                </button>
+                <div className="hidden lg:flex items-center gap-1 text-xs text-gray-500">
+                  <button
+                    onClick={() => handleNavigateApplication(-1)}
+                    disabled={currentServiceIndex <= 0}
+                    className="p-1.5 rounded-md hover:bg-white disabled:opacity-30"
+                    aria-label="Previous application"
+                  >
+                    <FiChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="tabular-nums">{currentServiceIndex + 1} of {services.length}</span>
+                  <button
+                    onClick={() => handleNavigateApplication(1)}
+                    disabled={currentServiceIndex >= services.length - 1}
+                    className="p-1.5 rounded-md hover:bg-white disabled:opacity-30"
+                    aria-label="Next application"
+                  >
+                    <FiChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => navigate(`/dashboard/staff/track_service/${selectedService.id}`)}
+                  className="text-xs font-semibold text-[#172a45] hover:underline flex items-center gap-1"
+                >
+                  <FiExternalLink className="h-3.5 w-3.5" /> Open on its own page
+                </button>
+              </div>
+              {renderServiceDetail(selectedService, { inDrawer: true })}
+            </div>
+          ) : (
+            <div className="hidden lg:flex flex-col items-center justify-center text-center bg-white rounded-xl border border-dashed border-gray-300 py-24 px-6">
+              <FiFileText className="h-10 w-10 text-gray-300 mb-3" />
+              <p className="text-base font-semibold text-gray-900">Pick an application from the queue</p>
+              <p className="text-sm text-gray-500 mt-1">Its details, documents and quick update panel open here.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /* =====================================================================
      PAGE
   ===================================================================== */
 
@@ -2157,7 +2387,7 @@ const TrackServicePage = () => {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <div className="w-12 h-12 border-4 border-[#172a45] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
           <p className="text-gray-600 font-medium">{id ? 'Loading application…' : 'Loading applications…'}</p>
         </div>
       </div>
@@ -2180,7 +2410,7 @@ const TrackServicePage = () => {
             <div className="flex items-center justify-between gap-3">
               <button
                 onClick={handleBackToList}
-                className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-indigo-700"
+                className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#172a45]"
               >
                 <FiArrowLeft className="h-4 w-4" /> All applications
               </button>
@@ -2199,7 +2429,7 @@ const TrackServicePage = () => {
                 <FiAlertCircle className="mx-auto h-10 w-10 text-gray-300 mb-3" />
                 <h3 className="text-lg font-semibold text-gray-900">Application not found</h3>
                 <p className="text-sm text-gray-500 mt-1">It may have been removed, or you may not have access to it.</p>
-                <button onClick={handleBackToList} className="mt-4 px-4 py-2 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700">
+                <button onClick={handleBackToList} className="mt-4 px-4 py-2 text-sm font-semibold text-white bg-[#172a45] rounded-lg hover:bg-[#1e3a5f]">
                   Go to all applications
                 </button>
               </div>
@@ -2220,27 +2450,27 @@ const TrackServicePage = () => {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-xl font-bold text-gray-900">Service Tracking</h1>
-              <p className="text-sm text-gray-500">
-                {totalRecords || globalStats.total || 0} applications · {TIME_RANGE_LABELS[timeRange]}
-                {globalStats.sla_compliance != null && (
-                  <span className="ml-2 text-emerald-700 font-medium">· {Math.round(globalStats.sla_compliance)}% on time</span>
-                )}
-              </p>
+              <p className="text-sm text-gray-500">Find an application, update it, and let the customer know.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex bg-white border border-gray-200 p-1 rounded-lg">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 ${viewMode === 'grid' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-500 hover:text-gray-800'}`}
-                >
-                  <FiList className="h-4 w-4" /> List
-                </button>
-                <button
-                  onClick={() => setViewMode('kanban')}
-                  className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 ${viewMode === 'kanban' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-500 hover:text-gray-800'}`}
-                >
-                  <FiColumns className="h-4 w-4" /> Board
-                </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-white border border-gray-200 p-1 rounded-lg" role="tablist" aria-label="View">
+                {[
+                  { id: 'queue', label: 'Queue', icon: FiColumns },
+                  { id: 'grid', label: 'Table', icon: FiList },
+                  { id: 'kanban', label: 'Board', icon: FiGrid },
+                ].map(v => (
+                  <button
+                    key={v.id}
+                    role="tab"
+                    aria-selected={viewMode === v.id}
+                    onClick={() => setViewMode(v.id)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 ${
+                      viewMode === v.id ? 'bg-[#172a45] text-white' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <v.icon className="h-4 w-4" /> {v.label}
+                  </button>
+                ))}
               </div>
 
               <div className="relative">
@@ -2273,19 +2503,21 @@ const TrackServicePage = () => {
 
               <button
                 onClick={() => navigate('/dashboard/staff/service_entry')}
-                className="px-3 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1.5 shadow-sm"
+                className="px-3 py-2 text-sm font-semibold bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] flex items-center gap-1.5 shadow-sm whitespace-nowrap"
               >
                 <FiPlus className="h-4 w-4" /> New entry
               </button>
             </div>
           </div>
 
+          {renderMetrics()}
+
           {renderToolbar()}
 
-          {viewMode === 'grid' ? renderTable() : renderKanbanBoard()}
+          {viewMode === 'queue' ? renderQueue() : viewMode === 'grid' ? renderTable() : renderKanbanBoard()}
         </div>
 
-        {renderDrawer()}
+        {viewMode !== 'queue' && renderDrawer()}
 
         <style>{`.scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none}.scrollbar-hide::-webkit-scrollbar{display:none}`}</style>
       </div>
@@ -2330,7 +2562,7 @@ const FormField = ({ label, name, value, onChange, type = 'text', placeholder, m
       onChange={onChange}
       placeholder={placeholder}
       maxLength={maxLength}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]"
     />
   </div>
 );
@@ -2342,7 +2574,7 @@ const FormSelect = ({ label, name, value, onChange, options, placeholder }) => (
       name={name}
       value={value}
       onChange={onChange}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]"
     >
       <option value="">{placeholder}</option>
       {options.map(option => (
@@ -2361,14 +2593,14 @@ const FormTextarea = ({ label, name, value, onChange, placeholder, rows = 4 }) =
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]"
     />
   </div>
 );
 
 const ActivityItem = ({ action, description, time, user }) => (
   <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-    <div className="w-2 h-2 bg-indigo-500 rounded-full mt-2"></div>
+    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
     <div className="flex-1">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-gray-900">{action}</p>
@@ -2467,7 +2699,7 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
         </button>
         <button
           type="submit"
-          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          className="px-6 py-2.5 bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] transition-colors"
         >
           Save Changes
         </button>
@@ -2534,7 +2766,7 @@ const DocumentRemarkEditor = ({ doc, onSave }) => {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-      className="mt-1.5 text-[11px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+      className="mt-1.5 text-[11px] text-gray-400 hover:text-[#172a45] flex items-center gap-1 transition-colors"
     >
       <FiPlus className="h-2.5 w-2.5" />
       Add customer remark
@@ -2593,7 +2825,7 @@ const EnhancedDocumentsView = ({
     const name = (doc.file_name || doc.label || '').toLowerCase();
     if (name.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
     if (name.match(/\.(jpg|jpeg|png|gif|webp)$/)) return { Icon: FiEye, color: 'text-blue-600', bg: 'bg-blue-50' };
-    if (name.match(/\.(doc|docx)$/)) return { Icon: FiFileText, color: 'text-indigo-600', bg: 'bg-indigo-50' };
+    if (name.match(/\.(doc|docx)$/)) return { Icon: FiFileText, color: 'text-[#172a45]', bg: 'bg-blue-50' };
     return { Icon: FiFileText, color: 'text-gray-600', bg: 'bg-gray-50' };
   };
 
@@ -2603,8 +2835,8 @@ const EnhancedDocumentsView = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center">
-              <FiPaperclip className="h-4 w-4 text-indigo-600" />
+            <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+              <FiPaperclip className="h-4 w-4 text-[#172a45]" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900">Customer Documents</h3>
           </div>
@@ -2629,7 +2861,7 @@ const EnhancedDocumentsView = ({
       {/* Upload Form */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-          <FiUpload className="h-4 w-4 text-indigo-600" />
+          <FiUpload className="h-4 w-4 text-[#172a45]" />
           <h4 className="text-sm font-semibold text-gray-900">Upload New Document</h4>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
@@ -2644,7 +2876,7 @@ const EnhancedDocumentsView = ({
                 placeholder="e.g. Income Certificate"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45] transition-all"
               />
             </div>
 
@@ -2660,10 +2892,10 @@ const EnhancedDocumentsView = ({
                 onClick={() => fileInputRef.current?.click()}
                 className={`relative flex items-center gap-3 px-3 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
                   dragActive
-                    ? 'border-indigo-500 bg-indigo-50'
+                    ? 'border-indigo-500 bg-blue-50'
                     : file
                     ? 'border-emerald-400 bg-emerald-50/40'
-                    : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/40'
+                    : 'border-gray-300 bg-gray-50 hover:border-[#172a45] hover:bg-blue-50/40'
                 }`}
               >
                 <input
@@ -2713,7 +2945,7 @@ const EnhancedDocumentsView = ({
                 <button
                   type="submit"
                   disabled={uploadingDocument || !file || !label.trim()}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#172a45] text-white text-xs font-semibold rounded-lg hover:bg-[#1e3a5f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                 >
                   {uploadingDocument ? (
                     <>
@@ -2753,7 +2985,7 @@ const EnhancedDocumentsView = ({
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FiFileText className="h-4 w-4 text-indigo-600" />
+            <FiFileText className="h-4 w-4 text-[#172a45]" />
             <h4 className="text-sm font-semibold text-gray-900">Uploaded Documents</h4>
           </div>
           {documents.length > 0 && (
@@ -2765,7 +2997,7 @@ const EnhancedDocumentsView = ({
 
         {documentsLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-6 h-6 border-2 border-[#172a45] border-t-transparent rounded-full animate-spin"></div>
             <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
           </div>
         ) : documents.length === 0 ? (
@@ -2857,7 +3089,7 @@ const EnhancedDocumentsView = ({
                             href={doc.file_url || doc.url || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#172a45] hover:bg-blue-50 transition-colors"
                             title="View document"
                             onClick={(e) => {
                               if (!doc.file_url && !doc.url) e.preventDefault();
@@ -2895,7 +3127,7 @@ const HistoryView = ({ activityHistory, activityLoading }) => {
         <h3 className="font-semibold text-gray-900">Activity History</h3>
 
         <div className="flex items-center justify-center py-10">
-          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-6 h-6 border-2 border-[#172a45] border-t-transparent rounded-full animate-spin"></div>
           <span className="ml-3 text-sm text-gray-500">
             Loading activity history...
           </span>
