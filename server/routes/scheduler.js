@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import pool from '../db.js';
 import generateDailyBalances from './walletDailyBalanceService.js';
 import generateRecurringTasks from "../controllers/recurringTaskService.js";
+import runScheduledActions from "../controllers/scheduledActionWorker.js";
 
 // 👇 NEW: Automated Reports 👇
 import { getReportData } from '../routes/reports/analyticsService.js';
@@ -182,6 +183,21 @@ cron.schedule("* * * * *", async () => {
     await checkAndRunSchedules();
 }, {
     timezone: "Asia/Kolkata"
+});
+
+// ==========================================
+// 3. SCHEDULED ACTIONS (Reminders & auto-tasks)
+// Every minute: send due WhatsApp reminders and
+// create due staff tasks from scheduled_actions.
+// ==========================================
+cron.schedule("* * * * *", async () => {
+  try {
+    await runScheduledActions();
+  } catch (err) {
+    console.error("[CRON] Scheduled actions worker failed", err);
+  }
+}, {
+  timezone: "Asia/Kolkata"
 });
 
 // Run every day at 00:20 AM IST - Cleanup previous days' chat_messages (OTPs and Notifications)
