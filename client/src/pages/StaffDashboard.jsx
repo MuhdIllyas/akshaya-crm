@@ -7,7 +7,7 @@ import {
   FiUsers, FiClock, FiCheckCircle, FiPlayCircle, FiPlus, FiSearch, 
   FiAlertCircle, FiRefreshCw, FiCalendar, FiBarChart2, FiTrendingUp,
   FiUser, FiAward, FiXCircle, FiCheckSquare, FiTarget, FiDollarSign, FiGlobe,
-  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink, FiGift
+  FiBriefcase, FiActivity, FiStar, FiInfo, FiChevronRight, FiExternalLink
 } from 'react-icons/fi';
 import { getCategories, getTokens } from '/src/services/serviceService';
 import { getWalletsForCentre } from '@/services/walletService';
@@ -853,93 +853,84 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      {/* ===== BIRTHDAY SECTION ===== */}
-      {(myBirthday && !hideMyBirthday) || colleagueBirthdays.length > 0 ? (
-        <div className="bg-gray-50 px-6 pt-5">
-          <div className="max-w-7xl mx-auto space-y-3">
+      {/* ===== BIRTHDAY: MY OWN ===== */}
+      <AnimatePresence>
+        {myBirthday && !hideMyBirthday && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="relative overflow-hidden bg-gradient-to-r from-pink-500 via-fuchsia-500 to-amber-400 text-white"
+          >
+            {/* floating emojis */}
+            {['🎉', '🎈', '🎂', '✨', '🎁', '🎊'].map((e, i) => (
+              <motion.span
+                key={i}
+                className="absolute text-2xl select-none pointer-events-none"
+                style={{ left: `${8 + i * 16}%`, bottom: '-10px' }}
+                animate={{ y: [-10, -90], opacity: [0, 1, 0] }}
+                transition={{ duration: 3 + (i % 3), repeat: Infinity, delay: i * 0.6 }}
+              >
+                {e}
+              </motion.span>
+            ))}
 
-            {/* --- My Birthday --- */}
-            <AnimatePresence>
-              {myBirthday && !hideMyBirthday && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.35 }}
-                  className="relative overflow-hidden rounded-xl bg-gradient-to-r from-slate-900 via-indigo-900 to-slate-900 text-white shadow-md"
-                >
-                  {/* gold accent bar */}
-                  <div className="absolute left-0 top-0 h-full w-1.5 bg-gradient-to-b from-amber-300 to-amber-500" />
-                  {/* soft decorative circles */}
-                  <div className="absolute -right-10 -top-10 w-40 h-40 rounded-full bg-white/5" />
-                  <div className="absolute right-24 -bottom-12 w-32 h-32 rounded-full bg-amber-400/10" />
-
-                  <div className="relative flex items-center justify-between gap-4 px-6 py-5">
-                    <div className="flex items-center gap-4 min-w-0">
-                      <div className="w-12 h-12 rounded-full bg-amber-400/15 border border-amber-300/40 flex items-center justify-center shrink-0">
-                        <FiGift className="h-6 w-6 text-amber-300" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-[11px] uppercase tracking-[0.2em] text-amber-300 font-semibold">
-                          Happy Birthday
-                        </p>
-                        <h3 className="text-lg font-semibold mt-0.5 truncate">
-                          Warm wishes, {myBirthday.name}
-                        </h3>
-                        <p className="text-sm text-white/70 mt-0.5">
-                          On behalf of the entire team, we wish you a healthy, happy and successful year ahead.
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={dismissMyBirthday}
-                      className="text-xs font-medium text-white/70 hover:text-white border border-white/20 hover:border-white/40 rounded-lg px-3 py-1.5 shrink-0 transition-colors"
-                    >
-                      Dismiss
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            {/* --- Colleague Birthdays --- */}
-            {colleagueBirthdays.length > 0 && (
-              <div className="rounded-xl bg-white border border-gray-200 shadow-sm px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-center gap-4 min-w-0">
-                  <div className="w-10 h-10 rounded-lg bg-amber-50 border border-amber-100 flex items-center justify-center shrink-0">
-                    <FiGift className="h-5 w-5 text-amber-600" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                      Celebrating today
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                      {colleagueBirthdays.map(b => (
-                        <div key={b.id} className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-full pl-1 pr-3 py-1">
-                          {toPhotoUrl(b.photo) ? (
-                            <img src={toPhotoUrl(b.photo)} alt={b.name} className="w-6 h-6 rounded-full object-cover" />
-                          ) : (
-                            <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold">
-                              {b.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
-                            </div>
-                          )}
-                          <span className="text-sm font-medium text-gray-800">{b.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+            <div className="relative max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="text-5xl">🎂</div>
+                <div>
+                  <h3 className="text-xl font-bold">Happy Birthday, {myBirthday.name}! 🎉</h3>
+                  <p className="text-white/90 text-sm mt-0.5">
+                    Wishing you a wonderful year ahead from the whole team. Thank you for everything you do!
+                  </p>
                 </div>
-                <button
-                  onClick={() => navigate('/dashboard/staff/messenger')}
-                  className="px-4 py-2 bg-indigo-600 text-white text-sm font-semibold rounded-lg hover:bg-indigo-700 shadow-sm shrink-0 transition-colors"
-                >
-                  Send Wishes
-                </button>
               </div>
-            )}
+              <button
+                onClick={dismissMyBirthday}
+                className="p-2 rounded-full bg-white/20 hover:bg-white/30 shrink-0"
+                title="Dismiss"
+              >
+                <FiXCircle className="h-5 w-5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== BIRTHDAY: COLLEAGUES ===== */}
+      {colleagueBirthdays.length > 0 && (
+        <div className="bg-pink-50 border-l-4 border-pink-500">
+          <div className="max-w-7xl mx-auto px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex -space-x-2 shrink-0">
+                {colleagueBirthdays.slice(0, 3).map(b => (
+                  toPhotoUrl(b.photo) ? (
+                    <img key={b.id} src={toPhotoUrl(b.photo)} alt={b.name}
+                        className="w-9 h-9 rounded-full border-2 border-white object-cover" />
+                  ) : (
+                    <div key={b.id} className="w-9 h-9 rounded-full border-2 border-white bg-pink-200 text-pink-800 flex items-center justify-center text-xs font-bold">
+                      {b.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                  )
+                ))}
+              </div>
+              <p className="text-sm text-pink-900">
+                🎂 Today is{' '}
+                <span className="font-bold">
+                  {colleagueBirthdays.map(b => b.name).join(', ').replace(/, ([^,]*)$/, ' & $1')}
+                </span>
+                's birthday! Don't forget to wish {colleagueBirthdays.length > 1 ? 'them' : 'them'} 🎉
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/dashboard/staff/messenger')}
+              className="px-4 py-2 bg-pink-600 text-white text-sm font-bold rounded-lg hover:bg-pink-700 shadow-sm shrink-0"
+            >
+              Send Wishes
+            </button>
           </div>
         </div>
-      ) : null}
+      )}
 
       {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
       <AnimatePresence>
