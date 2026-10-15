@@ -127,6 +127,47 @@ const formatTimelineDate = (dateString) => {
   }
 };
 
+/**
+ * Date input for quick update. Keeps its own draft so the field shows what staff picked
+ * straight away, and saves once (after a short pause, on blur or Enter) instead of on every
+ * keystroke - typing "2026" used to fire saves for years 0002, 0020, 0202...
+ */
+function DeliveryDateField({ value, onSave, className }) {
+  const [draft, setDraft] = useState(value || '');
+  const timer = useRef(null);
+  const lastSaved = useRef(value || '');
+
+  useEffect(() => {
+    setDraft(value || '');
+    lastSaved.current = value || '';
+  }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const isComplete = (v) => v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && +v.slice(0, 4) >= 2000 && +v.slice(0, 4) <= 2100);
+  const commit = (v) => {
+    clearTimeout(timer.current);
+    if (!isComplete(v) || v === lastSaved.current) return;
+    lastSaved.current = v;
+    onSave(v);
+  };
+
+  return (
+    <input
+      type="date"
+      value={draft}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => commit(v), 700);
+      }}
+      onBlur={() => commit(draft)}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(draft); } }}
+      className={className}
+    />
+  );
+}
+
 const TrackServicePage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -446,7 +487,8 @@ const TrackServicePage = () => {
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return '';
-      return date.toISOString().split('T')[0];
+      // India date, not UTC: toISOString() turned 25 Oct (IST midnight) into 24 Oct
+      return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     } catch (error) {
       console.error('Error formatting date for input:', error);
       return '';
@@ -518,7 +560,7 @@ const TrackServicePage = () => {
         createdAt: trackingEntry.created_at || trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
         duration: null,
-        notes: trackingEntry.notes || 'No notes available',
+        notes: trackingEntry.notes || '',
         rating: null,
         followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
         paymentStatus: paymentStatus,
@@ -847,20 +889,25 @@ const TrackServicePage = () => {
     }
   };
 
+  // Turns a backend 400 ("Invalid fields" + details) into a readable message
+  const apiErrorText = (error) => {
+    const data = error?.response?.data;
+    if (Array.isArray(data?.details) && data.details.length) return data.details.join(', ');
+    return data?.error || error?.message || 'Unknown error';
+  };
+
   const handleInlineTrackingUpdate = async (service, updates) => {
+    const before = { ...service };
     try {
-      const payload = {
-        applicationNumber: updates.applicationNumber !== undefined ? updates.applicationNumber : service.applicationNumber,
-        currentStep: updates.currentStep !== undefined ? updates.currentStep : service.currentStep,
-        estimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : service.rawEstimatedDelivery,
-        averageTime: service.averageTime || '7 days',
-        notes: service.notes || null,
-        assignedTo: updates.assignedTo !== undefined ? (updates.assignedTo ? parseInt(updates.assignedTo) : null) : service.assignedToId,
-        aadhaar: service.aadhaar || null,
-        email: service.email || null,
-        priority: updates.priority !== undefined ? updates.priority : service.priority,
-        progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
-      };
+      // Send ONLY what changed. Re-sending every field meant one bad old value
+      // (e.g. an Aadhaar saved with spaces) blocked every quick update with a 400.
+      const payload = {};
+      if (updates.applicationNumber !== undefined) payload.applicationNumber = updates.applicationNumber;
+      if (updates.currentStep !== undefined) payload.currentStep = updates.currentStep;
+      if (updates.estimatedDelivery !== undefined) payload.estimatedDelivery = updates.estimatedDelivery || null;
+      if (updates.assignedTo !== undefined) payload.assignedTo = updates.assignedTo ? parseInt(updates.assignedTo) : null;
+      if (updates.priority !== undefined) payload.priority = updates.priority;
+      payload.progress = updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress;
 
       // Handle Optimistic UI injection for Timeline
       const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
@@ -889,31 +936,23 @@ const TrackServicePage = () => {
       if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
       if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
 
-      setServices(prevServices => prevServices.map(s => {
-        if (s.id === service.id) {
-          return {
-            ...s,
-            ...updates,
-            steps: updates.steps || s.steps,
-            updatedAt: updates.updatedAt || s.updatedAt,
-            assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
-            assignedToId: updates.assignedTo !== undefined ? parseInt(updates.assignedTo) : s.assignedToId,
-            rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
-            estimatedDelivery: updates.estimatedDelivery !== undefined ? formatDate(updates.estimatedDelivery) : s.estimatedDelivery,
-            progress: payload.progress
-          };
-        }
-        return s;
-      }));
-      
+      // One merge used for both the list and the open detail, so they never disagree
+      const applyUpdates = (s) => ({
+        ...s,
+        ...updates,
+        steps: updates.steps || s.steps,
+        updatedAt: updates.updatedAt || s.updatedAt,
+        assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
+        assignedToId: updates.assignedTo !== undefined ? (updates.assignedTo ? parseInt(updates.assignedTo) : null) : s.assignedToId,
+        rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
+        estimatedDelivery: updates.estimatedDelivery !== undefined ? formatDate(updates.estimatedDelivery) : s.estimatedDelivery,
+        progress: payload.progress
+      });
+
+      setServices(prevServices => prevServices.map(s => (s.id === service.id ? applyUpdates(s) : s)));
+
       if (selectedService?.id === service.id) {
-        setSelectedService(prev => ({ 
-            ...prev, 
-            ...updates, 
-            steps: updates.steps || prev.steps,
-            updatedAt: updates.updatedAt || prev.updatedAt,
-            progress: payload.progress 
-        }));
+        setSelectedService(prev => applyUpdates(prev));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
 
@@ -923,7 +962,11 @@ const TrackServicePage = () => {
 
     } catch (error) {
       console.error('Error updating details:', error);
-      toast.error('Failed to update tracking details');
+      // Undo the optimistic change so the screen shows what is really saved
+      Object.assign(service, before);
+      setServices(prev => prev.map(s => (s.id === before.id ? before : s)));
+      if (selectedService?.id === before.id) setSelectedService(before);
+      toast.error('Not saved: ' + apiErrorText(error));
     }
   };
 
@@ -1048,7 +1091,7 @@ const TrackServicePage = () => {
       setActiveTab('overview');
     } catch (error) {
       console.error('TrackServicePage: Error updating tracking details:', error);
-      toast.error('Failed to update tracking details: ' + (error.response?.data?.error || error.message));
+      toast.error('Not saved: ' + apiErrorText(error));
     }
   };
 
@@ -1297,10 +1340,10 @@ const TrackServicePage = () => {
           {/* Delivery */}
           <div>
             <label className={`${sectionLabel} block mb-1.5`}>Estimated delivery</label>
-            <input
-              type="date"
+            <DeliveryDateField
+              key={service.id}
               value={formatDateForInput(service.rawEstimatedDelivery)}
-              onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
+              onSave={(v) => handleInlineTrackingUpdate(service, { estimatedDelivery: v })}
               className={fieldCls}
             />
           </div>

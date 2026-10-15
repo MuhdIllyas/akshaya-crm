@@ -1901,7 +1901,13 @@ const syncWithCustomerServices = async (client, trackingEntry, customerServiceId
  */
 router.put('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-  const { applicationNumber, status, assignedTo, currentStep, estimatedDelivery, averageTime, notes, aadhaar, email, priority } = req.body;
+  const { status, assignedTo, currentStep, estimatedDelivery, averageTime, notes, priority } = req.body;
+  // Normalise what staff type or paste: spaces/dashes in Aadhaar and application numbers, stray spaces in email
+  const aadhaar = typeof req.body.aadhaar === 'string' ? req.body.aadhaar.replace(/[\s-]/g, '') : req.body.aadhaar;
+  const email = typeof req.body.email === 'string' ? req.body.email.trim() : req.body.email;
+  const applicationNumber = typeof req.body.applicationNumber === 'string'
+    ? req.body.applicationNumber.replace(/[\s\u200B-\u200D\uFEFF\-\u2013\u2014]+/g, '').toUpperCase()
+    : req.body.applicationNumber;
 
   if (isNaN(parseInt(id, 10))) {
     return res.status(400).json({ error: 'Invalid tracking ID provided.' });
@@ -1926,6 +1932,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
     if (estimatedDelivery && isNaN(Date.parse(estimatedDelivery))) {
       errors.push('estimatedDelivery must be a valid date');
+    }
+    if (applicationNumber && applicationNumber.length > 50) {
+      errors.push('applicationNumber is too long (max 50 characters)');
     }
     if (aadhaar && !/^\d{12}$/.test(aadhaar)) {
       errors.push('aadhaar must be a 12-digit number');
@@ -2057,15 +2066,17 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     if (applicationNumber !== undefined) {
       updateFields.push(`application_number = $${paramIndex++}`);
-      updateValues.push(applicationNumber ? applicationNumber.trim() : (serviceEntry.rows[0].token_id ? `T${serviceEntry.rows[0].token_id}` : `APP${existingEntry.service_entry_id}`));
+      // Empty means "not added yet". (Never invent APP<id> / T<token> numbers: they look real.)
+      updateValues.push(applicationNumber || null);
     }
     if (status) {
       updateFields.push(`status = $${paramIndex++}`);
       updateValues.push(status);
     }
-    if (assignedTo) {
+    if (assignedTo !== undefined && (assignedTo || req.user.role !== 'staff')) {
+      // null / '' = Unassigned (admins only, so staff can't lock themselves out)
       updateFields.push(`assigned_to = $${paramIndex++}`);
-      updateValues.push(parseInt(assignedTo));
+      updateValues.push(assignedTo ? parseInt(assignedTo) : null);
     }
     if (currentStep !== undefined) {
       updateFields.push(`current_step = $${paramIndex++}`);
@@ -2342,6 +2353,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('servicetracking.js: Error updating service tracking entry:', err);
+    // Bad input that only the database catches -> tell staff what to fix (400), not a server error
+    if (err.code === '22001') return res.status(400).json({ error: 'Invalid fields', details: ['A value is too long for this field (check the application number length)'] });
+    if (err.code === '22007' || err.code === '22008') return res.status(400).json({ error: 'Invalid fields', details: ['estimatedDelivery must be a valid date'] });
     res.status(500).json({ error: 'Failed to update service tracking entry: ' + err.message });
   } finally {
     client.release();
