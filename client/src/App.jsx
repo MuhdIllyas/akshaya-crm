@@ -42,6 +42,7 @@ import ExpenseEntry from "./pages/staff/ExpenseEntry";
 import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
 import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
+import MyProfile from "./pages/staff/MyProfile";
 import AllEntries from './pages/AllEntries';
 import CustomerProfileSystem from './pages/CustomerProfileSystem';
 import CampaignManagement from "./pages/campaign/CampaignManagement";
