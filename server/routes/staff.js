@@ -451,6 +451,27 @@ router.post("/users/change-password", authMiddleware(["admin", "superadmin"]), a
   }
 });
 
+// Today's birthdays in the logged-in user's centre (IST date)
+router.get("/birthdays/today", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, photo, role
+       FROM staff
+       WHERE dob IS NOT NULL
+         AND status = 'Active'
+         AND centre_id = $1
+         AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM (NOW() AT TIME ZONE 'Asia/Kolkata'))
+         AND EXTRACT(DAY   FROM dob) = EXTRACT(DAY   FROM (NOW() AT TIME ZONE 'Asia/Kolkata'))
+       ORDER BY name`,
+      [req.user.centre_id]
+    );
+    res.json(result.rows.map(r => ({ ...r, isMe: Number(r.id) === Number(req.user.id) })));
+  } catch (err) {
+    console.error("Error fetching birthdays:", err);
+    res.status(500).json({ error: "Failed to fetch birthdays" });
+  }
+});
+
 // ==============================================
 // 3. GENERIC /:id ROUTES (must come after /me)
 // ==============================================

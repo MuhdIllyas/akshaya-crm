@@ -138,6 +138,18 @@ const StaffDashboard = () => {
     .toUpperCase()
     .slice(0, 2) || 'ST';
 
+  // --- Birthdays ---
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const [birthdays, setBirthdays] = useState([]);
+  const [hideMyBirthday, setHideMyBirthday] = useState(() => {
+    try { return localStorage.getItem(`bday-hidden-${todayKey}`) === '1'; } catch { return false; }
+  });
+
+  const toPhotoUrl = (p) => {
+    if (!p || p === 'null' || p === 'undefined') return null;
+    return p.startsWith('http') || p.startsWith('data:image') ? p : `${import.meta.env.VITE_API_URL}${p}`;
+  };
+
   // Photo Formatting
   const [imageError, setImageError] = useState(false);
   const rawPhoto = localStorage.getItem('photo') ;
@@ -349,6 +361,24 @@ const StaffDashboard = () => {
   useEffect(() => {
     getWalletsForCentre().then(setWallets).catch(() => toast.error('Failed to load wallets'));
   }, []);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    fetch(`${import.meta.env.VITE_API_URL}/api/staff/birthdays/today`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(res => (res.ok ? res.json() : []))
+      .then(data => setBirthdays(Array.isArray(data) ? data : []))
+      .catch(() => setBirthdays([]));
+  }, []);
+
+  const myBirthday = birthdays.find(b => b.isMe);
+  const colleagueBirthdays = birthdays.filter(b => !b.isMe);
+
+  const dismissMyBirthday = () => {
+    setHideMyBirthday(true);
+    try { localStorage.setItem(`bday-hidden-${todayKey}`, '1'); } catch {}
+  };
 
   // Initial data fetch
   useEffect(() => {
@@ -822,6 +852,85 @@ const StaffDashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* ===== BIRTHDAY: MY OWN ===== */}
+      <AnimatePresence>
+        {myBirthday && !hideMyBirthday && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="relative overflow-hidden bg-gradient-to-r from-pink-500 via-fuchsia-500 to-amber-400 text-white"
+          >
+            {/* floating emojis */}
+            {['🎉', '🎈', '🎂', '✨', '🎁', '🎊'].map((e, i) => (
+              <motion.span
+                key={i}
+                className="absolute text-2xl select-none pointer-events-none"
+                style={{ left: `${8 + i * 16}%`, bottom: '-10px' }}
+                animate={{ y: [-10, -90], opacity: [0, 1, 0] }}
+                transition={{ duration: 3 + (i % 3), repeat: Infinity, delay: i * 0.6 }}
+              >
+                {e}
+              </motion.span>
+            ))}
+
+            <div className="relative max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="text-5xl">🎂</div>
+                <div>
+                  <h3 className="text-xl font-bold">Happy Birthday, {myBirthday.name}! 🎉</h3>
+                  <p className="text-white/90 text-sm mt-0.5">
+                    Wishing you a wonderful year ahead from the whole team. Thank you for everything you do!
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={dismissMyBirthday}
+                className="p-2 rounded-full bg-white/20 hover:bg-white/30 shrink-0"
+                title="Dismiss"
+              >
+                <FiXCircle className="h-5 w-5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ===== BIRTHDAY: COLLEAGUES ===== */}
+      {colleagueBirthdays.length > 0 && (
+        <div className="bg-pink-50 border-l-4 border-pink-500">
+          <div className="max-w-7xl mx-auto px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex -space-x-2 shrink-0">
+                {colleagueBirthdays.slice(0, 3).map(b => (
+                  toPhotoUrl(b.photo) ? (
+                    <img key={b.id} src={toPhotoUrl(b.photo)} alt={b.name}
+                        className="w-9 h-9 rounded-full border-2 border-white object-cover" />
+                  ) : (
+                    <div key={b.id} className="w-9 h-9 rounded-full border-2 border-white bg-pink-200 text-pink-800 flex items-center justify-center text-xs font-bold">
+                      {b.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                    </div>
+                  )
+                ))}
+              </div>
+              <p className="text-sm text-pink-900">
+                🎂 Today is{' '}
+                <span className="font-bold">
+                  {colleagueBirthdays.map(b => b.name).join(', ').replace(/, ([^,]*)$/, ' & $1')}
+                </span>
+                's birthday! Don't forget to wish {colleagueBirthdays.length > 1 ? 'them' : 'them'} 🎉
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/dashboard/staff/messenger')}
+              className="px-4 py-2 bg-pink-600 text-white text-sm font-bold rounded-lg hover:bg-pink-700 shadow-sm shrink-0"
+            >
+              Send Wishes
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ===== NEW: SMART ATTENDANCE BANNER ===== */}
       <AnimatePresence>
