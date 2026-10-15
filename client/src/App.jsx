@@ -44,7 +44,6 @@ import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import AllEntries from './pages/AllEntries';
 import CustomerProfileSystem from './pages/CustomerProfileSystem';
-import MyProfile from './pages/MyProfile';
 import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
@@ -290,12 +289,6 @@ const App = () => {
             <Route
               path="my-profile"
               element={<ProtectedRoute allowedRoles={["staff", "admin", "superadmin"]}><MyProfile /></ProtectedRoute>}
-            />
-
-            {/* Staff-specific MyProfile (optional, can keep for backward compatibility) */}
-            <Route
-              path="staff/myprofile"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><MyProfile /></ProtectedRoute>}
             />
 
             <Route
