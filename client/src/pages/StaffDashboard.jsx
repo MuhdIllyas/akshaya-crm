@@ -380,6 +380,47 @@ const StaffDashboard = () => {
     try { localStorage.setItem(`bday-hidden-${todayKey}`, '1'); } catch {}
   };
 
+  // ⚠️ Must be the EXACT path the sidebar "Messenger" link opens (check the address bar).
+  // A wrong path falls through to the app's catch-all route, which logs you out.
+  const MESSENGER_ROUTE = '/dashboard/messenger';
+  const [openingChatFor, setOpeningChatFor] = useState(null);
+
+  // Open (or create) the direct chat with a colleague and pre-fill a birthday wish
+  const handleSendWishes = async (person) => {
+    if (openingChatFor) return;
+    setOpeningChatFor(person.id);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/chat/conversation`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify({
+          participants: [person.id],
+          is_group: false,
+          conversationType: 'internal',
+          channel: 'internal',
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to open chat');
+      const conv = await res.json();
+
+      const firstName = (person.name || '').split(' ')[0];
+      navigate(MESSENGER_ROUTE, {
+        state: {
+          openConversationId: conv.id,
+          draftMessage: `Happy Birthday, ${firstName}! 🎉 Wishing you a wonderful year ahead.`,
+        },
+      });
+    } catch (err) {
+      console.error(err);
+      toast.error('Could not open chat. Please try again.');
+    } finally {
+      setOpeningChatFor(null);
+    }
+  };
+
   // Initial data fetch
   useEffect(() => {
     const fetchData = async () => {
@@ -860,7 +901,7 @@ const StaffDashboard = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="relative overflow-hidden bg-gradient-to-r from-pink-500 via-fuchsia-500 to-amber-400 text-white"
+            className="relative overflow-hidden bg-pink-600 text-white"
           >
             {/* floating emojis */}
             {['🎉', '🎈', '🎂', '✨', '🎁', '🎊'].map((e, i) => (
@@ -919,15 +960,31 @@ const StaffDashboard = () => {
                 <span className="font-bold">
                   {colleagueBirthdays.map(b => b.name).join(', ').replace(/, ([^,]*)$/, ' & $1')}
                 </span>
-                's birthday! Don't forget to wish {colleagueBirthdays.length > 1 ? 'them' : 'them'} 🎉
+                's birthday! Don't forget to wish them 🎉
               </p>
             </div>
-            <button
-              onClick={() => navigate('/dashboard/staff/messenger')}
-              className="px-4 py-2 bg-pink-600 text-white text-sm font-bold rounded-lg hover:bg-pink-700 shadow-sm shrink-0"
-            >
-              Send Wishes
-            </button>
+            {colleagueBirthdays.length === 1 ? (
+              <button
+                onClick={() => handleSendWishes(colleagueBirthdays[0])}
+                disabled={!!openingChatFor}
+                className="px-4 py-2 bg-pink-600 text-white text-sm font-bold rounded-lg hover:bg-pink-700 shadow-sm shrink-0 disabled:opacity-60"
+              >
+                {openingChatFor ? 'Opening…' : 'Send Wishes'}
+              </button>
+            ) : (
+              <div className="flex flex-wrap gap-2 shrink-0">
+                {colleagueBirthdays.map(b => (
+                  <button
+                    key={b.id}
+                    onClick={() => handleSendWishes(b)}
+                    disabled={!!openingChatFor}
+                    className="px-3 py-1.5 bg-pink-600 text-white text-xs font-bold rounded-lg hover:bg-pink-700 shadow-sm disabled:opacity-60"
+                  >
+                    {openingChatFor === b.id ? 'Opening…' : `Wish ${(b.name || '').split(' ')[0]}`}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
