@@ -45,21 +45,32 @@ export const authMiddleware = (allowedRoles) => async (req, res, next) => {
 // 1. SELF‑PROFILE ROUTES (must come before /:id)
 // ==============================================
 
+// Shared: profile + manager name + centre name
+const getOwnProfile = async (id) => {
+  const result = await pool.query(
+    `SELECT s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
+      s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
+      s.employment_type AS "employmentType",
+      s.reports_to AS "reportsTo", m.name AS "reportsToName",
+      s.dob, s.gender, s.emergency_contact AS "emergencyContact",
+      s.emergency_relationship AS "emergencyRelationship",
+      s.centre_id AS "centreId", c.name AS "centreName",
+      s.created_at
+    FROM staff s
+    LEFT JOIN staff m   ON m.id = s.reports_to
+    LEFT JOIN centres c ON c.id = s.centre_id
+    WHERE s.id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+};
+
 // Get logged‑in staff profile
 router.get("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT id, username, name, role, department, email, phone, status,
-        join_date AS "joinDate", photo, employee_id AS "employeeId",
-        employment_type AS "employmentType", reports_to AS "reportsTo",
-        salary, dob, gender, emergency_contact AS "emergencyContact",
-        emergency_relationship AS "emergencyRelationship", centre_id AS "centreId",
-        created_at
-      FROM staff WHERE id = $1`,
-      [req.user.id]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
-    res.json(result.rows[0]);
+    const profile = await getOwnProfile(req.user.id);
+    if (!profile) return res.status(404).json({ error: "Staff not found" });
+    res.json(profile);
   } catch (err) {
     console.error("Error fetching own profile:", err);
     res.status(500).json({ error: "Server error" });
@@ -67,30 +78,25 @@ router.get("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"])
 });
 
 // Update own profile
-router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), upload.single('photo'), async (req, res) => {
-  // Removed 'photo' from destructuring here
+router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), upload.single("photo"), async (req, res) => {
   const { name, phone, emergencyContact, emergencyRelationship } = req.body;
-  
-  // NEW: Handle photo URL
-  // If the frontend sends the existing URL as text, keep it. 
-  let photoUrl = req.body.photo || null; 
-  if (req.file) {
-    // If a new file was uploaded, overwrite with the new URL
-    photoUrl = `/uploads/staff/${req.file.filename}`;
-  }
+
+  // Only change the photo when a new file is uploaded; otherwise keep the existing one
+  const newPhotoUrl = req.file ? `/uploads/staff/${req.file.filename}` : null;
 
   try {
     const result = await pool.query(
-      `UPDATE staff SET name = $1, phone = $2, emergency_contact = $3, emergency_relationship = $4, photo = $5
-       WHERE id = $6 RETURNING id, username, name, role, department, email, phone, status,
-         join_date AS "joinDate", photo, employee_id AS "employeeId",
-         employment_type AS "employmentType", reports_to AS "reportsTo",
-         salary, dob, gender, emergency_contact AS "emergencyContact",
-         emergency_relationship AS "emergencyRelationship", centre_id AS "centreId"`,
-      [name, phone, emergencyContact, emergencyRelationship, photoUrl, req.user.id] // Passed photoUrl
+      `UPDATE staff
+       SET name = $1, phone = $2, emergency_contact = $3, emergency_relationship = $4,
+           photo = COALESCE($5, photo)
+       WHERE id = $6
+       RETURNING id`,
+      [name, phone, emergencyContact, emergencyRelationship, newPhotoUrl, req.user.id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
-    res.json(result.rows[0]);
+
+    const profile = await getOwnProfile(req.user.id);
+    res.json(profile);
   } catch (err) {
     console.error("Error updating own profile:", err);
     res.status(500).json({ error: "Failed to update profile" });
