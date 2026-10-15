@@ -343,8 +343,6 @@ const Chat = ({
   onDeleteConversation = null,
   onOpenDetails = null,
   isDetailsOpen = false,
-  initialDraft = null,
-  onDraftConsumed = null,
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -451,24 +449,6 @@ const Chat = ({
     setIsMoreMenuOpen(false);
     setMentionQuery(null);
   }, [activeConversation?.id]);
-
-  // Pre-fill a draft passed in from another page (e.g. birthday wishes)
-  useEffect(() => {
-    if (!initialDraft || !activeConversation) return;
-    if (String(initialDraft.conversationId) !== String(activeConversation.id)) return;
-
-    setNewMessage(initialDraft.text);
-    onDraftConsumed?.();
-
-    const t = setTimeout(() => {
-      const el = chatInputRef.current;
-      if (el) {
-        el.focus();
-        el.setSelectionRange(el.value.length, el.value.length);
-      }
-    }, 150);
-    return () => clearTimeout(t);
-  }, [initialDraft, activeConversation?.id]);
 
   // Mark messages as read
   useEffect(() => {

@@ -338,10 +338,6 @@ const MessengerPage = ({ user }) => {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
 
-  // Draft message passed in via navigation (e.g. "Send Wishes" from the dashboard)
-  const [pendingDraft, setPendingDraft] = useState(null);
-  const handledNavKeyRef = useRef(null);
-
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState({});
   const [staffList, setStaffList] = useState([]);
@@ -841,7 +837,7 @@ const MessengerPage = ({ user }) => {
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
 
-  // 🔥 Catch incoming navigation from Notifications / Dashboard (e.g. birthday wishes)
+  // 🔥 Catch incoming navigation from Notifications
   useEffect(() => {
     if (!location.state) return;
 
@@ -855,21 +851,16 @@ const MessengerPage = ({ user }) => {
 
     // Check if we need to open a specific Chat
     if (location.state.openConversationId && conversations.length > 0) {
-      if (handledNavKeyRef.current === location.key) return; // handle each navigation only once
       const targetConvId = location.state.openConversationId;
-      const chatToOpen = conversations.find(c => String(c.id) === String(targetConvId));
-
+      const chatToOpen = conversations.find(c => c.id === targetConvId);
+      
       if (chatToOpen) {
-        handledNavKeyRef.current = location.key;
-        setActiveView("chats");
-        setActiveConversation(chatToOpen);
-        if (location.state.draftMessage) {
-          setPendingDraft({ conversationId: chatToOpen.id, text: location.state.draftMessage });
-        }
+        setActiveView("chats"); 
+        setActiveConversation(chatToOpen); 
         window.history.replaceState({}, document.title);
       }
     }
-  }, [location.state, location.key, conversations]);
+  }, [location.state, conversations]);
 
   // ============== CHAT API INTEGRATION ==============
 
@@ -2864,8 +2855,6 @@ const renderTasksView = () => {
                 onDeleteConversation={handleDeleteConversation}
                 onOpenDetails={handleOpenDetails}
                 isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
-                initialDraft={pendingDraft}
-                onDraftConsumed={() => setPendingDraft(null)}
               />
             </section>
 
