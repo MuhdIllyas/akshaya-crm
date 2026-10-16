@@ -332,7 +332,7 @@ router.get("/all", authMiddleware(["admin", "superadmin"]), async (req, res) => 
         s.gender, s.emergency_contact AS "emergencyContact",
         s.emergency_relationship AS "emergencyRelationship", s.centre_id AS "centreId",
         s.created_at,
-        ss.start_time, ss.end_time, ss.effective_from,
+        ss.start_time, ss.end_time, to_char(ss.effective_from, 'YYYY-MM-DD') AS effective_from,
         COALESCE(
           (SELECT json_agg(activity)
            FROM (SELECT json_build_object('action', al.action, 'timestamp', al.timestamp, 'details', al.details) AS activity
