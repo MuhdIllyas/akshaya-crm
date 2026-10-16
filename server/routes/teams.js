@@ -1527,7 +1527,7 @@ router.get("/:id/service-mix", async (req, res) => {
       dates += ` AND se.created_at < ($${params.length}::date + INTERVAL '1 day')`;
     }
 
-    // Top 6 services by service charges, everything else rolled into "Other"
+    // Every service with charges in the period; the chart groups the small ones itself
     const result = await client.query(
       `SELECT s2.name AS service_type,
               SUM(se.service_charges) AS total,
@@ -1542,24 +1542,13 @@ router.get("/:id/service-mix", async (req, res) => {
       params
     );
 
-    const rows = result.rows.map((r) => ({
-      service_type: r.service_type,
-      total: num(r.total),
-      count: r.count,
-    }));
-
-    const top = rows.slice(0, 6);
-    const rest = rows.slice(6);
-
-    if (rest.length) {
-      top.push({
-        service_type: "Other",
-        total: rest.reduce((a, r) => a + r.total, 0),
-        count: rest.reduce((a, r) => a + r.count, 0),
-      });
-    }
-
-    res.json(top);
+    res.json(
+      result.rows.map((r) => ({
+        service_type: r.service_type,
+        total: num(r.total),
+        count: r.count,
+      }))
+    );
   } catch (error) {
     console.error("Error fetching service mix:", error);
     res.status(500).json({ error: "Failed to load service mix" });
