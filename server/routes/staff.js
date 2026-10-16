@@ -7,6 +7,15 @@ import { logActivity } from "../utils/activityLogger.js";
 
 const router = express.Router();
 
+// Normalise an incoming date ("2026-10-16", "2026-10-16T00:00:00.000Z", "") to "YYYY-MM-DD" or null
+const toDateOnly = (v) => {
+  if (v === undefined || v === null) return null;
+  const s = String(v).trim();
+  if (!s || s === "null" || s === "undefined") return null;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})/);
+  return m ? m[1] : null;
+};
+
 // ==============================================
 // Middleware (case‑insensitive role check)
 // ==============================================
@@ -49,7 +58,7 @@ export const authMiddleware = (allowedRoles) => async (req, res, next) => {
 const getOwnProfile = async (id) => {
   const result = await pool.query(
     `SELECT s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
-      s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
+      to_char(s.join_date, 'YYYY-MM-DD') AS "joinDate", s.photo, s.employee_id AS "employeeId",
       s.employment_type AS "employmentType",
       s.reports_to AS "reportsTo", m.name AS "reportsToName",
       to_char(s.dob, 'YYYY-MM-DD') AS dob, to_char(s.dob, 'YYYY-MM-DD') AS "dateOfBirth",
@@ -223,7 +232,7 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
         $16, $17, $18, NOW(), $19, $20)
       RETURNING id, username, name, role, department, email, phone, status,
-        join_date AS "joinDate", photo, employee_id AS "employeeId",
+        to_char(join_date, 'YYYY-MM-DD') AS "joinDate", photo, employee_id AS "employeeId",
         employment_type AS "employmentType", reports_to AS "reportsTo",
         salary, to_char(dob, 'YYYY-MM-DD') AS dob, to_char(dob, 'YYYY-MM-DD') AS "dateOfBirth",
         gender, emergency_contact AS "emergencyContact",
@@ -234,7 +243,7 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
         joinDate || new Date().toISOString(), 
         photoUrl, // <-- CHANGED: Using our new photoUrl variable here
         employeeId || null,
-        employmentType || null, reportsTo || null, salary || null, dateOfBirth || null,
+        employmentType || null, reportsTo || null, salary || null, toDateOnly(dateOfBirth ?? req.body.dob),
         gender || null, emergencyContact || null, emergencyRelationship || null,
         centreId || null, hashedPassword, permissions || null,
       ]
@@ -317,7 +326,7 @@ router.get("/all", authMiddleware(["admin", "superadmin"]), async (req, res) => 
     let query = `
       SELECT 
         s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
-        s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
+        to_char(s.join_date, 'YYYY-MM-DD') AS "joinDate", s.photo, s.employee_id AS "employeeId",
         s.employment_type AS "employmentType", s.reports_to AS "reportsTo",
         s.salary, to_char(s.dob, 'YYYY-MM-DD') AS dob, to_char(s.dob, 'YYYY-MM-DD') AS "dateOfBirth",
         s.gender, s.emergency_contact AS "emergencyContact",
@@ -489,7 +498,7 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
   try {
     const staffResult = await client.query(
       `SELECT s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
-        s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
+        to_char(s.join_date, 'YYYY-MM-DD') AS "joinDate", s.photo, s.employee_id AS "employeeId",
         s.employment_type AS "employmentType",
         s.reports_to AS "reportsTo", m.name AS "reportsToName",
         s.salary, to_char(s.dob, 'YYYY-MM-DD') AS dob, to_char(s.dob, 'YYYY-MM-DD') AS "dateOfBirth",
@@ -618,7 +627,7 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
   try {
     await client.query("BEGIN");
     // MODIFIED: include salary in the SELECT
-    const staffCheck = await client.query("SELECT id, centre_id, role, salary FROM staff WHERE id = $1", [id]);
+    const staffCheck = await client.query("SELECT id, centre_id, role, salary, to_char(dob, 'YYYY-MM-DD') AS dob FROM staff WHERE id = $1", [id]);
     if (staffCheck.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
     const existingStaff = staffCheck.rows[0];
 
@@ -630,6 +639,13 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
         return res.status(403).json({ error: "Unauthorized access: You cannot edit this staff member" });
       }
     }
+
+    // DOB: accept either "dateOfBirth" or "dob" from the form.
+    // If the form didn't send a DOB field at all, keep what's already stored.
+    const dobSent = "dateOfBirth" in req.body || "dob" in req.body;
+    const finalDob = dobSent
+      ? toDateOnly(req.body.dob ?? req.body.dateOfBirth)
+      : existingStaff.dob;
 
     const targetCentreId = req.user.role === "admin" ? req.user.centre_id : centre_id;
     if (!targetCentreId && role !== "superadmin") {
@@ -646,9 +662,9 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
       `UPDATE staff SET username=$1, name=$2, role=$3, department=$4, email=$5, phone=$6, status=$7,
         join_date=$8, photo=COALESCE($9, photo), employee_id=$10, employment_type=$11, reports_to=$12,
         salary=$13, dob=$14, gender=$15, emergency_contact=$16, emergency_relationship=$17,
-        centre_id=$18, permissions=$19 WHERE id=$20
+        centre_id=$18, permissions=COALESCE($19, permissions) WHERE id=$20
       RETURNING id, username, name, role, department, email, phone, status,
-        join_date AS "joinDate", photo, employee_id AS "employeeId",
+        to_char(join_date, 'YYYY-MM-DD') AS "joinDate", photo, employee_id AS "employeeId",
         employment_type AS "employmentType", reports_to AS "reportsTo",
         salary, to_char(dob, 'YYYY-MM-DD') AS dob, to_char(dob, 'YYYY-MM-DD') AS "dateOfBirth",
         gender, emergency_contact AS "emergencyContact",
@@ -656,10 +672,10 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
         created_at`,
       [
         username, name, role, department || null, email, phone || null, status || "Active",
-        joinDate || new Date().toISOString(), 
+        toDateOnly(joinDate) || new Date().toISOString().slice(0, 10),
         photoUrl, // <-- CHANGED: Using our new photoUrl variable here
         employeeId || null,
-        employmentType || null, reportsTo || null, salary || null, dateOfBirth || null,
+        employmentType || null, reportsTo || null, salary || null, finalDob,
         gender || null, emergencyContact || null, emergencyRelationship || null,
         targetCentreId || null, permissions || null, id
       ]
