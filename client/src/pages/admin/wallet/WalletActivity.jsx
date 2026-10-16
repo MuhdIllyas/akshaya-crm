@@ -828,4 +828,4 @@ const WalletActivity = () => {
   );
 };
 
-export default WalletActivity;G
+export default WalletActivity;
