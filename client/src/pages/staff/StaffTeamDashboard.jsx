@@ -1,919 +1,826 @@
-import React, { useState, useEffect, useMemo } from 'react';
+// StaffTeamDashboard.jsx
+import React, { useState, useEffect, useMemo } from "react";
 import {
-  FiTrendingUp, FiTrendingDown, FiDollarSign, FiBriefcase,
-  FiUsers, FiStar, FiCalendar, FiClock, FiAward, FiTarget,
-  FiBarChart2, FiPieChart, FiCheckCircle, FiAlertCircle,
-  FiRefreshCw, FiDownload, FiFilter, FiChevronRight, FiChevronLeft,
-  FiUser, FiPhone, FiMail, FiMapPin, FiActivity, FiSmile,
-  FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiEye, FiZap, FiHeart, FiGift, FiX,
-  FiMessageCircle, FiBookOpen, FiFlag, FiBell, FiUsers as FiTeam, FiAward as FiTrophy,
-  FiCalendar as FiEvent, FiClock as FiTime, FiUserCheck, FiUserX, FiGift as FiBirthday,
-  FiLogOut, FiMenu, FiGrid, FiList, FiPlus, FiEdit, FiTrash2
-} from 'react-icons/fi';
-import { motion, AnimatePresence } from 'framer-motion';
+  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
+} from "recharts";
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ArcElement,
-  RadialLinearScale
-} from 'chart.js';
-import { Line, Bar, Doughnut, Radar } from 'react-chartjs-2';
-import { toast } from 'react-toastify';
+  FiGlobe, FiUsers, FiRefreshCw, FiLoader, FiChevronRight, FiArrowUp, FiArrowDown, FiBell, FiAward
+} from "react-icons/fi";
 
-// Register Chart.js components
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  ArcElement,
-  RadialLinearScale
-);
+// ==========================================
+// SHARED PRIMITIVES (same look as the dashboards)
+// ==========================================
+const money = (n) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
 
-// Formatting utilities (reused from StaffPerformance)
-const formatCurrency = (amount) => {
-  if (amount === undefined || amount === null) return '₹0';
-  return `₹${Number(amount).toLocaleString('en-IN', {
-    maximumFractionDigits: 0
-  })}`;
+const shortINR = (v) => {
+  const n = Number(v) || 0;
+  const s = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a >= 10000000) return `${s}₹${(a / 10000000).toFixed(1)}Cr`;
+  if (a >= 100000) return `${s}₹${(a / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `${s}₹${(a / 1000).toFixed(0)}k`;
+  return `${s}₹${a}`;
 };
 
-const formatDate = (date) => {
-  if (!date) return '—';
-  const d = new Date(date);
-  return d.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric'
-  });
-};
-
-const formatTime = (time) => {
-  if (!time) return '—';
-  return new Date(`2000-01-01T${time}`).toLocaleTimeString('en-IN', {
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
-
-const getDatesFromPeriod = (period) => {
-  const toDate = new Date();
-  let fromDate = new Date();
-
-  switch (period) {
-    case 'week':
-      fromDate.setDate(fromDate.getDate() - fromDate.getDay()); // Sunday of this week
-      break;
-    case 'month':
-      fromDate.setDate(1); // 1st of this month
-      break;
-    case 'quarter':
-      fromDate.setMonth(Math.floor(fromDate.getMonth() / 3) * 3);
-      fromDate.setDate(1); // 1st of current quarter
-      break;
-    case 'year':
-      fromDate.setMonth(0);
-      fromDate.setDate(1); // Jan 1st of this year
-      break;
-    default:
-      fromDate.setDate(1); // Default to month
-  }
-  
-  return { 
-    from: fromDate.toISOString().split('T')[0], 
-    to: toDate.toISOString().split('T')[0] 
-  };
-};
-
-// ============ SUB-COMPONENTS ============
-
-// Stat Card (reused from StaffPerformance)
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, loading, trendValue }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 cursor-pointer p-5"
-    onClick={onClick}
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
-        {loading ? (
-          <div className="h-8 w-24 bg-gray-200 animate-pulse rounded"></div>
-        ) : (
-          <p className="font-bold text-gray-900 mb-1 text-2xl">{value}</p>
-        )}
-        {subtitle && (
-          <p className="text-gray-500 text-sm">{subtitle}</p>
-        )}
-        {trend !== undefined && trendValue !== undefined && (
-          <p className={`font-medium text-sm mt-1 flex items-center ${trendValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {trendValue >= 0 ? <FiTrendingUp className="mr-1 h-3 w-3" /> : <FiTrendingDown className="mr-1 h-3 w-3" />}
-            {Math.round(Math.abs(trendValue))}% {trend}
-          </p>
-        )}
+const Panel = ({ title, hint, summary, action, children, className = "" }) => (
+  <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
+    <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
+      <div className="min-w-0">
+        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
+        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
       </div>
-      <div className={`rounded-xl ${color} p-3`}>
-        <Icon className="text-white h-6 w-6" />
-      </div>
+      {action}
     </div>
-  </motion.div>
+    {summary && <div className="px-5 pt-3">{summary}</div>}
+    <div className="flex-1 px-5 pb-5 pt-3">{children}</div>
+  </section>
 );
 
-const TargetProgressBar = ({ label, current, target }) => {
-  const safeTarget = target || 1;
-  const percentage = Math.min((current / safeTarget) * 100, 100).toFixed(0);
-  const formatCurrency = (val) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val || 0);
-
+const Sparkline = ({ data = [], color = "#4f46e5" }) => {
+  const pts = data.map(Number).filter(Number.isFinite);
+  if (pts.length < 2) return null;
+  const w = 104, h = 36;
+  const max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
+  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
   return (
-    <div className="mb-4">
-      <div className="flex justify-between text-sm mb-1">
-        <span className="font-medium text-gray-700">{label}</span>
-        <span className="text-gray-600 font-semibold">{formatCurrency(current)} / {formatCurrency(target)} ({percentage}%)</span>
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="flex-shrink-0">
+      <polygon points={`0,${h} ${line} ${w},${h}`} fill={color} opacity="0.12" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context, spark, sparkColor, bar, tone = "text-slate-900" }) => {
+  const v = delta === null || delta === undefined ? NaN : Number(delta);
+  const hasDelta = Number.isFinite(v);
+  const isGood = goodWhen === "down" ? v < 0 : v > 0;
+  const badgeTone = v === 0 ? "bg-slate-100 text-slate-600" : isGood ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+  const shown = Math.abs(v) > 999 ? "999%+" : `${Math.abs(v)}%`;
+  return (
+    <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+        {hasDelta && (
+          <span
+            title={v === 0 ? `Same as ${compareLabel || "the previous period"}` : `${shown} ${v > 0 ? "higher" : "lower"} than ${compareLabel || "the previous period"}`}
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}
+          >
+            {v > 0 && <FiArrowUp className="h-3 w-3" aria-hidden="true" />}
+            {v < 0 && <FiArrowDown className="h-3 w-3" aria-hidden="true" />}
+            {shown}
+          </span>
+        )}
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-2.5">
-        <motion.div 
-          initial={{ width: 0 }} animate={{ width: `${percentage}%` }} transition={{ duration: 1 }}
-          className={`h-2.5 rounded-full ${percentage >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} 
-        />
+      <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
+      {context && <p className="mt-1 text-xs text-slate-500">{context}</p>}
+      {bar && <div className="mt-3">{bar}</div>}
+      <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
+        <p className="text-xs text-slate-500">{note}</p>
+        {spark && <Sparkline data={spark} color={sparkColor} />}
       </div>
     </div>
   );
 };
 
-// Member Card
-const MemberCard = ({ member, rank, isLeader }) => (
-  <motion.div
-    initial={{ opacity: 0, y: 20 }}
-    animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.3 }}
-    className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow"
-  >
-    <div className="flex items-start justify-between">
-      <div className="flex items-center space-x-3">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg">
-          {member.name.charAt(0)}
-        </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h4 className="font-semibold text-gray-900">{member.name}</h4>
-            {isLeader && <span className="text-amber-500" title="Team Leader">👑</span>}
-            {member.is_online && <span className="w-2 h-2 rounded-full bg-emerald-500" title="Online"></span>}
-          </div>
-          <p className="text-sm text-gray-500">{member.role || 'Member'}</p>
-        </div>
-      </div>
-      {rank && (
-        <div className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1">
-          <FiTrophy className="h-3 w-3" />
-          #{rank}
-        </div>
-      )}
-    </div>
-    <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
-      <div>
-        <p className="text-gray-500 text-xs">Applications</p>
-        <p className="font-semibold text-gray-900">{member.applications || 0}</p>
-      </div>
-      <div>
-        <p className="text-gray-500 text-xs">Rating</p>
-        <div className="flex items-center">
-          <FiStar className="text-yellow-400 h-3 w-3 fill-current" />
-          <span className="font-semibold text-gray-900 ml-1">{member.rating || 0}</span>
-        </div>
-      </div>
-      <div>
-        <p className="text-gray-500 text-xs">Revenue</p>
-        <p className="font-semibold text-emerald-600">{formatCurrency(member.revenue || 0)}</p>
-      </div>
-    </div>
-  </motion.div>
-);
-
-// Notice Item
-const NoticeItem = ({ notice }) => (
-  <div className="border-b border-gray-100 py-3 last:border-0">
-    <div className="flex items-start gap-3">
-      <div className="bg-blue-50 p-2 rounded-lg mt-0.5">
-        <FiBell className="h-4 w-4 text-blue-600" />
-      </div>
-      <div className="flex-1">
-        <p className="text-sm font-medium text-gray-900">{notice.title}</p>
-        <p className="text-xs text-gray-600 mt-1">{notice.content}</p>
-        <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-          <span>Posted by {notice.author}</span>
-          <span>•</span>
-          <span>{formatDate(notice.created_at)}</span>
-        </div>
-      </div>
-    </div>
+const TargetBar = ({ value, max, tone }) => (
+  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className={`h-full rounded-full ${tone}`} style={{ width: `${max > 0 ? Math.min((value / max) * 100, 100) : 0}%` }} />
   </div>
 );
 
-// Event Item
-const EventItem = ({ event }) => (
-  <div className="flex items-start gap-3 py-2 border-b border-gray-100 last:border-0">
-    <div className="bg-amber-50 p-2 rounded-lg mt-0.5">
-      <FiEvent className="h-4 w-4 text-amber-600" />
+// Photos can be a full URL, a data URL, or a path on the API server (like on the staff dashboard)
+const photoSrc = (raw) => {
+  if (!raw || raw === "null" || raw === "undefined") return null;
+  if (/^(https?:|data:image|blob:)/i.test(raw)) return raw;
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+};
+
+const Avatar = ({ name, photo, size = 36 }) => {
+  const [failed, setFailed] = useState(false);
+  const src = photoSrc(photo);
+  const initials = (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const dim = { width: size, height: size };
+  return src && !failed ? (
+    <img src={src} alt="" onError={() => setFailed(true)} style={dim} className="flex-shrink-0 rounded-full border border-slate-200 object-cover" />
+  ) : (
+    <span style={dim} className="flex flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700" aria-hidden="true">{initials}</span>
+  );
+};
+
+const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#059669", profit: "#059669", expenses: "#e11d48" };
+const TREND_LABELS = { revenue: "Revenue", serviceCharges: "Service charges", profit: "Profit", expenses: "Expenses" };
+
+const RevenueChart = ({ data, view, height = 280 }) => {
+  if (!data || data.length === 0) {
+    return <div className="flex h-[240px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
+  }
+
+  const fmt = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+
+  const formatLabel = (label) => {
+    if (!label) return '';
+    if (label.length === 7) {
+      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
+    }
+    if (label.length === 10) return label.slice(5);
+    return label;
+  };
+
+  const short = (v) => shortINR(v);
+  const color = TREND_COLORS[view] || TREND_COLORS.revenue;
+  const seriesName = TREND_LABELS[view] || "Revenue";
+  const gid = `fill-${view}`;
+
+  const Tip = ({ active, payload }) =>
+    active && payload?.length ? (
+      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
+        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
+        <p className="text-slate-400">{seriesName}</p>
+      </div>
+    ) : null;
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.55} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={16} />
+        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip content={<Tip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
+        <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const MIX_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
+const MIX_OTHER = "#94a3b8";
+
+const MixDonut = ({ rows, totalLabel, emptyText }) => {
+  const [open, setOpen] = useState(null);
+  const clean = (rows || [])
+    .map((r) => ({ name: r.category || "Uncategorised", amount: Number(r.amount) || 0, subs: r.subcategories || [] }))
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  if (clean.length === 0) return <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>;
+  const total = clean.reduce((a, r) => a + r.amount, 0);
+  const rest = clean.slice(6).reduce((a, r) => a + r.amount, 0);
+  const list = [
+    ...clean.slice(0, 6).map((r, i) => ({ ...r, color: MIX_COLORS[i] })),
+    ...(rest > 0 ? [{ name: `Other (${clean.length - 6})`, amount: rest, subs: [], color: MIX_OTHER }] : []),
+  ];
+  return (
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+      <div className="relative h-40 w-40 flex-shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={list} dataKey="amount" nameKey="name" innerRadius="64%" outerRadius="100%" paddingAngle={list.length > 1 ? 2 : 0} stroke="none" isAnimationActive={false}>
+              {list.map((r) => <Cell key={r.name} fill={r.color} />)}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-base font-semibold tabular-nums text-slate-900">{money(total)}</span>
+          <span className="text-[11px] text-slate-500">{totalLabel}</span>
+        </div>
+      </div>
+      <ul className="w-full min-w-0 flex-1 space-y-1">
+        {list.map((r) => {
+          const expandable = r.subs.length > 0 && !(r.subs.length === 1 && r.subs[0].name === "No subcategory");
+          const isOpen = open === r.name;
+          const Row = expandable ? "button" : "div";
+          return (
+            <li key={r.name}>
+              <Row
+                {...(expandable ? { type: "button", onClick: () => setOpen(isOpen ? null : r.name), "aria-expanded": isOpen } : {})}
+                className={`flex w-full items-center gap-2 rounded px-1 py-1 text-left text-sm ${expandable ? "hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""}`}
+              >
+                <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                  {expandable && <FiChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
+                </span>
+                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-sm" style={{ backgroundColor: r.color }} />
+                <span className="min-w-0 flex-1 truncate text-slate-800" title={r.name}>{r.name}</span>
+                <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">{money(r.amount)}</span>
+                <span className="w-9 text-right text-xs tabular-nums text-slate-500">{Math.round((r.amount / total) * 100)}%</span>
+              </Row>
+              {isOpen && (
+                <ul className="mb-1 ml-[34px] space-y-1 border-l-2 border-slate-100 pl-3">
+                  {r.subs.map((sub) => (
+                    <li key={sub.name} className="flex items-baseline justify-between gap-3 text-xs">
+                      <span className="truncate text-slate-600" title={sub.name}>{sub.name}</span>
+                      <span className="whitespace-nowrap tabular-nums text-slate-700">
+                        {money(sub.amount)} <span className="text-slate-400">{Math.round((sub.amount / r.amount) * 100)}% · {sub.services}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
     </div>
-    <div className="flex-1">
-      <p className="text-sm font-medium text-gray-900">{event.title}</p>
-      <p className="text-xs text-gray-600">{formatDate(event.date)}</p>
-      <p className="text-xs text-gray-500">{event.description}</p>
+  );
+};
+
+const MiniTargetBar = ({ achieved, target, onPace }) => {
+  if (!target) return <span className="text-xs text-slate-400">No target set</span>;
+  const raw = (achieved / target) * 100;
+  const tone = raw >= 100 ? "bg-emerald-500" : onPace ? "bg-blue-500" : "bg-amber-500";
+  return (
+    <div className="min-w-[150px]">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+        <span className="tabular-nums text-slate-700">{money(achieved)} / {money(target)}</span>
+        <span className="font-semibold tabular-nums text-slate-900">{Math.round(raw)}%</span>
+      </div>
+      <TargetBar value={achieved} max={target} tone={tone} />
     </div>
+  );
+};
+
+// ---- Period filter (same options and IST day boundaries as the dashboards) ----
+const PERIOD_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "3months", label: "Last 3 Months" },
+  { value: "6months", label: "Last 6 Months" },
+  { value: "year", label: "This Year" },
+];
+
+const getDatesFromPeriod = (period) => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [y, m, d] = today.split("-").map(Number);
+  let start;
+  switch (period) {
+    case "today": start = new Date(Date.UTC(y, m - 1, d)); break;
+    case "week": {
+      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
+      break;
+    }
+    case "3months": start = new Date(Date.UTC(y, m - 3, 1)); break;
+    case "6months": start = new Date(Date.UTC(y, m - 6, 1)); break;
+    case "year": start = new Date(Date.UTC(y, 0, 1)); break;
+    case "month":
+    default: start = new Date(Date.UTC(y, m - 1, 1));
+  }
+  return { from: start.toISOString().split("T")[0], to: today };
+};
+
+
+// ==========================================
+// STAFF TEAM DASHBOARD
+// ==========================================
+const API_BASE = import.meta.env.VITE_API_URL || "";
+
+// Token claims (base64url safe)
+const getMyId = () => {
+  try {
+    const token = localStorage.getItem("token");
+    const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+    return JSON.parse(atob(part)).id ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const api = async (path, signal) => {
+  const token = localStorage.getItem("token");
+  const res = await fetch(`${API_BASE}${path}`, { headers: { Authorization: `Bearer ${token}` }, signal });
+  if (!res.ok) throw new Error(`Request failed (${res.status})`);
+  return res.json();
+};
+
+// Optional pieces: a failure leaves that panel empty instead of breaking the page
+const tryApi = (path, signal) =>
+  api(path, signal).catch((err) => {
+    if (err.name === "AbortError") throw err;
+    return null;
+  });
+
+const formatDate = (date) => {
+  if (!date) return "";
+  const d = new Date(date);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+};
+
+const paceTone = (progress, onPace) => (progress >= 100 ? "bg-emerald-500" : onPace ? "bg-blue-500" : "bg-amber-500");
+const paceText = (progress, onPace) => (progress >= 100 ? "reached" : onPace ? "on pace" : "behind pace");
+const paceTextTone = (progress, onPace) => (progress >= 100 ? "text-emerald-700" : onPace ? "text-slate-500" : "text-amber-700");
+
+const Tile = ({ label, value, hint, tone = "text-slate-900" }) => (
+  <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+    <p className={`mt-1 text-xl font-semibold tabular-nums ${tone}`}>{value}</p>
+    {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
   </div>
 );
 
-// Achievement Badge
-const AchievementBadge = ({ achievement }) => (
-  <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-xl p-3 flex items-center gap-3">
-    <div className="text-3xl">{achievement.icon}</div>
-    <div>
-      <p className="font-semibold text-gray-900 text-sm">{achievement.title}</p>
-      <p className="text-xs text-gray-600">{achievement.description}</p>
-      {achievement.date && <p className="text-xs text-gray-400 mt-1">{formatDate(achievement.date)}</p>}
-    </div>
+const AvatarStack = ({ people, max = 6 }) => (
+  <div className="flex items-center">
+    {people.slice(0, max).map((p, i) => (
+      <span key={p.id ?? i} className={`rounded-full ring-2 ring-white ${i > 0 ? "-ml-1" : ""}`}>
+        <Avatar name={p.name} photo={p.photo} size={32} />
+      </span>
+    ))}
+    {people.length > max && (
+      <span className="-ml-1 flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 ring-2 ring-white">
+        +{people.length - max}
+      </span>
+    )}
   </div>
 );
-
-// ============ MAIN COMPONENT ============
 
 const StaffTeamDashboard = () => {
-  // --- Core UI States ---
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [period, setPeriod] = useState('month');
+  const myId = useMemo(getMyId, []);
 
-  // --- Identity & Team Switcher States ---
-  const [myUserId, setMyUserId] = useState(null);
+  const [period, setPeriod] = useState("month");
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [teamsLoading, setTeamsLoading] = useState(true);
+  const [teamsError, setTeamsError] = useState(false);
   const [myTeams, setMyTeams] = useState([]);
   const [selectedTeamId, setSelectedTeamId] = useState(null);
 
-  // --- Live API Data States ---
-  const [teamData, setTeamData] = useState(null);
-  const [teamStats, setTeamStats] = useState(null);
-  const [teamMembers, setTeamMembers] = useState([]);
-  const [performanceTrend, setPerformanceTrend] = useState(null);
-  const [serviceMix, setServiceMix] = useState([]);
-  const [reviews, setReviews] = useState([]);
+  // Period-bound data
+  const [periodLoading, setPeriodLoading] = useState(false);
+  const [periodError, setPeriodError] = useState(false);
+  const [stats, setStats] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [mix, setMix] = useState([]);
+  const [targets, setTargets] = useState(null);
+
+  // Team-bound data
+  const [trend, setTrend] = useState([]);
+  const [settings, setSettings] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
-  const [notices, setNotices] = useState([]); // Keeps your old notice UI from breaking
-  
-  // --- Settings State ---
-  const [teamSettings, setTeamSettings] = useState({ targets_enabled: false, monthly_target: 250000 });
 
-  // --- Mock Data States (To be wired to backend later) ---
-  const [events, setEvents] = useState([]);
-  const [achievements, setAchievements] = useState([]);
-  const [pendingWork, setPendingWork] = useState({});
-  const [leaderMessage, setLeaderMessage] = useState(null);
-  const [birthdays, setBirthdays] = useState([]);
-  const [leaveStatus, setLeaveStatus] = useState([]);
-  const [myStats, setMyStats] = useState(null);
-  const [rank, setRank] = useState(null);
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "This Month";
+  const trendYear = new Date().getFullYear();
 
-  // 1. Initial Load: Get User Identity & Their Teams
+  // 1. The teams I belong to
   useEffect(() => {
-    const initializeDashboard = async () => {
+    const ctrl = new AbortController();
+    (async () => {
       try {
-        const token = localStorage.getItem('token');
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        setMyUserId(payload.id);
-
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/teams`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const teamsList = await res.json();
-        
-        if (teamsList && teamsList.length > 0) {
-          setMyTeams(teamsList);
-          const primaryTeam = teamsList.find(t => t.is_primary) || teamsList[0];
-          setSelectedTeamId(primaryTeam.id);
-        } else {
-          setLoading(false);
+        const list = await api("/api/teams", ctrl.signal);
+        if (Array.isArray(list) && list.length > 0) {
+          setMyTeams(list);
+          setSelectedTeamId(Number((list.find((t) => t.is_primary) || list[0]).id));
         }
       } catch (err) {
-        console.error("Failed to load teams", err);
-        setLoading(false);
+        if (err.name !== "AbortError") setTeamsError(true);
+      } finally {
+        if (!ctrl.signal.aborted) setTeamsLoading(false);
       }
-    };
-    initializeDashboard();
+    })();
+    return () => ctrl.abort();
   }, []);
 
-  // 2. Fetch specific team data when selectedTeamId or period changes
-  const fetchSpecificTeamData = async () => {
-    if (!selectedTeamId) return;
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const headers = { Authorization: `Bearer ${token}` };
-
-      // Calculate the from and to dates based on the dropdown
-      const { from, to } = getDatesFromPeriod(period);
-
-      // Set basic team info from the dropdown selection
-      const currentTeam = myTeams.find(t => t.id === Number(selectedTeamId));
-      if (currentTeam) setTeamData({ name: currentTeam.name, leader: 'Leader', member_count: currentTeam.member_count, status: 'active' });
-
-      // Run real API calls (Passing from & to into the analytics summary!)
-      const [summaryRes, contribRes, trendRes, mixRes, annRes, revRes, settingsRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/teams/analytics/summary?team_id=${selectedTeamId}&from=${from}&to=${to}`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/contribution`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/trend?year=${new Date().getFullYear()}`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/service-mix`, { headers }).catch(() => ({ ok: false })),
-        fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/hub/announcements?teamId=${selectedTeamId}`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/reviews/team/${selectedTeamId}`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/teams/${selectedTeamId}/settings`, { headers }).catch(() => ({ ok: false }))
-      ]);
-
-      const summary = await summaryRes.json();
-      if (summary.teams && summary.teams.length > 0) setTeamStats(summary.teams[0]);
-      
-      setTeamMembers(await contribRes.json());
-      
-      if (trendRes.ok) {
-        const trendData = await trendRes.json();
-        setPerformanceTrend({
-          labels: trendData.map(t => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.month - 1]),
-          revenue: trendData.map(t => t.collected_revenue),
-          applications: trendData.map(t => t.collected_revenue / 1000) // Mocking apps for the line chart
-        });
-      }
-
-      if(mixRes.ok) setServiceMix(await mixRes.json());
-      setAnnouncements(await annRes.json());
-      
-      if(revRes.ok) {
-        const revData = await revRes.json();
-        setReviews(revData.reviews.slice(0, 5));
-      }
-
-      if(settingsRes.ok) {
-        setTeamSettings(await settingsRes.json());
-      } else {
-        setTeamSettings({ targets_enabled: false, monthly_target: 250000 });
-      }
-
-      // Mock remaining items (Notices, Events, etc.)
-      setNotices([{ id: 1, title: 'Welcome to your team', content: 'Check out the new dashboard!', author: 'Admin' }]);
-      setPendingWork({ pending_services: 14, pending_payments: 2500, applications_waiting: 8, documents_missing: 3 });
-
-    } catch (error) {
-      console.error('Error fetching team data:', error);
-    } finally {
-      setLoading(false);
-    }
+  const switchTeam = (id) => {
+    setStats(null);
+    setMembers([]);
+    setMix([]);
+    setTargets(null);
+    setTrend([]);
+    setSettings(null);
+    setAnnouncements([]);
+    setSelectedTeamId(Number(id));
   };
 
+  // 2. Numbers for the chosen period
   useEffect(() => {
-    fetchSpecificTeamData();
-  }, [selectedTeamId, period]);
+    if (!selectedTeamId) return undefined;
+    const ctrl = new AbortController();
+    const { from, to } = getDatesFromPeriod(period);
+    const range = `from=${from}&to=${to}`;
 
-  // My stats from myStats
-  const myContribution = useMemo(() => {
-    if (!myStats) return null;
-    return {
-      applications: myStats.total_services || 0,
-      collectedRevenue: myStats.total_collected || 0,
-      serviceProfit: myStats.total_service_charges || 0,
-      departmentPayments: myStats.total_department_charges || 0,
-      expenses: myStats.total_expenses || 0,
-      rating: myStats.csat_score || 0,
-      pendingCollections: (myStats.total_billed || 0) - (myStats.total_collected || 0)
-    };
-  }, [myStats]);
-
-  // Chart data for performance trend
-  const trendChartData = useMemo(() => {
-    if (!performanceTrend) return null;
-    return {
-      labels: performanceTrend.labels || [],
-      datasets: [
-        {
-          label: 'Applications',
-          data: performanceTrend.applications || [],
-          borderColor: 'rgb(99, 102, 241)',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y',
-        },
-        {
-          label: 'Revenue (₹)',
-          data: performanceTrend.revenue || [],
-          borderColor: 'rgb(16, 185, 129)',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y1',
-        }
-      ]
-    };
-  }, [performanceTrend]);
-
-  const trendOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { position: 'top', labels: { font: { size: 11 } } },
-      tooltip: {
-        callbacks: {
-          label: (context) => {
-            let label = context.dataset.label || '';
-            let value = context.raw;
-            if (context.dataset.label?.includes('Revenue')) {
-              return `${label}: ${formatCurrency(value)}`;
-            }
-            return `${label}: ${value}`;
-          }
-        }
+    (async () => {
+      setPeriodLoading(true);
+      setPeriodError(false);
+      try {
+        const [summary, contribution, mixRows, targetRows] = await Promise.all([
+          api(`/api/teams/analytics/summary?team_id=${selectedTeamId}&${range}`, ctrl.signal),
+          tryApi(`/api/teams/${selectedTeamId}/contribution?${range}`, ctrl.signal),
+          tryApi(`/api/teams/${selectedTeamId}/service-mix?${range}`, ctrl.signal),
+          tryApi(`/api/teams/${selectedTeamId}/targets?photos=1`, ctrl.signal),
+        ]);
+        setStats(summary?.teams?.[0] || null);
+        setMembers(Array.isArray(contribution) ? contribution : []);
+        setMix(Array.isArray(mixRows) ? mixRows : []);
+        setTargets(targetRows);
+      } catch (err) {
+        if (err.name !== "AbortError") setPeriodError(true);
+      } finally {
+        if (!ctrl.signal.aborted) setPeriodLoading(false);
       }
-    },
-    scales: {
-      y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        title: { display: true, text: 'Applications', font: { size: 10 } },
-        ticks: { font: { size: 10 } }
-      },
-      y1: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        title: { display: true, text: 'Revenue (₹)', font: { size: 10 } },
-        grid: { drawOnChartArea: false },
-        ticks: { 
-          font: { size: 10 },
-          callback: (value) => `₹${value/1000}k`
-        }
-      }
-    }
-  };
+    })();
 
-  // Loading state
-  if (loading) {
+    return () => ctrl.abort();
+  }, [selectedTeamId, period, reloadKey]);
+
+  // 3. Things that belong to the team, not the period
+  useEffect(() => {
+    if (!selectedTeamId) return undefined;
+    const ctrl = new AbortController();
+
+    (async () => {
+      try {
+        const [trendRows, settingRow, notes] = await Promise.all([
+          tryApi(`/api/teams/${selectedTeamId}/trend?year=${trendYear}`, ctrl.signal),
+          tryApi(`/api/teams/${selectedTeamId}/settings`, ctrl.signal),
+          tryApi(`/api/knowledge/hub/announcements?teamId=${selectedTeamId}`, ctrl.signal),
+        ]);
+        setTrend(Array.isArray(trendRows) ? trendRows : []);
+        setSettings(settingRow);
+        setAnnouncements(Array.isArray(notes) ? notes : []);
+      } catch {
+        /* aborted */
+      }
+    })();
+
+    return () => ctrl.abort();
+  }, [selectedTeamId, trendYear, reloadKey]);
+
+  // ------------------------------------------------------------------
+  // Derived
+  // ------------------------------------------------------------------
+  const team = myTeams.find((t) => Number(t.id) === selectedTeamId);
+  const targetsEnabled = !!settings?.targets_enabled;
+  const teamTargets = stats?.targets || null;
+
+  const meIdx = members.findIndex((m) => Number(m.id) === Number(myId));
+  const me = meIdx >= 0 ? members[meIdx] : null;
+  const myTarget = (targets?.members || []).find((m) => Number(m.staff_id) === Number(myId)) || null;
+
+  const charges = Number(stats?.service_charges) || 0;
+  const expense = Number(stats?.expense) || 0;
+  const net = Number(stats?.net_profit) || 0;
+  const margin = charges > 0 ? Math.round((net / charges) * 100) : 0;
+
+  const chargesSpark = (stats?.series || []).map((p) => Number(p.service_charges) || 0);
+  const expenseSpark = (stats?.series || []).map((p) => Number(p.expense) || 0);
+  const netSpark = chargesSpark.map((v, i) => v - expenseSpark[i]);
+
+  const monthlyChartData = useMemo(() => {
+    const lastMonth = new Date().getMonth() + 1;
+    return trend
+      .filter((t) => t.month <= lastMonth)
+      .map((t) => ({ label: `${trendYear}-${String(t.month).padStart(2, "0")}`, value: Number(t.service_charges) || 0 }));
+  }, [trend, trendYear]);
+
+  const mixRows = useMemo(
+    () => mix.map((s) => ({ category: s.service_type, amount: Number(s.total) || 0, subcategories: [] })),
+    [mix]
+  );
+
+  const maxCharges = Math.max(1, ...members.map((m) => Number(m.service_charges) || 0));
+
+  const selectCls =
+    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500";
+  const btnGhost =
+    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60";
+  const btnPrimary =
+    "inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-navy-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2";
+
+  // ------------------------------------------------------------------
+  // Render
+  // ------------------------------------------------------------------
+  if (teamsLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="flex h-full min-h-[320px] items-center justify-center bg-slate-50">
         <div className="text-center">
-          <FiLoader className="animate-spin h-10 w-10 text-indigo-600 mx-auto mb-4" />
-          <p className="text-gray-500">Loading team dashboard...</p>
+          <FiLoader className="mx-auto mb-3 h-8 w-8 animate-spin text-navy-700" />
+          <p className="text-sm text-slate-500">Loading your team…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (teamsError || myTeams.length === 0) {
+    return (
+      <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6">
+        <div className="mx-auto mt-10 max-w-md rounded-xl border border-slate-200 bg-white p-8 text-center">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            <FiUsers className="h-6 w-6" aria-hidden="true" />
+          </span>
+          <h1 className="mt-4 text-lg font-semibold text-slate-900">
+            {teamsError ? "Couldn't load your teams" : "You're not in a team yet"}
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {teamsError ? "Check your connection and try again." : "Once your admin adds you to a team, its numbers and targets show up here."}
+          </p>
+          {teamsError && (
+            <button type="button" onClick={() => window.location.reload()} className={`${btnPrimary} mt-5`}>
+              <FiRefreshCw className="h-4 w-4" aria-hidden="true" /> Try again
+            </button>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* ========== HEADER ========== */}
-        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-              <FiTeam className="text-indigo-600" />
-              My Workspace
-            </h1>
-            <p className="text-gray-500 text-sm">Overview of your team's performance</p>
-          </div>
-          
-          <div className="flex flex-wrap items-center gap-3 mt-4 lg:mt-0 w-full lg:w-auto">
-            
-            {/* DATE / PERIOD FILTER */}
-            <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 w-full sm:w-auto flex-1 sm:flex-none">
-              <FiCalendar className="text-gray-400" />
-              <select 
-                value={period} 
-                onChange={(e) => setPeriod(e.target.value)}
-                className="bg-transparent font-semibold text-gray-700 outline-none cursor-pointer w-full text-sm"
-              >
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-                <option value="quarter">This Quarter</option>
-                <option value="year">This Year</option>
-              </select>
+    <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">My Team</h1>
+          <p className="text-sm text-slate-500">Service charges and targets · {periodLabel}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {myTeams.length > 1 && (
+            <select value={selectedTeamId || ""} onChange={(e) => switchTeam(e.target.value)} className={selectCls} aria-label="Select team">
+              {myTeams.map((t) => (
+                <option key={t.id} value={t.id}>{t.name}{t.is_primary ? " (Primary)" : ""}</option>
+              ))}
+            </select>
+          )}
+          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={selectCls} aria-label="Select period">
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)} disabled={periodLoading} className={btnGhost} title="Refresh" aria-label="Refresh">
+            <FiRefreshCw className={`h-4 w-4 ${periodLoading ? "animate-spin" : ""}`} aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+
+      {/* Team banner */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white p-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
+            {team?.is_global ? <FiGlobe className="h-5 w-5" aria-hidden="true" /> : <FiUsers className="h-5 w-5" aria-hidden="true" />}
+          </span>
+          <div className="min-w-0">
+            <h2 className="truncate text-base font-semibold text-slate-900">{team?.name}</h2>
+            <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+              <span>{members.length || team?.member_count || 0} members</span>
+              {team?.is_global && <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">Global team</span>}
+              {(team?.is_primary || me?.is_primary) && <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">Your primary team</span>}
+              {team?.created_at && <span>Created {formatDate(team.created_at)}</span>}
             </div>
-
-            {/* THE TEAM SWITCHER */}
-            {myTeams.length > 0 ? (
-              <div className="flex items-center gap-2 bg-indigo-50 px-3 py-2 rounded-lg border border-indigo-100 w-full sm:w-auto flex-1 sm:flex-none shadow-sm">
-                <span className="text-sm text-indigo-500 font-medium whitespace-nowrap">Viewing:</span>
-                <select 
-                  value={selectedTeamId || ""} 
-                  onChange={(e) => setSelectedTeamId(e.target.value)}
-                  className={`bg-transparent font-bold text-indigo-900 outline-none w-full text-sm ${myTeams.length > 1 ? 'cursor-pointer' : 'cursor-default appearance-none'}`}
-                  disabled={myTeams.length === 1}
-                >
-                  {myTeams.map(team => (
-                    <option key={team.id} value={team.id}>
-                      {team.name} {team.is_primary ? '(Primary)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-               <div className="text-sm font-medium text-amber-700 bg-amber-50 px-4 py-2 rounded-lg border border-amber-200 w-full sm:w-auto text-center">
-                 No Teams Assigned
-               </div>
-            )}
-
-            {/* REFRESH BUTTON */}
-            <button
-              onClick={fetchSpecificTeamData}
-              className="p-2.5 bg-gray-50 rounded-lg hover:bg-gray-200 transition border border-gray-200 flex-shrink-0"
-              disabled={loading}
-              title="Refresh Dashboard"
-            >
-              <FiRefreshCw className={`h-5 w-5 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
-            </button>
           </div>
         </div>
+        {members.length > 0 && <AvatarStack people={members} />}
+      </div>
 
-        {/* ========== TEAM OVERVIEW ========== */}
-        {teamData && (
-          <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 p-5 mb-6">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="bg-indigo-600 p-3 rounded-xl">
-                  <FiTeam className="text-white h-8 w-8" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{teamData.name}</h2>
-                  <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 mt-1">
-                    <span className="flex items-center gap-1">
-                      <span className="text-amber-500">👑</span> Leader: {teamData.leader}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <FiUsers /> {teamData.member_count} members
-                    </span>
-                    {teamData.is_primary && (
-                      <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-xs font-medium">
-                        Primary Team
-                      </span>
-                    )}
-                    <span className="text-xs text-gray-400">
-                      Created {formatDate(teamData.created_at)}
-                    </span>
+      {periodError && (
+        <div role="alert" className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+          <span>Couldn't load this team's numbers.</span>
+          <button type="button" onClick={() => setReloadKey((k) => k + 1)} className="font-semibold underline">Try again</button>
+        </div>
+      )}
+
+      <div className={`transition-opacity ${periodLoading && stats ? "opacity-60" : ""}`}>
+        {/* KPIs */}
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Kpi
+            label="Service charges"
+            value={money(charges)}
+            tone="text-emerald-600"
+            context={periodLabel}
+            note={`${stats?.services_completed ?? 0} completed ${stats?.services_completed === 1 ? "service" : "services"}`}
+            spark={chargesSpark}
+            sparkColor="#059669"
+          />
+          <Kpi
+            label="Expenses"
+            value={money(expense)}
+            tone="text-rose-600"
+            context={periodLabel}
+            note="Approved expenses"
+            spark={expenseSpark}
+            sparkColor="#e11d48"
+          />
+          <Kpi
+            label="Net profit"
+            value={money(net)}
+            tone={net < 0 ? "text-rose-600" : "text-emerald-600"}
+            context={`${margin}% of service charges`}
+            note="Service charges less expenses"
+            spark={netSpark}
+            sparkColor={net < 0 ? "#e11d48" : "#059669"}
+          />
+          {targetsEnabled ? (
+            <Kpi
+              label="Monthly target"
+              value={teamTargets && teamTargets.target > 0 ? `${Math.round(teamTargets.progress)}%` : "Not set"}
+              tone={teamTargets && teamTargets.progress >= 100 ? "text-emerald-600" : "text-slate-900"}
+              context={teamTargets && teamTargets.target > 0 ? `${money(teamTargets.achieved)} of ${money(teamTargets.target)}` : "No member targets this month"}
+              note={teamTargets?.mode === "manual" ? "Set for the team" : "Sum of members' targets"}
+              bar={teamTargets && teamTargets.target > 0 ? (
+                <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={paceTone(teamTargets.progress, teamTargets.onPace)} />
+              ) : null}
+            />
+          ) : (
+            <Kpi
+              label="Team size"
+              value={String(members.length || team?.member_count || 0)}
+              context="Members in this team"
+              note={members.length ? `${members.filter((m) => m.has_target).length} with a target this month` : ""}
+            />
+          )}
+        </div>
+
+        {/* My contribution */}
+        {me && (
+          <div className="mt-4">
+            <Panel
+              title="My contribution"
+              hint={`${periodLabel}. Target figures are for this month`}
+              action={
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                  <FiAward className="h-3.5 w-3.5" aria-hidden="true" /> Rank #{meIdx + 1} of {members.length}
+                </span>
+              }
+            >
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-center">
+                <div className="flex min-w-0 items-center gap-3 lg:w-64 lg:flex-shrink-0">
+                  <Avatar name={me.name} photo={me.photo} size={52} />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-slate-900">{me.name}</p>
+                    <p className="truncate text-xs text-slate-500">{me.role}{me.centre_name ? ` · ${me.centre_name}` : ""}</p>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <div className="text-right">
-                  <p className="text-xs text-gray-500">Monthly Target</p>
-                  <p className="text-lg font-bold text-gray-900">{formatCurrency(teamData.monthly_target)}</p>
+                <div className="grid flex-1 grid-cols-2 gap-3 md:grid-cols-4">
+                  <Tile label="Service charges" value={money(me.service_charges)} tone="text-emerald-700" hint={periodLabel} />
+                  <Tile label="Services" value={me.services_completed} hint="Completed" />
+                  {me.has_target ? (
+                    <>
+                      <Tile
+                        label="Today"
+                        value={money(myTarget?.today)}
+                        hint={myTarget?.daily_target ? `of ${money(myTarget.daily_target)} daily target` : "No daily target"}
+                        tone={myTarget?.today_met ? "text-emerald-700" : "text-slate-900"}
+                      />
+                      <Tile
+                        label="Days on target"
+                        value={myTarget ? `${myTarget.days_met}` : "—"}
+                        hint={myTarget ? `of ${myTarget.complete_days} full days` : ""}
+                      />
+                    </>
+                  ) : (
+                    <div className="col-span-2 flex items-center rounded-lg border border-dashed border-slate-200 px-3 py-2 text-xs text-slate-500">
+                      You have no personal target set for this month.
+                    </div>
+                  )}
                 </div>
-                <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  teamData.status === 'active' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-700'
-                }`}>
-                  {teamData.status === 'active' ? '🟢 Active' : '⚪ Inactive'}
-                </div>
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* ========== TEAM PERFORMANCE (Real Data) ========== */}
-        {teamStats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard
-              title="Expected Revenue"
-              value={formatCurrency(teamStats.expected_revenue)}
-              icon={FiTarget}
-              color="bg-indigo-600"
-            />
-            <StatCard
-              title="Collected Revenue"
-              value={formatCurrency(teamStats.collected_revenue)}
-              icon={FiDollarSign}
-              color="bg-emerald-600"
-            />
-            <StatCard
-              title="Team Expenses"
-              value={formatCurrency(teamStats.expense)}
-              icon={FiBriefcase}
-              color="bg-rose-600"
-            />
-            <StatCard
-              title="Net Generated"
-              value={formatCurrency((teamStats.collected_revenue || 0) - (teamStats.department_charges || 0) - (teamStats.expense || 0))}
-              icon={FiTrendingUp}
-              color="bg-blue-600"
-              subtitle={`Margin: ${teamStats.collected_revenue > 0 ? ((((teamStats.collected_revenue || 0) - (teamStats.department_charges || 0) - (teamStats.expense || 0)) / teamStats.collected_revenue) * 100).toFixed(1) : 0}%`}
-            />
-          </div>
-        )}
-
-        {/* ========== MY CONTRIBUTION + RANK ========== */}
-        {myContribution && (
-          <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-gray-900 text-lg flex items-center gap-2">
-                <FiUser className="text-indigo-600" />
-                My Contribution
-              </h3>
-              {rank && (
-                <div className="bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-sm font-bold flex items-center gap-1">
-                  <FiTrophy className="h-4 w-4" />
-                  Rank #{rank} of {teamMembers.length}
+              {me.has_target && (
+                <div className="mt-5">
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-slate-500">
+                      My monthly target <span className={paceTextTone(me.target_progress, me.on_pace)}>· {paceText(me.target_progress, me.on_pace)}</span>
+                    </span>
+                    <span className="tabular-nums text-slate-700">
+                      {money(me.month_achieved)} / {money(me.target)} <span className="font-semibold text-slate-900">{Math.round(me.target_progress)}%</span>
+                    </span>
+                  </div>
+                  <TargetBar value={me.month_achieved} max={me.target} tone={paceTone(me.target_progress, me.on_pace)} />
                 </div>
               )}
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="bg-gray-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Applications</p>
-                <p className="text-xl font-bold text-gray-900">{myContribution.applications}</p>
-              </div>
-              <div className="bg-emerald-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Collected Revenue</p>
-                <p className="text-xl font-bold text-emerald-600">{formatCurrency(myContribution.collectedRevenue)}</p>
-              </div>
-              <div className="bg-indigo-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Service Profit</p>
-                <p className="text-xl font-bold text-indigo-600">{formatCurrency(myContribution.serviceProfit)}</p>
-              </div>
-              <div className="bg-rose-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Dept Payments</p>
-                <p className="text-xl font-bold text-rose-600">{formatCurrency(myContribution.departmentPayments)}</p>
-              </div>
-              <div className="bg-amber-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Expenses</p>
-                <p className="text-xl font-bold text-amber-600">{formatCurrency(myContribution.expenses)}</p>
-              </div>
-              <div className="bg-yellow-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Customer Rating</p>
-                <p className="text-xl font-bold text-yellow-600">{myContribution.rating}★</p>
-              </div>
-            </div>
-            {myContribution.pendingCollections > 0 && (
-              <div className="mt-3 text-sm text-amber-600 flex items-center gap-2 bg-amber-50 p-2 rounded-lg">
-                <FiClock /> Pending Collections: {formatCurrency(myContribution.pendingCollections)}
-              </div>
-            )}
+            </Panel>
           </div>
         )}
 
-        {/* ========== TEAM MEMBERS ========== */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900 text-lg flex items-center gap-2">
-              <FiUsers className="text-indigo-600" />
-              Team Members ({teamMembers.length})
-            </h3>
+        {/* Leaderboard + service mix */}
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-7">
+            <Panel title="Team leaderboard" hint={`Ranked by service charges · ${periodLabel}${targetsEnabled ? ". Target bars show this month" : ""}`}>
+              {members.length === 0 ? (
+                <p className="py-10 text-center text-sm text-slate-500">No member activity to show yet.</p>
+              ) : (
+                <ul className="space-y-4">
+                  {members.map((m, idx) => {
+                    const mine = Number(m.id) === Number(myId);
+                    return (
+                      <li
+                        key={m.id}
+                        className={`grid grid-cols-1 gap-x-8 gap-y-2 rounded-lg md:items-center ${targetsEnabled ? "md:grid-cols-2" : ""} ${mine ? "bg-blue-50/60 p-3 ring-1 ring-blue-100" : "px-3"}`}
+                      >
+                        <div>
+                          <div className="flex items-baseline justify-between gap-3">
+                            <span className="flex min-w-0 items-center gap-3">
+                              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">{idx + 1}</span>
+                              <Avatar name={m.name} photo={m.photo} size={40} />
+                              <span className="min-w-0">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="truncate text-sm font-medium text-slate-900">{m.name}</span>
+                                  {mine && <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">You</span>}
+                                </span>
+                                <span className="block truncate text-xs text-slate-500">{m.role}{m.centre_name ? ` · ${m.centre_name}` : ""}</span>
+                              </span>
+                            </span>
+                            <span className="text-sm font-semibold tabular-nums text-emerald-700">{money(m.service_charges)}</span>
+                          </div>
+                          <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${((Number(m.service_charges) || 0) / maxCharges) * 100}%` }} />
+                          </div>
+                          <p className="mt-1 text-xs text-slate-500">{m.services_completed} {m.services_completed === 1 ? "service" : "services"}</p>
+                        </div>
+                        {targetsEnabled && (
+                          <div>
+                            <p className="mb-1 text-xs text-slate-500">This month's target</p>
+                            <MiniTargetBar achieved={m.month_achieved} target={m.target} onPace={m.on_pace} />
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Panel>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {teamMembers.map((member, idx) => (
-              <MemberCard
-                key={member.id}
-                member={member}
-                rank={idx + 1}
-                isLeader={member.is_leader}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* ========== NOTICES + CALENDAR ========== */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Notices */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-              <FiBell className="text-indigo-600" />
-              Team Notices
-            </h3>
-            {notices.length === 0 ? (
-              <p className="text-gray-500 text-sm">No notices</p>
-            ) : (
-              <div className="max-h-64 overflow-y-auto">
-                {notices.map(notice => (
-                  <NoticeItem key={notice.id} notice={notice} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Calendar */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-              <FiCalendar className="text-indigo-600" />
-              Team Calendar
-            </h3>
-            {events.length === 0 ? (
-              <p className="text-gray-500 text-sm">No upcoming events</p>
-            ) : (
-              <div className="max-h-64 overflow-y-auto">
-                {events.map(event => (
-                  <EventItem key={event.id} event={event} />
-                ))}
-              </div>
-            )}
+          <div className="xl:col-span-5">
+            <Panel title="Service charges by service" hint={periodLabel}>
+              <MixDonut rows={mixRows} totalLabel="earned" emptyText="No completed services in this period." />
+            </Panel>
           </div>
         </div>
 
-        {/* ========== ACHIEVEMENTS ========== */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-            <FiAward className="text-yellow-500" />
-            Team Achievements
-          </h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {achievements.map(ach => (
-              <AchievementBadge key={ach.id} achievement={ach} />
-            ))}
-          </div>
-        </div>
-
-        {/* ========== PENDING WORK + LEADER MESSAGE ========== */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Pending Work */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-              <FiAlertCircle className="text-amber-500" />
-              My Pending Work
-            </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-amber-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Pending Services</p>
-                <p className="text-xl font-bold text-amber-600">{pendingWork.pending_services || 0}</p>
-              </div>
-              <div className="bg-rose-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Pending Payments</p>
-                <p className="text-xl font-bold text-rose-600">{formatCurrency(pendingWork.pending_payments || 0)}</p>
-              </div>
-              <div className="bg-blue-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Applications Waiting</p>
-                <p className="text-xl font-bold text-blue-600">{pendingWork.applications_waiting || 0}</p>
-              </div>
-              <div className="bg-purple-50 rounded-lg p-3 text-center">
-                <p className="text-xs text-gray-500">Documents Missing</p>
-                <p className="text-xl font-bold text-purple-600">{pendingWork.documents_missing || 0}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Leader's Message */}
-          {leaderMessage && (
-            <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-100 p-5">
-              <div className="flex items-start gap-3">
-                <div className="bg-indigo-100 p-2 rounded-lg">
-                  <FiMessageCircle className="h-5 w-5 text-indigo-600" />
-                </div>
+        {/* Team target */}
+        {targetsEnabled && (
+          <div className="mt-4">
+            <Panel title="Team target" hint={teamTargets?.mode === "manual" ? "Target set for the team, this month" : "Sum of members' individual targets, this month"}>
+              {teamTargets && teamTargets.target > 0 ? (
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Leader's Message</h3>
-                  <p className="text-gray-700 text-sm mt-2 leading-relaxed">{leaderMessage.content}</p>
-                  <div className="flex items-center gap-3 mt-3 text-xs text-gray-500">
-                    <span>— {leaderMessage.author}</span>
-                    <span>{formatDate(leaderMessage.date)}</span>
+                  <div className="mb-1 flex items-baseline justify-between text-xs">
+                    <span className="text-slate-500">
+                      Month <span className={paceTextTone(teamTargets.progress, teamTargets.onPace)}>· {paceText(teamTargets.progress, teamTargets.onPace)}</span>
+                    </span>
+                    <span className="tabular-nums text-slate-700">
+                      {money(teamTargets.achieved)} / {money(teamTargets.target)} <span className="font-semibold text-slate-900">{Math.round(teamTargets.progress)}%</span>
+                    </span>
+                  </div>
+                  <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={paceTone(teamTargets.progress, teamTargets.onPace)} />
+                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <Tile label="Today" value={money(teamTargets.today)} hint={`of ${money(teamTargets.dailyTarget)} daily target`} />
+                    <Tile
+                      label="Met today's target"
+                      value={<>{teamTargets.metToday} <span className="text-sm font-normal text-slate-500">of {teamTargets.membersWithTarget} members</span></>}
+                    />
+                    <Tile
+                      label="Month progress"
+                      value={<>Day {teamTargets.dayOfMonth} <span className="text-sm font-normal text-slate-500">of {teamTargets.daysInMonth}</span></>}
+                    />
                   </div>
                 </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ========== MONTHLY TRAJECTORY (TARGETS VS GROWTH) ========== */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6 shadow-sm">
-          <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-6">
-            <FiTrendingUp className="text-indigo-600" /> Monthly Trajectory
-          </h3>
-          
-          {teamSettings.targets_enabled ? (
-            <div className="mb-8">
-              <TargetProgressBar 
-                label="Revenue Target Progress" 
-                current={teamStats?.revenue || 0} 
-                target={teamSettings.monthly_target} 
-              />
-            </div>
-          ) : (
-            <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-xl text-center mb-6 flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="text-left flex items-center gap-4">
-                <div className="bg-indigo-100 p-3 rounded-full hidden sm:block">
-                  <FiTrendingUp className="text-xl text-indigo-600" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold text-indigo-900">Growth Mindset Active</h4>
-                  <p className="text-indigo-700 mt-1 text-xs max-w-md">Keep up the great work! Focus on quality service and beating last month's pace rather than a strict quota.</p>
-                </div>
-              </div>
-              <div className="bg-white px-5 py-3 rounded-xl shadow-sm border border-indigo-100 w-full sm:w-auto text-center">
-                <p className="text-[10px] text-indigo-500 uppercase tracking-wider font-bold">Current Pace</p>
-                <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(teamStats?.revenue)}</p>
-              </div>
-            </div>
-          )}
-
-          {trendChartData && (
-            <div className="h-64 mt-4 border-t border-gray-50 pt-6">
-              <Line data={trendChartData} options={trendOptions} />
-            </div>
-          )}
-        </div>
-
-        {/* ========== BADGES (Gamification) ========== */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-          <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-            <FiStar className="text-yellow-500" />
-            Your Badges
-          </h3>
-          <div className="flex flex-wrap gap-3">
-            <div className="bg-gradient-to-br from-yellow-50 to-amber-50 border border-yellow-200 rounded-lg px-4 py-2 flex items-center gap-2">
-              <span className="text-2xl">🏆</span>
-              <span className="text-sm font-medium text-gray-800">Top Performer</span>
-            </div>
-            <div className="bg-gradient-to-br from-red-50 to-pink-50 border border-red-200 rounded-lg px-4 py-2 flex items-center gap-2">
-              <span className="text-2xl">⭐</span>
-              <span className="text-sm font-medium text-gray-800">Customer Favourite</span>
-            </div>
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg px-4 py-2 flex items-center gap-2">
-              <span className="text-2xl">🔥</span>
-              <span className="text-sm font-medium text-gray-800">30 Days Attendance</span>
-            </div>
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center gap-2">
-              <span className="text-2xl">⚡</span>
-              <span className="text-sm font-medium text-gray-800">Fast Processor</span>
-            </div>
-            <div className="bg-gradient-to-br from-purple-50 to-violet-50 border border-purple-200 rounded-lg px-4 py-2 flex items-center gap-2">
-              <span className="text-2xl">💰</span>
-              <span className="text-sm font-medium text-gray-800">Revenue Champion</span>
-            </div>
+              ) : (
+                <p className="py-6 text-center text-sm text-slate-500">No target is set for this team this month.</p>
+              )}
+            </Panel>
           </div>
+        )}
+
+        {/* Trend */}
+        <div className="mt-4">
+          <Panel title="Service charges by month" hint={`${trendYear}, completed services`}>
+            <RevenueChart data={monthlyChartData} view="serviceCharges" />
+          </Panel>
         </div>
 
-        {/* ========== BIRTHDAYS + LEAVE STATUS ========== */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Birthdays */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-              <FiBirthday className="text-pink-500" />
-              Upcoming Birthdays
-            </h3>
-            {birthdays.length === 0 ? (
-              <p className="text-gray-500 text-sm">No upcoming birthdays</p>
+        {/* Announcements */}
+        <div className="mt-4">
+          <Panel title="Team announcements" hint="From your team leaders and admins">
+            {announcements.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-500">No announcements for this team.</p>
             ) : (
-              <div className="space-y-2">
-                {birthdays.map(bday => (
-                  <div key={bday.id} className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className="text-2xl">🎂</span>
-                      <span className="font-medium text-gray-900">{bday.name}</span>
-                    </div>
-                    <span className="text-sm text-gray-500">{formatDate(bday.date)}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Leave Status */}
-          <div className="bg-white rounded-xl border border-gray-200 p-5">
-            <h3 className="font-semibold text-gray-900 text-sm flex items-center gap-2 mb-3">
-              <FiUserCheck className="text-indigo-500" />
-              Leave Status
-            </h3>
-            {leaveStatus.length === 0 ? (
-              <p className="text-gray-500 text-sm">No leave records today</p>
-            ) : (
-              <div className="space-y-2">
-                {leaveStatus.map(leave => (
-                  <div key={leave.id} className="flex items-center justify-between border-b border-gray-100 pb-2 last:border-0">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-2 h-2 rounded-full ${leave.status === 'Full Day' ? 'bg-rose-500' : 'bg-amber-500'}`}></span>
-                      <span className="font-medium text-gray-900">{leave.name}</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className={`text-xs font-medium ${leave.status === 'Full Day' ? 'text-rose-600' : 'text-amber-600'}`}>
-                        {leave.status}
+              <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                {announcements.map((a, i) => {
+                  const body = a.content || a.message || a.body || a.description;
+                  const author = a.author || a.author_name || a.created_by_name || a.posted_by;
+                  const when = formatDate(a.created_at || a.date);
+                  return (
+                    <li key={a.id ?? i} className="flex items-start gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className="mt-0.5 flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-700">
+                        <FiBell className="h-4 w-4" aria-hidden="true" />
                       </span>
-                      <span className="text-gray-400">{formatDate(leave.date)}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">{a.title}</p>
+                        {body && <p className="mt-0.5 whitespace-pre-line text-sm text-slate-600">{body}</p>}
+                        {(author || when) && (
+                          <p className="mt-1 text-xs text-slate-400">{[author && `Posted by ${author}`, when].filter(Boolean).join(" · ")}</p>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-          </div>
-        </div>
-
-        {/* ========== TEAM CHAT SHORTCUT ========== */}
-        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 rounded-xl p-5 text-white flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold text-lg">💬 Open Team Chat</h3>
-            <p className="text-indigo-100 text-sm">Connect with your team instantly</p>
-          </div>
-          <button className="bg-white text-indigo-600 px-5 py-2.5 rounded-lg font-medium hover:bg-gray-100 transition shadow-lg">
-            Join Chat →
-          </button>
+          </Panel>
         </div>
       </div>
     </div>
