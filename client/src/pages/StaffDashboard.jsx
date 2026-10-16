@@ -380,8 +380,6 @@ const StaffDashboard = () => {
     try { localStorage.setItem(`bday-hidden-${todayKey}`, '1'); } catch {}
   };
 
-  // ⚠️ Must be the EXACT path the sidebar "Messenger" link opens (check the address bar).
-  // A wrong path falls through to the app's catch-all route, which logs you out.
   const MESSENGER_ROUTE = '/dashboard/staff/messenger';
   const [openingChatFor, setOpeningChatFor] = useState(null);
 
