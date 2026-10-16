@@ -1,13 +1,13 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
-import { motion, AnimatePresence } from "framer-motion";
-import {
-  FiPlus, FiRefreshCw, FiChevronDown, FiChevronUp, FiSearch,
-  FiX, FiEdit, FiTrash, FiArrowDown, FiArrowUp, FiLock, FiFileText,
-  FiChevronRight, FiCheckSquare, FiMapPin, FiMoreVertical
-} from "react-icons/fi";
+import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import {
+  FiPlus, FiRefreshCw, FiSearch, FiX, FiEdit2, FiTrash2, FiArrowDownLeft, FiArrowUpRight,
+  FiRepeat, FiMapPin, FiChevronLeft, FiChevronRight, FiCreditCard, FiDollarSign,
+  FiSmartphone, FiHome, FiBriefcase, FiUsers, FiActivity, FiAlertCircle, FiFileText,
+} from "react-icons/fi";
 import {
   getWallets,
   createWallet,
@@ -18,2110 +18,1086 @@ import {
   transferWallet,
   deleteWallet,
   getAuditLogs,
-  getWalletTodayBalance
+  getWalletTodayBalance,
 } from "@/services/walletService";
-import { Link } from "react-router-dom";
+
 const API_BASE = import.meta.env.VITE_API_URL;
 
-// ----- Icons -----
-const WalletIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
-    <path d="M4 4a2 2 0 00-2 2v1h16V6a2 2 0 00-2-2H4z" />
-    <path fillRule="evenodd" d="M18 9H2v5a2 2 0 002 2h12a2 2 0 002-2V9zM4 13a1 1 0 011-1h1a1 1 0 110 2H5a1 1 0 01-1-1z" clipRule="evenodd" />
-  </svg>
-);
+/* ───────────── constants & helpers ───────────── */
+const WALLET_TYPES = [
+  { id: "bank", name: "Bank Account", icon: FiHome },
+  { id: "cash", name: "Cash", icon: FiDollarSign },
+  { id: "card", name: "Credit Card", icon: FiCreditCard },
+  { id: "digital", name: "Digital Wallet", icon: FiSmartphone },
+  { id: "savings", name: "Savings", icon: FiBriefcase },
+];
+// One accent colour per wallet category (same as the admin page)
+const TYPE_COLOR = { bank: "#2563eb", cash: "#059669", card: "#9333ea", digital: "#ea580c", savings: "#e11d48" };
+const walletColor = (w) => TYPE_COLOR[w?.wallet_type] || "#64748b";
+const tint = (hex, alpha = "1A") => `${hex}${alpha}`;
+const getType = (id) => WALLET_TYPES.find((t) => t.id === id) || { id, name: "Wallet", icon: FiCreditCard };
 
-const FeeIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-teal-500" viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.736 6.979C9.208 6.193 9.696 6 10 6c.304 0 .792.193 1.264.979a1 1 0 001.715-1.029C12.279 4.784 11.232 4 10 4s-2.279.784-2.979 1.95a1 1 0 101.715 1.029zM6 9a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-  </svg>
-);
+const formatAmount = (amount) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(amount) || 0);
 
-const UserIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-500" viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd" />
-  </svg>
-);
-
-const ChevronIcon = ({ open }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" className={`h-5 w-5 text-gray-500 transition-transform ${open ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor">
-    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-  </svg>
-);
-
-// ----- Helper: gradient per wallet type -----
-const getWalletGradient = (type) => {
-  const gradients = {
-    bank: "from-blue-500 to-blue-600",
-    cash: "from-emerald-500 to-teal-600",
-    card: "from-purple-500 to-indigo-600",
-    digital: "from-amber-500 to-orange-600",
-    savings: "from-rose-500 to-pink-600"
-  };
-  return gradients[type] || "from-gray-500 to-gray-600";
+const getPhotoUrl = (photo) => {
+  if (!photo || photo === "null" || photo === "undefined") return null;
+  if (photo.startsWith("http") || photo.startsWith("data:image")) return photo;
+  return `${API_BASE}${photo.startsWith("/") ? "" : "/"}${photo}`;
 };
 
-const getWalletLightBg = (type) => {
-  const bg = {
-    bank: "bg-blue-50",
-    cash: "bg-emerald-50",
-    card: "bg-purple-50",
-    digital: "bg-amber-50",
-    savings: "bg-rose-50"
-  };
-  return bg[type] || "bg-gray-50";
+const isToday = (value) => {
+  if (!value) return false;
+  const d = new Date(value);
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
 };
 
-// ----- Main Component -----
+const Avatar = ({ name = "", photo, size = "w-8 h-8", text = "text-xs" }) => {
+  const [failed, setFailed] = useState(false);
+  const url = getPhotoUrl(photo);
+  if (url && !failed) {
+    return <img src={url} alt={name} onError={() => setFailed(true)} className={`${size} rounded-full object-cover border border-gray-200 shrink-0`} />;
+  }
+  const initials = name.split(" ").filter(Boolean).map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "?";
+  return (
+    <div className={`${size} rounded-full bg-blue-50 text-blue-700 border border-blue-100 flex items-center justify-center font-semibold ${text} shrink-0`}>
+      {initials}
+    </div>
+  );
+};
+
+const inputCls =
+  "w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50";
+
+const Modal = ({ title, subtitle, onClose, children, footer, size = "max-w-lg" }) => (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
+    <div className={`bg-white rounded-2xl w-full ${size} max-h-[92vh] flex flex-col shadow-2xl`} onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-start justify-between gap-4 px-6 py-4 border-b border-gray-200">
+        <div>
+          <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+          {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
+        </div>
+        <button onClick={onClose} className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100">
+          <FiX size={18} />
+        </button>
+      </div>
+      <div className="px-6 py-5 overflow-y-auto space-y-4">{children}</div>
+      {footer && <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">{footer}</div>}
+    </div>
+  </div>
+);
+
+const Field = ({ label, required, hint, children }) => (
+  <div>
+    <label className="block text-sm font-medium text-gray-700 mb-1">
+      {label} {required && <span className="text-red-500">*</span>}
+    </label>
+    {children}
+    {hint && <p className="text-xs text-gray-400 mt-1">{hint}</p>}
+  </div>
+);
+
+const AmountInput = ({ value, onChange, autoFocus }) => (
+  <div className="relative">
+    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+    <input type="number" min="0" value={value} onChange={(e) => onChange(e.target.value)} autoFocus={autoFocus} placeholder="Enter amount" className={`${inputCls} pl-7`} />
+  </div>
+);
+
+const Segmented = ({ options, value, onChange }) => (
+  <div className="flex bg-gray-100 rounded-lg p-1">
+    {options.map(([val, label]) => (
+      <button
+        key={String(val)}
+        type="button"
+        onClick={() => onChange(val)}
+        className={`flex-1 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${value === val ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+      >
+        {label}
+      </button>
+    ))}
+  </div>
+);
+
+const SecondaryBtn = ({ children, ...props }) => (
+  <button {...props} className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-60">
+    {children}
+  </button>
+);
+const PrimaryBtn = ({ children, danger, ...props }) => (
+  <button
+    {...props}
+    className={`px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed ${danger ? "bg-red-600 hover:bg-red-700" : "bg-navy-700 hover:bg-navy-800"}`}
+  >
+    {children}
+  </button>
+);
+
+const Pager = ({ page, total, perPage, onChange }) => {
+  const pages = Math.max(1, Math.ceil(total / perPage));
+  if (total <= perPage) return null;
+  const start = (page - 1) * perPage;
+  return (
+    <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+      <span>{start + 1}–{Math.min(start + perPage, total)} of {total}</span>
+      <div className="flex items-center gap-1">
+        <button onClick={() => onChange(Math.max(1, page - 1))} disabled={page === 1} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-40"><FiChevronLeft size={16} /></button>
+        <span className="px-2">Page {page} of {pages}</span>
+        <button onClick={() => onChange(Math.min(pages, page + 1))} disabled={page === pages} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-40"><FiChevronRight size={16} /></button>
+      </div>
+    </div>
+  );
+};
+
+const EMPTY_WALLET = { name: "", balance: "", type: "personal", isOnline: true, staffId: "", walletType: "bank", centreId: "" };
+const TX_PER_PAGE = 8;
+const LOG_PER_PAGE = 8;
+
+/* ───────────── page ───────────── */
 const WalletManagementSuperAdmin = () => {
   const storedId = localStorage.getItem("id");
-  const storedUser = localStorage.getItem("username");
-  const storedRole = localStorage.getItem("role");
-  const storedPhoto = localStorage.getItem("photoUrl");
-  const currentStaff = {
-    id: storedId ? Number(storedId) : null,
-    username: storedUser || "Unknown",
-    role: storedRole || "",
-  };
+  const role = (localStorage.getItem("role") || "").toLowerCase();
+  const isSuperAdmin = role === "superadmin";
+  const staffId = storedId ? Number(storedId) : null;
 
-  // Role-based access check
-  const isSuperAdmin = currentStaff.role.toLowerCase() === "superadmin";
-
-  const walletTypes = [
-    { id: "bank", name: "Bank Account", icon: WalletIcon, color: "bg-blue-50 text-blue-700" },
-    { id: "cash", name: "Cash", icon: FeeIcon, color: "bg-green-50 text-green-700" },
-    { id: "card", name: "Credit Card", icon: FeeIcon, color: "bg-purple-50 text-purple-700" },
-    { id: "digital", name: "Digital Wallet", icon: WalletIcon, color: "bg-amber-50 text-amber-700" },
-    { id: "savings", name: "Savings", icon: WalletIcon, color: "bg-yellow-50 text-yellow-700" },
-  ];
-
-  const [staffMembers, setStaffMembers] = useState([]);
   const [wallets, setWallets] = useState([]);
   const [todayBalances, setTodayBalances] = useState({});
   const [transactions, setTransactions] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [staffLoading, setStaffLoading] = useState(false);
-  const [staffError, setStaffError] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
-  const [isAdding, setIsAdding] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [auditSearchQuery, setAuditSearchQuery] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    balance: "",
-    type: "personal",
-    isOnline: true,
-    staffId: "",
-    walletType: "bank",
-    permissions: []
-  });
-  const [newWallet, setNewWallet] = useState({
-    name: "",
-    balance: "",
-    type: "personal",
-    isOnline: true,
-    staffId: "",
-    walletType: "bank",
-    permissions: [],
-    centreId: "",
-  });
-  const [rechargingId, setRechargingId] = useState(null);
-  const [rechargeAmount, setRechargeAmount] = useState("");
-  const [rechargeDescription, setRechargeDescription] = useState("");
-  const [transferringId, setTransferringId] = useState(null);
-  const [transferFromWalletId, setTransferFromWalletId] = useState("");
-  const [transferToWalletId, setTransferToWalletId] = useState("");
-  const [transferAmount, setTransferAmount] = useState("");
-  const [transferDescription, setTransferDescription] = useState("");
-  const [showAuditLogs, setShowAuditLogs] = useState(false);
-  const [selectedWallets, setSelectedWallets] = useState([]);
-  const [actionLoading, setActionLoading] = useState(false);
-  const transactionsPerPage = 5;
+  const [staffMembers, setStaffMembers] = useState([]);
   const [centres, setCentres] = useState([]);
-  const [selectedCentre, setSelectedCentre] = useState('');
-  const [auditCurrentPage, setAuditCurrentPage] = useState(1);
-  const auditItemsPerPage = 5;
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
-  const [mobileActionsWalletId, setMobileActionsWalletId] = useState(null);
+  const [staffError, setStaffError] = useState(null);
 
-  // Get wallet name by ID
-  const getWalletName = (id) => {
-    const wallet = wallets.find(w => w.id === id);
-    if (!wallet) return "Unknown Wallet";
-    return wallet.centre_name ? `${wallet.centre_name} - ${wallet.name}` : wallet.name;
-  };
+  const [selectedCentre, setSelectedCentre] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [txPage, setTxPage] = useState(1);
+  const [showAuditLogs, setShowAuditLogs] = useState(false);
+  const [auditSearch, setAuditSearch] = useState("");
+  const [auditPage, setAuditPage] = useState(1);
+  const [selectedWallets, setSelectedWallets] = useState([]);
 
-  // Reset pagination when centre changes
+  // Modals
+  const [walletForm, setWalletForm] = useState(null); // { mode, id?, data }
+  const [recharge, setRecharge] = useState(null); // { walletId, amount, description }
+  const [transfer, setTransfer] = useState(null); // { from, to, amount, description }
+  const [confirmDelete, setConfirmDelete] = useState(null); // { ids: [], label }
+  const [busy, setBusy] = useState(false);
+
   useEffect(() => {
-    setCurrentPage(1);
-    setAuditCurrentPage(1);
-  }, [selectedCentre]);
+    const t = setTimeout(() => setSearch(searchInput.trim().toLowerCase()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+  useEffect(() => setTxPage(1), [search, selectedCentre]);
+  useEffect(() => setAuditPage(1), [auditSearch, selectedCentre]);
 
-  // Wallet Filteration for whole page
-  const filteredWallets = selectedCentre
-    ? wallets.filter((wallet) => wallet.centre_id === Number(selectedCentre))
-    : wallets;
+  /* ---------- data (same service calls as before) ---------- */
+  const fetchCentres = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/api/centres`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
+      setCentres(Array.isArray(res.data) ? res.data : []);
+    } catch (err) {
+      console.error("Error fetching centres:", err);
+      toast.error("Failed to load centres.");
+    }
+  }, []);
+
+  const fetchWalletData = useCallback(async () => {
+    try {
+      const [walletRes, txRes] = await Promise.all([getWallets(), getTransactions()]);
+      const list = walletRes.data || [];
+      setWallets(list);
+      setTransactions(txRes.data || []);
+      // Today's opening/closing per wallet (same endpoint as before, now in parallel)
+      const results = await Promise.all(list.map((w) => getWalletTodayBalance(w.id).catch(() => null)));
+      const map = {};
+      list.forEach((w, i) => (map[w.id] = results[i]));
+      setTodayBalances(map);
+    } catch (err) {
+      console.error("Error loading wallet data:", err);
+      toast.error("Failed to load wallet data.");
+    }
+  }, []);
+
+  const fetchStaffData = useCallback(async () => {
+    try {
+      setStaffError(null);
+      const data = await getStaff();
+      setStaffMembers(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Error loading staff data:", err);
+      setStaffError("Failed to load staff.");
+      setStaffMembers([]);
+    }
+  }, []);
+
+  const fetchAuditLogs = useCallback(async () => {
+    try {
+      setAuditLoading(true);
+      const res = await getAuditLogs();
+      const d = res.data;
+      setAuditLogs(Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : Array.isArray(d?.logs) ? d.logs : []);
+    } catch (err) {
+      console.error("Error loading audit logs:", err);
+      setAuditLogs([]);
+      toast.error("Failed to load audit logs.");
+    } finally {
+      setAuditLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (!isSuperAdmin) {
       toast.error("Access denied. Superadmin privileges required.");
-      window.location.href = '/dashboard';
+      window.location.href = "/dashboard";
       return;
     }
-    fetchWalletData();
-    fetchStaffData();
-    fetchAuditLogs();
-    fetchCentres();
-  }, [isSuperAdmin]);
-
-  // Fetch centres for superadmins
-  const fetchCentres = async () => {
-    try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-      });
-      setCentres(response.data);
-    } catch (err) {
-      console.error('Error fetching centres:', err);
-      toast.error('Failed to load centres.');
-    }
-  };
-
-  const fetchWalletData = async (retryCount = 0) => {
-    try {
+    (async () => {
       setLoading(true);
-      const walletRes = await getWallets();
-      const transactionRes = await getTransactions();
-      setWallets(walletRes.data || []);
-      setTransactions(transactionRes.data || []);
-
-      // Fetch today's balances for all wallets
-      const balancesMap = {};
-      for (const wallet of walletRes.data || []) {
-        try {
-          const balance = await getWalletTodayBalance(wallet.id);
-          balancesMap[wallet.id] = balance;
-        } catch (e) {
-          balancesMap[wallet.id] = null;
-        }
-      }
-      setTodayBalances(balancesMap);
-    } catch (err) {
-      console.error("Error loading wallet data:", err);
-      if (retryCount < 2) {
-        setTimeout(() => fetchWalletData(retryCount + 1), 1000);
-        toast.warn("Retrying to load wallet data...");
-      } else {
-        setWallets([]);
-        setTransactions([]);
-        toast.error("Failed to load wallet data after retries.");
-      }
-    } finally {
+      await Promise.all([fetchWalletData(), fetchStaffData(), fetchCentres(), fetchAuditLogs()]);
       setLoading(false);
-    }
+    })();
+  }, [isSuperAdmin, fetchWalletData, fetchStaffData, fetchCentres, fetchAuditLogs]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await Promise.all([fetchWalletData(), fetchStaffData(), fetchAuditLogs()]);
+    setRefreshing(false);
+    toast.success("Wallets refreshed");
   };
 
-  const fetchStaffData = async (retryCount = 0) => {
+  /* ---------- lookups ---------- */
+  const staffById = useMemo(() => {
+    const m = {};
+    staffMembers.forEach((s) => (m[String(s.id)] = s));
+    return m;
+  }, [staffMembers]);
+  const walletById = useMemo(() => {
+    const m = {};
+    wallets.forEach((w) => (m[String(w.id)] = w));
+    return m;
+  }, [wallets]);
+  const centreNameById = useCallback(
+    (id) => centres.find((c) => String(c.id) === String(id))?.name || wallets.find((w) => String(w.centre_id) === String(id))?.centre_name || "Unknown centre",
+    [centres, wallets]
+  );
+  const staffCentre = (s) => s.centreId ?? s.centre_id;
+
+  /* ---------- derived ---------- */
+  const centreWallets = useMemo(
+    () => (selectedCentre ? wallets.filter((w) => String(w.centre_id) === String(selectedCentre)) : wallets),
+    [wallets, selectedCentre]
+  );
+
+  const filteredWallets = useMemo(() => {
+    if (!search) return centreWallets;
+    return centreWallets.filter((w) => {
+      const staff = staffById[String(w.assigned_staff_id)];
+      return [w.name, w.centre_name, getType(w.wallet_type).name, staff?.name, `#${w.id}`].some((f) => String(f || "").toLowerCase().includes(search));
+    });
+  }, [centreWallets, search, staffById]);
+
+  const todaysTransactions = useMemo(
+    () =>
+      transactions.filter((t) => {
+        const w = walletById[String(t.wallet_id)];
+        if (selectedCentre && (!w || String(w.centre_id) !== String(selectedCentre))) return false;
+        return isToday(t.created_at);
+      }),
+    [transactions, walletById, selectedCentre]
+  );
+  const todayIn = todaysTransactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount || 0), 0);
+  const todayOut = todaysTransactions.filter((t) => t.type !== "credit").reduce((s, t) => s + Number(t.amount || 0), 0);
+
+  const filteredTransactions = useMemo(() => {
+    if (!search) return todaysTransactions;
+    return todaysTransactions.filter((t) =>
+      [t.description, t.category, t.staff_name, walletById[String(t.wallet_id)]?.name, walletById[String(t.wallet_id)]?.centre_name]
+        .some((f) => String(f || "").toLowerCase().includes(search))
+    );
+  }, [todaysTransactions, search, walletById]);
+  const txStart = (txPage - 1) * TX_PER_PAGE;
+
+  const filteredLogs = useMemo(() => {
+    const q = auditSearch.trim().toLowerCase();
+    return auditLogs.filter((log) => {
+      if (selectedCentre && String(log.centre_id) !== String(selectedCentre)) return false;
+      if (!isToday(log.created_at)) return false;
+      return !q || [log.action, log.performed_by, log.details, log.centre_name].some((f) => String(f || "").toLowerCase().includes(q));
+    });
+  }, [auditLogs, selectedCentre, auditSearch]);
+  const logStart = (auditPage - 1) * LOG_PER_PAGE;
+
+  const totalBalance = centreWallets.reduce((s, w) => s + (Number(w.balance) || 0), 0);
+  const personalCount = centreWallets.filter((w) => !w.is_shared).length;
+  const sharedCount = centreWallets.filter((w) => w.is_shared).length;
+  const centreCount = new Set(centreWallets.map((w) => w.centre_id)).size;
+
+  const staffWallets = useMemo(
+    () =>
+      staffMembers
+        .map((s) => {
+          const own = centreWallets.filter((w) => !w.is_shared && String(w.assigned_staff_id) === String(s.id));
+          return { ...s, wallets: own, walletCount: own.length, walletTotal: own.reduce((sum, w) => sum + (Number(w.balance) || 0), 0) };
+        })
+        .filter((s) => s.walletCount > 0)
+        .sort((a, b) => b.walletTotal - a.walletTotal),
+    [staffMembers, centreWallets]
+  );
+
+  /* ---------- actions (payloads unchanged from the original page) ---------- */
+  const openAdd = () => setWalletForm({ mode: "add", data: { ...EMPTY_WALLET, centreId: selectedCentre || "" } });
+  const openEdit = (w) =>
+    setWalletForm({
+      mode: "edit",
+      id: w.id,
+      centreId: w.centre_id,
+      data: {
+        name: w.name || "",
+        balance: String(w.balance ?? ""),
+        type: w.is_shared ? "shared" : "personal",
+        isOnline: w.status === "online",
+        staffId: w.assigned_staff_id ? String(w.assigned_staff_id) : "",
+        walletType: w.wallet_type || "bank",
+        permissions: w.permissions || [],
+      },
+    });
+  const setFormField = (k, v) => setWalletForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
+
+  const saveWallet = async () => {
+    const d = walletForm.data;
+    if (!d.name.trim() || d.balance === "") return toast.error("Wallet name and balance are required.");
+    if (walletForm.mode === "add" && !d.centreId) return toast.error("Please choose a centre.");
+    setBusy(true);
     try {
-      setStaffLoading(true);
-      setStaffError(null);
-      const staffData = await getStaff();
-      const mappedStaff = staffData.map(staff => ({
-        ...staff,
-        photoUrl: staff.photo
-      }));
-      setStaffMembers(mappedStaff || []);
-    } catch (err) {
-      console.error("Error loading staff data:", err);
-      if (retryCount < 2) {
-        setTimeout(() => fetchStaffData(retryCount + 1), 1000);
-        toast.warn("Retrying to load staff data...");
-      } else {
-        setStaffError(err.message);
-        setStaffMembers([]);
-        toast.error("Failed to load staff data after retries.");
-      }
-    } finally {
-      setStaffLoading(false);
-    }
-  };
-
-  const fetchAuditLogs = async (retryCount = 0) => {
-    try {
-      setAuditLoading(true);
-      const auditRes = await getAuditLogs();
-      let logs = [];
-      if (Array.isArray(auditRes.data)) {
-        logs = auditRes.data;
-      } else if (auditRes.data?.data && Array.isArray(auditRes.data.data)) {
-        logs = auditRes.data.data;
-      } else if (auditRes.data?.logs && Array.isArray(auditRes.data.logs)) {
-        logs = auditRes.data.logs;
-      } else {
-        console.warn('Unexpected audit logs response structure:', auditRes.data);
-        logs = [];
-      }
-      setAuditLogs(logs);
-    } catch (err) {
-      console.error('Error loading audit logs:', err);
-      if (err.response?.status === 404) {
-        toast.error('Audit logs endpoint not found. Please check backend configuration.');
-      } else if (retryCount < 2) {
-        setTimeout(() => fetchAuditLogs(retryCount + 1), 1000);
-        toast.warn('Retrying to load audit logs...');
-      } else {
-        setAuditLogs([]);
-        toast.error('Failed to load audit logs after retries.');
-      }
-    } finally {
-      setAuditLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (editingId) {
-      const walletToEdit = wallets.find(w => w.id === editingId);
-      if (walletToEdit) {
-        setEditForm({
-          name: walletToEdit.name,
-          balance: walletToEdit.balance.toString(),
-          type: walletToEdit.is_shared ? "shared" : "personal",
-          isOnline: walletToEdit.status === 'online',
-          staffId: walletToEdit.assigned_staff_id || "",
-          walletType: walletToEdit.wallet_type,
-          permissions: walletToEdit.permissions || []
+      if (walletForm.mode === "add") {
+        await createWallet({
+          name: d.name.trim(),
+          balance: Number(d.balance),
+          is_shared: d.type === "shared",
+          assigned_staff_id: d.type === "personal" ? d.staffId : null,
+          wallet_type: d.walletType,
+          status: d.isOnline ? "online" : "offline",
+          permissions: [],
+          centre_id: d.centreId,
         });
-        if (expandedId !== editingId) {
-          setExpandedId(editingId);
-        }
+        toast.success("Wallet added");
+      } else {
+        await updateWallet(walletForm.id, {
+          name: d.name.trim(),
+          balance: Number(d.balance),
+          is_shared: d.type === "shared",
+          assigned_staff_id: d.type === "personal" ? d.staffId : null,
+          wallet_type: d.walletType,
+          status: d.isOnline ? "online" : "offline",
+          permissions: d.permissions || [],
+        });
+        toast.success("Wallet updated");
       }
-    }
-  }, [editingId, wallets, expandedId]);
-
-  const formatAmount = (amount) => {
-    const num = typeof amount === 'string' ? 
-      parseFloat(amount) : 
-      (typeof amount === 'number' ? amount : 0);
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-      minimumFractionDigits: 0,
-    }).format(num);
-  };
-
-  const handleRefresh = () => {
-    setLoading(true);
-    setStaffLoading(true);
-    fetchWalletData();
-    fetchStaffData();
-    fetchAuditLogs();
-    toast.success("Data refreshed successfully!");
-  };
-
-  const toggleDetails = (id) => {
-    setExpandedId(expandedId === id ? null : id);
-    if (editingId === id) {
-      setEditingId(null);
-    }
-  };
-
-  const toggleMobileActions = (walletId) => {
-    setMobileActionsWalletId(prev => prev === walletId ? null : walletId);
-  };
-
-  const handleAddWallet = async () => {
-    if (!newWallet.name || !newWallet.balance || (isSuperAdmin && !newWallet.centreId)) {
-      toast.error("Wallet name, balance, and centre (for superadmins) are required.");
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      const payload = {
-        name: newWallet.name,
-        balance: Number(newWallet.balance),
-        is_shared: newWallet.type === "shared",
-        assigned_staff_id: newWallet.type === "personal" ? newWallet.staffId : null,
-        wallet_type: newWallet.walletType,
-        status: newWallet.isOnline ? "online" : "offline",
-        permissions: newWallet.permissions,
-        centre_id: newWallet.centreId,
-      };
-
-      await createWallet(payload);
-      fetchWalletData();
-      setNewWallet({
-        name: "",
-        balance: "",
-        type: "personal",
-        isOnline: true,
-        staffId: "",
-        walletType: "bank",
-        permissions: [],
-        centreId: "",
-      });
-      setIsAdding(false);
-      toast.success("Wallet added successfully!");
-    } catch (err) {
-      console.error("Error creating wallet:", err);
-      toast.error("Failed to create wallet: " + (err.message || "Unknown error"));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleEditWallet = async () => {
-    if (!editForm.name || !editForm.balance) {
-      toast.error("Wallet name and balance are required.");
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      const payload = {
-        name: editForm.name,
-        balance: Number(editForm.balance),
-        is_shared: editForm.type === "shared",
-        assigned_staff_id: editForm.type === "personal" ? editForm.staffId : null,
-        wallet_type: editForm.walletType,
-        status: editForm.isOnline ? "online" : "offline",
-        permissions: editForm.permissions
-      };
-
-      await updateWallet(editingId, payload);
-      fetchWalletData();
-      setEditingId(null);
-      toast.success("Wallet updated successfully!");
-    } catch (err) {
-      console.error("Error updating wallet:", err);
-      toast.error("Failed to update wallet: " + (err.message || "Unknown error"));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleDeleteWallet = async (walletId) => {
-    if (!isSuperAdmin) {
-      toast.error("Only superadmins can delete wallets.");
-      return;
-    }
-    if (!window.confirm("Are you sure you want to delete this wallet? This action cannot be undone.")) {
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      await deleteWallet(walletId);
-      fetchWalletData();
-      setSelectedWallets(selectedWallets.filter(id => id !== walletId));
-      toast.success("Wallet deleted successfully!");
-    } catch (err) {
-      console.error("Error deleting wallet:", err);
-      toast.error("Failed to delete wallet: " + (err.message || "Unknown error"));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (!isSuperAdmin) {
-      toast.error("Only superadmins can perform bulk deletion.");
-      return;
-    }
-    if (selectedWallets.length === 0) {
-      toast.error("No wallets selected for deletion.");
-      return;
-    }
-    if (!window.confirm(`Are you sure you want to delete ${selectedWallets.length} wallet(s)? This action cannot be undone.`)) {
-      return;
-    }
-
-    try {
-      setActionLoading(true);
-      for (const walletId of selectedWallets) {
-        await deleteWallet(walletId);
-      }
-      fetchWalletData();
-      setSelectedWallets([]);
-      toast.success(`${selectedWallets.length} wallet(s) deleted successfully!`);
-    } catch (err) {
-      console.error("Error during bulk deletion:", err);
-      toast.error("Failed to delete some wallets: " + (err.message || "Unknown error"));
-    } finally {
-      setActionLoading(false);
-    }
-  };
-
-  const handleRecharge = async (walletId) => {
-    if (!rechargeAmount || Number(rechargeAmount) <= 0) {
-      toast.error("Please enter a valid recharge amount.");
-      return;
-    }
-    
-    try {
-      setActionLoading(true);
-      const amount = Number(rechargeAmount);
-      const payload = {
-        wallet_id: walletId,
-        amount,
-        description: rechargeDescription || "Wallet Recharge",
-        category: "Recharge",
-        staff_id: currentStaff.id
-      };
-
-      await rechargeWallet(payload);
+      setWalletForm(null);
       await fetchWalletData();
-      setRechargingId(null);
-      setRechargeAmount("");
-      setRechargeDescription("");
-      toast.success(`Successfully recharged ${formatAmount(amount)} to wallet.`);
+      fetchAuditLogs();
+    } catch (err) {
+      console.error(err);
+      toast.error(err.response?.data?.error || `Failed to ${walletForm.mode === "add" ? "create" : "update"} wallet.`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const doRecharge = async () => {
+    const amount = Number(recharge.amount);
+    if (!amount || amount <= 0) return toast.error("Enter a valid amount.");
+    setBusy(true);
+    try {
+      await rechargeWallet({
+        wallet_id: recharge.walletId,
+        amount,
+        description: recharge.description || "Wallet Recharge",
+        category: "Recharge",
+        staff_id: staffId,
+      });
+      toast.success(`${formatAmount(amount)} added to ${walletById[String(recharge.walletId)]?.name || "wallet"}`);
+      setRecharge(null);
+      await fetchWalletData();
+      fetchAuditLogs();
     } catch (err) {
       console.error("Recharge failed:", err);
-      toast.error("Recharge failed: " + (err.message || "Unknown error"));
+      toast.error(err.response?.data?.error || "Recharge failed. Please try again.");
     } finally {
-      setActionLoading(false);
+      setBusy(false);
     }
   };
 
-  const handleTransfer = async () => {
-    if (!transferFromWalletId || !transferToWalletId || !transferAmount || Number(transferAmount) <= 0) {
-      toast.error("Please select source and destination wallets and enter a valid amount.");
+  const doTransfer = async () => {
+    const amount = Number(transfer.amount);
+    if (!transfer.from || !transfer.to || !amount || amount <= 0) return toast.error("Choose both wallets and enter a valid amount.");
+    if (transfer.from === transfer.to) return toast.error("Source and destination must be different.");
+    if (!staffId) {
+      toast.error("Session expired. Please log in again.");
+      window.location.href = "/login";
       return;
     }
-    if (transferFromWalletId === transferToWalletId) {
-      toast.error("Source and destination wallets cannot be the same.");
-      return;
-    }
-    if (!currentStaff.id) {
-      toast.error("Staff ID is missing. Redirecting to login page...");
-      window.location.href = '/login';
-      return;
-    }
-
+    const fromWallet = walletById[transfer.from];
+    const toWallet = walletById[transfer.to];
+    const description =
+      transfer.description ||
+      `Transferred ${amount} from ${fromWallet?.name || "Unknown Wallet"} (${fromWallet?.centre_name || "Unknown Centre"}) to ${toWallet?.name || "Unknown Wallet"} (${toWallet?.centre_name || "Unknown Centre"})`;
+    setBusy(true);
     try {
-      setActionLoading(true);
-      const amount = Number(transferAmount);
-      const fromWallet = wallets.find(w => w.id === Number(transferFromWalletId));
-      const toWallet = wallets.find(w => w.id === Number(transferToWalletId));
-      const description = transferDescription || `Transferred ${amount} from ${fromWallet?.name || 'Unknown Wallet'} (${fromWallet?.centre_name || 'Unknown Centre'}) to ${toWallet?.name || 'Unknown Wallet'} (${toWallet?.centre_name || 'Unknown Centre'})`;
-      const payload = {
-        from_wallet_id: Number(transferFromWalletId),
-        to_wallet_id: Number(transferToWalletId),
+      await transferWallet({
+        from_wallet_id: Number(transfer.from),
+        to_wallet_id: Number(transfer.to),
         amount,
         description,
         category: "Transfer",
-        staff_id: currentStaff.id
-      };
-
-      await transferWallet(payload);
+        staff_id: staffId,
+      });
+      toast.success(`${formatAmount(amount)} moved from ${fromWallet?.name} to ${toWallet?.name}`);
+      setTransfer(null);
       await fetchWalletData();
-      setTransferringId(null);
-      setTransferFromWalletId("");
-      setTransferToWalletId("");
-      setTransferAmount("");
-      setTransferDescription("");
-      toast.success(`Successfully transferred ${formatAmount(amount)}.`);
+      fetchAuditLogs();
     } catch (err) {
       console.error("Transfer failed:", err);
-      toast.error(err.response?.data?.error || "Transfer failed: " + (err.message || "Unknown error"));
+      toast.error(err.response?.data?.error || "Transfer failed. Please try again.");
     } finally {
-      setActionLoading(false);
+      setBusy(false);
     }
   };
 
-  const getStaffMember = (id) => {
-    if (!id && currentStaff) return currentStaff;
-    const staff = staffMembers.find(s => s.id === Number(id));
-    return staff ? {
-      id: staff.id,
-      name: staff.name,
-      role: staff.role,
-      photoUrl: staff.photoUrl || null,
-      avatarColor: staff.photoUrl ? "" : "bg-slate-700"
-    } : {
-      name: "Unassigned",
-      role: "",
-      photoUrl: null,
-      avatarColor: "bg-slate-600"
-    };
-  };
-
-  const getWalletIcon = (typeId) => {
-    const type = walletTypes.find(t => t.id === typeId);
-    return type ? type.icon : WalletIcon;
-  };
-
-  const getTransactionStaff = (transaction) => {
-    if (transaction.staff_id) {
-      return {
-        name: transaction.staff_name || `Staff ID ${transaction.staff_id}`,
-        role: transaction.staff_role || "Unknown Role",
-        photoUrl: transaction.staff_photo || null,
-        avatarColor: "bg-slate-700"
-      };
-    } else {
-      return {
-        name: "System",
-        role: "Auto-generated",
-        photoUrl: null,
-        avatarColor: "bg-slate-600"
-      };
+  const doDelete = async () => {
+    const ids = confirmDelete.ids;
+    setBusy(true);
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await deleteWallet(id);
+      } catch (err) {
+        console.error("Delete failed for wallet", id, err);
+        failed++;
+      }
     }
+    setBusy(false);
+    setConfirmDelete(null);
+    setSelectedWallets((sel) => sel.filter((id) => !ids.includes(id)));
+    if (failed) toast.error(`${failed} of ${ids.length} wallet(s) could not be deleted.`);
+    else toast.success(ids.length === 1 ? "Wallet deleted" : `${ids.length} wallets deleted`);
+    await fetchWalletData();
+    fetchAuditLogs();
   };
 
-  const totalBalance = useMemo(() => 
-    filteredWallets.reduce((sum, wallet) => sum + (Number(wallet?.balance) || 0), 0),
-    [filteredWallets]
-  );
-  const personalCount = useMemo(() => 
-    filteredWallets.filter(w => w && !w.is_shared).length,
-    [filteredWallets]
-  );
-  const sharedCount = useMemo(() => 
-    filteredWallets.filter(w => w && w.is_shared).length,
-    [filteredWallets]
-  );
+  const toggleSelect = (id) => setSelectedWallets((sel) => (sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id]));
 
-  // Filter transactions by selected centre and search query and today's date
-  const filteredTransactions = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return transactions.filter(t => {
-      const wallet = wallets.find(w => w.id === t.wallet_id);
-      const matchesCentre = selectedCentre ? wallet && wallet.centre_id === Number(selectedCentre) : true;
-      const matchesSearch =
-        t.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        t.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        getTransactionStaff(t).name.toLowerCase().includes(searchQuery.toLowerCase());
-      const isToday = t.created_at.startsWith(today);
-      return matchesCentre && matchesSearch && isToday;
-    });
-  }, [transactions, wallets, selectedCentre, searchQuery]);
+  /* ---------- render ---------- */
+  const stats = [
+    { label: "Total Balance", value: formatAmount(totalBalance), sub: `${centreCount} centre${centreCount === 1 ? "" : "s"}`, icon: FiCreditCard, tone: "bg-blue-50 text-blue-600" },
+    { label: "Today In", value: formatAmount(todayIn), icon: FiArrowDownLeft, tone: "bg-emerald-50 text-emerald-600" },
+    { label: "Today Out", value: formatAmount(todayOut), icon: FiArrowUpRight, tone: "bg-red-50 text-red-600" },
+    { label: "Wallets", value: centreWallets.length, sub: `${personalCount} personal · ${sharedCount} shared`, icon: FiUsers, tone: "bg-purple-50 text-purple-600" },
+  ];
 
-  // Filter audit logs by selected centre and search query and today's date
-  const filteredAuditLogs = useMemo(() => {
-    const today = new Date().toISOString().split('T')[0];
-    return auditLogs.filter(log => {
-      const matchesCentre = selectedCentre ? log.centre_id === Number(selectedCentre) : true;
-      const matchesSearch =
-        log.action?.toLowerCase().includes(auditSearchQuery.toLowerCase()) ||
-        log.performed_by?.toLowerCase().includes(auditSearchQuery.toLowerCase()) ||
-        log.details?.toLowerCase().includes(auditSearchQuery.toLowerCase()) ||
-        (log.centre_name && log.centre_name.toLowerCase().includes(auditSearchQuery.toLowerCase()));
-      const isToday = log.created_at.startsWith(today);
-      return matchesCentre && matchesSearch && isToday;
-    });
-  }, [auditLogs, selectedCentre, auditSearchQuery]);
-
-  // Filter staff by selected centre
-  const filteredStaff = staffMembers.filter(staff => 
-    selectedCentre ? staff.centreId === Number(selectedCentre) : true
-  );
-
-  const indexOfLastTransaction = currentPage * transactionsPerPage;
-  const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
-  const currentTransactions = filteredTransactions.slice(indexOfFirstTransaction, indexOfLastTransaction);
-  const totalPages = Math.ceil(filteredTransactions.length / transactionsPerPage);
+  const formCentre = walletForm ? (walletForm.mode === "add" ? walletForm.data.centreId : walletForm.centreId) : null;
+  const formStaffOptions = walletForm
+    ? staffMembers.filter((s) => !formCentre || String(staffCentre(s)) === String(formCentre))
+    : [];
+  const transferFrom = transfer ? walletById[transfer.from] : null;
+  const transferExceeds = transfer && transferFrom && Number(transfer.amount) > Number(transferFrom.balance);
+  const walletLabel = (w) => (w.centre_name ? `${w.centre_name} – ${w.name}` : w.name);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-gray-100">
-          <div className="mb-4 md:mb-0">
-            <h1 className="text-2xl font-bold text-gray-800">Superadmin Wallet Management</h1>
-            <p className="text-gray-600 mt-1">
-              Advanced control and oversight of all financial accounts and transactions
-            </p>
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Wallet Management</h1>
+            <p className="text-gray-500 mt-1">All wallets across every centre</p>
           </div>
-          
-          {/* Button Group */}
-          <div className="w-full md:w-auto">
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3">
-              {/* Centre Selection */}
-              <motion.div 
-                className="relative w-full sm:w-auto min-w-[180px]"
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
+          <div className="flex flex-wrap gap-2">
+            <div className="relative">
+              <FiMapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={15} />
+              <select
+                value={selectedCentre}
+                onChange={(e) => setSelectedCentre(e.target.value)}
+                className="pl-9 pr-8 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                aria-label="Filter by centre"
               >
-                <div className="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 rounded-xl shadow-md hover:shadow-lg transition-all pl-4 pr-10 py-2.5 cursor-pointer">
-                  <FiMapPin className="text-indigo-600 flex-shrink-0" />
-                  <span className="text-sm font-medium truncate max-w-[160px]">
-                    {selectedCentre 
-                      ? centres.find(c => c.id === Number(selectedCentre))?.name || "Selected Centre"
-                      : "All Centres"}
-                  </span>
-                </div>
-                <select
-                  value={selectedCentre}
-                  onChange={(e) => setSelectedCentre(e.target.value)}
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-                  aria-label="Filter wallets by centre"
-                >
-                  <option value="">All Centres</option>
-                  {centres.map((centre) => (
-                    <option key={centre.id} value={centre.id}>
-                      {centre.name}
-                    </option>
-                  ))}
-                </select>
-                <FiChevronDown className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-500 pointer-events-none" />
-              </motion.div>
-
-              {/* Refresh Button */}
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleRefresh}
-                className="w-full sm:w-auto flex items-center justify-center px-4 py-2.5 border border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 transition-all shadow-md hover:shadow-lg text-sm font-medium"
-                disabled={loading || staffLoading || actionLoading}
-                aria-label="Refresh data"
-              >
-                <FiRefreshCw className={`mr-2 ${loading || staffLoading ? "animate-spin" : ""}`} />
-                {loading || staffLoading ? "Refreshing..." : "Refresh"}
-              </motion.button>
-
-              {/* Add New Wallet Button */}
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setIsAdding(!isAdding)}
-                className="w-full sm:w-auto flex items-center justify-center px-4 py-2.5 bg-[#1e3a5f] text-white rounded-xl hover:bg-[#172a45] transition-all shadow-md hover:shadow-lg text-sm font-medium"
-                disabled={actionLoading}
-                aria-label={isAdding ? "Cancel adding wallet" : "Add new wallet"}
-              >
-                <FiPlus className="mr-2" />
-                {isAdding ? "Cancel" : "Add Wallet"}
-              </motion.button>
-
-              {/* View Audit Logs Button */}
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setShowAuditLogs(!showAuditLogs)}
-                className="w-full sm:w-auto flex items-center justify-center px-4 py-2.5 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-all shadow-md hover:shadow-lg text-sm font-medium"
-                disabled={actionLoading || !isSuperAdmin}
-                aria-label={showAuditLogs ? "Hide audit logs" : "View audit logs"}
-              >
-                <FiFileText className="mr-2" />
-                {showAuditLogs ? "Hide Logs" : "Audit Logs"}
-              </motion.button>
-
-              {/* Bulk Delete Button */}
-              {selectedWallets.length > 0 && (
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleBulkDelete}
-                  className="w-full sm:w-auto flex items-center justify-center px-4 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all shadow-md hover:shadow-lg text-sm font-medium"
-                  disabled={actionLoading || !isSuperAdmin}
-                  aria-label="Delete selected wallets"
-                >
-                  <FiTrash className="mr-2" />
-                  Delete {selectedWallets.length} Wallet(s)
-                </motion.button>
-              )}
+                <option value="">All centres</option>
+                {centres.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
             </div>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+            >
+              <FiRefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button
+              onClick={() => setShowAuditLogs((v) => !v)}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 border rounded-xl text-sm font-medium ${showAuditLogs ? "border-gray-900 bg-gray-900 text-white" : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"}`}
+            >
+              <FiFileText size={15} /> Audit Logs
+            </button>
+            <button
+              onClick={() => setTransfer({ from: "", to: "", amount: "", description: "" })}
+              disabled={wallets.length < 2}
+              className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <FiRepeat size={15} /> Transfer
+            </button>
+            <button onClick={openAdd} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 shadow-sm">
+              <FiPlus size={16} /> Add Wallet
+            </button>
           </div>
         </div>
 
-        {/* Error Message */}
-        {(staffError || filteredTransactions.length === 0) && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700"
-            role="alert"
-          >
-            {staffError || "No transactions match your search."}
-          </motion.div>
-        )}
-
-        {/* Loading State */}
-        {loading && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="bg-white p-8 rounded-2xl shadow-lg text-center border border-gray-100"
-            role="status"
-          >
-            <div className="mx-auto w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-              <svg className="animate-spin h-12 w-12 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {stats.map(({ label, value, sub, icon: Icon, tone }) => (
+            <div key={label} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-sm text-gray-500 font-medium">{label}</p>
+                <p className="text-xl md:text-2xl font-bold text-gray-900 mt-1 truncate">{loading ? "–" : value}</p>
+                {sub && !loading && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+              </div>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 ${tone}`}>
+                <Icon size={20} />
+              </div>
             </div>
-            <p className="text-gray-600">Loading wallets...</p>
-          </motion.div>
-        )}
+          ))}
+        </div>
 
-        {/* Stats Cards */}
-        {!loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-8">
-            {[
-              { label: "Total Balance", value: formatAmount(totalBalance), icon: "💰", bgColor: "from-indigo-100 to-indigo-50", borderColor: "border-indigo-200" },
-              { 
-                label: "Personal Wallets", 
-                value: personalCount,
-                icon: "👤",
-                bgColor: "from-emerald-100 to-emerald-50",
-                borderColor: "border-emerald-200"
-              },
-              { 
-                label: "Shared Wallets", 
-                value: sharedCount,
-                icon: "👥",
-                bgColor: "from-amber-100 to-amber-50",
-                borderColor: "border-amber-200"
-              }
-            ].map((stat, index) => (
-              <motion.div 
-                key={index} 
-                className={`rounded-2xl shadow-lg p-5 border ${stat.borderColor} bg-gradient-to-br ${stat.bgColor} transition-all`}
-                whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-                role="region"
-                aria-label={stat.label}
-              >
-                <div className="flex items-center">
-                  <span className="text-3xl mr-3">{stat.icon}</span>
-                  <div>
-                    <p className="text-sm text-gray-600">{stat.label}</p>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-
-        {/* Search */}
-        {!loading && (
-          <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
-            <div className="flex items-center">
-              <div className="relative w-full">
-                <FiSearch className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" aria-hidden="true" />
+        {/* Audit logs */}
+        {showAuditLogs && (
+          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
+            <div className="px-5 py-4 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Today's Audit Logs</h2>
+                <p className="text-sm text-gray-500">{filteredLogs.length} entr{filteredLogs.length === 1 ? "y" : "ies"}</p>
+              </div>
+              <div className="relative sm:w-72">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={15} />
                 <input
-                  type="text"
-                  placeholder="Search wallets, transactions, or audit logs..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  aria-label="Search wallets and transactions"
+                  value={auditSearch}
+                  onChange={(e) => setAuditSearch(e.target.value)}
+                  placeholder="Search logs…"
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                 />
               </div>
-              <button 
-                onClick={() => setSearchQuery("")}
-                className="ml-3 px-4 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                aria-label="Clear search"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="mt-3 text-sm text-indigo-600">
-              <span className="font-medium">Search Tip:</span> Try searching for wallet names, transaction descriptions, or staff names
-            </div>
-          </div>
-        )}
-
-        {/* Add Wallet Form (unchanged) */}
-        <AnimatePresence>
-          {isAdding && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-              onClick={() => setIsAdding(false)}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Add new wallet modal"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 sticky top-0 z-10">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-white">Add New Wallet</h2>
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => setIsAdding(false)}
-                      className="text-white hover:text-gray-200"
-                      aria-label="Close add wallet modal"
-                    >
-                      <FiX className="h-5 w-5" />
-                    </motion.button>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="space-y-4">
-                    {isSuperAdmin && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="centre-select">
-                          Centre *
-                        </label>
-                        <select
-                          id="centre-select"
-                          value={newWallet.centreId}
-                          onChange={(e) => setNewWallet({ ...newWallet, centreId: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                          required
-                          aria-required="true"
-                          aria-label="Select centre"
-                        >
-                          <option value="">Select Centre</option>
-                          {centres.map((centre) => (
-                            <option key={centre.id} value={centre.id}>
-                              {centre.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="wallet-name">
-                        Wallet Name *
-                      </label>
-                      <input
-                        id="wallet-name"
-                        type="text"
-                        value={newWallet.name}
-                        onChange={(e) => setNewWallet({ ...newWallet, name: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                        placeholder="e.g. HDFC Bank"
-                        required
-                        aria-required="true"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="initial-balance">
-                        Initial Balance (₹) *
-                      </label>
-                      <input
-                        id="initial-balance"
-                        type="number"
-                        value={newWallet.balance}
-                        onChange={(e) => setNewWallet({ ...newWallet, balance: e.target.value })}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                        placeholder="₹ Amount"
-                        min="0"
-                        required
-                        aria-required="true"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Wallet Type *</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {walletTypes.map((type) => (
-                          <motion.button
-                            key={type.id}
-                            type="button"
-                            onClick={() => setNewWallet({ ...newWallet, walletType: type.id })}
-                            className={`flex flex-col items-center justify-center p-2 rounded-lg border ${
-                              newWallet.walletType === type.id
-                                ? "border-indigo-500 bg-indigo-50"
-                                : "border-gray-200 hover:bg-gray-50"
-                            } transition-all text-xs`}
-                            whileHover={{ scale: 1.02 }}
-                            whileTap={{ scale: 0.98 }}
-                            aria-label={`Select ${type.name} wallet type`}
-                          >
-                            <type.icon className={`h-4 w-4 ${type.color.split(" ")[1]}`} />
-                            <span className="mt-1">{type.name}</span>
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Wallet Status *</label>
-                      <div className="flex space-x-4">
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name="wallet-status"
-                            checked={newWallet.isOnline}
-                            onChange={() => setNewWallet({ ...newWallet, isOnline: true })}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                            aria-label="Online wallet status"
-                          />
-                          <div className="flex items-center">
-                            <WalletIcon className="h-4 w-4 text-green-600 mr-1" />
-                            Online
-                          </div>
-                        </label>
-                        <label className="flex items-center gap-2 text-sm">
-                          <input
-                            type="radio"
-                            name="wallet-status"
-                            checked={!newWallet.isOnline}
-                            onChange={() => setNewWallet({ ...newWallet, isOnline: false })}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                            aria-label="Offline wallet status"
-                          />
-                          <div className="flex items-center">
-                            <WalletIcon className="h-4 w-4 text-gray-600 mr-1" />
-                            Offline
-                          </div>
-                        </label>
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Wallet Type *</label>
-                      <div className="flex space-x-4">
-                        <label className="flex items-center text-sm">
-                          <input
-                            type="radio"
-                            name="wallet-type"
-                            checked={newWallet.type === "personal"}
-                            onChange={() => setNewWallet({ ...newWallet, type: "personal" })}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                            aria-label="Personal wallet type"
-                          />
-                          <span className="ml-2">Personal</span>
-                        </label>
-                        <label className="flex items-center text-sm">
-                          <input
-                            type="radio"
-                            name="wallet-type"
-                            checked={newWallet.type === "shared"}
-                            onChange={() => setNewWallet({ ...newWallet, type: "shared" })}
-                            className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                            aria-label="Shared wallet type"
-                          />
-                          <span className="ml-2">Shared</span>
-                        </label>
-                      </div>
-                    </div>
-                    {newWallet.type === "personal" && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="staff-select">
-                          Assign to Staff
-                        </label>
-                        <select
-                          id="staff-select"
-                          value={newWallet.staffId}
-                          onChange={(e) => setNewWallet({ ...newWallet, staffId: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                          disabled={staffLoading}
-                          aria-label="Select staff member"
-                        >
-                          <option value="">Select Staff Member</option>
-                          {staffMembers.map((staff) => (
-                            <option key={staff.id} value={staff.id}>
-                              {staff.name} ({staff.role})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Permissions</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {["view", "edit", "transfer", "recharge"].map((perm) => (
-                          <label key={perm} className="flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={newWallet.permissions.includes(perm)}
-                              onChange={(e) => {
-                                const updatedPermissions = e.target.checked
-                                  ? [...newWallet.permissions, perm]
-                                  : newWallet.permissions.filter((p) => p !== perm);
-                                setNewWallet({ ...newWallet, permissions: updatedPermissions });
-                              }}
-                              className="rounded text-indigo-600 focus:ring-indigo-500 h-4 w-4"
-                              aria-label={`Toggle ${perm} permission`}
-                            />
-                            <span className="capitalize">{perm}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-4">
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setIsAdding(false)}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
-                      aria-label="Cancel"
-                    >
-                      Cancel
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleAddWallet}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center text-sm"
-                      disabled={staffLoading || actionLoading}
-                      aria-label="Add wallet"
-                    >
-                      {actionLoading ? <FiRefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
-                      {actionLoading ? "Adding..." : "Add Wallet"}
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-        
-        {/* Audit Logs Section (unchanged) */}
-        {showAuditLogs && isSuperAdmin && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="bg-white p-6 rounded-2xl shadow-lg border border-gray-100 mb-8"
-            role="region"
-            aria-label="Audit logs"
-          >
-            <div className="flex justify-between items-center mb-5">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-gray-800">Today's Audit Logs</h2>
-                <Link
-                  to="/dashboard/superadmin/reports#audit-logs"
-                  className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center"
-                >
-                  View All Audit Logs <FiChevronRight className="ml-1" />
-                </Link>
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => setShowAuditLogs(false)}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Close audit logs"
-              >
-                <FiX className="h-5 w-5" />
-              </motion.button>
-            </div>
-            <div className="mb-5">
-              <div className="relative w-full">
-                <FiSearch className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" aria-hidden="true" />
-                <input
-                  type="text"
-                  placeholder="Search today's audit logs..."
-                  value={auditSearchQuery}
-                  onChange={(e) => setAuditSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  aria-label="Search today's audit logs"
-                />
-              </div>
-              <button
-                onClick={() => setAuditSearchQuery('')}
-                className="mt-3 px-4 py-2 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                aria-label="Clear audit log search"
-              >
-                Clear
-              </button>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
+              <table className="min-w-full divide-y divide-gray-100">
                 <thead className="bg-gray-50">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Time</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Action</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Performed By</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Centre</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Details</th>
+                    {["Time", "Action", "By", "Centre", "Details"].map((h) => (
+                      <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="divide-y divide-gray-100">
                   {auditLoading ? (
-                    <tr>
-                      <td colSpan="5" className="px-6 py-16 text-center">
-                        <FiRefreshCw className="h-12 w-12 text-indigo-500 animate-spin mx-auto" />
-                        <p className="text-gray-600 mt-4">Loading audit logs...</p>
-                      </td>
-                    </tr>
-                  ) : filteredAuditLogs.length > 0 ? (
-                    filteredAuditLogs
-                      .slice((auditCurrentPage - 1) * auditItemsPerPage, auditCurrentPage * auditItemsPerPage)
-                      .map((log) => (
-                        <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {new Date(log.created_at).toLocaleTimeString('en-IN', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{log.action}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{log.performed_by}</td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                            {log.centre_name || 'System'}
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-600">{log.details}</td>
-                        </tr>
-                      ))
+                    <tr><td colSpan="5" className="px-5 py-10 text-center text-sm text-gray-400">Loading…</td></tr>
+                  ) : filteredLogs.length === 0 ? (
+                    <tr><td colSpan="5" className="px-5 py-10 text-center text-sm text-gray-500">No audit logs today</td></tr>
                   ) : (
-                    <tr>
-                      <td colSpan="5" className="px-6 py-16 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <FiFileText className="h-12 w-12 text-gray-400 mb-4" />
-                          <h3 className="text-lg font-medium text-gray-700">No audit logs for today</h3>
-                          <p className="text-gray-500 mt-2">
-                            {auditSearchQuery ? 'No audit logs match your search for today' : 'No audit logs recorded for today'}
-                          </p>
-                          <Link
-                            to="/dashboard/superadmin/reports#audit-logs"
-                            className="mt-4 text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center"
-                          >
-                            View All Audit Logs <FiChevronRight className="ml-1" />
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
+                    filteredLogs.slice(logStart, logStart + LOG_PER_PAGE).map((log) => (
+                      <tr key={log.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {new Date(log.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{log.action}</span>
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-700">{log.performed_by}</td>
+                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-600">{log.centre_name || "System"}</td>
+                        <td className="px-5 py-3 text-sm text-gray-600 min-w-[240px]">{log.details}</td>
+                      </tr>
+                    ))
                   )}
                 </tbody>
               </table>
             </div>
-            {filteredAuditLogs.length > auditItemsPerPage && (
-              <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-t border-gray-200">
-                <div className="text-sm text-gray-600">
-                  Showing {(auditCurrentPage - 1) * auditItemsPerPage + 1} to{' '}
-                  {Math.min(auditCurrentPage * auditItemsPerPage, filteredAuditLogs.length)} of{' '}
-                  {filteredAuditLogs.length} audit logs for today
-                </div>
-                <div className="flex gap-2">
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setAuditCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={auditCurrentPage === 1}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium ${
-                      auditCurrentPage === 1
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                    }`}
-                    aria-label="Previous audit log page"
-                  >
-                    Previous
-                  </motion.button>
-                  {Array.from({ length: Math.ceil(filteredAuditLogs.length / auditItemsPerPage) }, (_, i) => i + 1)
-                    .filter((page) => Math.abs(page - auditCurrentPage) <= 2 || page === 1 || page === Math.ceil(filteredAuditLogs.length / auditItemsPerPage))
-                    .map((page) => (
-                      <motion.button
-                        key={page}
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => setAuditCurrentPage(page)}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium ${
-                          auditCurrentPage === page
-                            ? 'bg-indigo-600 text-white'
-                            : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                        }`}
-                        aria-label={`Go to audit log page ${page}`}
-                      >
-                        {page}
-                      </motion.button>
-                    ))}
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => setAuditCurrentPage((prev) => Math.min(prev + 1, Math.ceil(filteredAuditLogs.length / auditItemsPerPage)))}
-                    disabled={auditCurrentPage === Math.ceil(filteredAuditLogs.length / auditItemsPerPage)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium ${
-                      auditCurrentPage === Math.ceil(filteredAuditLogs.length / auditItemsPerPage)
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                    }`}
-                    aria-label="Next audit log page"
-                  >
-                    Next
-                  </motion.button>
-                </div>
-              </div>
-            )}
-          </motion.div>
-        )}
-        
-        {/* ===== REDESIGNED WALLETS GRID ===== */}
-        {!loading && wallets.filter(w => w && w.wallet_type).length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 mb-10">
-            {filteredWallets
-              .filter(wallet => wallet && wallet.wallet_type)
-              .map((wallet) => {
-                const WalletIcon = getWalletIcon(wallet.wallet_type);
-                const type = walletTypes.find(t => t.id === wallet.wallet_type);
-                const staff = getStaffMember(wallet.assigned_staff_id);
-                const todayBalanceData = todayBalances[wallet.id];
-                const isMobileActionsOpen = mobileActionsWalletId === wallet.id;
-                const gradient = getWalletGradient(wallet.wallet_type);
-                const lightBg = getWalletLightBg(wallet.wallet_type);
-                const isOnline = wallet.status === "online";
-
-                return (
-                  <motion.div
-                    key={wallet.id}
-                    initial={{ opacity: 0, y: 30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.4, ease: "easeOut" }}
-                    className="group relative bg-white rounded-3xl shadow-lg hover:shadow-2xl transition-all duration-300 overflow-hidden border border-gray-100/50"
-                  >
-                    {/* Gradient top bar */}
-                    <div className={`h-2 w-full bg-gradient-to-r ${gradient}`} />
-
-                    <div className="p-5">
-                      {/* Header: Checkbox + Icon + Name + Status */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-start space-x-3 flex-1 min-w-0">
-                          {isSuperAdmin && (
-                            <input
-                              type="checkbox"
-                              checked={selectedWallets.includes(wallet.id)}
-                              onChange={(e) => {
-                                setSelectedWallets(e.target.checked
-                                  ? [...selectedWallets, wallet.id]
-                                  : selectedWallets.filter(id => id !== wallet.id));
-                              }}
-                              className="rounded text-indigo-600 focus:ring-indigo-500 h-5 w-5 mt-1 flex-shrink-0"
-                              aria-label={`Select wallet ${wallet.name} for bulk actions`}
-                            />
-                          )}
-                          <div className={`p-2.5 rounded-2xl ${lightBg} ring-2 ring-white/50 shadow-sm flex-shrink-0`}>
-                            <WalletIcon />
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <h3 className="text-lg font-bold text-gray-800 leading-tight break-words" title={wallet.centre_name ? `${wallet.centre_name} - ${wallet.name}` : wallet.name}>
-                              {wallet.centre_name ? `${wallet.centre_name} - ${wallet.name}` : wallet.name}
-                            </h3>
-                            <div className="flex items-center mt-0.5 flex-wrap gap-1">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                isOnline
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-gray-100 text-gray-600'
-                              }`}>
-                                <span className={`w-1.5 h-1.5 rounded-full mr-1.5 ${isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-gray-400'}`} />
-                                {isOnline ? 'Online' : 'Offline'}
-                              </span>
-                              <span className="text-xs text-gray-400">#{wallet.id.toString().padStart(4, '0')}</span>
-                            </div>
-                          </div>
-                        </div>
-                        <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2.5 py-1 rounded-full flex-shrink-0">
-                          {type?.name || 'Wallet'}
-                        </span>
-                      </div>
-
-                      {/* Balance Grid */}
-                      <div className="mt-4 grid grid-cols-2 gap-2">
-                        <div className="bg-gradient-to-br from-indigo-50 to-indigo-100/50 rounded-2xl p-3 text-center border border-indigo-200/50 col-span-2">
-                          <p className="text-xs text-indigo-600 font-medium">Balance</p>
-                          <p className="text-sm font-extrabold text-indigo-700">
-                            {formatAmount(wallet.balance)}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50/80 rounded-2xl p-3 text-center border border-gray-100/50">
-                          <p className="text-xs text-gray-500 font-medium">Opening</p>
-                          <p className="text-sm font-bold text-gray-700">
-                            {todayBalances[wallet.id]?.opening_balance != null
-                              ? formatAmount(todayBalances[wallet.id].opening_balance)
-                              : "N/A"}
-                          </p>
-                        </div>
-                        <div className="bg-gray-50/80 rounded-2xl p-3 text-center border border-gray-100/50">
-                          <p className="text-xs text-gray-500 font-medium">Closing</p>
-                          <p className="text-sm font-bold text-gray-700">
-                            {todayBalances[wallet.id]?.closing_balance != null
-                              ? formatAmount(todayBalances[wallet.id].closing_balance)
-                              : "N/A"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Assigned Staff (if personal) */}
-                      {!wallet.is_shared && wallet.assigned_staff_id && (
-                        <div className="mt-3 flex items-center text-sm bg-gray-50 rounded-2xl px-4 py-2.5 border border-gray-100/50">
-                          {staff.photoUrl ? (
-                              <img 
-                                src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
-                                  ? staff.photoUrl 
-                                  : `${API_BASE}${staff.photoUrl}`} 
-                                alt={staff.name} 
-                                className="w-6 h-6 rounded-full object-cover mr-2.5" 
-                              />
-                            ) : (
-                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${staff.avatarColor} mr-2.5`}>
-                              {staff.name.charAt(0)}
-                            </div>
-                          )}
-                          <span className="text-gray-700">
-                            Assigned to <span className="font-semibold">{staff.name}</span>
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Footer with Actions */}
-                    <div className="border-t border-gray-100/80 px-5 py-3 bg-gray-50/60 backdrop-blur-sm flex flex-wrap items-center justify-between gap-2">
-                      {/* Toggle Details */}
-                      <motion.button
-                        whileHover={{ scale: 1.03 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => toggleDetails(wallet.id)}
-                        className="flex items-center text-sm font-medium text-gray-600 hover:text-indigo-600 transition-colors px-3 py-1.5 rounded-xl bg-white/70 hover:bg-white shadow-sm border border-gray-200/50"
-                      >
-                        {expandedId === wallet.id ? "Less" : "More"}
-                        <ChevronIcon open={expandedId === wallet.id} />
-                      </motion.button>
-
-                      {/* Action Buttons */}
-                      <div className="flex items-center gap-1 sm:gap-2">
-                        {/* Edit */}
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => setEditingId(wallet.id)}
-                          className="p-2 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-                          title="Edit Wallet"
-                        >
-                          <FiEdit className="h-4 w-4 sm:mr-1" />
-                          <span className="hidden sm:inline text-sm">Edit</span>
-                        </motion.button>
-
-                        {/* Transfer */}
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => {
-                            setTransferringId(wallet.id);
-                            setTransferFromWalletId(wallet.id.toString());
-                          }}
-                          className="p-2 rounded-xl text-gray-500 hover:text-amber-600 hover:bg-amber-50 transition-all"
-                          title="Transfer Funds"
-                        >
-                          <FiArrowUp className="h-4 w-4 sm:mr-1" />
-                          <span className="hidden sm:inline text-sm">Transfer</span>
-                        </motion.button>
-
-                        {/* Recharge */}
-                        <motion.button
-                          whileHover={{ scale: 1.05 }}
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => setRechargingId(wallet.id)}
-                          className="p-2 rounded-xl text-gray-500 hover:text-emerald-600 hover:bg-emerald-50 transition-all"
-                          title="Recharge Wallet"
-                        >
-                          <FiArrowDown className="h-4 w-4 sm:mr-1" />
-                          <span className="hidden sm:inline text-sm">Recharge</span>
-                        </motion.button>
-
-                        {/* Delete (superadmin only) */}
-                        {isSuperAdmin && (
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => handleDeleteWallet(wallet.id)}
-                            className="p-2 rounded-xl text-gray-500 hover:text-red-600 hover:bg-red-50 transition-all"
-                            title="Delete Wallet"
-                          >
-                            <FiTrash className="h-4 w-4 sm:mr-1" />
-                            <span className="hidden sm:inline text-sm">Delete</span>
-                          </motion.button>
-                        )}
-
-                        {/* Mobile More Menu */}
-                        <div className="relative sm:hidden">
-                          <motion.button
-                            whileHover={{ scale: 1.05 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => toggleMobileActions(wallet.id)}
-                            className="p-2 rounded-xl text-gray-500 hover:bg-gray-200 transition-colors"
-                          >
-                            <FiMoreVertical className="h-4 w-4" />
-                          </motion.button>
-                          <AnimatePresence>
-                            {isMobileActionsOpen && (
-                              <motion.div
-                                initial={{ opacity: 0, scale: 0.9, y: -5 }}
-                                animate={{ opacity: 1, scale: 1, y: 0 }}
-                                exit={{ opacity: 0, scale: 0.9, y: -5 }}
-                                className="absolute right-0 mt-2 w-44 bg-white rounded-2xl shadow-xl border border-gray-100 py-1.5 z-20"
-                              >
-                                <button
-                                  onClick={() => { setEditingId(wallet.id); setMobileActionsWalletId(null); }}
-                                  className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-indigo-50 transition-colors"
-                                >
-                                  <FiEdit className="h-4 w-4 mr-2" /> Edit
-                                </button>
-                                <button
-                                  onClick={() => { setTransferringId(wallet.id); setTransferFromWalletId(wallet.id.toString()); setMobileActionsWalletId(null); }}
-                                  className="flex items-center w-full px-4 py-2.5 text-sm text-gray-700 hover:bg-amber-50 transition-colors"
-                                >
-                                  <FiArrowUp className="h-4 w-4 mr-2" /> Transfer
-                                </button>
-                                <button
-                                  onClick={() => { setRechargingId(wallet.id); setMobileActionsWalletId(null); }}
-                                  className="flex items-center w-full px-4 py-2.5 text-sm text-emerald-600 hover:bg-emerald-50 transition-colors"
-                                >
-                                  <FiArrowDown className="h-4 w-4 mr-2" /> Recharge
-                                </button>
-                                {isSuperAdmin && (
-                                  <button
-                                    onClick={() => { handleDeleteWallet(wallet.id); setMobileActionsWalletId(null); }}
-                                    className="flex items-center w-full px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                                  >
-                                    <FiTrash className="h-4 w-4 mr-2" /> Delete
-                                  </button>
-                                )}
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Expandable Details */}
-                    <AnimatePresence>
-                      {expandedId === wallet.id && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: "auto", opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          transition={{ duration: 0.25, ease: "easeInOut" }}
-                          className="overflow-hidden border-t border-gray-100/80"
-                        >
-                          <div className="p-5 bg-gray-50/40 space-y-4">
-                            {editingId === wallet.id ? (
-                              <div>
-                                <h4 className="font-semibold text-gray-800 mb-3">Edit Wallet</h4>
-                                <div className="space-y-3">
-                                  <input
-                                    type="text"
-                                    value={editForm.name}
-                                    onChange={(e) => setEditForm({...editForm, name: e.target.value})}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                                    placeholder="Wallet name"
-                                  />
-                                  <input
-                                    type="number"
-                                    value={editForm.balance}
-                                    onChange={(e) => setEditForm({...editForm, balance: e.target.value})}
-                                    className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400 focus:border-transparent"
-                                    placeholder="Balance"
-                                  />
-                                  <div className="flex flex-wrap gap-2">
-                                    {walletTypes.map(t => (
-                                      <button
-                                        key={t.id}
-                                        onClick={() => setEditForm({...editForm, walletType: t.id})}
-                                        className={`px-3 py-1.5 rounded-xl text-xs font-medium border ${
-                                          editForm.walletType === t.id
-                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
-                                            : 'border-gray-200 hover:bg-gray-50'
-                                        }`}
-                                      >
-                                        {t.name}
-                                      </button>
-                                    ))}
-                                  </div>
-                                  <div className="flex gap-4">
-                                    <label className="flex items-center text-sm">
-                                      <input type="radio" checked={editForm.isOnline} onChange={() => setEditForm({...editForm, isOnline: true})} className="mr-1.5" /> Online
-                                    </label>
-                                    <label className="flex items-center text-sm">
-                                      <input type="radio" checked={!editForm.isOnline} onChange={() => setEditForm({...editForm, isOnline: false})} className="mr-1.5" /> Offline
-                                    </label>
-                                  </div>
-                                  <div className="flex gap-4">
-                                    <label className="flex items-center text-sm">
-                                      <input type="radio" checked={editForm.type === "personal"} onChange={() => setEditForm({...editForm, type: "personal"})} className="mr-1.5" /> Personal
-                                    </label>
-                                    <label className="flex items-center text-sm">
-                                      <input type="radio" checked={editForm.type === "shared"} onChange={() => setEditForm({...editForm, type: "shared"})} className="mr-1.5" /> Shared
-                                    </label>
-                                  </div>
-                                  {editForm.type === "personal" && (
-                                    <select
-                                      value={editForm.staffId}
-                                      onChange={(e) => setEditForm({...editForm, staffId: e.target.value})}
-                                      className="w-full px-4 py-2.5 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-400"
-                                      disabled={staffLoading}
-                                    >
-                                      <option value="">Assign Staff</option>
-                                      {staffMembers.map(s => (
-                                        <option key={s.id} value={s.id}>{s.name}</option>
-                                      ))}
-                                    </select>
-                                  )}
-                                  <div className="flex flex-wrap gap-2">
-                                    {['view', 'edit', 'transfer', 'recharge'].map(perm => (
-                                      <label key={perm} className="flex items-center gap-1 text-sm">
-                                        <input
-                                          type="checkbox"
-                                          checked={editForm.permissions.includes(perm)}
-                                          onChange={(e) => {
-                                            const updatedPermissions = e.target.checked
-                                              ? [...editForm.permissions, perm]
-                                              : editForm.permissions.filter(p => p !== perm);
-                                            setEditForm({...editForm, permissions: updatedPermissions});
-                                          }}
-                                          className="rounded text-indigo-600 h-4 w-4"
-                                        />
-                                        <span className="capitalize">{perm}</span>
-                                      </label>
-                                    ))}
-                                  </div>
-                                  <div className="flex justify-end gap-3 pt-2">
-                                    <button onClick={() => setEditingId(null)} className="px-5 py-2 text-sm font-medium text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 transition">Cancel</button>
-                                    <button onClick={handleEditWallet} className="px-5 py-2 text-sm font-medium text-white bg-indigo-600 rounded-xl hover:bg-indigo-700 transition">Save</button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : (
-                              <div>
-                                <div className="grid grid-cols-2 gap-3 text-sm">
-                                  <div><span className="text-gray-500">Type</span><br/><span className="font-medium">{type?.name || "Wallet"}</span></div>
-                                  <div><span className="text-gray-500">Status</span><br/><span className="font-medium capitalize">{wallet.status}</span></div>
-                                  {!wallet.is_shared && wallet.assigned_staff_id && (
-                                    <div className="col-span-2"><span className="text-gray-500">Assigned Staff</span><br/><span className="font-medium">{staff.name}</span></div>
-                                  )}
-                                  <div className="col-span-2"><span className="text-gray-500">Wallet ID</span><br/><span className="font-mono text-sm">#{wallet.id}</span></div>
-                                  <div className="col-span-2"><span className="text-gray-500">Permissions</span><br/><span className="font-mono text-sm">{wallet.permissions?.join(', ') || 'None'}</span></div>
-                                </div>
-                                <div className="mt-4">
-                                  <Link to={`/dashboard/admin/wallets/${wallet.id}`}>
-                                    <button className="w-full text-center text-sm font-medium text-indigo-600 bg-indigo-50/50 hover:bg-indigo-100 py-2.5 rounded-xl transition-colors border border-indigo-100">
-                                      View Activity
-                                    </button>
-                                  </Link>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.div>
-                );
-              })}
+            <Pager page={auditPage} total={filteredLogs.length} perPage={LOG_PER_PAGE} onChange={setAuditPage} />
           </div>
         )}
-        
-        {/* Transactions Section (unchanged) */}
-        {!loading && (
-          <div className="mb-12">
-            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-2xl font-bold text-gray-800">Today's Transactions</h2>
-                <Link
-                  to="/dashboard/superadmin/reports#transactions"
-                  className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center"
-                >
-                  View All Transactions <FiChevronRight className="ml-1" />
-                </Link>
-              </div>
-              <div className="relative w-full md:w-80">
-                <FiSearch className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" aria-hidden="true" />
-                <input
-                  type="text"
-                  placeholder="Search today's transactions..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                  aria-label="Search today's transactions"
-                />
-              </div>
+
+        {/* Search */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-6">
+          <div className="relative">
+            <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
+            <input
+              type="text"
+              placeholder="Search wallets, centres, staff or today's transactions…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+            />
+            {searchInput && (
+              <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <FiX size={16} />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Wallets header + bulk bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          <h2 className="text-lg font-semibold text-gray-900">
+            Wallets {selectedCentre && <span className="text-gray-400 font-normal">· {centreNameById(selectedCentre)}</span>}
+          </h2>
+          {selectedWallets.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">{selectedWallets.length} selected</span>
+              <button onClick={() => setSelectedWallets([])} className="text-sm font-medium text-gray-500 hover:text-gray-700 px-2">Clear</button>
+              <button
+                onClick={() => setConfirmDelete({ ids: selectedWallets, label: `${selectedWallets.length} wallet(s)` })}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700"
+              >
+                <FiTrash2 size={14} /> Delete
+              </button>
             </div>
-            <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Time</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Description</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Wallet</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Staff</th>
-                      <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Category</th>
-                      <th className="px-6 py-4 text-right text-xs font-semibold text-gray-600 uppercase tracking-wider" scope="col">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {currentTransactions.length > 0 ? (
-                      currentTransactions.map((transaction) => {
-                        const staff = getTransactionStaff(transaction);
-                        return (
-                          <tr key={transaction.id} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                              <div className="flex items-center">
-                                <div className={`mr-3 h-2.5 w-2.5 rounded-full ${
-                                  transaction.type === 'credit' ? 'bg-green-500' : 'bg-red-500'
-                                }`}></div>
-                                {transaction.created_at 
-                                  ? new Date(transaction.created_at).toLocaleTimeString('en-IN', {
-                                      hour: '2-digit',
-                                      minute: '2-digit',
-                                    })
-                                  : "N/A"}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="text-sm font-medium text-gray-900">{transaction.description || "No description"}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="text-sm text-gray-600">{getWalletName(transaction.wallet_id)}</div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                {staff.name === "System" ? (
-                                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-gray-200 mr-3">
-                                    <WalletIcon className="h-4 w-4 text-gray-500" />
-                                  </div>
-                                ) : staff.photoUrl ? (
-                                    <img
-                                      src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
-                                        ? staff.photoUrl 
-                                        : `${API_BASE}${staff.photoUrl}`}
-                                      alt={`${staff.name}'s avatar`}
-                                      className="w-8 h-8 rounded-full mr-3"
-                                    />
-                                  ) : (
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${staff.avatarColor} text-white mr-3`}>
-                                    {staff.name.charAt(0).toUpperCase()}
-                                  </div>
-                                )}
-                                <div>
-                                  <div className="text-sm font-medium text-gray-900">{staff.name}</div>
-                                  <div className="text-xs text-gray-500">{staff.role}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <span
-                                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  transaction.category === 'Recharge'
-                                    ? 'bg-green-100 text-green-800'
-                                    : transaction.category === 'Transfer'
-                                    ? 'bg-blue-100 text-blue-800'
-                                    : 'bg-gray-100 text-gray-800'
-                                }`}
-                              >
-                                {transaction.category || "N/A"}
+          ) : (
+            search && <p className="text-sm text-gray-500">{filteredWallets.length} of {centreWallets.length}</p>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse">
+                <div className="flex gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-gray-200" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-4 bg-gray-200 rounded w-2/3" />
+                    <div className="h-3 bg-gray-200 rounded w-1/3" />
+                  </div>
+                </div>
+                <div className="h-7 bg-gray-200 rounded w-1/2 mt-5" />
+                <div className="h-12 bg-gray-100 rounded-xl mt-4" />
+              </div>
+            ))}
+          </div>
+        ) : centreWallets.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center mb-8">
+            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4">
+              <FiCreditCard size={24} />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900">No wallets {selectedCentre ? "in this centre" : "yet"}</h3>
+            <p className="text-gray-500 mt-1 mb-5">Add a wallet to start tracking balances.</p>
+            <PrimaryBtn onClick={openAdd}>Add Wallet</PrimaryBtn>
+          </div>
+        ) : filteredWallets.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-500 mb-8">No wallets match “{searchInput}”.</div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
+            {filteredWallets.map((w) => {
+              const type = getType(w.wallet_type);
+              const TypeIcon = type.icon;
+              const color = walletColor(w);
+              const staff = staffById[String(w.assigned_staff_id)];
+              const today = todayBalances[w.id];
+              const online = w.status === "online";
+              const checked = selectedWallets.includes(w.id);
+              return (
+                <div
+                  key={w.id}
+                  className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden ${checked ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"}`}
+                >
+                  <div className="h-1" style={{ background: color }} />
+                  <div className="p-5 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="w-11 h-11 rounded-xl border flex items-center justify-center shrink-0"
+                          style={{ background: tint(color), borderColor: tint(color, "33"), color }}
+                        >
+                          <TypeIcon size={20} />
+                        </div>
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-gray-900 truncate" title={w.name}>{w.name}</h3>
+                          <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-gray-400"}`} />
+                            {online ? "Online" : "Offline"} · {type.name}
+                          </p>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleSelect(w.id)}
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                        title="Select for bulk delete"
+                        aria-label={`Select ${w.name}`}
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-1.5 mt-3">
+                      <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border bg-gray-50 text-gray-600 border-gray-200 max-w-full">
+                        <FiMapPin size={11} className="shrink-0" /> <span className="truncate">{w.centre_name || centreNameById(w.centre_id)}</span>
+                      </span>
+                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${w.is_shared ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                        {w.is_shared ? "Shared" : "Personal"}
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-gray-500 mt-4">Current balance</p>
+                    <p className="text-2xl font-bold text-gray-900">{formatAmount(w.balance)}</p>
+
+                    <div className="grid grid-cols-2 gap-2 mt-4">
+                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                        <p className="text-[11px] text-gray-500">Today opening</p>
+                        <p className="text-sm font-semibold text-gray-800">{today?.opening_balance != null ? formatAmount(today.opening_balance) : "—"}</p>
+                      </div>
+                      <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
+                        <p className="text-[11px] text-gray-500">Today closing</p>
+                        <p className="text-sm font-semibold text-gray-800">{today?.closing_balance != null ? formatAmount(today.closing_balance) : "—"}</p>
+                      </div>
+                    </div>
+
+                    {!w.is_shared && (
+                      <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+                        {staff ? (
+                          <>
+                            <Avatar name={staff.name} photo={staff.photo || staff.photoUrl} size="w-6 h-6" text="text-[10px]" />
+                            <span className="truncate">Assigned to <span className="font-medium text-gray-900">{staff.name}</span></span>
+                          </>
+                        ) : (
+                          <span className="flex items-center gap-1.5 text-amber-600"><FiAlertCircle size={14} /> Not assigned to anyone</span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center justify-between px-3 py-2 border-t border-gray-100">
+                    <Link to={`/dashboard/admin/wallets/${w.id}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-blue-600 hover:text-blue-800 px-2 py-1.5 rounded-lg hover:bg-blue-50">
+                      <FiActivity size={14} /> Activity
+                    </Link>
+                    <div className="flex gap-1">
+                      <button onClick={() => setRecharge({ walletId: w.id, amount: "", description: "" })} className="p-2 rounded-lg text-gray-500 hover:text-emerald-600 hover:bg-emerald-50" title="Add money">
+                        <FiArrowDownLeft size={16} />
+                      </button>
+                      <button
+                        onClick={() => setTransfer({ from: String(w.id), to: "", amount: "", description: "" })}
+                        disabled={wallets.length < 2}
+                        className="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-40"
+                        title="Transfer"
+                      >
+                        <FiRepeat size={16} />
+                      </button>
+                      <button onClick={() => openEdit(w)} className="p-2 rounded-lg text-gray-500 hover:text-blue-700 hover:bg-blue-50" title="Edit">
+                        <FiEdit2 size={16} />
+                      </button>
+                      <button onClick={() => setConfirmDelete({ ids: [w.id], label: w.name })} className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50" title="Delete">
+                        <FiTrash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Today's transactions */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-8">
+          <div className="px-5 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Today's Transactions</h2>
+            <p className="text-sm text-gray-500">
+              {filteredTransactions.length} transaction{filteredTransactions.length === 1 ? "" : "s"}
+              {search && " matching your search"}
+              {transactions.length >= 50 && " · from the latest 50 across all centres"}
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-100">
+              <thead className="bg-gray-50">
+                <tr>
+                  {["Time", "Description", "Wallet", "Staff", "Category"].map((h) => (
+                    <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                  ))}
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {loading ? (
+                  <tr><td colSpan="6" className="px-5 py-10 text-center text-sm text-gray-400">Loading…</td></tr>
+                ) : filteredTransactions.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-5 py-12 text-center">
+                      <p className="text-sm font-medium text-gray-700">{search ? "No matching transactions today" : "No transactions yet today"}</p>
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTransactions.slice(txStart, txStart + TX_PER_PAGE).map((t) => {
+                    const credit = t.type === "credit";
+                    const w = walletById[String(t.wallet_id)];
+                    return (
+                      <tr key={t.id} className="hover:bg-gray-50">
+                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {new Date(t.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                        </td>
+                        <td className="px-5 py-3 text-sm font-medium text-gray-900 max-w-xs truncate">{t.description || "No description"}</td>
+                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {w ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ background: walletColor(w) }} />
+                              <span>
+                                {w.name}
+                                {!selectedCentre && w.centre_name && <span className="block text-xs text-gray-400">{w.centre_name}</span>}
                               </span>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-right">
-                              <div
-                                className={`text-sm font-medium ${
-                                  transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'
-                                }`}
-                              >
-                                {formatAmount(transaction.amount)}
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })
-                    ) : (
-                      <tr>
-                        <td colSpan="6" className="px-6 py-16 text-center">
-                          <div className="flex flex-col items-center justify-center">
-                            <WalletIcon className="h-12 w-12 text-gray-400 mb-4" />
-                            <h3 className="text-lg font-medium text-gray-700">No transactions today</h3>
-                            <p className="text-gray-500 mt-2">
-                              {searchQuery ? "No transactions match your search for today" : "No transactions recorded for today"}
-                            </p>
-                            <Link
-                              to="/dashboard/superadmin/reports#transactions"
-                              className="mt-4 text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center"
-                            >
-                              View All Transactions <FiChevronRight className="ml-1" />
-                            </Link>
-                          </div>
+                            </span>
+                          ) : (t.wallet_name || "—")}
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          {t.staff_id ? (
+                            <div className="flex items-center gap-2">
+                              <Avatar name={t.staff_name || ""} photo={t.staff_photo} size="w-7 h-7" text="text-[10px]" />
+                              <span className="text-sm text-gray-700">{t.staff_name || `Staff #${t.staff_id}`}</span>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-400">System</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">{t.category || "General"}</span>
+                        </td>
+                        <td className={`px-5 py-3 whitespace-nowrap text-right text-sm font-semibold ${credit ? "text-emerald-600" : "text-red-600"}`}>
+                          {credit ? "+" : "−"}{formatAmount(t.amount)}
                         </td>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              {/* Pagination */}
-              {totalPages > 1 && (
-                <div className="flex justify-between items-center px-6 py-4 bg-gray-50 border-t border-gray-200">
-                  <div className="text-sm text-gray-600">
-                    Showing {indexOfFirstTransaction + 1} to{' '}
-                    {Math.min(indexOfLastTransaction, filteredTransactions.length)} of{' '}
-                    {filteredTransactions.length} transactions for today
-                  </div>
-                  <div className="flex gap-2">
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                      disabled={currentPage === 1}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium ${
-                        currentPage === 1
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                      }`}
-                      aria-label="Previous page"
-                    >
-                      Previous
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                      disabled={currentPage === totalPages}
-                      className={`px-4 py-2 rounded-xl text-sm font-medium ${
-                        currentPage === totalPages
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-200'
-                      }`}
-                      aria-label="Next page"
-                    >
-                      Next
-                    </motion.button>
-                  </div>
-                </div>
-              )}
-            </div>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
-        )}
-        
-        {/* Staff Management Section (unchanged) */}
-        {!loading && (
-          <div className="mb-10">
-            <h2 className="text-2xl font-bold text-gray-800 mb-6">Staff Members</h2>
-            {staffLoading ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="bg-white p-8 rounded-2xl shadow-lg text-center border border-gray-100"
-              >
-                <div className="mx-auto w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-                  <FiRefreshCw className="h-12 w-12 text-indigo-500 animate-spin" />
-                </div>
-                <p className="text-gray-600">Loading staff...</p>
-              </motion.div>
-            ) : staffError ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="bg-white p-8 rounded-2xl shadow-lg text-center border border-gray-100"
-              >
-                <div className="mx-auto w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-                  <UserIcon className="h-12 w-12 text-indigo-500" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">Error loading staff members</h3>
-                <p className="text-gray-500 mb-4">{staffError}</p>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={fetchStaffData}
-                  className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium"
-                >
-                  <FiRefreshCw className="mr-2 h-4 w-4" /> Retry
-                </motion.button>
-              </motion.div>
-            ) : filteredStaff.length === 0 ? (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="bg-white p-8 rounded-2xl shadow-lg text-center border border-gray-100"
-              >
-                <div className="mx-auto w-24 h-24 bg-indigo-50 rounded-full flex items-center justify-center mb-4">
-                  <UserIcon className="h-12 w-12 text-indigo-500" />
-                </div>
-                <h3 className="text-lg font-semibold mb-2">No staff members found</h3>
-                <p className="text-gray-500 mb-4">
-                  {selectedCentre ? "No staff members in the selected centre" : "Add staff members to manage wallets"}
-                </p>
-              </motion.div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredStaff.map(staff => (
-                  <motion.div
-                    key={staff.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="bg-white rounded-2xl shadow-lg border border-gray-100"
-                    whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-                  >
-                    <div className="p-5 flex items-center">
-                        {staff.photoUrl ? (
-                          <img 
-                            src={staff.photoUrl.startsWith('http') || staff.photoUrl.startsWith('data:image') 
-                              ? staff.photoUrl 
-                              : `${API_BASE}${staff.photoUrl}`} 
-                            alt={staff.name} 
-                            className="w-12 h-12 rounded-full object-cover mr-4"
-                          />
-                        ) : (
-                        <div className={`w-12 h-12 rounded-full flex items-center justify-center text-white bg-slate-700 mr-4`}>
-                          {staff.name.charAt(0)}
-                        </div>
-                      )}
-                      <div className="flex-1">
-                        <h3 className="font-bold text-gray-800">{staff.name}</h3>
-                        <p className="text-sm text-gray-500">{staff.role}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          className="text-gray-600 hover:text-gray-900 text-sm font-medium flex items-center px-3 py-2 bg-white rounded-lg border border-gray-200"
-                        >
-                          <UserIcon className="h-4 w-4 mr-1" />
-                          Profile
-                        </motion.button>
-                        <motion.button
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          className="text-gray-600 hover:text-gray-900 text-sm font-medium flex items-center px-3 py-2 bg-white rounded-lg border border-gray-200"
-                        >
-                          <WalletIcon className="h-4 w-4 mr-1" />
-                          Activity
-                        </motion.button>
-                      </div>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-        
-        {/* Recharge Modal (unchanged) */}
-        <AnimatePresence>
-          {rechargingId && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-              onClick={() => setRechargingId(null)}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Recharge wallet modal"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 sticky top-0 z-10">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-white">Recharge Wallet</h2>
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => setRechargingId(null)}
-                      className="text-white hover:text-gray-200"
-                      aria-label="Close recharge modal"
-                    >
-                      <FiX className="h-5 w-5" />
-                    </motion.button>
-                  </div>
-                </div>
-                <div className="p-5">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="recharge-amount">
-                        Amount *
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
-                        <input
-                          id="recharge-amount"
-                          type="number"
-                          value={rechargeAmount}
-                          onChange={(e) => setRechargeAmount(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                          placeholder="Enter amount"
-                          min="1"
-                          required
-                          aria-required="true"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="recharge-description">
-                        Description (Optional)
-                      </label>
-                      <input
-                        id="recharge-description"
-                        type="text"
-                        value={rechargeDescription}
-                        onChange={(e) => setRechargeDescription(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                        placeholder="e.g. Cash deposit"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-4">
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setRechargingId(null)}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
-                      aria-label="Cancel recharge"
-                    >
-                      Cancel
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => handleRecharge(rechargingId)}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center text-sm"
-                      disabled={!rechargeAmount || Number(rechargeAmount) <= 0 || actionLoading}
-                      aria-label="Confirm recharge"
-                    >
-                      {actionLoading ? <FiRefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
-                      {actionLoading ? "Recharging..." : "Confirm Recharge"}
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
+          <Pager page={txPage} total={filteredTransactions.length} perPage={TX_PER_PAGE} onChange={setTxPage} />
+        </div>
 
-        {/* Transfer Modal (unchanged) */}
-        <AnimatePresence>
-          {transferringId && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50"
-              onClick={() => setTransferringId(null)}
-              role="dialog"
-              aria-modal="true"
-              aria-label="Transfer funds modal"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 20 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 20 }}
-                className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-5 sticky top-0 z-10">
-                  <div className="flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-white">Transfer Funds</h2>
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={() => setTransferringId(null)}
-                      className="text-white hover:text-gray-200"
-                      aria-label="Close transfer modal"
-                    >
-                      <FiX className="h-5 w-5" />
-                    </motion.button>
+        {/* Staff wallets (only staff who have personal wallets) */}
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold text-gray-900 mb-3">Staff Wallets</h2>
+          {staffError ? (
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center">
+              <p className="text-sm text-gray-600 mb-3">{staffError}</p>
+              <SecondaryBtn onClick={fetchStaffData}>Retry</SecondaryBtn>
+            </div>
+          ) : staffWallets.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-sm text-gray-500">
+              {loading ? "Loading…" : "No personal wallets are assigned to staff yet."}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {staffWallets.map((s) => (
+                <div key={s.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={s.name} photo={s.photo || s.photoUrl} size="w-11 h-11" text="text-sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-gray-900 truncate">{s.name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        <span className="capitalize">{s.role}</span>
+                        {!selectedCentre && staffCentre(s) && <> · {centreNameById(staffCentre(s))}</>}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-gray-900">{formatAmount(s.walletTotal)}</p>
+                      <p className="text-xs text-gray-400">{s.walletCount} wallet{s.walletCount === 1 ? "" : "s"}</p>
+                    </div>
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                    {s.wallets.map((w) => (
+                      <Link key={w.id} to={`/dashboard/admin/wallets/${w.id}`} className="flex items-center gap-2 text-sm rounded-lg px-2 py-1 -mx-2 hover:bg-gray-50">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: walletColor(w) }} />
+                        <span className="flex-1 truncate text-gray-700">{w.name}</span>
+                        <span className="font-medium text-gray-900">{formatAmount(w.balance)}</span>
+                      </Link>
+                    ))}
                   </div>
                 </div>
-                <div className="p-5">
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="transfer-from">
-                        From Wallet *
-                      </label>
-                      <select
-                        id="transfer-from"
-                        value={transferFromWalletId}
-                        onChange={(e) => setTransferFromWalletId(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                        disabled={loading || actionLoading}
-                        aria-label="Select source wallet"
-                      >
-                        <option value="">Select Source Wallet</option>
-                        {wallets.map((wallet) => (
-                          <option key={wallet.id} value={wallet.id}>
-                            {getWalletName(wallet.id)} ({formatAmount(wallet.balance)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="transfer-to">
-                        To Wallet *
-                      </label>
-                      <select
-                        id="transfer-to"
-                        value={transferToWalletId}
-                        onChange={(e) => setTransferToWalletId(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                        disabled={loading || actionLoading}
-                        aria-label="Select destination wallet"
-                      >
-                        <option value="">Select Destination Wallet</option>
-                        {wallets.map((wallet) => (
-                          <option key={wallet.id} value={wallet.id}>
-                            {getWalletName(wallet.id)} ({formatAmount(wallet.balance)})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="transfer-amount">
-                        Amount *
-                      </label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500">₹</span>
-                        <input
-                          id="transfer-amount"
-                          type="number"
-                          value={transferAmount}
-                          onChange={(e) => setTransferAmount(e.target.value)}
-                          className="w-full pl-8 pr-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                          placeholder="Enter amount"
-                          min="1"
-                          required
-                          aria-required="true"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="transfer-description">
-                        Description (Optional)
-                      </label>
-                      <input
-                        id="transfer-description"
-                        type="text"
-                        value={transferDescription}
-                        onChange={(e) => setTransferDescription(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm"
-                        placeholder="e.g. Transfer to savings"
-                      />
-                    </div>
-                  </div>
-                  <div className="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-4">
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={() => setTransferringId(null)}
-                      className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
-                      aria-label="Cancel transfer"
-                    >
-                      Cancel
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.98 }}
-                      onClick={handleTransfer}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors font-medium flex items-center text-sm"
-                      disabled={!transferFromWalletId || !transferToWalletId || !transferAmount || Number(transferAmount) <= 0 || actionLoading}
-                      aria-label="Confirm transfer"
-                    >
-                      {actionLoading ? <FiRefreshCw className="animate-spin mr-2 h-4 w-4" /> : null}
-                      {actionLoading ? "Transferring..." : "Confirm Transfer"}
-                    </motion.button>
-                  </div>
-                </div>
-              </motion.div>
-            </motion.div>
+              ))}
+            </div>
           )}
-        </AnimatePresence>
+        </div>
       </div>
+
+      {/* Add / Edit wallet */}
+      {walletForm && (
+        <Modal
+          title={walletForm.mode === "add" ? "Add Wallet" : "Edit Wallet"}
+          subtitle={walletForm.mode === "edit" ? `Wallet #${walletForm.id} · ${centreNameById(walletForm.centreId)}` : "Create a wallet for a centre"}
+          onClose={() => !busy && setWalletForm(null)}
+          footer={
+            <>
+              <SecondaryBtn onClick={() => setWalletForm(null)} disabled={busy}>Cancel</SecondaryBtn>
+              <PrimaryBtn onClick={saveWallet} disabled={busy}>{busy ? "Saving…" : walletForm.mode === "add" ? "Add Wallet" : "Save Changes"}</PrimaryBtn>
+            </>
+          }
+        >
+          {walletForm.mode === "add" && (
+            <Field label="Centre" required>
+              <select
+                value={walletForm.data.centreId}
+                onChange={(e) => setWalletForm((f) => ({ ...f, data: { ...f.data, centreId: e.target.value, staffId: "" } }))}
+                className={inputCls}
+              >
+                <option value="">Select centre</option>
+                {centres.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Wallet name" required>
+            <input value={walletForm.data.name} onChange={(e) => setFormField("name", e.target.value)} className={inputCls} placeholder="e.g. HDFC Bank" />
+          </Field>
+          <Field
+            label={walletForm.mode === "add" ? "Opening balance" : "Balance"}
+            required
+            hint={walletForm.mode === "edit" ? "To add money, use “Add money” instead so it's recorded as a transaction." : undefined}
+          >
+            <AmountInput value={walletForm.data.balance} onChange={(v) => setFormField("balance", v)} />
+          </Field>
+          <Field label="Wallet type">
+            <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+              {WALLET_TYPES.map((t) => {
+                const Icon = t.icon;
+                const active = walletForm.data.walletType === t.id;
+                const c = TYPE_COLOR[t.id];
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    onClick={() => setFormField("walletType", t.id)}
+                    className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs font-medium transition-colors ${active ? "" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                    style={active ? { borderColor: c, background: `${c}14`, color: c } : undefined}
+                  >
+                    <Icon size={16} style={active ? undefined : { color: c }} />
+                    <span className="truncate w-full text-center">{t.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Status">
+              <Segmented options={[[true, "Online"], [false, "Offline"]]} value={walletForm.data.isOnline} onChange={(v) => setFormField("isOnline", v)} />
+            </Field>
+            <Field label="Ownership">
+              <Segmented options={[["personal", "Personal"], ["shared", "Shared"]]} value={walletForm.data.type} onChange={(v) => setFormField("type", v)} />
+            </Field>
+          </div>
+          {walletForm.data.type === "personal" && (
+            <Field label="Assign to staff" hint={!formCentre ? "Choose a centre first to see its staff" : undefined}>
+              <select value={walletForm.data.staffId} onChange={(e) => setFormField("staffId", e.target.value)} className={inputCls} disabled={!formCentre}>
+                <option value="">Not assigned</option>
+                {formStaffOptions.map((s) => (
+                  <option key={s.id} value={String(s.id)}>{s.name} ({s.role})</option>
+                ))}
+              </select>
+            </Field>
+          )}
+        </Modal>
+      )}
+
+      {/* Recharge */}
+      {recharge && (
+        <Modal
+          title="Add Money"
+          subtitle={`${walletLabel(walletById[String(recharge.walletId)] || {})} · balance ${formatAmount(walletById[String(recharge.walletId)]?.balance)}`}
+          onClose={() => !busy && setRecharge(null)}
+          footer={
+            <>
+              <SecondaryBtn onClick={() => setRecharge(null)} disabled={busy}>Cancel</SecondaryBtn>
+              <PrimaryBtn onClick={doRecharge} disabled={busy || !(Number(recharge.amount) > 0)}>{busy ? "Adding…" : "Add Money"}</PrimaryBtn>
+            </>
+          }
+        >
+          <Field label="Amount" required>
+            <AmountInput value={recharge.amount} onChange={(v) => setRecharge((r) => ({ ...r, amount: v }))} autoFocus />
+          </Field>
+          <Field label="Note">
+            <input value={recharge.description} onChange={(e) => setRecharge((r) => ({ ...r, description: e.target.value }))} className={inputCls} placeholder="e.g. Cash deposit" />
+          </Field>
+          {Number(recharge.amount) > 0 && (
+            <p className="text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+              New balance will be <span className="font-semibold text-gray-900">{formatAmount(Number(walletById[String(recharge.walletId)]?.balance || 0) + Number(recharge.amount))}</span>
+            </p>
+          )}
+        </Modal>
+      )}
+
+      {/* Transfer */}
+      {transfer && (
+        <Modal
+          title="Transfer Funds"
+          subtitle="Move money between wallets (any centre)"
+          onClose={() => !busy && setTransfer(null)}
+          footer={
+            <>
+              <SecondaryBtn onClick={() => setTransfer(null)} disabled={busy}>Cancel</SecondaryBtn>
+              <PrimaryBtn onClick={doTransfer} disabled={busy || !transfer.from || !transfer.to || !(Number(transfer.amount) > 0)}>
+                {busy ? "Transferring…" : "Transfer"}
+              </PrimaryBtn>
+            </>
+          }
+        >
+          <Field label="From" required>
+            <select value={transfer.from} onChange={(e) => setTransfer((t) => ({ ...t, from: e.target.value, to: t.to === e.target.value ? "" : t.to }))} className={inputCls}>
+              <option value="">Select source wallet</option>
+              {wallets.map((w) => <option key={w.id} value={String(w.id)}>{walletLabel(w)} ({formatAmount(w.balance)})</option>)}
+            </select>
+          </Field>
+          <Field label="To" required>
+            <select value={transfer.to} onChange={(e) => setTransfer((t) => ({ ...t, to: e.target.value }))} className={inputCls}>
+              <option value="">Select destination wallet</option>
+              {wallets.filter((w) => String(w.id) !== transfer.from).map((w) => (
+                <option key={w.id} value={String(w.id)}>{walletLabel(w)} ({formatAmount(w.balance)})</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Amount" required>
+            <AmountInput value={transfer.amount} onChange={(v) => setTransfer((t) => ({ ...t, amount: v }))} />
+          </Field>
+          {transferExceeds && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center gap-2">
+              <FiAlertCircle size={15} /> This is more than the {formatAmount(transferFrom.balance)} available in {transferFrom.name}.
+            </p>
+          )}
+          <Field label="Note">
+            <input value={transfer.description} onChange={(e) => setTransfer((t) => ({ ...t, description: e.target.value }))} className={inputCls} placeholder="Optional" />
+          </Field>
+        </Modal>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDelete && (
+        <Modal
+          title={confirmDelete.ids.length === 1 ? "Delete wallet?" : `Delete ${confirmDelete.ids.length} wallets?`}
+          onClose={() => !busy && setConfirmDelete(null)}
+          size="max-w-md"
+          footer={
+            <>
+              <SecondaryBtn onClick={() => setConfirmDelete(null)} disabled={busy}>Cancel</SecondaryBtn>
+              <PrimaryBtn danger onClick={doDelete} disabled={busy}>{busy ? "Deleting…" : "Delete permanently"}</PrimaryBtn>
+            </>
+          }
+        >
+          <p className="text-sm text-gray-600">
+            <span className="font-semibold text-gray-900">{confirmDelete.label}</span> will be permanently deleted. This cannot be undone.
+          </p>
+          {confirmDelete.ids.length > 1 && (
+            <ul className="text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 max-h-40 overflow-y-auto space-y-1">
+              {confirmDelete.ids.map((id) => {
+                const w = walletById[String(id)];
+                return <li key={id}>{w ? `${walletLabel(w)} · ${formatAmount(w.balance)}` : `Wallet #${id}`}</li>;
+              })}
+            </ul>
+          )}
+        </Modal>
+      )}
     </div>
   );
 };
