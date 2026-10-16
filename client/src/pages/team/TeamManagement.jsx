@@ -120,12 +120,21 @@ const TargetBar = ({ value, max, tone }) => (
   </div>
 );
 
+// Photos can be a full URL, a data URL, or a path on the API server (like on the staff dashboard)
+const photoSrc = (raw) => {
+  if (!raw || raw === "null" || raw === "undefined") return null;
+  if (/^(https?:|data:image|blob:)/i.test(raw)) return raw;
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+};
+
 const Avatar = ({ name, photo, size = 36 }) => {
   const [failed, setFailed] = useState(false);
+  const src = photoSrc(photo);
   const initials = (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
   const dim = { width: size, height: size };
-  return photo && !failed ? (
-    <img src={photo} alt="" onError={() => setFailed(true)} style={dim} className="flex-shrink-0 rounded-full border border-slate-200 object-cover" />
+  return src && !failed ? (
+    <img src={src} alt="" onError={() => setFailed(true)} style={dim} className="flex-shrink-0 rounded-full border border-slate-200 object-cover" />
   ) : (
     <span style={dim} className="flex flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700" aria-hidden="true">{initials}</span>
   );
