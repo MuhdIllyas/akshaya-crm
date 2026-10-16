@@ -1,10 +1,12 @@
 // StaffTeamDashboard.jsx
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
   PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from "recharts";
 import {
-  FiGlobe, FiUsers, FiRefreshCw, FiLoader, FiChevronRight, FiArrowUp, FiArrowDown, FiBell, FiAward, FiGift
+  FiGlobe, FiUsers, FiRefreshCw, FiLoader, FiChevronRight, FiArrowUp, FiArrowDown, FiBell, FiAward, FiGift, FiMessageSquare
 } from "react-icons/fi";
 
 // ==========================================
@@ -284,6 +286,9 @@ const getDatesFromPeriod = (period) => {
 // ==========================================
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
+// Where the Messenger page lives in the app (it opens the chat passed in navigation state)
+const MESSENGER_PATH = "/dashboard/staff/messenger";
+
 // Token claims (base64url safe)
 const getMyId = () => {
   try {
@@ -362,6 +367,7 @@ const AvatarStack = ({ people, max = 6 }) => (
 );
 
 const StaffTeamDashboard = () => {
+  const navigate = useNavigate();
   const myId = useMemo(getMyId, []);
 
   const [period, setPeriod] = useState("month");
@@ -384,6 +390,8 @@ const StaffTeamDashboard = () => {
   const [trend, setTrend] = useState([]);
   const [settings, setSettings] = useState(null);
   const [announcements, setAnnouncements] = useState([]);
+  const [chatUnread, setChatUnread] = useState(0);
+  const [openingChat, setOpeningChat] = useState(false);
 
   const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "This Month";
   const trendYear = new Date().getFullYear();
@@ -407,6 +415,25 @@ const StaffTeamDashboard = () => {
     return () => ctrl.abort();
   }, []);
 
+  // Opens (creating it the first time) the team's group chat in Messenger
+  const openTeamChat = async () => {
+    if (!selectedTeamId || openingChat) return;
+    setOpeningChat(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/teams/${selectedTeamId}/chat`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.conversation_id) throw new Error(data.error || "Couldn't open the team chat");
+      navigate(MESSENGER_PATH, { state: { openConversationId: data.conversation_id } });
+    } catch (err) {
+      toast.error(err.message || "Couldn't open the team chat");
+    } finally {
+      setOpeningChat(false);
+    }
+  };
+
   const switchTeam = (id) => {
     setStats(null);
     setMembers([]);
@@ -415,6 +442,7 @@ const StaffTeamDashboard = () => {
     setTrend([]);
     setSettings(null);
     setAnnouncements([]);
+    setChatUnread(0);
     setSelectedTeamId(Number(id));
   };
 
@@ -456,14 +484,16 @@ const StaffTeamDashboard = () => {
 
     (async () => {
       try {
-        const [trendRows, settingRow, notes] = await Promise.all([
+        const [trendRows, settingRow, notes, chat] = await Promise.all([
           tryApi(`/api/teams/${selectedTeamId}/trend?year=${trendYear}`, ctrl.signal),
           tryApi(`/api/teams/${selectedTeamId}/settings`, ctrl.signal),
           tryApi(`/api/knowledge/hub/announcements?teamId=${selectedTeamId}`, ctrl.signal),
+          tryApi(`/api/teams/${selectedTeamId}/chat`, ctrl.signal),
         ]);
         setTrend(Array.isArray(trendRows) ? trendRows : []);
         setSettings(settingRow);
         setAnnouncements(Array.isArray(notes) ? notes : []);
+        setChatUnread(Number(chat?.unread) || 0);
       } catch {
         /* aborted */
       }
@@ -614,7 +644,18 @@ const StaffTeamDashboard = () => {
             </div>
           </div>
         </div>
-        {members.length > 0 && <AvatarStack people={members} />}
+        <div className="flex flex-wrap items-center gap-3">
+          {members.length > 0 && <AvatarStack people={members} />}
+          <button type="button" onClick={openTeamChat} disabled={openingChat} className={`${btnPrimary} relative disabled:opacity-60`}>
+            <FiMessageSquare className="h-4 w-4" aria-hidden="true" />
+            {openingChat ? "Opening…" : "Team chat"}
+            {chatUnread > 0 && (
+              <span className="ml-0.5 inline-flex min-w-[20px] items-center justify-center rounded-full bg-white px-1.5 text-[11px] font-bold text-navy-700">
+                {chatUnread > 99 ? "99+" : chatUnread}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {periodError && (

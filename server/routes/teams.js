@@ -1,6 +1,13 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
+import {
+  ensureTeamChat,
+  findTeamChat,
+  removeMemberFromTeamChat,
+  archiveTeamChat,
+  safely,
+} from "../utils/teamChatService.js";
 
 const router = express.Router();
 
@@ -1189,6 +1196,11 @@ router.post("/", async (req, res) => {
 
     await client.query("COMMIT");
 
+    // every team gets a Messenger group chat with its members
+    await safely("create", () =>
+      ensureTeamChat(team.id, { createdBy: req.user.id, io: req.io })
+    );
+
     res.status(201).json(team);
 
   } catch (err) {
@@ -1368,6 +1380,11 @@ router.post("/:id/members", async (req, res) => {
 
     await client.query("COMMIT");
 
+    // put the new member into the team's chat
+    await safely("add member", () =>
+      ensureTeamChat(Number(id), { createdBy: req.user.id, io: req.io })
+    );
+
     res.status(201).json(result.rows[0]);
 
   } catch (err) {
@@ -1408,6 +1425,11 @@ router.delete("/:id/members/:staffId", async (req, res) => {
       AND staff_id = $2
       `,
       [id, staffId]
+    );
+
+    // and take them out of the team's chat
+    await safely("remove member", () =>
+      removeMemberFromTeamChat(Number(id), Number(staffId), { io: req.io })
     );
 
     res.json({
@@ -1577,6 +1599,9 @@ router.delete("/:id", async (req, res) => {
     );
 
     await client.query("COMMIT");
+
+    // the chat is hidden (its history is kept)
+    await safely("archive", () => archiveTeamChat(Number(id), { io: req.io }));
 
     res.json({
       success: true,
@@ -1755,6 +1780,123 @@ router.get("/:id/service-mix", async (req, res) => {
     res.status(500).json({ error: "Failed to load service mix" });
   } finally {
     client.release();
+  }
+});
+
+/* =========================================================
+   TEAM CHAT (Messenger group for the team)
+
+   GET  /:id/chat   -> { conversation_id, unread }   conversation_id is null
+                       until the chat exists (it never creates anything)
+   POST /:id/chat   -> { conversation_id }           creates the chat on first
+                       use (teams that existed before get one this way) and
+                       makes sure every member is in it
+
+   Only members of the team can use it.
+========================================================= */
+
+const requireTeamMember = async (client, user, teamId) => {
+  const access = await checkTeamAccess(client, user, teamId);
+  if (!access.ok) return access;
+
+  const member = await client.query(
+    `SELECT 1 FROM team_members
+     WHERE team_id = $1 AND staff_id = $2 AND is_active = true`,
+    [teamId, user.id]
+  );
+
+  if (member.rows.length === 0) {
+    return { ok: false, status: 403, error: "Only members of this team can use the team chat" };
+  }
+
+  return access;
+};
+
+router.get("/:id/chat", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const access = await requireTeamMember(client, req.user, req.params.id);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const conv = await findTeamChat(client, req.params.id);
+
+    if (!conv || conv.status !== "active") {
+      return res.json({ conversation_id: null, unread: 0 });
+    }
+
+    const inChat = await client.query(
+      `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+      [conv.id, req.user.id]
+    );
+
+    if (inChat.rows.length === 0) {
+      // member of the team but not in the chat yet: POST adds them
+      return res.json({ conversation_id: null, unread: 0 });
+    }
+
+    const unread = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM chat_messages m
+       WHERE m.conversation_id = $1
+         AND (m.sender_id IS NULL OR m.sender_id <> $2)
+         AND m.is_deleted = false
+         AND NOT EXISTS (
+           SELECT 1 FROM chat_message_reads r
+           WHERE r.message_id = m.id AND r.staff_id = $2
+         )`,
+      [conv.id, req.user.id]
+    );
+
+    res.json({ conversation_id: conv.id, unread: unread.rows[0].count });
+
+  } catch (err) {
+
+    console.error("Team chat lookup error:", err);
+
+    res.status(500).json({ error: "Failed to load the team chat" });
+
+  } finally {
+
+    client.release();
+
+  }
+});
+
+router.post("/:id/chat", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const access = await requireTeamMember(client, req.user, req.params.id);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const conversationId = await ensureTeamChat(Number(req.params.id), {
+      createdBy: req.user.id,
+      io: req.io,
+    });
+
+    if (!conversationId) {
+      return res.status(404).json({ error: "This team has no active members yet" });
+    }
+
+    return res.json({ conversation_id: conversationId });
+
+  } catch (err) {
+
+    console.error("Open team chat error:", err);
+
+    res.status(500).json({ error: "Failed to open the team chat" });
+
+  } finally {
+
+    client.release();
+
   }
 });
 

@@ -1055,6 +1055,12 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
       return res.status(403).json({ error: "Not authorized to delete this conversation" });
     }
 
+    // Team chats follow their team: only admins can delete them (staff would wipe it for the whole team)
+    const kind = await pool.query(`SELECT context_type FROM chat_conversations WHERE id = $1`, [conversationId]);
+    if (kind.rows[0]?.context_type === 'team' && userRole !== 'superadmin' && userRole !== 'admin') {
+      return res.status(403).json({ error: "Team chats can't be deleted. They follow the team." });
+    }
+
     // 🔥 Soft Delete: Update status to 'deleted' so it vanishes from the GET /conversations query
     await pool.query(
       `UPDATE chat_conversations SET status = 'deleted', updated_at = NOW() WHERE id = $1`,
