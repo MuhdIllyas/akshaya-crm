@@ -5,9 +5,10 @@ import {
 } from "recharts";
 import {
   FiGlobe, FiUsers, FiHome, FiUserCheck, FiBarChart2, FiSearch, FiPlus, FiX, FiStar, FiTrash2,
-  FiChevronRight, FiLoader, FiMapPin, FiArrowUp, FiArrowDown
+  FiChevronRight, FiLoader, FiMapPin, FiArrowUp, FiArrowDown, FiMessageSquare
 } from "react-icons/fi";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
 // ==========================================
 // SHARED PRIMITIVES (same look as the dashboards)
@@ -403,6 +404,24 @@ const TeamManagement = () => {
   const [membersLoading, setMembersLoading] = useState(false);
 
   const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+
+  // Opens (or creates) the team's Messenger group. The admin / superadmin is added to it.
+  const navigate = useNavigate();
+  const [chatOpeningId, setChatOpeningId] = useState(null);
+  const MESSENGER_PATH = user.role === "superadmin" ? "/dashboard/superadmin/messenger" : "/dashboard/admin/messenger"; // assumed routes; confirm
+  const openTeamChat = async (team) => {
+    setChatOpeningId(team.id);
+    try {
+      const res = await fetch(`${API_BASE}/api/teams/${team.id}/chat`, { method: "POST", headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not open the team chat");
+      navigate(MESSENGER_PATH, { state: { openConversationId: data.conversation_id } });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setChatOpeningId(null);
+    }
+  };
 
   // Roster + this month's targets for one team (members and targets are fetched together)
   const loadTeamExtras = async (teamId) => {
@@ -1140,6 +1159,9 @@ const TeamManagement = () => {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
+                            <button onClick={() => openTeamChat(team)} disabled={chatOpeningId === team.id} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-50" title="Team chat" aria-label={`Open ${team.name} chat`}>
+                              {chatOpeningId === team.id ? <FiLoader className="h-4 w-4 animate-spin" /> : <FiMessageSquare className="h-4 w-4" />}
+                            </button>
                             <button onClick={() => openAnalyticsModal(team)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Team dashboard" aria-label={`Open ${team.name} dashboard`}>
                               <FiBarChart2 className="h-4 w-4" />
                             </button>

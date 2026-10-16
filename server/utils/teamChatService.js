@@ -99,7 +99,7 @@ const activeMemberIds = async (db, teamId) => {
  * archived/deleted, and make sure every active member is a participant.
  * Returns the conversation id, or null when the team is missing or empty.
  */
-export const ensureTeamChat = async (teamId, { createdBy = null, io = null } = {}) => {
+export const ensureTeamChat = async (teamId, { createdBy = null, io = null, joinStaffId = null } = {}) => {
   const lock = await pool.connect();
 
   try {
@@ -115,13 +115,20 @@ export const ensureTeamChat = async (teamId, { createdBy = null, io = null } = {
       return null;
     }
 
-    const memberIds = await activeMemberIds(lock, teamId);
+    const teamMemberIds = await activeMemberIds(lock, teamId);
+    // An admin/superadmin opening the chat from the Teams page is added too,
+    // so the chat shows up in their Messenger.
+    const memberIds = [...teamMemberIds];
+    if (joinStaffId && !memberIds.some((id) => String(id) === String(joinStaffId))) {
+      memberIds.push(Number(joinStaffId));
+    }
     let conv = await findTeamChat(lock, teamId);
     let conversationId;
     let isNew = false;
 
     if (!conv) {
-      if (memberIds.length === 0) {
+      // an empty team gets no chat (an admin alone is not a team chat)
+      if (teamMemberIds.length === 0) {
         await lock.query("COMMIT");
         return null;
       }

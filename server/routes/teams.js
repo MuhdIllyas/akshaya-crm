@@ -1792,12 +1792,19 @@ router.get("/:id/service-mix", async (req, res) => {
                        use (teams that existed before get one this way) and
                        makes sure every member is in it
 
-   Only members of the team can use it.
+   Members of the team can use it; so can the centre admin (own centre's
+   teams) and the superadmin, who are added to the chat when they open it.
 ========================================================= */
 
 const requireTeamMember = async (client, user, teamId) => {
   const access = await checkTeamAccess(client, user, teamId);
   if (!access.ok) return access;
+
+  // Admin (own centre's teams) and superadmin (all teams) can open the chat
+  // too; checkTeamAccess has already scoped them.
+  if (user.role === "admin" || user.role === "superadmin") {
+    return { ...access, viewer: true };
+  }
 
   const member = await client.query(
     `SELECT 1 FROM team_members
@@ -1879,6 +1886,7 @@ router.post("/:id/chat", async (req, res) => {
     const conversationId = await ensureTeamChat(Number(req.params.id), {
       createdBy: req.user.id,
       io: req.io,
+      joinStaffId: access.viewer ? req.user.id : null,
     });
 
     if (!conversationId) {
