@@ -1,550 +1,386 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Link, useParams } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { 
-  ArrowLeft, Filter, Download, Search, 
-  BarChart, PieChart, LineChart, Wallet, CreditCard,
-  ChevronDown, ChevronUp, Plus, Banknote, Landmark, 
-  Smartphone, PiggyBank, Activity, ArrowDown, ArrowUp, 
-  FileText, Calendar, Tag, RefreshCw, X, 
-  ArrowLeftCircle, ArrowRightCircle, Minus,
-  TrendingUp, TrendingDown, User, ChevronRight, ChevronLeft
-} from "lucide-react";
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { Link, useParams, useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import {
-  BarChart as ReBarChart,
-  Bar,
-  PieChart as RePieChart,
-  Pie,
-  LineChart as ReLineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-  Cell
-} from 'recharts';
-import { format, isValid, subDays, startOfDay, endOfDay } from 'date-fns';
-import { 
-  getWallets, 
+  FiArrowLeft, FiDownload, FiSearch, FiRefreshCw, FiX, FiPlus, FiArrowDownLeft, FiArrowUpRight,
+  FiChevronUp, FiChevronDown, FiChevronLeft, FiChevronRight, FiCreditCard, FiDollarSign,
+  FiSmartphone, FiHome, FiBriefcase, FiActivity, FiTrendingUp, FiTrendingDown, FiUser, FiList,
+} from "react-icons/fi";
+import {
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid,
+  Tooltip, Legend, ResponsiveContainer,
+} from "recharts";
+import { format, isValid, subDays, startOfDay, endOfDay } from "date-fns";
+import {
   getWalletTransactions,
   getStaff,
-  rechargeWallet, 
-  getWalletById, 
-  getWalletTodayBalance, 
-  getWalletDailyBalances
+  rechargeWallet,
+  getWalletById,
+  getWalletTodayBalance,
 } from "@/services/walletService";
 
-// Predefined color palette
-const SERVICE_COLORS = [
-  "#8884d8", "#82ca9d", "#ffc658", "#ff7300", "#a4de6c",
-  "#d0ed57", "#ff8042", "#00ced1", "#ff6e6e", "#a05195"
-];
+/* ───────────── constants & helpers ───────────── */
+const WALLET_TYPES = {
+  bank: { name: "Bank Account", icon: FiHome, tone: "bg-blue-50 text-blue-600 border-blue-100" },
+  cash: { name: "Cash", icon: FiDollarSign, tone: "bg-emerald-50 text-emerald-600 border-emerald-100" },
+  card: { name: "Credit Card", icon: FiCreditCard, tone: "bg-purple-50 text-purple-600 border-purple-100" },
+  digital: { name: "Digital Wallet", icon: FiSmartphone, tone: "bg-amber-50 text-amber-600 border-amber-100" },
+  savings: { name: "Savings", icon: FiBriefcase, tone: "bg-rose-50 text-rose-600 border-rose-100" },
+};
+const CATEGORY_COLORS = ["#2563eb", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b6d4", "#ec4899", "#84cc16", "#64748b", "#f97316"];
+const COLOR_IN = "#10b981";
+const COLOR_OUT = "#ef4444";
+const COLOR_NET = "#2563eb";
 
+const PERIODS = [
+  ["today", "Today"],
+  ["yesterday", "Yesterday"],
+  ["week", "7 days"],
+  ["month", "30 days"],
+  ["quarter", "90 days"],
+  ["year", "1 year"],
+  ["all", "All"],
+  ["custom", "Custom"],
+];
+const PER_PAGE = 10;
+
+const formatAmount = (amount) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(Number(amount) || 0);
+const compactAmount = (v) => {
+  const a = Math.abs(v);
+  if (a >= 10000000) return `₹${(v / 10000000).toFixed(1)}Cr`;
+  if (a >= 100000) return `₹${(v / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `₹${Math.round(v / 1000)}K`;
+  return `₹${Math.round(v)}`;
+};
+const fmt = (d, f = "dd MMM yyyy") => {
+  const date = d instanceof Date ? d : new Date(d);
+  return isValid(date) ? format(date, f) : "—";
+};
+// "yyyy-MM-dd" from a date input -> local date (no UTC shift)
+const parseInputDate = (v) => {
+  const [y, m, d] = String(v).split("-").map(Number);
+  return y && m && d ? new Date(y, m - 1, d) : null;
+};
+const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const rangeFor = (period, custom) => {
+  const now = new Date();
+  switch (period) {
+    case "today": return { start: startOfDay(now), end: endOfDay(now) };
+    case "yesterday": return { start: startOfDay(subDays(now, 1)), end: endOfDay(subDays(now, 1)) };
+    case "week": return { start: startOfDay(subDays(now, 6)), end: endOfDay(now) };
+    case "month": return { start: startOfDay(subDays(now, 29)), end: endOfDay(now) };
+    case "quarter": return { start: startOfDay(subDays(now, 89)), end: endOfDay(now) };
+    case "year": return { start: startOfDay(subDays(now, 364)), end: endOfDay(now) };
+    case "custom": return { start: startOfDay(custom.start), end: endOfDay(custom.end) };
+    default: return { start: null, end: null };
+  }
+};
+
+const Card = ({ title, action, children, className = "" }) => (
+  <div className={`bg-white rounded-2xl border border-gray-200 shadow-sm ${className}`}>
+    {(title || action) && (
+      <div className="flex items-center justify-between gap-3 px-5 pt-4 pb-3">
+        {title && <h3 className="text-sm font-semibold text-gray-900">{title}</h3>}
+        {action}
+      </div>
+    )}
+    {children}
+  </div>
+);
+
+const Stat = ({ label, value, sub, icon: Icon, tone, valueCls = "text-gray-900" }) => (
+  <div className="bg-white rounded-2xl p-4 border border-gray-200 shadow-sm">
+    <div className="flex items-center justify-between gap-2">
+      <p className="text-sm text-gray-500 font-medium">{label}</p>
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${tone}`}>
+        <Icon size={15} />
+      </div>
+    </div>
+    <p className={`text-xl font-bold mt-2 truncate ${valueCls}`}>{value}</p>
+    {sub && <p className="text-xs text-gray-400 mt-0.5 truncate">{sub}</p>}
+  </div>
+);
+
+/* ───────────── page ───────────── */
 const WalletActivity = () => {
   const { walletId } = useParams();
-  console.log("WalletActivity : Component rendered with walletId:", walletId);
+  const navigate = useNavigate();
 
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [todayBalance, setTodayBalance] = useState(null);
-  const [todayBalanceLoading, setTodayBalanceLoading] = useState(false);
   const [staffMembers, setStaffMembers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [chartLoading, setChartLoading] = useState(false);
-  const [timeFilter, setTimeFilter] = useState("month");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [serviceFilter, setServiceFilter] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedTransaction, setSelectedTransaction] = useState(null);
-  const [dateRange, setDateRange] = useState({
-    start: startOfDay(subDays(new Date(), 30)),
-    end: endOfDay(new Date())
-  });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortConfig, setSortConfig] = useState({
-    key: 'date',
-    direction: 'desc'
-  });
-  const [zoomLevel, setZoomLevel] = useState(1);
-  const [chartType, setChartType] = useState('bar');
-  const [showChartMenu, setShowChartMenu] = useState(false);
-  const [trendTimeFrame, setTrendTimeFrame] = useState('month');
-  const [expandedTrendAnalysis, setExpandedTrendAnalysis] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [rechargeAmount, setRechargeAmount] = useState("");
-  const [rechargeDescription, setRechargeDescription] = useState("");
-  const [showRechargeModal, setShowRechargeModal] = useState(false);
-  const chartMenuRef = useRef(null);
-  const transactionsPerPage = 8;
 
-  // Wallet types
-  const walletTypes = [
-    { id: "bank", name: "Bank Account", icon: Landmark, color: "bg-blue-100 text-blue-700" },
-    { id: "cash", name: "Cash", icon: Banknote, color: "bg-green-100 text-green-700" },
-    { id: "card", name: "Credit Card", icon: CreditCard, color: "bg-purple-100 text-purple-700" },
-    { id: "digital", name: "Digital Wallet", icon: Smartphone, color: "bg-amber-100 text-amber-700" },
-    { id: "savings", name: "Savings", icon: PiggyBank, color: "bg-yellow-100 text-yellow-700" },
-  ];
+  const [period, setPeriod] = useState("month");
+  const [customRange, setCustomRange] = useState({ start: subDays(new Date(), 30), end: new Date() });
+  const [typeFilter, setTypeFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
+  const [sort, setSort] = useState({ key: "date", dir: "desc" });
+  const [page, setPage] = useState(1);
+  const [chartType, setChartType] = useState("bar");
+  const [selected, setSelected] = useState(null);
+  const [recharge, setRecharge] = useState(null); // { amount, description }
+  const [busy, setBusy] = useState(false);
 
-  // Services with predefined colors
-  const services = [
-    { id: "income", name: "Income", color: SERVICE_COLORS[0] },
-    { id: "possession_certificate", name: "Possession Certificate", color: SERVICE_COLORS[1] },
-    { id: "passport", name: "Passport", color: SERVICE_COLORS[2] },
-    { id: "neet_registration", name: "NEET Registration", color: SERVICE_COLORS[3] },
-    { id: "other", name: "Other", color: SERVICE_COLORS[4] },
-  ];
-
-  const mapCategoryToServiceId = (category) => {
-    const mapping = {
-      "Income": "income",
-      "Possession Certificate": "possession_certificate",
-      "Passport": "passport",
-      "NEET Registration": "neet_registration",
-      "Transfer": "other",
-      "Recharge": "other"
-    };
-    return mapping[category] || "other";
-  };
-
-  const getDateRangeForFilter = (filter, currentRange) => {
-    const now = new Date();
-    let start, end;
-    switch (filter) {
-      case 'today':
-        start = startOfDay(now);
-        end = endOfDay(now);
-        break;
-      case 'yesterday':
-        start = startOfDay(subDays(now, 1));
-        end = endOfDay(subDays(now, 1));
-        break;
-      case 'week':
-        start = startOfDay(subDays(now, 6));
-        end = endOfDay(now);
-        break;
-      case 'month':
-        start = startOfDay(subDays(now, 29));
-        end = endOfDay(now);
-        break;
-      case 'quarter':
-        start = startOfDay(subDays(now, 89));
-        end = endOfDay(now);
-        break;
-      case 'year':
-        start = startOfDay(subDays(now, 364));
-        end = endOfDay(now);
-        break;
-      case 'custom':
-        start = currentRange.start;
-        end = currentRange.end;
-        break;
-      default:
-        start = null;
-        end = null;
-    }
-    return { start, end };
-  };
-
-  // Helper to get staff info
-  const getStaffInfo = useCallback((staffId) => {
-    return staffMembers.find(s => s.id === staffId) || 
-      { name: "Unknown Staff", position: "N/A" };
-  }, [staffMembers]);
-
-  // OPTIMIZED: Filtered transactions computed directly with useMemo (no extra state/effect)
-  const filteredTransactions = useMemo(() => {
-    let result = [...transactions];
-    const displayRange = getDateRangeForFilter(timeFilter, dateRange);
-    if (displayRange.start && displayRange.end) {
-      result = result.filter(t => {
-        try {
-          const transactionDate = new Date(t.date);
-          return transactionDate >= displayRange.start && transactionDate <= displayRange.end;
-        } catch (error) {
-          return false;
-        }
-      });
-    }
-    if (typeFilter !== "all") {
-      result = result.filter(t => t.type === typeFilter);
-    }
-    if (serviceFilter !== "all") {
-      result = result.filter(t => t.service === serviceFilter);
-    }
-    if (searchQuery) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(t => {
-        const description = t.description ? t.description.toLowerCase() : '';
-        const notes = t.notes ? t.notes.toLowerCase() : '';
-        const staff = getStaffInfo(t.staffId);
-        const staffName = staff.name.toLowerCase();
-        return description.includes(q) || notes.includes(q) || staffName.includes(q);
-      });
-    }
-    return result;
-  }, [transactions, timeFilter, typeFilter, serviceFilter, searchQuery, dateRange, getStaffInfo]);
-
-  // Reset page when filters change
   useEffect(() => {
-    setCurrentPage(1);
-  }, [filteredTransactions.length]);
-
-  // Debounce search input
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setSearchQuery(searchInput);
-    }, 300);
-    return () => clearTimeout(handler);
+    const t = setTimeout(() => setSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
   }, [searchInput]);
 
-  // OPTIMIZED: Fetch data with pagination (limit 100)
+  /* ---------- data ---------- */
   const fetchData = useCallback(async () => {
-    console.log("fetchData: Initiating with walletId:", walletId);
     if (!walletId || isNaN(walletId)) {
       setError("Invalid or missing wallet ID");
-      setLoading(false);
       return;
     }
     setError(null);
-    setLoading(true);
     try {
-      const [walletRes, transactionsRes, staffRes, todayBalanceRes] = await Promise.all([
+      const [walletRes, txRes, staffRes, todayRes] = await Promise.all([
         getWalletById(walletId),
-        getWalletTransactions(walletId, 100, 0), // OPTIMIZED: fetch only 100 most recent transactions
-        getStaff(),
-        getWalletTodayBalance(walletId).catch(e => null)
+        getWalletTransactions(walletId, 100, 0),
+        getStaff().catch(() => []),
+        getWalletTodayBalance(walletId).catch(() => null),
       ]);
-      const walletData = walletRes.data || {};
-      if (!walletData.id) throw new Error("Wallet data is incomplete");
-      const transactionsData = Array.isArray(transactionsRes.data) ? transactionsRes.data : [];
-      setTodayBalance(todayBalanceRes);
-      setTodayBalanceLoading(false);
-      const staffData = Array.isArray(staffRes) ? staffRes.map(staff => ({
-        ...staff,
-        id: staff.id.toString()
-      })) : [];
-      const mappedTransactions = transactionsData.map(t => ({
-        id: t.id || `temp-${Math.random().toString(36).substr(2, 9)}`,
-        date: t.created_at || new Date().toISOString(),
-        description: t.description || "No description",
-        amount: t.type === 'credit' ? Number(t.amount) : -Number(t.amount),
-        type: t.type || "unknown",
-        walletId: t.wallet_id || walletId,
-        service: mapCategoryToServiceId(t.category || ""),
-        notes: t.category || "",
-        staffId: t.staff_id ? t.staff_id.toString() : null
-      }));
+      const w = walletRes.data || {};
+      if (!w.id) throw new Error("Wallet data is incomplete");
+
       setWallet({
-        id: walletData.id || walletId,
-        name: walletData.name || `Wallet ${walletId}`,
-        balance: walletData.balance || 0,
-        type: walletData.wallet_type || "bank",
-        lastTransaction: walletData.updated_at && isValid(new Date(walletData.updated_at)) ? walletData.updated_at : new Date().toISOString(),
-        isShared: walletData.is_shared || false,
-        status: walletData.status || "online",
-        transactions: transactionsData.length
+        id: w.id,
+        name: w.name || `Wallet ${walletId}`,
+        balance: Number(w.balance) || 0,
+        type: w.wallet_type || "bank",
+        isShared: !!w.is_shared,
+        status: w.status || "online",
+        updatedAt: w.updated_at,
       });
-      setStaffMembers(staffData);
-      setTransactions(mappedTransactions);
+      setTodayBalance(todayRes);
+      setStaffMembers(Array.isArray(staffRes) ? staffRes : []);
+      setTransactions(
+        (Array.isArray(txRes.data) ? txRes.data : []).map((t, i) => ({
+          id: t.id ?? `tmp-${i}`,
+          date: t.created_at,
+          description: t.description || "No description",
+          type: t.type === "credit" ? "credit" : "debit",
+          amount: Math.abs(Number(t.amount) || 0), // always positive; use .type for direction
+          category: t.category || "Other",
+          staffId: t.staff_id != null ? String(t.staff_id) : null,
+          staffName: t.staff_name || null,
+        }))
+      );
     } catch (err) {
-      const errorMessage = err.response?.status === 404 ? `Wallet not found` : err.response?.status === 401 ? "Unauthorized" : `Failed to load: ${err.message}`;
-      setError(errorMessage);
-      console.error("fetchData Error:", err);
-      if (err.response?.status === 401) window.location.href = "/login";
-    } finally {
-      setLoading(false);
+      console.error("WalletActivity fetch error:", err);
+      if (err.response?.status === 401) return navigate("/login");
+      setError(err.response?.status === 404 ? "Wallet not found" : `Failed to load: ${err.message}`);
     }
-  }, [walletId]);
+  }, [walletId, navigate]);
 
   useEffect(() => {
-    fetchData();
+    (async () => {
+      setLoading(true);
+      await fetchData();
+      setLoading(false);
+    })();
   }, [fetchData]);
 
-  // OPTIMIZED: Memoized trend analysis (replaces useEffect)
-  const trendAnalysis = useMemo(() => {
-    const now = new Date();
-    const timeFrames = {
-      week: subDays(now, 7),
-      month: subDays(now, 30),
-      quarter: subDays(now, 90),
-      year: subDays(now, 365)
-    };
-    const periodStart = timeFrames[trendTimeFrame];
-    const result = {
-      credits: 0,
-      debits: 0,
-      services: {},
-      dailyAverage: {},
-      largestTransaction: null,
-      mostActiveService: null,
-      comparison: {}
-    };
-    const periodTransactions = transactions.filter(t => new Date(t.date) > periodStart);
-    if (periodTransactions.length === 0) return result;
-    periodTransactions.forEach(t => {
-      const amount = Number(t.amount) || 0;
-      if (t.type === 'credit') result.credits += amount;
-      else if (t.type === 'debit') result.debits += Math.abs(amount);
-      if (t.service) {
-        if (!result.services[t.service]) result.services[t.service] = { count: 0, total: 0 };
-        result.services[t.service].count++;
-        result.services[t.service].total += Math.abs(t.amount);
-      }
-      if (!result.largestTransaction || Math.abs(t.amount) > Math.abs(result.largestTransaction.amount)) {
-        result.largestTransaction = t;
-      }
-    });
-    const serviceEntries = Object.entries(result.services);
-    if (serviceEntries.length > 0) {
-      const sortedServices = serviceEntries.sort((a, b) => b[1].count - a[1].count);
-      result.mostActiveService = sortedServices[0][0];
-    }
-    const daysInPeriod = Math.max(1, Math.floor((now - periodStart) / (1000 * 60 * 60 * 24)));
-    result.dailyAverage = {
-      credits: result.credits / daysInPeriod,
-      debits: result.debits / daysInPeriod,
-      transactions: periodTransactions.length / daysInPeriod
-    };
-    const prevPeriodStart = subDays(periodStart, daysInPeriod);
-    const prevPeriodTransactions = transactions.filter(t => new Date(t.date) > prevPeriodStart && new Date(t.date) <= periodStart);
-    const prevCredits = prevPeriodTransactions.filter(t => t.type === 'credit').reduce((sum, t) => sum + t.amount, 0);
-    const prevDebits = prevPeriodTransactions.filter(t => t.type === 'debit').reduce((sum, t) => sum + Math.abs(t.amount), 0);
-    result.comparison = {
-      creditChange: result.credits - prevCredits,
-      debitChange: result.debits - prevDebits,
-      transactionChange: periodTransactions.length - prevPeriodTransactions.length
-    };
-    return result;
-  }, [transactions, trendTimeFrame]);
-
-  // Sorting logic
-  const sortedTransactions = useMemo(() => {
-    const items = [...filteredTransactions];
-    if (items.length === 0) return [];
-    if (sortConfig.key) {
-      items.sort((a, b) => {
-        let comparison = 0;
-        if (sortConfig.key === 'date') {
-          const dateA = a.date ? new Date(a.date) : new Date(0);
-          const dateB = b.date ? new Date(b.date) : new Date(0);
-          comparison = dateA - dateB;
-        } else if (sortConfig.key === 'amount') {
-          const amountA = Math.abs(a.amount || 0);
-          const amountB = Math.abs(b.amount || 0);
-          comparison = amountA - amountB;
-        } else if (sortConfig.key === 'description') {
-          const descA = a.description || '';
-          const descB = b.description || '';
-          comparison = descA.localeCompare(descB);
-        }
-        return sortConfig.direction === 'asc' ? comparison : -comparison;
-      });
-    }
-    return items;
-  }, [filteredTransactions, sortConfig]);
-
-  // Stats based on filtered transactions
-  const calculateStats = useMemo(() => {
-    return filteredTransactions.reduce((stats, transaction) => {
-      const amount = Number(transaction.amount) || 0;
-      if (transaction.type === 'credit') stats.credits += amount;
-      else if (transaction.type === 'debit') stats.debits += Math.abs(amount);
-      stats.count++;
-      if (transaction.staffId) {
-        stats.staffTransactions[transaction.staffId] = (stats.staffTransactions[transaction.staffId] || 0) + 1;
-      }
-      return stats;
-    }, { credits: 0, debits: 0, count: 0, staffTransactions: {} });
-  }, [filteredTransactions]);
-
-  const topStaff = useMemo(() => {
-    const staffCounts = calculateStats.staffTransactions;
-    let topStaffId = null;
-    let maxTransactions = 0;
-    for (const staffId in staffCounts) {
-      if (staffCounts[staffId] > maxTransactions) {
-        maxTransactions = staffCounts[staffId];
-        topStaffId = staffId;
-      }
-    }
-    if (!topStaffId) return null;
-    const staffInfo = staffMembers.find(staff => staff.id === topStaffId);
-    return staffInfo ? { ...staffInfo, transactionCount: maxTransactions } : null;
-  }, [calculateStats, staffMembers]);
-
-  // Chart data
-  const chartData = useMemo(() => {
-    if (!transactions.length) return [];
-    const grouped = {};
-    transactions.forEach(t => {
-      const amount = Number(t.amount) || 0;
-      const date = new Date(t.date);
-      const monthYear = format(date, 'MMM yyyy');
-      if (!grouped[monthYear]) grouped[monthYear] = { credits: 0, debits: 0, net: 0 };
-      if (t.type === 'credit') {
-        grouped[monthYear].credits += amount;
-        grouped[monthYear].net += amount;
-      } else {
-        grouped[monthYear].debits += Math.abs(amount);
-        grouped[monthYear].net -= Math.abs(amount);
-      }
-    });
-    return Object.keys(grouped).map(month => ({
-      name: month,
-      credits: grouped[month].credits,
-      debits: grouped[month].debits,
-      net: grouped[month].net
-    })).sort((a, b) => new Date(a.name) - new Date(b.name));
-  }, [transactions]);
-
-  const serviceData = useMemo(() => {
-    if (!transactions.length) return [];
-    const serviceTotals = {};
-    transactions.forEach(t => {
-      const service = t.service;
-      if (!serviceTotals[service]) serviceTotals[service] = 0;
-      serviceTotals[service] += Math.abs(t.amount);
-    });
-    return Object.keys(serviceTotals).map(serviceId => {
-      const service = services.find(s => s.id === serviceId) || { 
-        name: serviceId, 
-        color: SERVICE_COLORS[Object.keys(serviceTotals).indexOf(serviceId) % SERVICE_COLORS.length]
-      };
-      return { name: service.name, value: serviceTotals[serviceId], color: service.color };
-    });
-  }, [transactions]);
-
-  // Helper functions
-  const formatAmount = (amount) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(amount);
-  const formatDate = (dateString, formatStr = 'dd MMM yyyy') => {
-    try { return format(new Date(dateString), formatStr); } catch (error) { return "Invalid Date"; }
-  };
-  const getWalletIcon = (typeId) => {
-    const type = walletTypes.find(t => t.id === typeId);
-    return type ? type.icon : Wallet;
-  };
-  const getServiceName = (serviceId) => {
-    const service = services.find(s => s.id === serviceId);
-    return service ? service.name : "Unknown Service";
-  };
-  const highlightSearch = (text) => {
-    if (!searchQuery || !text) return text;
-    const parts = text.split(new RegExp(`(${searchQuery})`, 'gi'));
-    return parts.map((part, i) => 
-      part.toLowerCase() === searchQuery.toLowerCase() ? <mark key={i} className="bg-yellow-200">{part}</mark> : part
-    );
-  };
-
-  const handleSort = (key) => {
-    setSortConfig(prev => ({ key, direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc' }));
-  };
-  const handleDateChange = (e, type) => {
-    const newDate = new Date(e.target.value);
-    setDateRange(prev => ({ ...prev, [type]: newDate }));
-    setTimeFilter("custom");
-  };
-  const clearFilters = () => {
-    setTimeFilter("month");
-    setTypeFilter("all");
-    setServiceFilter("all");
-    setSearchInput("");
-    setDateRange({ start: startOfDay(subDays(new Date(), 30)), end: endOfDay(new Date()) });
-  };
-  const exportToCSV = () => {
-    try {
-      const headers = ['Date', 'Description', 'Service', 'Type', 'Amount (₹)', 'Notes', 'Staff'];
-      const csvContent = [
-        headers.join(','),
-        ...filteredTransactions.map(t => {
-          const staff = getStaffInfo(t.staffId);
-          return `"${formatDate(t.date)}","${t.description ? t.description.replace(/"/g, '""') : ''}","${getServiceName(t.service)}","${t.type ? t.type.charAt(0).toUpperCase() + t.type.slice(1) : ''}","${formatAmount(t.amount).replace(/[^\d.,-]/g, '')}","${(t.notes || '').replace(/"/g, '""')}","${staff.name}"`;
-        })
-      ].join('\n');
-      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.setAttribute('href', url);
-      link.setAttribute('download', `${wallet ? wallet.name.replace(/\s+/g, '-') : 'wallet'}-transactions-${formatDate(new Date(), 'yyyyMMdd')}.csv`);
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-    } catch (error) { console.error("Error exporting CSV:", error); alert("Failed to export CSV."); }
-  };
-  const handleRefresh = useCallback(async () => {
-    setLoading(true);
-    setChartLoading(true);
+  const handleRefresh = async () => {
+    setRefreshing(true);
     await fetchData();
-    setLoading(false);
-    setChartLoading(false);
-  }, [fetchData]);
-  const handleZoom = (direction) => {
-    setZoomLevel(prev => direction === 'in' ? Math.min(prev + 0.1, 1.5) : Math.max(prev - 0.1, 0.7));
+    setRefreshing(false);
   };
-  const handleRecharge = useCallback(async () => {
-    if (!rechargeAmount || Number(rechargeAmount) <= 0) {
-      alert("Please enter a valid recharge amount");
-      return;
-    }
+
+  /* ---------- lookups ---------- */
+  const staffById = useMemo(() => {
+    const m = {};
+    staffMembers.forEach((s) => (m[String(s.id)] = s));
+    return m;
+  }, [staffMembers]);
+  const staffName = useCallback((t) => (t.staffId ? staffById[t.staffId]?.name || t.staffName || `Staff #${t.staffId}` : "System"), [staffById]);
+
+  const categories = useMemo(() => [...new Set(transactions.map((t) => t.category))].sort(), [transactions]);
+  const colorFor = useCallback((cat) => CATEGORY_COLORS[Math.max(0, categories.indexOf(cat)) % CATEGORY_COLORS.length], [categories]);
+
+  /* ---------- filtering ---------- */
+  const range = rangeFor(period, customRange);
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase();
+    return transactions.filter((t) => {
+      const d = new Date(t.date);
+      if (range.start && (d < range.start || d > range.end)) return false;
+      if (typeFilter !== "all" && t.type !== typeFilter) return false;
+      if (categoryFilter !== "all" && t.category !== categoryFilter) return false;
+      if (q && ![t.description, t.category, staffName(t)].some((f) => String(f).toLowerCase().includes(q))) return false;
+      return true;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, range.start?.getTime(), range.end?.getTime(), typeFilter, categoryFilter, search, staffName]);
+
+  useEffect(() => setPage(1), [filtered.length, sort]);
+
+  const sorted = useMemo(() => {
+    const items = [...filtered];
+    items.sort((a, b) => {
+      let c = 0;
+      if (sort.key === "date") c = new Date(a.date) - new Date(b.date);
+      else if (sort.key === "amount") c = a.amount - b.amount;
+      return sort.dir === "asc" ? c : -c;
+    });
+    return items;
+  }, [filtered, sort]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PER_PAGE));
+  const pageStart = (page - 1) * PER_PAGE;
+  const pageItems = sorted.slice(pageStart, pageStart + PER_PAGE);
+
+  /* ---------- stats ---------- */
+  const stats = useMemo(() => {
+    let moneyIn = 0, moneyOut = 0, inCount = 0, outCount = 0, largest = null;
+    const byStaff = {};
+    filtered.forEach((t) => {
+      if (t.type === "credit") { moneyIn += t.amount; inCount++; } else { moneyOut += t.amount; outCount++; }
+      if (!largest || t.amount > largest.amount) largest = t;
+      if (t.staffId) byStaff[t.staffId] = (byStaff[t.staffId] || 0) + 1;
+    });
+    const topStaffId = Object.keys(byStaff).sort((a, b) => byStaff[b] - byStaff[a])[0];
+    return { moneyIn, moneyOut, inCount, outCount, net: moneyIn - moneyOut, largest, topStaffId, topStaffCount: byStaff[topStaffId] || 0 };
+  }, [filtered]);
+
+  // Previous period of the same length, for comparison
+  const comparison = useMemo(() => {
+    if (!range.start) return null;
+    const len = range.end - range.start;
+    const prevStart = new Date(range.start.getTime() - len - 1);
+    const prevEnd = new Date(range.start.getTime() - 1);
+    let pin = 0, pout = 0;
+    transactions.forEach((t) => {
+      const d = new Date(t.date);
+      if (d >= prevStart && d <= prevEnd) t.type === "credit" ? (pin += t.amount) : (pout += t.amount);
+    });
+    const days = Math.max(1, Math.round(len / 86400000));
+    return { inChange: stats.moneyIn - pin, outChange: stats.moneyOut - pout, perDay: filtered.length / days, outPerDay: stats.moneyOut / days };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [transactions, range.start?.getTime(), range.end?.getTime(), stats, filtered.length]);
+
+  /* ---------- charts ---------- */
+  const flowData = useMemo(() => {
+    // Daily buckets for short ranges, monthly otherwise
+    const daily = period === "today" || period === "yesterday" || period === "week" || period === "month" ||
+      (period === "custom" && range.end - range.start <= 62 * 86400000);
+    const buckets = {};
+    filtered.forEach((t) => {
+      const d = new Date(t.date);
+      const key = daily ? format(d, "yyyy-MM-dd") : format(d, "yyyy-MM");
+      if (!buckets[key]) buckets[key] = { key, name: daily ? format(d, "dd MMM") : format(d, "MMM yy"), in: 0, out: 0 };
+      t.type === "credit" ? (buckets[key].in += t.amount) : (buckets[key].out += t.amount);
+    });
+    return Object.values(buckets).sort((a, b) => a.key.localeCompare(b.key)).map((b) => ({ ...b, net: b.in - b.out }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, period, range.start?.getTime(), range.end?.getTime()]);
+
+  const categoryData = useMemo(() => {
+    const totals = {};
+    filtered.forEach((t) => {
+      if (!totals[t.category]) totals[t.category] = { name: t.category, value: 0, count: 0 };
+      totals[t.category].value += t.amount;
+      totals[t.category].count++;
+    });
+    return Object.values(totals).sort((a, b) => b.value - a.value);
+  }, [filtered]);
+  const categoryTotal = categoryData.reduce((s, c) => s + c.value, 0);
+
+  /* ---------- actions ---------- */
+  const resetFilters = () => {
+    setPeriod("month");
+    setTypeFilter("all");
+    setCategoryFilter("all");
+    setSearchInput("");
+  };
+  const hasFilters = period !== "month" || typeFilter !== "all" || categoryFilter !== "all" || searchInput;
+
+  const toggleSort = (key) => setSort((s) => ({ key, dir: s.key === key && s.dir === "desc" ? "asc" : "desc" }));
+
+  const exportCsv = () => {
+    if (!sorted.length) return toast.info("Nothing to export");
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = [
+      ["Date", "Time", "Description", "Category", "Type", "Amount", "Staff"].map(esc).join(","),
+      ...sorted.map((t) =>
+        [fmt(t.date, "dd-MM-yyyy"), fmt(t.date, "HH:mm"), t.description, t.category, t.type === "credit" ? "Credit" : "Debit", t.type === "credit" ? t.amount : -t.amount, staffName(t)]
+          .map(esc).join(",")
+      ),
+    ];
+    const url = URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(wallet?.name || "wallet").replace(/\s+/g, "-")}-transactions-${fmt(new Date(), "yyyyMMdd")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const doRecharge = async () => {
+    const amount = Number(recharge.amount);
+    if (!amount || amount <= 0) return toast.error("Enter a valid amount.");
+    setBusy(true);
     try {
-      const amount = Number(rechargeAmount);
+      const id = localStorage.getItem("id");
       await rechargeWallet({
         wallet_id: walletId,
         amount,
-        description: rechargeDescription || "Wallet Recharge",
+        description: recharge.description.trim() || "Wallet Recharge",
         category: "Recharge",
-        staff_id: localStorage.getItem("id") ? parseInt(localStorage.getItem("id")) : null
+        staff_id: id ? parseInt(id, 10) : null,
       });
-      await handleRefresh();
-      setRechargeAmount("");
-      setRechargeDescription("");
-      setShowRechargeModal(false);
-      alert(`Successfully recharged ${formatAmount(amount)} to wallet`);
+      toast.success(`${formatAmount(amount)} added to ${wallet.name}`);
+      setRecharge(null);
+      await fetchData();
     } catch (err) {
       console.error("Recharge failed:", err);
-      alert("Recharge failed. Please try again.");
+      toast.error(err.response?.data?.error || "Recharge failed. Please try again.");
+    } finally {
+      setBusy(false);
     }
-  }, [walletId, rechargeAmount, rechargeDescription, handleRefresh]);
-  const toggleTrendAnalysis = () => setExpandedTrendAnalysis(!expandedTrendAnalysis);
+  };
 
-  const indexOfLastTransaction = currentPage * transactionsPerPage;
-  const indexOfFirstTransaction = indexOfLastTransaction - transactionsPerPage;
-  const currentTransactions = sortedTransactions.slice(indexOfFirstTransaction, indexOfLastTransaction);
-  const totalPages = Math.ceil(sortedTransactions.length / transactionsPerPage);
-  const displayRange = getDateRangeForFilter(timeFilter, dateRange);
-  const WalletIcon = wallet ? getWalletIcon(wallet.type) : Wallet;
-  const walletType = wallet ? walletTypes.find(t => t.id === wallet.type) || walletTypes[0] : walletTypes[0];
+  const highlight = (text) => {
+    if (!search || !text) return text;
+    const parts = String(text).split(new RegExp(`(${escapeRegExp(search)})`, "gi"));
+    return parts.map((p, i) => (p.toLowerCase() === search.toLowerCase() ? <mark key={i} className="bg-yellow-100 rounded px-0.5">{p}</mark> : p));
+  };
 
+  /* ---------- states ---------- */
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-slate-800 mx-auto"></div>
-          <p className="mt-4 text-slate-700">Loading wallet activity...</p>
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-gray-200 border-t-navy-700 mx-auto" />
+          <p className="mt-3 text-sm text-gray-500">Loading wallet activity…</p>
         </div>
       </div>
     );
   }
 
-  if (error) {
+  if (error || !wallet) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center max-w-md p-6 bg-white rounded-xl shadow-md border border-red-200">
-          <div className="bg-red-100 p-3 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-            <X className="h-8 w-8 text-red-600" />
+      <div className="min-h-[60vh] flex items-center justify-center p-4">
+        <div className="text-center max-w-md bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
+          <div className="w-14 h-14 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto mb-4">
+            <FiX size={24} />
           </div>
-          <h2 className="text-xl font-bold text-slate-800 mb-2">Error Loading Data</h2>
-          <p className="text-slate-600 mb-4">{error}</p>
+          <h2 className="text-lg font-bold text-gray-900 mb-1">{error === "Wallet not found" ? "Wallet not found" : "Couldn't load wallet"}</h2>
+          <p className="text-sm text-gray-500 mb-5">{error || "This wallet doesn't exist or has been removed."}</p>
           <div className="flex justify-center gap-3">
-            <button onClick={handleRefresh} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md flex items-center">
-              <RefreshCw className="h-4 w-4 mr-2" /> Retry
+            <button onClick={handleRefresh} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800">
+              <FiRefreshCw size={15} /> Retry
             </button>
-            <Link to="/dashboard/admin/wallets" className="px-4 py-2 bg-white border border-slate-300 rounded-md hover:bg-slate-50 flex items-center">
-              <ArrowLeft className="h-4 w-4 mr-2" /> Back to Wallets
+            <Link to="/dashboard/admin/wallets" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium border border-gray-300 text-gray-700 hover:bg-gray-50">
+              <FiArrowLeft size={15} /> Back to Wallets
             </Link>
           </div>
         </div>
@@ -552,157 +388,444 @@ const WalletActivity = () => {
     );
   }
 
-  if (!wallet) {
+  const type = WALLET_TYPES[wallet.type] || { name: "Wallet", icon: FiCreditCard, tone: "bg-gray-50 text-gray-600 border-gray-100" };
+  const TypeIcon = type.icon;
+  const online = wallet.status === "online";
+  const topStaff = stats.topStaffId ? staffById[stats.topStaffId] : null;
+  const rangeLabel = range.start ? `${fmt(range.start, "dd MMM")} – ${fmt(range.end, "dd MMM yyyy")}` : "All time";
+  const tooltipFmt = (v, name) => [formatAmount(v), name];
+
+  const Change = ({ value, goodWhenUp = true }) => {
+    if (!value) return <span className="text-gray-400">No change</span>;
+    const up = value > 0;
+    const good = up === goodWhenUp;
+    const Icon = up ? FiTrendingUp : FiTrendingDown;
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="text-center">
-          <Wallet className="h-16 w-16 text-slate-400 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-slate-800 mb-2">Wallet Not Found</h2>
-          <p className="text-slate-600 mb-6">The wallet you're looking for doesn't exist or has been removed.</p>
-          <Link to="/dashboard/admin/wallets" className="inline-flex items-center px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back to Wallets
-          </Link>
-        </div>
-      </div>
+      <span className={`inline-flex items-center gap-1 font-medium ${good ? "text-emerald-600" : "text-red-600"}`}>
+        <Icon size={14} /> {up ? "+" : "−"}{formatAmount(Math.abs(value))}
+      </span>
     );
-  }
+  };
+
+  const SortIcon = ({ k }) => (sort.key === k ? (sort.dir === "asc" ? <FiChevronUp size={13} /> : <FiChevronDown size={13} />) : null);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <div className="bg-white border-b border-slate-200 py-4 sm:py-6">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col sm:flex-row justify-between gap-3 sm:gap-4">
-            <div className="flex items-center">
-              <Link to="/dashboard/admin/wallets" className="mr-3 p-1 sm:p-2 rounded-full hover:bg-slate-100">
-                <ArrowLeft className="h-5 w-5 text-slate-600" />
-              </Link>
-              <div>
-                <h1 className="text-xl sm:text-2xl font-bold text-slate-900">Wallet Activity</h1>
-                <p className="text-slate-600 text-sm sm:text-base mt-1">Detailed transaction history and analytics</p>
-              </div>
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="max-w-7xl mx-auto">
+        {/* Header */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link to="/dashboard/admin/wallets" className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 shrink-0" title="Back to wallets">
+              <FiArrowLeft size={20} />
+            </Link>
+            <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${type.tone}`}>
+              <TypeIcon size={22} />
             </div>
-            <div className="flex gap-2 sm:gap-3 flex-wrap justify-center sm:justify-end">
-              <Button variant="outline" onClick={handleRefresh} className="gap-2"><RefreshCw className="h-4 w-4" /><span className="hidden sm:inline">Refresh</span></Button>
-              <Button variant="outline" onClick={exportToCSV} className="gap-2"><Download className="h-4 w-4" /><span className="hidden sm:inline">Export CSV</span></Button>
-              <Button onClick={() => setShowRechargeModal(true)} className="gap-2"><Plus className="h-4 w-4" /><span className="hidden sm:inline">Recharge</span></Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-7xl mx-auto p-4 sm:p-6">
-        {/* Wallet Summary */}
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-6">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 sm:p-3 rounded-xl ${walletType.color}`}><WalletIcon className="h-6 w-6 sm:h-8 sm:w-8" /></div>
-            <div>
-              <h2 className="text-lg sm:text-xl font-bold text-slate-900">{wallet.name}</h2>
-              <p className="text-slate-600 text-xs sm:text-sm flex items-center gap-1 mt-1">
-                <span className={`w-2 h-2 rounded-full ${wallet.status === 'online' ? 'bg-green-500' : 'bg-slate-400'}`} />
-                {wallet.status === 'online' ? 'Online' : 'Offline'} • Last activity: {formatDate(wallet.lastTransaction)}
+            <div className="min-w-0">
+              <h1 className="text-xl md:text-2xl font-bold text-gray-900 truncate">{wallet.name}</h1>
+              <p className="text-sm text-gray-500 flex flex-wrap items-center gap-x-2">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-gray-400"}`} />
+                  {online ? "Online" : "Offline"}
+                </span>
+                <span className="text-gray-300">·</span>
+                {type.name}
+                <span className="text-gray-300">·</span>
+                {wallet.isShared ? "Shared" : "Personal"}
+                <span className="text-gray-300">·</span>
+                #{wallet.id}
               </p>
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-2xl sm:text-3xl font-bold text-slate-900">{formatAmount(wallet.balance)}</div>
-            <div className="mt-1 text-xs text-slate-600 space-y-0.5">
-              <div>Opening: <span className="font-medium">{todayBalanceLoading || !todayBalance?.opening_balance ? "N/A" : formatAmount(todayBalance.opening_balance)}</span></div>
-              <div>Closing: <span className="font-medium">{todayBalanceLoading || !todayBalance?.closing_balance ? "N/A" : formatAmount(todayBalance.closing_balance)}</span></div>
-              <div className="text-slate-500">{wallet.transactions} transactions</div>
-            </div>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={handleRefresh} disabled={refreshing} className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60">
+              <FiRefreshCw size={15} className={refreshing ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button onClick={exportCsv} className="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50">
+              <FiDownload size={15} /> Export
+            </button>
+            <button onClick={() => setRecharge({ amount: "", description: "" })} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 shadow-sm">
+              <FiPlus size={16} /> Add Money
+            </button>
+          </div>
+        </div>
+
+        {/* Balance strip */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="col-span-2 md:col-span-1">
+            <p className="text-sm text-gray-500">Current balance</p>
+            <p className="text-3xl font-bold text-gray-900">{formatAmount(wallet.balance)}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Today opening</p>
+            <p className="text-lg font-semibold text-gray-800">{todayBalance?.opening_balance != null ? formatAmount(todayBalance.opening_balance) : "—"}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Today closing</p>
+            <p className="text-lg font-semibold text-gray-800">{todayBalance?.closing_balance != null ? formatAmount(todayBalance.closing_balance) : "—"}</p>
+          </div>
+          <div>
+            <p className="text-sm text-gray-500">Last activity</p>
+            <p className="text-lg font-semibold text-gray-800">{transactions[0]?.date ? fmt(transactions.reduce((m, t) => (new Date(t.date) > new Date(m) ? t.date : m), transactions[0].date), "dd MMM, hh:mm a") : "—"}</p>
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4 mb-6">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="relative w-full">
-              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"><Search className="h-4 w-4 sm:h-5 sm:w-5 text-slate-400" /></div>
-              <input type="text" placeholder="Search transactions..." value={searchInput} onChange={(e) => setSearchInput(e.target.value)} className="w-full pl-9 sm:pl-10 pr-3 py-2 border border-slate-300 rounded-md bg-white text-sm focus:outline-none focus:ring-2 focus:ring-slate-500" />
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-6 space-y-3">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
+              <input
+                type="text"
+                placeholder="Search description, category or staff…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              />
+              {searchInput && (
+                <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <FiX size={16} />
+                </button>
+              )}
             </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <button onClick={() => setShowFilters(!showFilters)} className="flex items-center gap-1 w-full sm:w-auto justify-center px-3 py-2 bg-white border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm">
-                <Filter className="h-4 w-4" /><span>Filters</span>{showFilters ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-              </button>
-              {showFilters && <button onClick={clearFilters} className="flex items-center gap-1 w-full sm:w-auto justify-center px-3 py-2 bg-white border border-slate-300 rounded-md text-slate-700 hover:bg-slate-50 text-sm"><X className="h-4 w-4" /><span>Clear</span></button>}
+            <div className="flex flex-wrap gap-3">
+              <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="all">Money in & out</option>
+                <option value="credit">Money in only</option>
+                <option value="debit">Money out only</option>
+              </select>
+              <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none">
+                <option value="all">All categories</option>
+                {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
           </div>
-          {showFilters && (
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-slate-200 pt-4">
-              <div><label className="block text-xs sm:text-sm font-medium mb-1 text-slate-700">Time Period</label><select value={timeFilter} onChange={(e) => setTimeFilter(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md"><option value="all">All Time</option><option value="today">Today</option><option value="yesterday">Yesterday</option><option value="week">Last 7 Days</option><option value="month">Last 30 Days</option><option value="quarter">Last 3 Months</option><option value="year">Last Year</option><option value="custom">Custom Range</option></select></div>
-              {timeFilter === "custom" && (<div className="sm:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3"><div><label className="block text-xs sm:text-sm font-medium mb-1 text-slate-700">Start Date</label><input type="date" value={formatDate(dateRange.start, 'yyyy-MM-dd')} onChange={(e) => handleDateChange(e, 'start')} className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md" /></div><div><label className="block text-xs sm:text-sm font-medium mb-1 text-slate-700">End Date</label><input type="date" value={formatDate(dateRange.end, 'yyyy-MM-dd')} onChange={(e) => handleDateChange(e, 'end')} className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md" /></div></div>)}
-              <div><label className="block text-xs sm:text-sm font-medium mb-1 text-slate-700">Transaction Type</label><select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md"><option value="all">All Types</option><option value="credit">Credit</option><option value="debit">Debit</option></select></div>
-              <div><label className="block text-xs sm:text-sm font-medium mb-1 text-slate-700">Service</label><select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)} className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md"><option value="all">All Services</option>{services.map(service => <option key={service.id} value={service.id}>{service.name}</option>)}</select></div>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap bg-gray-100 rounded-xl p-1">
+              {PERIODS.map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setPeriod(val)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium ${period === val ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
+            {period === "custom" && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={fmt(customRange.start, "yyyy-MM-dd")}
+                  max={fmt(customRange.end, "yyyy-MM-dd")}
+                  onChange={(e) => { const d = parseInputDate(e.target.value); if (d) setCustomRange((r) => ({ ...r, start: d })); }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+                <span className="text-gray-400 text-sm">to</span>
+                <input
+                  type="date"
+                  value={fmt(customRange.end, "yyyy-MM-dd")}
+                  min={fmt(customRange.start, "yyyy-MM-dd")}
+                  onChange={(e) => { const d = parseInputDate(e.target.value); if (d) setCustomRange((r) => ({ ...r, end: d })); }}
+                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                />
+              </div>
+            )}
+            <span className="text-sm text-gray-500 ml-auto">{rangeLabel}</span>
+            {hasFilters && (
+              <button onClick={resetFilters} className="text-sm font-medium text-blue-600 hover:text-blue-800">Reset</button>
+            )}
+          </div>
+          {transactions.length >= 100 && (
+            <p className="text-xs text-gray-400">Showing the latest 100 transactions for this wallet.</p>
           )}
         </div>
 
-        {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 sm:gap-4 mb-6">
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4"><div className="flex items-center justify-between mb-2 sm:mb-3"><h3 className="text-xs sm:text-sm font-semibold text-slate-900">Transactions</h3><div className="p-1 sm:p-2 bg-slate-100 rounded-lg"><FileText className="h-4 w-4 text-slate-600" /></div></div><p className="text-lg sm:text-xl font-bold text-slate-900">{calculateStats.count}</p><p className="text-xs text-slate-500 mt-1">filtered transactions</p></div>
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4"><div className="flex items-center justify-between mb-2 sm:mb-3"><h3 className="text-xs sm:text-sm font-semibold text-slate-900">Total Credits</h3><div className="p-1 sm:p-2 bg-green-100 rounded-lg"><ArrowDown className="h-4 w-4 text-green-600" /></div></div><p className="text-base sm:text-lg font-bold text-green-600">{formatAmount(calculateStats.credits)}</p><p className="text-xs text-slate-500 mt-1">{filteredTransactions.filter(t => t.type === 'credit').length} transactions</p></div>
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4"><div className="flex items-center justify-between mb-2 sm:mb-3"><h3 className="text-xs sm:text-sm font-semibold text-slate-900">Total Debits</h3><div className="p-1 sm:p-2 bg-red-100 rounded-lg"><ArrowUp className="h-4 w-4 text-red-600" /></div></div><p className="text-base sm:text-lg font-bold text-red-600">{formatAmount(calculateStats.debits)}</p><p className="text-xs text-slate-500 mt-1">{filteredTransactions.filter(t => t.type === 'debit').length} transactions</p></div>
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4"><div className="flex items-center justify-between mb-2 sm:mb-3"><h3 className="text-xs sm:text-sm font-semibold text-slate-900">Date Range</h3><div className="p-1 sm:p-2 bg-slate-100 rounded-lg"><Calendar className="h-4 w-4 text-slate-600" /></div></div><p className="text-xs sm:text-sm font-bold text-slate-900 truncate">{timeFilter === 'all' ? 'All time' : `${formatDate(displayRange.start)} - ${formatDate(displayRange.end)}`}</p><p className="text-xs text-slate-500 mt-1 truncate">{timeFilter === "custom" ? "custom" : timeFilter} period</p></div>
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4"><div className="flex items-center justify-between mb-2 sm:mb-3"><h3 className="text-xs sm:text-sm font-semibold text-slate-900">Top Staff</h3><div className="p-1 sm:p-2 bg-indigo-100 rounded-lg"><User className="h-4 w-4 text-indigo-600" /></div></div>{topStaff ? (<><p className="text-sm sm:text-base font-bold text-slate-900 truncate">{topStaff.name}</p><p className="text-xs text-slate-600 mt-1 truncate">{topStaff.position}</p><p className="text-xs text-slate-500 mt-1"><span className="font-medium">{topStaff.transactionCount}</span> transactions</p></>) : (<p className="text-xs text-slate-500">No staff data</p>)}</div>
-          <div className={`bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3 sm:p-4 cursor-pointer hover:bg-slate-50 ${expandedTrendAnalysis ? 'ring-2 ring-blue-500' : ''}`} onClick={toggleTrendAnalysis} tabIndex={0} role="button" onKeyDown={(e) => e.key === 'Enter' && toggleTrendAnalysis()}>
-            <div className="flex items-center justify-between mb-2 sm:mb-3"><h3 className="text-xs sm:text-sm font-semibold text-slate-900">Trend Analysis</h3><div className="p-1 sm:p-2 bg-blue-100 rounded-lg"><Activity className="h-4 w-4 text-blue-600" /></div></div>
-            {trendAnalysis ? (<div className="grid grid-cols-2 gap-2"><div className="flex flex-col"><span className="text-xs text-slate-600">Credit Change</span><div className="flex items-center mt-1"><span className={`text-xs sm:text-sm font-medium ${trendAnalysis.comparison.creditChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>{trendAnalysis.comparison.creditChange >= 0 ? '+' : ''}{formatAmount(trendAnalysis.comparison.creditChange)}</span>{trendAnalysis.comparison.creditChange >= 0 ? <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 ml-1" /> : <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-red-600 ml-1" />}</div></div><div className="flex flex-col"><span className="text-xs text-slate-600">Debit Change</span><div className="flex items-center mt-1"><span className={`text-xs sm:text-sm font-medium ${trendAnalysis.comparison.debitChange >= 0 ? 'text-red-600' : 'text-green-600'}`}>{trendAnalysis.comparison.debitChange >= 0 ? '+' : ''}{formatAmount(trendAnalysis.comparison.debitChange)}</span>{trendAnalysis.comparison.debitChange >= 0 ? <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-red-600 ml-1" /> : <TrendingDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-600 ml-1" />}</div></div><div className="col-span-2 text-center mt-2"><span className="text-xs text-slate-500 truncate">vs previous {trendTimeFrame}</span></div></div>) : (<p className="text-xs text-slate-500">Calculating trends...</p>)}
-          </div>
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
+          <Stat label="Money in" value={formatAmount(stats.moneyIn)} sub={`${stats.inCount} transaction${stats.inCount === 1 ? "" : "s"}`} icon={FiArrowDownLeft} tone="bg-emerald-50 text-emerald-600" valueCls="text-emerald-600" />
+          <Stat label="Money out" value={formatAmount(stats.moneyOut)} sub={`${stats.outCount} transaction${stats.outCount === 1 ? "" : "s"}`} icon={FiArrowUpRight} tone="bg-red-50 text-red-600" valueCls="text-red-600" />
+          <Stat label="Net flow" value={`${stats.net < 0 ? "−" : ""}${formatAmount(Math.abs(stats.net))}`} sub={rangeLabel} icon={FiActivity} tone="bg-blue-50 text-blue-600" valueCls={stats.net < 0 ? "text-red-600" : "text-gray-900"} />
+          <Stat label="Transactions" value={filtered.length} sub={comparison ? `${comparison.perDay.toFixed(1)} per day` : "All time"} icon={FiList} tone="bg-gray-100 text-gray-600" />
+          <Stat
+            label="Most active"
+            value={topStaff?.name || (stats.topStaffId ? `Staff #${stats.topStaffId}` : "—")}
+            sub={stats.topStaffId ? `${stats.topStaffCount} transactions` : "No staff activity"}
+            icon={FiUser}
+            tone="bg-purple-50 text-purple-600"
+          />
         </div>
 
-        {/* Expanded Trend Analysis */}
-        {expandedTrendAnalysis && trendAnalysis && (
-          <div className="mt-4 sm:mt-6 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-300 mb-6">
-            <div className="p-4 sm:p-6 border-b border-slate-200 flex justify-between items-center bg-gradient-to-r from-blue-50 to-indigo-50">
-              <h3 className="text-lg sm:text-xl font-bold text-slate-800">Transaction Trend Analysis</h3>
-              <button onClick={toggleTrendAnalysis} className="p-1 sm:p-2 bg-white border border-slate-300 rounded-md hover:bg-slate-100"><X className="h-5 w-5 text-slate-600" /></button>
-            </div>
-            <div className="p-4 sm:p-6">
-              <div className="mb-6"><div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"><h4 className="text-base sm:text-lg font-semibold text-slate-800">Time Period</h4><select value={trendTimeFrame} onChange={(e) => setTrendTimeFrame(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-md text-sm sm:text-base bg-white"><option value="week">Last 7 Days</option><option value="month">Last 30 Days</option><option value="quarter">Last 90 Days</option><option value="year">Last 365 Days</option></select></div></div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-5 shadow-sm"><h4 className="font-semibold text-slate-800 mb-3 sm:mb-4 flex items-center gap-2"><div className="p-2 bg-blue-100 rounded-lg"><TrendingUp className="h-5 w-5 text-blue-600" /></div><span>Financial Summary</span></h4><div className="space-y-3 sm:space-y-4"><div className="flex justify-between items-center"><span className="text-sm text-slate-700">Total Credits</span><span className="font-medium text-lg text-green-600">{formatAmount(trendAnalysis.credits)}</span></div><div className="flex justify-between items-center"><span className="text-sm text-slate-700">Total Debits</span><span className="font-medium text-lg text-red-600">{formatAmount(trendAnalysis.debits)}</span></div><div className="flex justify-between items-center"><span className="text-sm text-slate-700">Net Flow</span><span className={`font-medium text-lg ${trendAnalysis.credits > trendAnalysis.debits ? 'text-green-600' : 'text-red-600'}`}>{formatAmount(trendAnalysis.credits - trendAnalysis.debits)}</span></div><div className="flex justify-between items-center pt-3 border-t border-slate-200"><span className="text-sm text-slate-700">Transactions</span><span className="font-medium text-lg text-slate-800">{transactions.filter(t => new Date(t.date) > subDays(new Date(), trendTimeFrame === 'week' ? 7 : trendTimeFrame === 'month' ? 30 : trendTimeFrame === 'quarter' ? 90 : 365)).length}</span></div></div></div>
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-5 shadow-sm"><h4 className="font-semibold text-slate-800 mb-3 sm:mb-4 flex items-center gap-2"><div className="p-2 bg-blue-100 rounded-lg"><Activity className="h-5 w-5 text-blue-600" /></div><span>Period Comparison</span></h4><div className="space-y-3 sm:space-y-4"><div className="flex justify-between items-center"><span className="text-sm text-slate-700">Credit Change</span><div className="flex items-center"><span className={`font-medium text-base ${trendAnalysis.comparison.creditChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>{trendAnalysis.comparison.creditChange >= 0 ? '+' : ''}{formatAmount(trendAnalysis.comparison.creditChange)}</span>{trendAnalysis.comparison.creditChange >= 0 ? <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 ml-1" /> : <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 ml-1" />}</div></div><div className="flex justify-between items-center"><span className="text-sm text-slate-700">Debit Change</span><div className="flex items-center"><span className={`font-medium text-base ${trendAnalysis.comparison.debitChange >= 0 ? 'text-red-600' : 'text-green-600'}`}>{trendAnalysis.comparison.debitChange >= 0 ? '+' : ''}{formatAmount(trendAnalysis.comparison.debitChange)}</span>{trendAnalysis.comparison.debitChange >= 0 ? <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-red-600 ml-1" /> : <TrendingDown className="h-4 w-4 sm:h-5 sm:w-5 text-green-600 ml-1" />}</div></div><div className="flex justify-between items-center pt-3 border-t border-slate-200"><span className="text-sm text-slate-700">Transaction Change</span><div className="flex items-center"><span className={`font-medium text-base ${trendAnalysis.comparison.transactionChange >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>{trendAnalysis.comparison.transactionChange >= 0 ? '+' : ''}{trendAnalysis.comparison.transactionChange}</span></div></div></div></div>
-                <div className="md:col-span-2 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 sm:p-5 shadow-sm"><h4 className="font-semibold text-slate-800 mb-3 sm:mb-4 flex items-center gap-2"><div className="p-2 bg-blue-100 rounded-lg"><BarChart className="h-5 w-5 text-blue-600" /></div><span>Key Insights</span></h4><div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4"><div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm"><p className="text-xs sm:text-sm text-slate-600 mb-1">Most Active Service</p><p className="font-semibold text-slate-800 truncate">{trendAnalysis.mostActiveService ? getServiceName(trendAnalysis.mostActiveService) : "N/A"}</p><p className="text-xs sm:text-sm text-slate-600 mt-1">{trendAnalysis.mostActiveService ? `${trendAnalysis.services[trendAnalysis.mostActiveService].count} transactions` : "No service data"}</p></div><div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm"><p className="text-xs sm:text-sm text-slate-600 mb-1">Daily Average</p><p className="font-semibold text-slate-800">{formatAmount(trendAnalysis.dailyAverage.transactions)} transactions/day</p><p className="text-xs sm:text-sm text-slate-600 mt-1">{formatAmount(trendAnalysis.dailyAverage.debits)} spent daily</p></div><div className="bg-white rounded-lg p-3 sm:p-4 shadow-sm"><p className="text-xs sm:text-sm text-slate-600 mb-1">Largest Transaction</p>{trendAnalysis.largestTransaction ? (<><p className="font-semibold text-slate-800 truncate">{trendAnalysis.largestTransaction.description}</p><p className={`text-sm ${trendAnalysis.largestTransaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{formatAmount(trendAnalysis.largestTransaction.amount)}</p></>) : (<p className="text-xs sm:text-sm text-slate-600">No data</p>)}</div></div></div>
+        {/* Charts */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-6">
+          <Card
+            className="lg:col-span-2"
+            title="Money in vs out"
+            action={
+              <div className="flex bg-gray-100 rounded-lg p-0.5">
+                {[["bar", "Bars"], ["line", "Lines"]].map(([v, l]) => (
+                  <button key={v} onClick={() => setChartType(v)} className={`px-2.5 py-1 rounded-md text-xs font-medium ${chartType === v ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}>
+                    {l}
+                  </button>
+                ))}
               </div>
-              <div className="mt-6 sm:mt-8"><h4 className="font-semibold text-slate-800 mb-3 sm:mb-4 flex items-center gap-2"><div className="p-2 bg-blue-100 rounded-lg"><PieChart className="h-5 w-5 text-blue-600" /></div><span>Service Distribution</span></h4><div className="h-64 sm:h-80"><ResponsiveContainer width="100%" height="100%"><ReBarChart data={Object.entries(trendAnalysis.services).map(([service, data]) => ({ name: getServiceName(service), transactions: data.count, amount: data.total })).sort((a, b) => b.transactions - a.transactions).slice(0, 5)}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" stroke="#94a3b8" /><YAxis stroke="#94a3b8" /><Tooltip formatter={(value, name) => name === 'transactions' ? [value, 'Transactions'] : [`₹${value}`, 'Amount']} /><Bar dataKey="transactions" name="Transactions" fill="#8884d8" radius={[4, 4, 0, 0]} /><Bar dataKey="amount" name="Amount" fill="#82ca9d" radius={[4, 4, 0, 0]} /></ReBarChart></ResponsiveContainer></div></div>
+            }
+          >
+            <div className="h-72 px-2 pb-4">
+              {flowData.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-gray-400">No transactions in this period</div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  {chartType === "bar" ? (
+                    <BarChart data={flowData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={compactAmount} width={56} />
+                      <Tooltip formatter={tooltipFmt} cursor={{ fill: "#f8fafc" }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="in" name="Money in" fill={COLOR_IN} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                      <Bar dataKey="out" name="Money out" fill={COLOR_OUT} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                    </BarChart>
+                  ) : (
+                    <LineChart data={flowData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} tickFormatter={compactAmount} width={56} />
+                      <Tooltip formatter={tooltipFmt} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: 12 }} />
+                      <Line type="monotone" dataKey="in" name="Money in" stroke={COLOR_IN} strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="out" name="Money out" stroke={COLOR_OUT} strokeWidth={2} dot={{ r: 3 }} />
+                      <Line type="monotone" dataKey="net" name="Net" stroke={COLOR_NET} strokeWidth={2} strokeDasharray="4 3" dot={false} />
+                    </LineChart>
+                  )}
+                </ResponsiveContainer>
+              )}
+            </div>
+          </Card>
+
+          <Card title="By category" action={<span className="text-xs text-gray-500">{formatAmount(categoryTotal)}</span>}>
+            {categoryData.length === 0 ? (
+              <div className="h-72 flex items-center justify-center text-sm text-gray-400">No data</div>
+            ) : (
+              <div className="px-5 pb-5">
+                <div className="h-40">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={categoryData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={70} paddingAngle={2} stroke="none">
+                        {categoryData.map((c) => <Cell key={c.name} fill={colorFor(c.name)} />)}
+                      </Pie>
+                      <Tooltip formatter={tooltipFmt} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <ul className="mt-3 space-y-2">
+                  {categoryData.slice(0, 6).map((c) => (
+                    <li key={c.name}>
+                      <button
+                        onClick={() => setCategoryFilter(categoryFilter === c.name ? "all" : c.name)}
+                        className={`w-full flex items-center gap-2 text-sm rounded-lg px-1.5 py-1 -mx-1.5 hover:bg-gray-50 ${categoryFilter === c.name ? "bg-gray-50" : ""}`}
+                        title="Filter by this category"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: colorFor(c.name) }} />
+                        <span className="flex-1 text-left text-gray-700 truncate">{c.name}</span>
+                        <span className="text-gray-400 text-xs">{categoryTotal ? Math.round((c.value / categoryTotal) * 100) : 0}%</span>
+                        <span className="font-medium text-gray-900 w-20 text-right">{compactAmount(c.value)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </Card>
+        </div>
+
+        {/* Insights */}
+        {comparison && filtered.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 mb-1">Money in vs previous period</p>
+              <Change value={comparison.inChange} goodWhenUp />
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 mb-1">Money out vs previous period</p>
+              <Change value={comparison.outChange} goodWhenUp={false} />
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+              <p className="text-xs text-gray-500 mb-1">Average spent per day</p>
+              <p className="font-semibold text-gray-900">{formatAmount(comparison.outPerDay)}</p>
+            </div>
+            <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 min-w-0">
+              <p className="text-xs text-gray-500 mb-1">Largest transaction</p>
+              {stats.largest ? (
+                <button onClick={() => setSelected(stats.largest)} className="text-left w-full min-w-0">
+                  <p className={`font-semibold ${stats.largest.type === "credit" ? "text-emerald-600" : "text-red-600"}`}>{formatAmount(stats.largest.amount)}</p>
+                  <p className="text-xs text-gray-500 truncate">{stats.largest.description}</p>
+                </button>
+              ) : (
+                <p className="text-gray-400">—</p>
+              )}
             </div>
           </div>
         )}
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 gap-4 sm:gap-6 mb-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 relative">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900">Monthly Financial Summary</h3>
-              <div className="flex items-center gap-2 sm:gap-4 w-full sm:w-auto">
-                <div className="flex items-center gap-1 sm:gap-2"><button onClick={() => handleZoom('out')} className="p-1 bg-slate-100 rounded-md hover:bg-slate-200" disabled={zoomLevel <= 0.7}><Minus className="h-4 w-4" /></button><button onClick={() => handleZoom('in')} className="p-1 bg-slate-100 rounded-md hover:bg-slate-200" disabled={zoomLevel >= 1.5}><Plus className="h-4 w-4" /></button></div>
-                <div className="relative" ref={chartMenuRef}><button onClick={() => setShowChartMenu(!showChartMenu)} className="flex items-center gap-1 text-sm px-2 sm:px-3 py-1 bg-slate-100 hover:bg-slate-200 rounded-md w-full sm:w-auto">{chartType === 'bar' ? <BarChart className="h-4 w-4" /> : chartType === 'line' ? <LineChart className="h-4 w-4" /> : <PieChart className="h-4 w-4" />}<span className="hidden sm:inline">{chartType === 'bar' ? 'Bar' : chartType === 'line' ? 'Line' : 'Pie'} Chart</span><ChevronDown className="h-4 w-4" /></button>{showChartMenu && (<div className="absolute right-0 mt-1 w-40 bg-white rounded-md shadow-lg border border-slate-200 z-10"><button onClick={() => { setChartType('bar'); setShowChartMenu(false); }} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2"><BarChart className="h-4 w-4" />Bar Chart</button><button onClick={() => { setChartType('line'); setShowChartMenu(false); }} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2"><LineChart className="h-4 w-4" />Line Chart</button><button onClick={() => { setChartType('pie'); setShowChartMenu(false); }} className="w-full text-left px-4 py-2 text-sm flex items-center gap-2"><PieChart className="h-4 w-4" />Pie Chart</button></div>)}</div>
+        {/* Transactions */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+            <h3 className="text-lg font-semibold text-gray-900">Transactions</h3>
+            <p className="text-sm text-gray-500">{filtered.length} result{filtered.length === 1 ? "" : "s"}</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-100">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <button onClick={() => toggleSort("date")} className="inline-flex items-center gap-1 uppercase">Date <SortIcon k="date" /></button>
+                  </th>
+                  <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="hidden md:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Category</th>
+                  <th className="hidden sm:table-cell px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Staff</th>
+                  <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <button onClick={() => toggleSort("amount")} className="inline-flex items-center gap-1 uppercase">Amount <SortIcon k="amount" /></button>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {pageItems.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="px-5 py-12 text-center">
+                      <p className="text-sm font-medium text-gray-700">No transactions found</p>
+                      <p className="text-xs text-gray-400 mt-1">{search ? "Try different search terms" : "Try a longer time period"}</p>
+                    </td>
+                  </tr>
+                ) : (
+                  pageItems.map((t) => {
+                    const credit = t.type === "credit";
+                    return (
+                      <tr key={t.id} onClick={() => setSelected(t)} className="hover:bg-gray-50 cursor-pointer">
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <p className="text-sm text-gray-900">{fmt(t.date, "dd MMM yyyy")}</p>
+                          <p className="text-xs text-gray-400">{fmt(t.date, "hh:mm a")}</p>
+                        </td>
+                        <td className="px-5 py-3 max-w-[220px] sm:max-w-sm">
+                          <p className="text-sm font-medium text-gray-900 truncate">{highlight(t.description)}</p>
+                          <p className="md:hidden text-xs text-gray-500 truncate">{t.category}</p>
+                        </td>
+                        <td className="hidden md:table-cell px-5 py-3 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                            <span className="w-1.5 h-1.5 rounded-full" style={{ background: colorFor(t.category) }} />
+                            {highlight(t.category)}
+                          </span>
+                        </td>
+                        <td className="hidden sm:table-cell px-5 py-3 whitespace-nowrap text-sm text-gray-600">{highlight(staffName(t))}</td>
+                        <td className={`px-5 py-3 whitespace-nowrap text-right text-sm font-semibold ${credit ? "text-emerald-600" : "text-red-600"}`}>
+                          {credit ? "+" : "−"}{formatAmount(t.amount)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+          {sorted.length > PER_PAGE && (
+            <div className="px-5 py-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+              <span>{pageStart + 1}–{Math.min(pageStart + PER_PAGE, sorted.length)} of {sorted.length}</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-40">
+                  <FiChevronLeft size={16} />
+                </button>
+                <span className="px-2">Page {page} of {totalPages}</span>
+                <button onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="p-2 rounded-lg hover:bg-gray-100 disabled:opacity-40">
+                  <FiChevronRight size={16} />
+                </button>
               </div>
             </div>
-            <div className="h-60 sm:h-80" style={{ transform: `scale(${zoomLevel})`, transformOrigin: 'center' }}>
-              <ResponsiveContainer width="100%" height="100%">
-                {chartType === 'bar' ? (<ReBarChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" stroke="#94a3b8" /><YAxis stroke="#94a3b8" tickFormatter={value => { if (Math.abs(value) >= 1000000) return `₹${Math.round(value/1000000)}M`; if (Math.abs(value) >= 1000) return `₹${Math.round(value/1000)}K`; return `₹${Math.round(value)}`; }} /><Tooltip formatter={(value, name) => [`₹${Math.round(value)}`, name]} labelFormatter={(name) => `Month: ${name}`} /><Legend /><Bar dataKey="credits" name="Credits" fill="#10B981" radius={[4, 4, 0, 0]} /><Bar dataKey="debits" name="Debits" fill="#EF4444" radius={[4, 4, 0, 0]} /><Bar dataKey="net" name="Net" fill="#3B82F6" radius={[4, 4, 0, 0]} /></ReBarChart>) : chartType === 'line' ? (<ReLineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}><CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" /><XAxis dataKey="name" stroke="#94a3b8" /><YAxis stroke="#94a3b8" tickFormatter={value => `₹${value/1000}K`} /><Tooltip formatter={(value) => [`₹${value}`, '']} labelFormatter={(name) => `Month: ${name}`} /><Legend /><Line type="monotone" dataKey="credits" name="Credits" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} /><Line type="monotone" dataKey="debits" name="Debits" stroke="#EF4444" strokeWidth={2} dot={{ r: 4 }} /><Line type="monotone" dataKey="net" name="Net" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} /></ReLineChart>) : (<RePieChart><Pie data={serviceData} cx="50%" cy="50%" outerRadius={80} fill="#8884d8" dataKey="value" nameKey="name" label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>{serviceData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip formatter={(value) => [`₹${value}`, '']} /><Legend /></RePieChart>)}
-              </ResponsiveContainer>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6 relative"><div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6"><h3 className="text-base sm:text-lg font-semibold text-slate-900">Service Distribution</h3><div className="text-sm text-slate-600 mt-1 sm:mt-0">Total: {formatAmount(serviceData.reduce((sum, item) => sum + item.value, 0))}</div></div><div className="h-60 sm:h-80"><ResponsiveContainer width="100%" height="100%"><RePieChart><Pie data={serviceData} cx="50%" cy="50%" labelLine={false} outerRadius={80} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}>{serviceData.map((entry, index) => <Cell key={`cell-${index}`} fill={entry.color} />)}</Pie><Tooltip formatter={(value) => [`₹${value}`, '']} /><Legend layout="vertical" verticalAlign="middle" align="right" /></RePieChart></ResponsiveContainer></div></div>
-        </div>
-
-        {/* Transactions Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="p-4 sm:p-6 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2"><h3 className="text-base sm:text-lg font-semibold text-slate-900">Transaction History</h3><p className="text-sm text-slate-600">{filteredTransactions.length} transactions</p></div>
-          <div className="overflow-x-auto"><table className="min-w-full divide-y divide-slate-200"><thead className="bg-slate-50 sticky top-0"><tr><th className="px-3 sm:px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100" onClick={() => handleSort('date')}><div className="flex items-center">Date{sortConfig.key === 'date' && (sortConfig.direction === 'asc' ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />)}</div></th><th className="px-3 sm:px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Description</th><th className="hidden xs:table-cell px-3 sm:px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Service</th><th className="hidden sm:table-cell px-3 sm:px-6 py-4 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Staff</th><th className="px-3 sm:px-6 py-4 text-right text-xs font-medium text-slate-500 uppercase tracking-wider cursor-pointer hover:bg-slate-100" onClick={() => handleSort('amount')}><div className="flex items-center justify-end">Amount{sortConfig.key === 'amount' && (sortConfig.direction === 'asc' ? <ChevronUp className="h-4 w-4 ml-1" /> : <ChevronDown className="h-4 w-4 ml-1" />)}</div></th></tr></thead><tbody className="bg-white divide-y divide-slate-200">{currentTransactions.length > 0 ? (currentTransactions.map((transaction) => { const staffInfo = getStaffInfo(transaction.staffId); return (<tr key={transaction.id} className="hover:bg-slate-50 cursor-pointer" onClick={() => setSelectedTransaction(transaction)} tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && setSelectedTransaction(transaction)}><td className="px-3 sm:px-6 py-4 whitespace-nowrap text-xs sm:text-sm text-slate-600">{formatDate(transaction.date, 'dd MMM')}</td><td className="px-3 sm:px-6 py-4 max-w-[150px] sm:max-w-xs"><div className="text-xs sm:text-sm font-medium text-slate-900 truncate">{highlightSearch(transaction.description)}</div>{transaction.notes && <div className="text-xs text-slate-500 mt-1 truncate">{highlightSearch(transaction.notes)}</div>}<div className="xs:hidden mt-1"><span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{getServiceName(transaction.service)}</span></div></td><td className="hidden xs:table-cell px-3 sm:px-6 py-4 whitespace-nowrap"><span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-700">{getServiceName(transaction.service)}</span></td><td className="hidden sm:table-cell px-3 sm:px-6 py-4 whitespace-nowrap">{transaction.staffId && (<><div className="text-xs sm:text-sm text-slate-700 truncate">{staffInfo.name}</div><div className="text-xs text-slate-500 truncate">{staffInfo.position}</div></>)}</td><td className={`px-3 sm:px-6 py-4 whitespace-nowrap text-right text-xs sm:text-sm font-medium ${transaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}><div className="flex justify-end items-center">{transaction.type === 'credit' ? <ArrowDown className="h-3 w-3 sm:h-4 sm:w-4 text-green-500 mr-1" /> : <ArrowUp className="h-3 w-3 sm:h-4 sm:w-4 text-red-500 mr-1" />}{formatAmount(Math.abs(transaction.amount))}</div></td></tr>); })) : (<tr><td colSpan="5" className="px-6 py-8 text-center"><div className="flex flex-col items-center justify-center"><Search className="h-10 w-10 text-slate-400 mb-3" /><h3 className="text-base font-medium text-slate-700">No transactions found</h3><p className="text-slate-500 text-sm mt-1">{searchQuery ? 'Try different search terms' : 'No transactions match your filters'}</p></div></td></tr>)}</tbody></table></div>
-          {filteredTransactions.length > 0 && (<div className="px-4 sm:px-6 py-4 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row justify-between items-center gap-4"><div className="text-xs sm:text-sm text-slate-600">Showing {indexOfFirstTransaction + 1} to {Math.min(indexOfLastTransaction, filteredTransactions.length)} of {filteredTransactions.length} transactions</div><div className="flex items-center gap-2"><button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} className={`p-2 rounded-md ${currentPage === 1 ? 'text-slate-300' : 'text-slate-600 hover:bg-slate-50'}`}><ChevronLeft className="h-5 w-5" /></button><span className="text-xs sm:text-sm text-slate-600">Page {currentPage} of {totalPages}</span><button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} className={`p-2 rounded-md ${currentPage === totalPages ? 'text-slate-300' : 'text-slate-600 hover:bg-slate-50'}`}><ChevronRight className="h-5 w-5" /></button></div></div>)}
+          )}
         </div>
       </div>
 
-      {/* Transaction Details Modal */}
-      {selectedTransaction && (<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-2 sm:p-4"><div className="bg-white rounded-xl w-full max-w-md mx-2 sm:mx-0 max-h-[90vh] overflow-y-auto" role="dialog" aria-modal="true"><div className="p-4 sm:p-6"><div className="flex justify-between items-center mb-4 sm:mb-5"><h3 className="text-lg sm:text-xl font-bold text-slate-800">Transaction Details</h3><button onClick={() => setSelectedTransaction(null)} className="text-slate-500 hover:text-slate-700"><X className="h-5 w-5" /></button></div><div className="space-y-4"><div><p className="text-sm text-slate-500">Description</p><p className="font-medium text-slate-900">{selectedTransaction.description}</p></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><p className="text-sm text-slate-500">Date</p><p className="font-medium text-slate-900">{formatDate(selectedTransaction.date, 'dd MMM yyyy, hh:mm a')}</p></div><div><p className="text-sm text-slate-500">Amount</p><p className={`font-medium ${selectedTransaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{formatAmount(selectedTransaction.amount)}</p></div></div><div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><p className="text-sm text-slate-500">Type</p><p className={`font-medium ${selectedTransaction.type === 'credit' ? 'text-green-600' : 'text-red-600'}`}>{selectedTransaction.type.charAt(0).toUpperCase() + selectedTransaction.type.slice(1)}</p></div><div><p className="text-sm text-slate-500">Service</p><p className="font-medium text-slate-900">{getServiceName(selectedTransaction.service)}</p></div></div>{selectedTransaction.staffId && (<div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><p className="text-sm text-slate-500">Staff</p><p className="font-medium text-slate-900">{getStaffInfo(selectedTransaction.staffId).name}</p></div><div><p className="text-sm text-slate-500">Position</p><p className="font-medium text-slate-900">{getStaffInfo(selectedTransaction.staffId).position}</p></div></div>)}{selectedTransaction.notes && (<div><p className="text-sm text-slate-500">Notes</p><p className="font-medium text-slate-900">{selectedTransaction.notes}</p></div>)}<div className="mt-4 sm:mt-6 pt-4 border-t border-slate-200"><p className="text-sm text-slate-500">Wallet ID</p><p className="font-medium text-slate-900">#{wallet.id}</p></div></div><div className="mt-6 flex justify-end"><button onClick={() => setSelectedTransaction(null)} className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-md text-sm sm:text-base">Close</button></div></div></div></div>)}
+      {/* Transaction details */}
+      {selected && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => setSelected(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-900">Transaction</h3>
+              <button onClick={() => setSelected(null)} className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><FiX size={18} /></button>
+            </div>
+            <div className="px-6 py-5">
+              <p className={`text-3xl font-bold ${selected.type === "credit" ? "text-emerald-600" : "text-red-600"}`}>
+                {selected.type === "credit" ? "+" : "−"}{formatAmount(selected.amount)}
+              </p>
+              <p className="text-gray-900 font-medium mt-1">{selected.description}</p>
+              <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
+                <div><dt className="text-xs text-gray-500">Date & time</dt><dd className="font-medium text-gray-900">{fmt(selected.date, "dd MMM yyyy, hh:mm a")}</dd></div>
+                <div><dt className="text-xs text-gray-500">Type</dt><dd className="font-medium text-gray-900">{selected.type === "credit" ? "Money in" : "Money out"}</dd></div>
+                <div><dt className="text-xs text-gray-500">Category</dt><dd className="font-medium text-gray-900">{selected.category}</dd></div>
+                <div><dt className="text-xs text-gray-500">Staff</dt><dd className="font-medium text-gray-900">{staffName(selected)}</dd></div>
+                <div><dt className="text-xs text-gray-500">Wallet</dt><dd className="font-medium text-gray-900">{wallet.name}</dd></div>
+                <div><dt className="text-xs text-gray-500">Transaction ID</dt><dd className="font-medium text-gray-900">#{selected.id}</dd></div>
+              </dl>
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end">
+              <button onClick={() => setSelected(null)} className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
-      {/* Recharge Modal */}
-      {showRechargeModal && (<div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"><div className="bg-white rounded-xl w-full max-w-md shadow-xl" onClick={(e) => e.stopPropagation()}><div className="p-6"><div className="flex justify-between items-center mb-5"><h3 className="text-xl font-bold text-slate-800">Recharge Wallet</h3><button onClick={() => setShowRechargeModal(false)} className="text-slate-500 hover:text-slate-700"><X className="h-5 w-5" /></button></div><div className="space-y-5"><div><label className="block text-sm font-medium mb-2 text-slate-700">Amount</label><div className="relative"><span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500">₹</span><input type="number" value={rechargeAmount} onChange={(e) => setRechargeAmount(e.target.value)} className="w-full pl-8 pr-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent" placeholder="Enter amount" min="1" /></div></div><div><label className="block text-sm font-medium mb-2 text-slate-700">Description (Optional)</label><input type="text" value={rechargeDescription} onChange={(e) => setRechargeDescription(e.target.value)} className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-transparent" placeholder="e.g. Cash deposit" /></div></div><div className="mt-7 flex justify-end gap-3"><button onClick={() => setShowRechargeModal(false)} className="px-4 py-2 bg-white border border-slate-300 rounded-md hover:bg-slate-50 text-slate-700">Cancel</button><button onClick={handleRecharge} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md" disabled={!rechargeAmount || Number(rechargeAmount) <= 0}>Confirm Recharge</button></div></div></div></div>)}
+      {/* Add money */}
+      {recharge && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={() => !busy && setRecharge(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between px-6 py-4 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Add Money</h3>
+                <p className="text-sm text-gray-500">{wallet.name} · balance {formatAmount(wallet.balance)}</p>
+              </div>
+              <button onClick={() => setRecharge(null)} className="p-2 -mr-2 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100"><FiX size={18} /></button>
+            </div>
+            <div className="px-6 py-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount <span className="text-red-500">*</span></label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-sm">₹</span>
+                  <input
+                    type="number"
+                    min="0"
+                    autoFocus
+                    value={recharge.amount}
+                    onChange={(e) => setRecharge((r) => ({ ...r, amount: e.target.value }))}
+                    className="w-full pl-7 pr-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Enter amount"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Note</label>
+                <input
+                  value={recharge.description}
+                  onChange={(e) => setRecharge((r) => ({ ...r, description: e.target.value }))}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="e.g. Cash deposit"
+                />
+              </div>
+              {Number(recharge.amount) > 0 && (
+                <p className="text-sm text-gray-600 bg-gray-50 border border-gray-100 rounded-lg px-3 py-2">
+                  New balance will be <span className="font-semibold text-gray-900">{formatAmount(wallet.balance + Number(recharge.amount))}</span>
+                </p>
+              )}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 flex justify-end gap-3">
+              <button onClick={() => setRecharge(null)} disabled={busy} className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</button>
+              <button onClick={doRecharge} disabled={busy || !(Number(recharge.amount) > 0)} className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 disabled:opacity-50">
+                {busy ? "Adding…" : "Add Money"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
-export default WalletActivity;
+export default WalletActivity;G
