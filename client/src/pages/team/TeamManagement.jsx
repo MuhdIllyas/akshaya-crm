@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from "recharts";
 import {
-  FiGlobe, FiBarChart2, FiSearch, FiPlus, FiX, FiStar, FiTrash2,
+  FiGlobe, FiUsers, FiHome, FiUserCheck, FiBarChart2, FiSearch, FiPlus, FiX, FiStar, FiTrash2,
   FiChevronRight, FiLoader, FiMapPin, FiArrowUp, FiArrowDown
 } from "react-icons/fi";
 import { toast } from "react-toastify";
@@ -82,7 +82,7 @@ const MiniStat = ({ label, value, hint }) => (
   </div>
 );
 
-const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context, spark, sparkColor, tone = "text-slate-900" }) => {
+const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context, spark, sparkColor, bar, tone = "text-slate-900" }) => {
   const v = delta === null || delta === undefined ? NaN : Number(delta);
   const hasDelta = Number.isFinite(v);
   const isGood = goodWhen === "down" ? v < 0 : v > 0;
@@ -105,6 +105,7 @@ const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context
       </div>
       <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
       {context && <p className="mt-1 text-xs text-slate-500">{context}</p>}
+      {bar && <div className="mt-3">{bar}</div>}
       <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
         <p className="text-xs text-slate-500">{note}</p>
         {spark && <Sparkline data={spark} color={sparkColor} />}
@@ -119,7 +120,18 @@ const TargetBar = ({ value, max, tone }) => (
   </div>
 );
 
-const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#0891b2", profit: "#059669", expenses: "#e11d48" };
+const Avatar = ({ name, photo, size = 36 }) => {
+  const [failed, setFailed] = useState(false);
+  const initials = (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const dim = { width: size, height: size };
+  return photo && !failed ? (
+    <img src={photo} alt="" onError={() => setFailed(true)} style={dim} className="flex-shrink-0 rounded-full border border-slate-200 object-cover" />
+  ) : (
+    <span style={dim} className="flex flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700" aria-hidden="true">{initials}</span>
+  );
+};
+
+const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#059669", profit: "#059669", expenses: "#e11d48" };
 const TREND_LABELS = { revenue: "Revenue", serviceCharges: "Service charges", profit: "Profit", expenses: "Expenses" };
 
 const RevenueChart = ({ data, view, height = 280 }) => {
@@ -268,11 +280,22 @@ function getTokenClaims() {
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
 
+// Stat tile with a coloured icon chip, same as the tiles on Staff Management
+const GlanceTile = ({ label, value, icon: Icon, chip }) => (
+  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
+    <div>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
+    </div>
+    <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${chip}`}><Icon className="h-5 w-5" aria-hidden="true" /></span>
+  </div>
+);
+
 // Compact "₹a / ₹t  42%" bar, same look as the staff-targets rows on the dashboards
 const MiniTargetBar = ({ achieved, target, onPace }) => {
   if (!target) return <span className="text-xs text-slate-400">No target set</span>;
   const raw = (achieved / target) * 100;
-  const tone = raw >= 100 ? "bg-emerald-500" : onPace ? "bg-indigo-500" : "bg-amber-500";
+  const tone = raw >= 100 ? "bg-emerald-500" : onPace ? "bg-blue-500" : "bg-amber-500";
   return (
     <div className="min-w-[150px]">
       <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
@@ -833,7 +856,7 @@ const TeamManagement = () => {
         fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${trendYear}`, { headers }),
         fetch(`${API_BASE}/api/teams/${teamId}/service-mix?${range}`, { headers }).catch(() => ({ ok: false })),
         fetch(`${API_BASE}/api/teams/${teamId}/settings`, { headers }).catch(() => ({ ok: false })),
-        fetch(`${API_BASE}/api/teams/${teamId}/targets`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/teams/${teamId}/targets?photos=1`, { headers }).catch(() => ({ ok: false })),
       ]);
 
       setContributionData(contribRes.ok ? await contribRes.json() : []);
@@ -887,13 +910,13 @@ const TeamManagement = () => {
   // Render
   // ------------------------------------------------------------------
   const btnPrimary =
-    "inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 focus-visible:ring-offset-2 disabled:opacity-60";
+    "inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-navy-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 disabled:opacity-60";
   const btnGhost =
-    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:opacity-60";
+    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60";
   const selectCls =
-    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600";
+    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500";
   const inputCls =
-    "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:bg-slate-50";
+    "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:bg-slate-50";
   const thCls = "px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
 
   // Totals for the teams currently shown
@@ -907,7 +930,23 @@ const TeamManagement = () => {
     }),
     { charges: 0, expense: 0, net: 0, target: 0, achieved: 0 }
   );
+  // Per-day (or per-month) totals across the teams shown, for the sparklines
+  const seriesLen = Math.max(0, ...filteredTeams.map((t) => (t.series || []).length));
+  const sumSeries = (key) =>
+    Array.from({ length: seriesLen }, (_, i) =>
+      filteredTeams.reduce((a, t) => a + (Number(t.series?.[i]?.[key]) || 0), 0)
+    );
+  const chargesSpark = sumSeries("service_charges");
+  const expenseSpark = sumSeries("expense");
+  const netSpark = chargesSpark.map((v, i) => v - expenseSpark[i]);
   const targetPct = sumTotals.target > 0 ? Math.round((sumTotals.achieved / sumTotals.target) * 100) : 0;
+
+  // Monthly values (this year, up to now) behind the sparklines in the team popup
+  const modalSpark = (key) => {
+    const lastMonth = trendYear === new Date().getFullYear() ? new Date().getMonth() + 1 : 12;
+    const pts = trendData.filter((t) => t.month <= lastMonth).map((t) => Number(t[key]) || 0);
+    return pts.length > 1 ? pts : undefined;
+  };
 
   return (
     <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6">
@@ -924,7 +963,7 @@ const TeamManagement = () => {
               type="text"
               placeholder="Search teams"
               aria-label="Search teams"
-              className="w-44 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+              className="w-44 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -956,41 +995,62 @@ const TeamManagement = () => {
       </div>
 
       {/* Glance strip */}
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <MiniStat label="Teams" value={totalStats.total} hint="All teams" />
-        <MiniStat label="Global teams" value={totalStats.global} hint="Across centres" />
-        <MiniStat label="Centre teams" value={totalStats.centre} hint="Inside one centre" />
-        <MiniStat label="Members" value={totalStats.members} hint="Active, all teams" />
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <GlanceTile label="Teams" value={totalStats.total} icon={FiUsers} chip="bg-blue-50 text-blue-600" />
+        <GlanceTile label="Global teams" value={totalStats.global} icon={FiGlobe} chip="bg-purple-50 text-purple-600" />
+        <GlanceTile label="Centre teams" value={totalStats.centre} icon={FiHome} chip="bg-amber-50 text-amber-600" />
+        <GlanceTile label="Members" value={totalStats.members} icon={FiUserCheck} chip="bg-emerald-50 text-emerald-600" />
       </div>
 
-      {/* KPIs */}
-      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <Kpi label="Service charges" value={money(sumTotals.charges)} context={periodLabel} note="Completed services, teams shown" />
+      {/* KPIs: green for what the team earns, red for what it spends */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi
+          label="Service charges"
+          value={money(sumTotals.charges)}
+          tone="text-emerald-600"
+          context={periodLabel}
+          note="Completed services"
+          spark={chargesSpark}
+          sparkColor="#059669"
+        />
+        <Kpi
+          label="Expenses"
+          value={money(sumTotals.expense)}
+          tone="text-rose-600"
+          context={periodLabel}
+          note="Approved expenses"
+          spark={expenseSpark}
+          sparkColor="#e11d48"
+        />
         <Kpi
           label="Net profit"
           value={money(sumTotals.net)}
-          tone={sumTotals.net < 0 ? "text-rose-600" : "text-slate-900"}
-          context={`After ${money(sumTotals.expense)} expenses`}
-          note="Service charges less expenses"
+          tone={sumTotals.net < 0 ? "text-rose-600" : "text-emerald-600"}
+          context="Service charges less expenses"
+          note={sumTotals.charges > 0 ? `${Math.round((sumTotals.net / sumTotals.charges) * 100)}% of service charges` : "No service charges yet"}
+          spark={netSpark}
+          sparkColor={sumTotals.net < 0 ? "#e11d48" : "#059669"}
         />
         <Kpi
           label="Monthly target"
           value={`${targetPct}%`}
+          tone={targetPct >= 100 ? "text-emerald-600" : "text-slate-900"}
           context={`${money(sumTotals.achieved)} of ${money(sumTotals.target)}`}
           note="Sum of members' targets, this month"
+          bar={<TargetBar value={sumTotals.achieved} max={sumTotals.target} tone={targetPct >= 100 ? "bg-emerald-500" : "bg-blue-500"} />}
         />
       </div>
 
       {/* Teams table */}
       <div className="mt-4">
-        <Panel title="Teams" hint={`Ranked by service charges · ${periodLabel}. Targets are always this month`}>
+        <Panel title="All teams" hint={`Ranked by service charges · ${periodLabel}. Targets are always this month`}>
           {loading ? (
-            <div className="flex justify-center py-10"><FiLoader className="h-6 w-6 animate-spin text-indigo-600" /></div>
+            <div className="flex justify-center py-10"><FiLoader className="h-6 w-6 animate-spin text-navy-700" /></div>
           ) : filteredTeams.length === 0 ? (
             <p className="py-10 text-center text-sm text-slate-500">No teams match these filters.</p>
           ) : (
             <div className="-mx-5 overflow-x-auto">
-              <table className="w-full min-w-[820px]">
+              <table className="w-full min-w-[940px]">
                 <thead>
                   <tr className="border-y border-slate-100 bg-slate-50/70 text-left">
                     <th className={thCls}>Team</th>
@@ -998,6 +1058,7 @@ const TeamManagement = () => {
                     <th className={`${thCls} text-right`}>Service charges</th>
                     <th className={`${thCls} text-right`}>Expense</th>
                     <th className={`${thCls} text-right`}>Net profit</th>
+                    <th className={thCls}>Trend</th>
                     <th className={thCls}>Monthly target</th>
                     <th className={`${thCls} text-right`}><span className="sr-only">Actions</span></th>
                   </tr>
@@ -1013,12 +1074,12 @@ const TeamManagement = () => {
                               onClick={() => toggleTeamExpand(team)}
                               aria-expanded={expandedTeamId === team.id}
                               aria-label={`${expandedTeamId === team.id ? "Hide" : "Show"} ${team.name} members`}
-                              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600"
+                              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
                             >
                               <FiChevronRight className={`h-4 w-4 transition-transform ${expandedTeamId === team.id ? "rotate-90" : ""}`} />
                             </button>
                             <div className="min-w-0">
-                              <button type="button" onClick={() => toggleTeamExpand(team)} className="block max-w-[260px] truncate text-left text-sm font-medium text-slate-900 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600">
+                              <button type="button" onClick={() => toggleTeamExpand(team)} className="block max-w-[260px] truncate text-left text-sm font-medium text-slate-900 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
                                 {team.name}
                               </button>
                               {team.is_global ? (
@@ -1035,19 +1096,22 @@ const TeamManagement = () => {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center text-sm tabular-nums text-slate-700">{team.member_count}</td>
-                        <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-slate-900">{money(team.service_charges)}</td>
-                        <td className="px-4 py-3 text-right text-sm tabular-nums text-slate-600">{money(team.expense)}</td>
-                        <td className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${team.net_profit < 0 ? "text-rose-600" : "text-slate-900"}`}>{money(team.net_profit)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-emerald-700">{money(team.service_charges)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-rose-600">{money(team.expense)}</td>
+                        <td className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${team.net_profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(team.net_profit)}</td>
+                        <td className="px-4 py-3">
+                          <Sparkline data={(team.series || []).map((p) => p.service_charges)} color="#059669" />
+                        </td>
                         <td className="px-4 py-3">
                           <MiniTargetBar achieved={team.targets?.achieved || 0} target={team.targets?.target || 0} onPace={team.targets?.onPace} />
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex justify-end gap-1">
-                            <button onClick={() => openAnalyticsModal(team)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-indigo-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" title="Team dashboard" aria-label={`Open ${team.name} dashboard`}>
+                            <button onClick={() => openAnalyticsModal(team)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Team dashboard" aria-label={`Open ${team.name} dashboard`}>
                               <FiBarChart2 className="h-4 w-4" />
                             </button>
                             {isAdmin && (
-                              <button onClick={() => handleDeleteTeam(team.id)} disabled={submitting} className="rounded-md p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 disabled:opacity-50" title="Delete team" aria-label={`Delete ${team.name}`}>
+                              <button onClick={() => handleDeleteTeam(team.id)} disabled={submitting} className="rounded-md p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-50" title="Delete team" aria-label={`Delete ${team.name}`}>
                                 <FiTrash2 className="h-4 w-4" />
                               </button>
                             )}
@@ -1057,7 +1121,7 @@ const TeamManagement = () => {
 
                       {expandedTeamId === team.id && (
                         <tr className="bg-slate-50/70">
-                          <td colSpan="7" className="px-5 py-4">
+                          <td colSpan="8" className="px-5 py-4">
                             {membersLoading ? (
                               <div className="flex items-center py-4 text-sm text-slate-500"><FiLoader className="mr-2 animate-spin" /> Loading members</div>
                             ) : (
@@ -1120,7 +1184,8 @@ const TeamManagement = () => {
                                     return (
                                       <li key={member.id} className="rounded-lg border border-slate-200 p-3">
                                         <div className="flex items-start justify-between gap-2">
-                                          <div className="min-w-0">
+                                          <Avatar name={member.name} photo={member.photo} size={40} />
+                                          <div className="min-w-0 flex-1">
                                             <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-900">
                                               {member.name}
                                               {member.is_primary && <FiStar className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" title="Primary team" aria-label="Primary team" />}
@@ -1130,9 +1195,9 @@ const TeamManagement = () => {
                                           {isAdmin && (
                                             <div className="flex flex-shrink-0 gap-0.5">
                                               {!member.is_primary && (
-                                                <button onClick={() => handleInlineSetPrimary(team.id, member.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" title="Make primary team" aria-label={`Make ${team.name} the primary team of ${member.name}`}><FiStar className="h-4 w-4" /></button>
+                                                <button onClick={() => handleInlineSetPrimary(team.id, member.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Make primary team" aria-label={`Make ${team.name} the primary team of ${member.name}`}><FiStar className="h-4 w-4" /></button>
                                               )}
-                                              <button onClick={() => handleInlineRemoveMember(team.id, member.staff_id)} className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" title="Remove from team" aria-label={`Remove ${member.name}`}><FiTrash2 className="h-4 w-4" /></button>
+                                              <button onClick={() => handleInlineRemoveMember(team.id, member.staff_id)} className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Remove from team" aria-label={`Remove ${member.name}`}><FiTrash2 className="h-4 w-4" /></button>
                                             </div>
                                           )}
                                         </div>
@@ -1164,7 +1229,7 @@ const TeamManagement = () => {
           <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
             <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
               <h2 className="text-[15px] font-semibold text-slate-900">New team</h2>
-              <button onClick={() => setShowCreateModal(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" aria-label="Close">
+              <button onClick={() => setShowCreateModal(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label="Close">
                 <FiX className="h-5 w-5" />
               </button>
             </div>
@@ -1185,7 +1250,7 @@ const TeamManagement = () => {
                     id="is_global"
                     checked={teamForm.is_global}
                     onChange={(e) => setTeamForm({ ...teamForm, is_global: e.target.checked, centre_id: e.target.checked ? null : teamForm.centre_id })}
-                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                    className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-indigo-600"
                     disabled={submitting}
                   />
                   Global team (members from different centres)
@@ -1211,9 +1276,9 @@ const TeamManagement = () => {
                     {teamForm.members.map((staffId) => {
                       const staff = availableStaff.find((s) => s.id === staffId);
                       return (
-                        <span key={staffId} className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700">
+                        <span key={staffId} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
                           {staff?.name || `ID ${staffId}`}
-                          <button type="button" onClick={() => removeMemberFromForm(staffId)} className="rounded-full p-0.5 hover:bg-indigo-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" aria-label={`Remove ${staff?.name || staffId}`} disabled={submitting}>
+                          <button type="button" onClick={() => removeMemberFromForm(staffId)} className="rounded-full p-0.5 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label={`Remove ${staff?.name || staffId}`} disabled={submitting}>
                             <FiX className="h-3 w-3" />
                           </button>
                         </span>
@@ -1271,7 +1336,7 @@ const TeamManagement = () => {
                     { value: "settings", label: "Targets" },
                   ]}
                 />
-                <button onClick={() => setShowAnalyticsModal(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" aria-label="Close">
+                <button onClick={() => setShowAnalyticsModal(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label="Close">
                   <FiX className="h-5 w-5" />
                 </button>
               </div>
@@ -1279,7 +1344,7 @@ const TeamManagement = () => {
 
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {analyticsLoading ? (
-                <div className="flex justify-center py-20"><FiLoader className="h-8 w-8 animate-spin text-indigo-600" /></div>
+                <div className="flex justify-center py-20"><FiLoader className="h-8 w-8 animate-spin text-navy-700" /></div>
               ) : (
                 <>
                   {/* OVERVIEW */}
@@ -1289,22 +1354,39 @@ const TeamManagement = () => {
                         <Kpi
                           label="Service charges"
                           value={money(activeTeamStats.service_charges)}
+                          tone="text-emerald-600"
                           context={periodLabel}
                           note={`${activeTeamStats.services_completed} completed ${activeTeamStats.services_completed === 1 ? "service" : "services"}`}
+                          spark={modalSpark("service_charges")}
+                          sparkColor="#059669"
                         />
-                        <Kpi label="Expenses" value={money(activeTeamStats.expense)} context={periodLabel} note="Approved expenses" />
+                        <Kpi
+                          label="Expenses"
+                          value={money(activeTeamStats.expense)}
+                          tone="text-rose-600"
+                          context={periodLabel}
+                          note="Approved expenses"
+                          spark={modalSpark("expense")}
+                          sparkColor="#e11d48"
+                        />
                         <Kpi
                           label="Net profit"
                           value={money(activeTeamStats.net_profit)}
-                          tone={activeTeamStats.net_profit < 0 ? "text-rose-600" : "text-slate-900"}
+                          tone={activeTeamStats.net_profit < 0 ? "text-rose-600" : "text-emerald-600"}
                           context={`${netMargin}% of service charges`}
                           note="Service charges less expenses"
+                          spark={modalSpark("net_profit")}
+                          sparkColor={activeTeamStats.net_profit < 0 ? "#e11d48" : "#059669"}
                         />
                         <Kpi
                           label="Monthly target"
                           value={teamTargets && teamTargets.target > 0 ? `${Math.round(teamTargets.progress)}%` : "Not set"}
+                          tone={teamTargets && teamTargets.progress >= 100 ? "text-emerald-600" : "text-slate-900"}
                           context={teamTargets && teamTargets.target > 0 ? `${money(teamTargets.achieved)} of ${money(teamTargets.target)}` : "No member targets this month"}
                           note="Sum of members' targets"
+                          bar={teamTargets && teamTargets.target > 0 ? (
+                            <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={teamTargets.progress >= 100 ? "bg-emerald-500" : teamTargets.onPace ? "bg-blue-500" : "bg-amber-500"} />
+                          ) : null}
                         />
                       </div>
 
@@ -1338,7 +1420,7 @@ const TeamManagement = () => {
                                 {money(teamTargets.achieved)} / {money(teamTargets.target)} <span className="font-semibold text-slate-900">{Math.round(teamTargets.progress)}%</span>
                               </span>
                             </div>
-                            <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={teamTargets.progress >= 100 ? "bg-emerald-500" : teamTargets.onPace ? "bg-indigo-500" : "bg-amber-500"} />
+                            <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={teamTargets.progress >= 100 ? "bg-emerald-500" : teamTargets.onPace ? "bg-blue-500" : "bg-amber-500"} />
                             <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                               <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
                                 <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Today</p>
@@ -1381,17 +1463,18 @@ const TeamManagement = () => {
                               <li key={member.id} className="grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2 md:items-center">
                                 <div>
                                   <div className="flex items-baseline justify-between gap-3">
-                                    <span className="flex min-w-0 items-center gap-2">
+                                    <span className="flex min-w-0 items-center gap-3">
                                       <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">{idx + 1}</span>
+                                      <Avatar name={member.name} photo={member.photo} size={40} />
                                       <span className="min-w-0">
                                         <span className="block truncate text-sm font-medium text-slate-900">{member.name}</span>
                                         <span className="block truncate text-xs text-slate-500">{member.role}{member.centre_name ? ` · ${member.centre_name}` : ""}</span>
                                       </span>
                                     </span>
-                                    <span className="text-sm font-semibold tabular-nums text-slate-900">{money(member.service_charges)}</span>
+                                    <span className="text-sm font-semibold tabular-nums text-emerald-700">{money(member.service_charges)}</span>
                                   </div>
                                   <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-                                    <div className="h-full rounded-full bg-cyan-600" style={{ width: `${(member.service_charges / max) * 100}%` }} />
+                                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(member.service_charges / max) * 100}%` }} />
                                   </div>
                                   <p className="mt-1 text-xs text-slate-500">{member.services_completed} {member.services_completed === 1 ? "service" : "services"}</p>
                                 </div>
@@ -1420,7 +1503,7 @@ const TeamManagement = () => {
                         </span>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-600"
+                          className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-indigo-600"
                           checked={targetsEnabled}
                           onChange={(e) => setTargetsEnabled(e.target.checked)}
                           disabled={!isAdmin}
@@ -1441,13 +1524,18 @@ const TeamManagement = () => {
                             {(teamTargets?.members || []).map((m) => (
                               <tr key={m.staff_id}>
                                 <td className="px-4 py-3">
-                                  <p className="font-medium text-slate-900">{m.name}</p>
-                                  <p className="text-xs text-slate-500">{m.centre_name || m.role}</p>
+                                  <div className="flex items-center gap-3">
+                                    <Avatar name={m.name} photo={m.photo} size={32} />
+                                    <div className="min-w-0">
+                                      <p className="truncate font-medium text-slate-900">{m.name}</p>
+                                      <p className="truncate text-xs text-slate-500">{m.centre_name || m.role}</p>
+                                    </div>
+                                  </div>
                                 </td>
                                 {m.has_target ? (
                                   <>
                                     <td className="px-4 py-3 text-right tabular-nums text-slate-900">{money(m.target)}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-slate-900">{money(m.achieved)} <span className="text-xs text-slate-500">{Math.round(m.progress)}%</span></td>
+                                    <td className="px-4 py-3 text-right tabular-nums text-slate-900"><span className="text-emerald-700">{money(m.achieved)}</span> <span className="text-xs text-slate-500">{Math.round(m.progress)}%</span></td>
                                     <td className="px-4 py-3 text-right tabular-nums text-slate-700">{money(m.daily_target)}</td>
                                   </>
                                 ) : (

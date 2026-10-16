@@ -180,7 +180,7 @@ const checkTeamAccess = async (client, user, teamId) => {
    to the target or to the achieved amount, so progress stays fair.
    Works for global teams: it goes through staff, not centre.
 --------------------------------------------------------- */
-const fetchTeamTargets = async (client, teamIds) => {
+const fetchTeamTargets = async (client, teamIds, { photos = false } = {}) => {
   const out = new Map();
   if (!teamIds.length) return out;
 
@@ -214,6 +214,7 @@ const fetchTeamTargets = async (client, teamIds) => {
       s.id   AS staff_id,
       s.name AS staff_name,
       s.role AS staff_role,
+      CASE WHEN $2::boolean THEN s.photo END AS staff_photo,
       c.name AS centre_name,
       COALESCE(t.target_amount, 0) AS target_amount,
       cal.day_of_month,
@@ -235,7 +236,7 @@ const fetchTeamTargets = async (client, teamIds) => {
       ON t.staff_id = s.id AND t.month = cal.month_start
     ORDER BY s.name
     `,
-    [teamIds]
+    [teamIds, photos]
   );
 
   for (const id of teamIds) {
@@ -284,6 +285,7 @@ const fetchTeamTargets = async (client, teamIds) => {
       staff_id: r.staff_id,
       name: r.staff_name,
       role: r.staff_role,
+      photo: r.staff_photo || null,
       centre_name: r.centre_name,
       is_primary: r.is_primary,
       has_target: hasTarget,
@@ -305,6 +307,87 @@ const fetchTeamTargets = async (client, teamIds) => {
       t.target > 0 &&
       t.dayOfMonth !== null &&
       t.achieved >= t.target * (t.dayOfMonth / t.daysInMonth);
+  }
+
+  return out;
+};
+
+/* ---------------------------------------------------------
+   PER-TEAM SERIES for the sparklines on the Teams screen
+   Daily buckets up to 60 days, monthly beyond that.
+   Empty buckets are filled with zero so the line is honest.
+--------------------------------------------------------- */
+const fetchTeamSeries = async (client, teamIds, from, to) => {
+  const out = new Map();
+  if (!teamIds.length || !from || !to) return out;
+
+  const DAY = 86400000;
+  const start = Date.parse(from);
+  const end = Date.parse(to);
+
+  if (!(end >= start) || (end - start) / DAY > 800) return out;
+
+  const days = Math.round((end - start) / DAY) + 1;
+  const monthly = days > 60;
+  const fmt = monthly ? "YYYY-MM" : "YYYY-MM-DD";
+
+  const labels = [];
+
+  if (monthly) {
+    const d = new Date(start);
+    d.setUTCDate(1);
+    while (d.getTime() <= end) {
+      labels.push(d.toISOString().slice(0, 7));
+      d.setUTCMonth(d.getUTCMonth() + 1);
+    }
+  } else {
+    for (let t = start; t <= end; t += DAY) {
+      labels.push(new Date(t).toISOString().slice(0, 10));
+    }
+  }
+
+  const [svc, exp] = await Promise.all([
+    client.query(
+      `
+      SELECT se.team_id, TO_CHAR(se.created_at, '${fmt}') AS bucket,
+             SUM(se.service_charges) AS total
+      FROM service_entries se
+      WHERE se.team_id = ANY($1::bigint[])
+        AND se.status = 'completed'
+        AND se.created_at >= $2::date
+        AND se.created_at < ($3::date + INTERVAL '1 day')
+      GROUP BY se.team_id, TO_CHAR(se.created_at, '${fmt}')
+      `,
+      [teamIds, from, to]
+    ),
+    client.query(
+      `
+      SELECT e.team_id, TO_CHAR(e.expense_date, '${fmt}') AS bucket,
+             SUM(e.amount) AS total
+      FROM expenses e
+      WHERE e.team_id = ANY($1::bigint[])
+        AND e.status IN ('approved', 'auto_approved')
+        AND COALESCE(e.is_reversal, FALSE) = FALSE
+        AND e.expense_date >= $2::date
+        AND e.expense_date <= $3::date
+      GROUP BY e.team_id, TO_CHAR(e.expense_date, '${fmt}')
+      `,
+      [teamIds, from, to]
+    ),
+  ]);
+
+  const sc = new Map(svc.rows.map((r) => [`${r.team_id}|${r.bucket}`, num(r.total)]));
+  const ex = new Map(exp.rows.map((r) => [`${r.team_id}|${r.bucket}`, num(r.total)]));
+
+  for (const id of teamIds) {
+    out.set(
+      Number(id),
+      labels.map((label) => ({
+        label,
+        service_charges: sc.get(`${id}|${label}`) || 0,
+        expense: ex.get(`${id}|${label}`) || 0,
+      }))
+    );
   }
 
   return out;
@@ -520,6 +603,13 @@ router.get("/analytics/summary", async (req, res) => {
       result.rows.map((r) => r.id)
     );
 
+    const seriesMap = await fetchTeamSeries(
+      client,
+      result.rows.map((r) => r.id),
+      from,
+      to
+    );
+
     const teams = result.rows.map((team) => {
       const serviceCharges = num(team.service_charges);
       const expense = num(team.expense);
@@ -541,6 +631,7 @@ router.get("/analytics/summary", async (req, res) => {
         net_profit: serviceCharges - expense,
 
         targets,
+        series: seriesMap.get(Number(team.id)) || [],
 
         expected_revenue: expectedRevenue,
         collected_revenue: collectedRevenue,
@@ -618,7 +709,9 @@ router.get("/:id/targets", async (req, res) => {
       return res.status(access.status).json({ error: access.error });
     }
 
-    const map = await fetchTeamTargets(client, [Number(req.params.id)]);
+    const map = await fetchTeamTargets(client, [Number(req.params.id)], {
+      photos: req.query.photos === "1",
+    });
 
     res.json(map.get(Number(req.params.id)));
 
@@ -680,6 +773,7 @@ router.get("/:teamId/contribution", async (req, res) => {
         s.id,
         s.name,
         s.role,
+        s.photo,
         c.name AS centre_name,
 
         tm.is_primary,
@@ -1055,6 +1149,7 @@ router.get("/:id/members", async (req, res) => {
 
         s.name,
         s.role,
+        s.photo,
         s.centre_id,
 
         c.name AS centre_name
