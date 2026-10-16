@@ -53,36 +53,73 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
   </div>
 );
 
+const inr = (val) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val || 0);
+
 const TargetProgressBar = ({ label, current, target }) => {
   const safeTarget = target || 1;
-  const percentage = Math.min((current / safeTarget) * 100, 100).toFixed(0);
-  
-  const formatCurrency = (val) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val || 0);
+  const raw = (current / safeTarget) * 100;
+  const percentage = Math.min(raw, 100).toFixed(0);
 
   return (
     <div className="mb-4">
       <div className="flex justify-between text-sm mb-1">
         <span className="font-medium text-gray-700">{label}</span>
-        <span className="text-gray-600 font-semibold">{formatCurrency(current)} / {formatCurrency(target)} ({percentage}%)</span>
+        <span className="text-gray-600 font-semibold">{inr(current)} / {inr(target)} ({raw.toFixed(0)}%)</span>
       </div>
       <div className="w-full bg-gray-100 rounded-full h-2.5">
-        <div className={`h-2.5 rounded-full ${percentage >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${percentage}%` }}></div>
+        <div className={`h-2.5 rounded-full ${raw >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${percentage}%` }}></div>
       </div>
     </div>
   );
 };
 
+// Compact "₹a / ₹t  42%" bar used in the team table and the roster
+const MiniTargetBar = ({ achieved, target, onPace }) => {
+  if (!target) return <span className="text-xs text-gray-400">No target set</span>;
+  const raw = (achieved / target) * 100;
+  const color = raw >= 100 ? "bg-emerald-500" : onPace ? "bg-indigo-500" : "bg-amber-500";
+  return (
+    <div className="min-w-[140px]">
+      <div className="flex justify-between gap-2 text-xs">
+        <span className="text-gray-600 tabular-nums">{inr(achieved)} / {inr(target)}</span>
+        <span className="font-semibold text-gray-800 tabular-nums">{raw.toFixed(0)}%</span>
+      </div>
+      <div className="mt-1 h-1.5 w-full rounded-full bg-gray-100">
+        <div className={`h-1.5 rounded-full ${color}`} style={{ width: `${Math.min(raw, 100)}%` }} />
+      </div>
+    </div>
+  );
+};
+
+// ---- Period filter (same options and IST day boundaries as the dashboards) ----
+const PERIOD_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "3months", label: "Last 3 Months" },
+  { value: "6months", label: "Last 6 Months" },
+  { value: "year", label: "This Year" },
+];
+
 const getDatesFromPeriod = (period) => {
-  const toDate = new Date();
-  let fromDate = new Date();
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [y, m, d] = today.split("-").map(Number);
+  let start;
   switch (period) {
-    case 'week': fromDate.setDate(fromDate.getDate() - fromDate.getDay()); break;
-    case 'month': fromDate.setDate(1); break;
-    case 'quarter': fromDate.setMonth(Math.floor(fromDate.getMonth() / 3) * 3); fromDate.setDate(1); break;
-    case 'year': fromDate.setMonth(0); fromDate.setDate(1); break;
-    default: fromDate.setDate(1);
+    case "today": start = new Date(Date.UTC(y, m - 1, d)); break;
+    case "week": {
+      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
+      break;
+    }
+    case "3months": start = new Date(Date.UTC(y, m - 3, 1)); break;
+    case "6months": start = new Date(Date.UTC(y, m - 6, 1)); break;
+    case "year": start = new Date(Date.UTC(y, 0, 1)); break;
+    case "month":
+    default: start = new Date(Date.UTC(y, m - 1, 1));
   }
-  return { from: fromDate.toISOString().split('T')[0], to: toDate.toISOString().split('T')[0] };
+  return { from: start.toISOString().split("T")[0], to: today };
 };
 
 // ----------------------------------------------------------------------
@@ -106,7 +143,7 @@ const TeamManagement = () => {
     members: 0,
   });
 
-  // Financial data from analytics endpoint
+  // Service-charge data from the analytics endpoint
   const [financialData, setFinancialData] = useState({ teams: [], totals: {} });
 
   // Filters
@@ -131,13 +168,31 @@ const TeamManagement = () => {
   const [contributionData, setContributionData] = useState([]);
   const [trendData, setTrendData] = useState([]);
   const [serviceMix, setServiceMix] = useState([]);
+  const [teamTargets, setTeamTargets] = useState(null); // sum of members' targets, this month
   const [trendYear, setTrendYear] = useState(new Date().getFullYear());
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // --- EXPANDABLE ROW STATE (Replaces the Manage Members Modal) ---
   const [expandedTeamId, setExpandedTeamId] = useState(null);
   const [teamMembersMap, setTeamMembersMap] = useState({});
+  const [teamTargetsMap, setTeamTargetsMap] = useState({});
   const [membersLoading, setMembersLoading] = useState(false);
+
+  const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+
+  // Roster + this month's targets for one team (members and targets are fetched together)
+  const loadTeamExtras = async (teamId) => {
+    const [membersRes, targetsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: authHeaders() }),
+      fetch(`${API_BASE}/api/teams/${teamId}/targets`, { headers: authHeaders() }).catch(() => ({ ok: false })),
+    ]);
+    const membersData = await membersRes.json();
+    setTeamMembersMap((prev) => ({ ...prev, [teamId]: Array.isArray(membersData) ? membersData : [] }));
+    if (targetsRes.ok) {
+      const targetsData = await targetsRes.json();
+      setTeamTargetsMap((prev) => ({ ...prev, [teamId]: targetsData }));
+    }
+  };
 
   const toggleTeamExpand = async (team) => {
     if (expandedTeamId === team.id) {
@@ -147,11 +202,7 @@ const TeamManagement = () => {
     setExpandedTeamId(team.id);
     setMembersLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const membersData = await response.json();
-      setTeamMembersMap(prev => ({ ...prev, [team.id]: membersData }));
+      await loadTeamExtras(team.id);
     } catch (error) {
       console.error("Fetch members failed:", error);
     } finally {
@@ -166,15 +217,12 @@ const TeamManagement = () => {
     try {
       const response = await fetch(`${API_BASE}/api/teams/${teamId}/members`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ staff_id: staffId, is_primary: false }),
       });
       if (!response.ok) throw new Error("Failed to add member");
 
-      // Refresh just this row
-      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
-      const updatedMembers = await updatedRes.json();
-      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+      await loadTeamExtras(teamId); // refresh just this row, targets included
       setAddMemberValue("");
       fetchTeams(); fetchFinancials();
     } catch (error) { toast.error(error.message); } finally { setSubmitting(false); }
@@ -186,11 +234,9 @@ const TeamManagement = () => {
     try {
       await fetch(`${API_BASE}/api/teams/${teamId}/members/${staffId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: authHeaders(),
       });
-      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
-      const updatedMembers = await updatedRes.json();
-      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+      await loadTeamExtras(teamId);
       fetchTeams(); fetchFinancials();
     } catch (error) { console.error(error); } finally { setSubmitting(false); }
   };
@@ -208,9 +254,8 @@ const TeamManagement = () => {
     } catch (error) { console.error(error); } finally { setSubmitting(false); }
   };
 
-  // Targets Settings State
+  // Targets switch (the amount itself is the sum of members' individual targets)
   const [targetsEnabled, setTargetsEnabled] = useState(false);
-  const [monthlyTarget, setMonthlyTarget] = useState(250000);
   const [savingSettings, setSavingSettings] = useState(false);
 
   const handleSaveSettings = async () => {
@@ -219,14 +264,11 @@ const TeamManagement = () => {
     try {
       const response = await fetch(`${API_BASE}/api/teams/${analyticsTeam.id}/settings`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
         },
-        body: JSON.stringify({
-          targets_enabled: targetsEnabled,
-          monthly_target: monthlyTarget
-        }),
+        body: JSON.stringify({ targets_enabled: targetsEnabled }),
       });
       if (!response.ok) throw new Error("Failed to save settings");
       toast.success("Team settings saved successfully!");
@@ -375,30 +417,15 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const mergedTeams = useMemo(() => {
     return teams.map((team) => {
-      const fin = financialData.teams.find((t) => t.id === team.id);
+      const fin = (financialData.teams || []).find((t) => t.id === team.id);
       return {
         ...team,
-
-        expected_revenue:
-          fin ? fin.expected_revenue : 0,
-
-        collected_revenue:
-          fin ? fin.collected_revenue : 0,
-
-        pending_revenue:
-          fin ? fin.pending_revenue : 0,
-
-        department_charges:
-          fin ? fin.department_charges : 0,
-
-        service_profit:
-          fin ? fin.service_profit : 0,
-
-        expense:
-          fin ? fin.expense : 0,
-
-        net_profit:
-          fin ? fin.net_profit : 0,
+        service_charges: fin ? fin.service_charges : 0,
+        services_completed: fin ? fin.services_completed : 0,
+        revenue_billed: fin ? fin.revenue_billed : 0,
+        expense: fin ? fin.expense : 0,
+        net_profit: fin ? fin.net_profit : 0,
+        targets: fin ? fin.targets : null,
       };
     });
   }, [teams, financialData]);
@@ -424,13 +451,7 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   // Currency formatter
   // ------------------------------------------------------------------
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
+  const formatCurrency = (value) => inr(value);
 
   // ------------------------------------------------------------------
   // Create team modal helpers
@@ -616,33 +637,28 @@ const TeamManagement = () => {
     setAnalyticsLoading(true);
     try {
       const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-      
-      // Fetch all 4 endpoints at the same time
-      const [contribRes, trendRes, mixRes, settingsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/teams/${teamId}/contribution`, { headers }),
+      const { from, to } = getDatesFromPeriod(period);
+      const range = `from=${from}&to=${to}`;
+
+      // Fetch everything at the same time
+      const [contribRes, trendRes, mixRes, settingsRes, targetsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/teams/${teamId}/contribution?${range}`, { headers }),
         fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${trendYear}`, { headers }),
-        fetch(`${API_BASE}/api/teams/${teamId}/service-mix`, { headers }).catch(() => ({ ok: false })),
-        fetch(`${API_BASE}/api/teams/${teamId}/settings`, { headers }).catch(() => ({ ok: false }))
+        fetch(`${API_BASE}/api/teams/${teamId}/service-mix?${range}`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/teams/${teamId}/settings`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/teams/${teamId}/targets`, { headers }).catch(() => ({ ok: false })),
       ]);
 
-      if (contribRes.ok) setContributionData(await contribRes.json());
-      if (trendRes.ok) setTrendData(await trendRes.json());
-      
-      // Handle Service Mix
-      if (mixRes.ok) {
-        setServiceMix(await mixRes.json());
-      } else {
-        setServiceMix([{ service_type: 'Passport', count: 45 }, { service_type: 'PAN Card', count: 30 }, { service_type: 'Certificate', count: 15 }]);
-      }
+      setContributionData(contribRes.ok ? await contribRes.json() : []);
+      setTrendData(trendRes.ok ? await trendRes.json() : []);
+      setServiceMix(mixRes.ok ? await mixRes.json() : []);
+      setTeamTargets(targetsRes.ok ? await targetsRes.json() : null);
 
-      // Handle Target Settings
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
-        setTargetsEnabled(settingsData.targets_enabled || false);
-        setMonthlyTarget(settingsData.monthly_target || 250000);
+        setTargetsEnabled(!!settingsData.targets_enabled);
       } else {
         setTargetsEnabled(false);
-        setMonthlyTarget(250000);
       }
 
     } catch (err) {
@@ -659,22 +675,27 @@ const TeamManagement = () => {
     fetchAnalyticsData(team.id);
   };
 
-  // Analytics Calculations for Admin Overview
+  // Analytics calculations for the team dashboard
   const activeTeamStats = useMemo(() => mergedTeams.find(t => t.id === analyticsTeam?.id), [analyticsTeam, mergedTeams]);
-  const actualProfit = activeTeamStats ? (activeTeamStats.collected_revenue || 0) - (activeTeamStats.department_charges || 0) - (activeTeamStats.expense || 0) : 0;
-  const profitMargin = activeTeamStats && activeTeamStats.collected_revenue > 0 ? ((actualProfit / activeTeamStats.collected_revenue) * 100).toFixed(1) : 0;
+  const netMargin = activeTeamStats && activeTeamStats.service_charges > 0
+    ? ((activeTeamStats.net_profit / activeTeamStats.service_charges) * 100).toFixed(1)
+    : 0;
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "";
 
   const trendChartData = useMemo(() => {
     if (!trendData.length) return null;
+    // no point plotting months that have not happened yet
+    const lastMonth = trendYear === new Date().getFullYear() ? new Date().getMonth() + 1 : 12;
+    const shown = trendData.filter((t) => t.month <= lastMonth);
     return {
-      labels: trendData.map(t => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.month - 1]),
-      datasets: [{ label: 'Revenue (₹)', data: trendData.map(t => t.collected_revenue), borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }]
+      labels: shown.map(t => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.month - 1]),
+      datasets: [{ label: 'Service charges (₹)', data: shown.map(t => t.service_charges), borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }]
     };
-  }, [trendData]);
+  }, [trendData, trendYear]);
 
   const doughnutData = {
     labels: serviceMix.map(s => s.service_type),
-    datasets: [{ data: serviceMix.map(s => s.count), backgroundColor: ["#3B82F6", "#10B981", "#EF4444", "#F59E0B", "#8B5CF6", "#64748B"], borderWidth: 0 }]
+    datasets: [{ data: serviceMix.map(s => s.total), backgroundColor: ["#3B82F6", "#10B981", "#EF4444", "#F59E0B", "#8B5CF6", "#0891B2", "#94A3B8"], borderWidth: 0 }]
   };
 
   // ------------------------------------------------------------------
@@ -690,10 +711,10 @@ const TeamManagement = () => {
               Teams Management
             </h1>
             <p className="text-gray-600 mt-1">
-              Organize finance ownership, centre vs global teams
+              Service charges and monthly targets for centre and global teams
             </p>
           </div>
-          <div className="flex gap-3 mt-4 md:mt-0">
+          <div className="flex flex-wrap gap-3 mt-4 md:mt-0">
             <div className="relative">
               <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
@@ -775,7 +796,7 @@ const TeamManagement = () => {
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
           
-          {/* NEW DATE FILTER */}
+          {/* PERIOD FILTER (service charges, expenses). Targets are always this month. */}
           <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm">
             <FiCalendar className="text-gray-500" />
             <select 
@@ -783,10 +804,9 @@ const TeamManagement = () => {
               onChange={(e) => setPeriod(e.target.value)} 
               className="bg-transparent focus:outline-none text-gray-700 font-semibold cursor-pointer"
             >
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-              <option value="year">This Year</option>
+              {PERIOD_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
             </select>
           </div>
 
@@ -833,13 +853,16 @@ const TeamManagement = () => {
                     Members
                   </th>
                   <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
-                    Collected Revenue
+                    Service Charges
                   </th>
                   <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
                     Expense
                   </th>
                   <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
                     Net Profit
+                  </th>
+                  <th className="py-4 px-5 text-left text-sm font-semibold text-gray-600">
+                    Monthly Target
                   </th>
                   <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
                     Actions
@@ -872,10 +895,17 @@ const TeamManagement = () => {
                       </td>
                       <td className="py-4 px-5 text-center"><span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{team.is_global ? "Global" : "Centre"}</span></td>
                       <td className="py-4 px-5 text-center font-bold text-gray-700">{team.member_count}</td>
-                      <td className="py-4 px-5 text-right text-emerald-600 font-medium">{formatCurrency(team.collected_revenue)}</td>
+                      <td className="py-4 px-5 text-right text-emerald-600 font-medium">{formatCurrency(team.service_charges)}</td>
                       <td className="py-4 px-5 text-right text-red-500 font-medium">{formatCurrency(team.expense)}</td>
-                      
-                      <td className="py-4 px-5 text-right font-bold text-indigo-600">{formatCurrency(team.net_profit)}</td>
+
+                      <td className={`py-4 px-5 text-right font-bold ${team.net_profit < 0 ? "text-rose-600" : "text-indigo-600"}`}>{formatCurrency(team.net_profit)}</td>
+                      <td className="py-4 px-5">
+                        <MiniTargetBar
+                          achieved={team.targets?.achieved || 0}
+                          target={team.targets?.target || 0}
+                          onPace={team.targets?.onPace}
+                        />
+                      </td>
                       <td className="py-4 px-5 text-center">
                         <div className="flex justify-center gap-2">
                           <button onClick={() => openAnalyticsModal(team)} className="text-teal-600 hover:text-teal-800 p-1.5 rounded-lg hover:bg-teal-50" title="View Dashboard">
@@ -893,7 +923,7 @@ const TeamManagement = () => {
                     {/* --- EXPANDED ROW (STAFF DETAILS) --- */}
                     {expandedTeamId === team.id && (
                       <tr className="bg-slate-50 border-b-2 border-indigo-100 shadow-inner">
-                         <td colSpan="6" className="p-0">
+                         <td colSpan="8" className="p-0">
                            <div className="px-14 py-6">
                              {membersLoading ? (
                                 <div className="text-gray-500 text-sm py-4 flex items-center"><FiLoader className="animate-spin mr-2"/> Loading members...</div>
@@ -919,6 +949,27 @@ const TeamManagement = () => {
                                     </div>
                                   </div>
                                   
+                                  {/* Team target = sum of members' targets */}
+                                  {teamTargetsMap[team.id] && (
+                                    <div className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
+                                      {teamTargetsMap[team.id].target > 0 ? (
+                                        <>
+                                          <TargetProgressBar
+                                            label={`Team target this month (${teamTargetsMap[team.id].membersWithTarget} of ${teamTargetsMap[team.id].memberCount} members have one)`}
+                                            current={teamTargetsMap[team.id].achieved}
+                                            target={teamTargetsMap[team.id].target}
+                                          />
+                                          <p className="text-xs text-gray-500">
+                                            Today {inr(teamTargetsMap[team.id].today)} of {inr(teamTargetsMap[team.id].dailyTarget)} daily target
+                                            {" · "}{teamTargetsMap[team.id].metToday} of {teamTargetsMap[team.id].membersWithTarget} met today
+                                          </p>
+                                        </>
+                                      ) : (
+                                        <p className="text-sm text-gray-600">No member of this team has a target for this month, so the team has no target yet.</p>
+                                      )}
+                                    </div>
+                                  )}
+
                                   {/* Staff Grid */}
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                      {teamMembersMap[team.id]?.map(member => (
@@ -930,6 +981,12 @@ const TeamManagement = () => {
                                              <div>
                                                 <p className="text-sm font-bold text-gray-800">{member.name} {member.is_primary && <FiStar className="inline text-amber-500 ml-1 mb-0.5"/>}</p>
                                                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mt-0.5">{member.role} • {member.centre_name}</p>
+                                                {(() => {
+                                                  const t = teamTargetsMap[team.id]?.members?.find((x) => x.staff_id === member.staff_id);
+                                                  return t ? (
+                                                    <div className="mt-2"><MiniTargetBar achieved={t.achieved} target={t.target} onPace={t.on_pace} /></div>
+                                                  ) : null;
+                                                })()}
                                              </div>
                                           </div>
                                           <div className="flex gap-1">
@@ -1168,7 +1225,7 @@ const TeamManagement = () => {
                 <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                   <FiBarChart2 className="text-indigo-600" /> {analyticsTeam.name} Dashboard
                 </h2>
-                <p className="text-gray-500 text-sm mt-1">Admin Performance Overview</p>
+                <p className="text-gray-500 text-sm mt-1">Service charges · {periodLabel}{analyticsTeam.is_global ? " · Global team" : ""}</p>
               </div>
               <button onClick={() => setShowAnalyticsModal(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition">
                 <FiX size={24} />
@@ -1184,7 +1241,7 @@ const TeamManagement = () => {
                 Staff Leaderboard
               </button>
               <button onClick={() => setAnalyticsTab("settings")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "settings" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
-                Culture & Targets
+                Targets
               </button>
             </div>
 
@@ -1196,23 +1253,68 @@ const TeamManagement = () => {
                   {/* TAB 1: OVERVIEW */}
                   {analyticsTab === "overview" && (
                     <div className="space-y-6">
-                      <div className="grid grid-cols-4 gap-4">
-                        <StatCard title="Total Expected" value={formatCurrency(activeTeamStats.expected_revenue)} icon={FiTarget} color="bg-indigo-600" />
-                        <StatCard title="Collected Revenue" value={formatCurrency(activeTeamStats.collected_revenue)} icon={FiDollarSign} color="bg-emerald-600" />
-                        <StatCard title="Net Generated" value={formatCurrency(actualProfit)} subtitle={`Expenses: ${formatCurrency(activeTeamStats.expense)}`} icon={FiTrendingUp} color="bg-blue-600" />
-                        <StatCard title="Profit Margin" value={`${profitMargin}%`} subtitle="After dept charges & expenses" icon={FiPieChart} color="bg-amber-500" />
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                        <StatCard
+                          title="Service Charges"
+                          value={formatCurrency(activeTeamStats.service_charges)}
+                          subtitle={`${activeTeamStats.services_completed} completed ${activeTeamStats.services_completed === 1 ? "service" : "services"}`}
+                          icon={FiDollarSign}
+                          color="bg-emerald-600"
+                        />
+                        <StatCard title="Expenses" value={formatCurrency(activeTeamStats.expense)} subtitle="Approved expenses" icon={FiBriefcase} color="bg-rose-500" />
+                        <StatCard
+                          title="Net Profit"
+                          value={formatCurrency(activeTeamStats.net_profit)}
+                          subtitle="Service charges less expenses"
+                          icon={FiTrendingUp}
+                          color="bg-blue-600"
+                        />
+                        <StatCard
+                          title="Net Margin"
+                          value={`${netMargin}%`}
+                          subtitle="Of service charges"
+                          icon={FiPieChart}
+                          color="bg-amber-500"
+                        />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-6">
-                        <div className="col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                           <h3 className="font-bold text-gray-900 mb-6 flex items-center">
-                            <FiTrendingUp className="mr-2 text-indigo-600" /> Monthly Trajectory
+                            <FiTarget className="mr-2 text-indigo-600" /> Monthly Target
                           </h3>
-                          
+
                           {targetsEnabled ? (
-                            <div className="space-y-6">
-                              <TargetProgressBar label="Revenue Target" current={activeTeamStats.collected_revenue} target={monthlyTarget} />
-                            </div>
+                            teamTargets && teamTargets.target > 0 ? (
+                              <div className="space-y-2">
+                                <TargetProgressBar
+                                  label={`Service charges target (${teamTargets.membersWithTarget} ${teamTargets.membersWithTarget === 1 ? "member" : "members"})`}
+                                  current={teamTargets.achieved}
+                                  target={teamTargets.target}
+                                />
+                                <div className="grid grid-cols-3 gap-3 text-sm">
+                                  <div className="bg-gray-50 p-3 rounded-lg">
+                                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Today</p>
+                                    <p className="font-bold text-gray-900">{formatCurrency(teamTargets.today)}</p>
+                                    <p className="text-xs text-gray-500">of {formatCurrency(teamTargets.dailyTarget)} daily</p>
+                                  </div>
+                                  <div className="bg-gray-50 p-3 rounded-lg">
+                                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Met today's target</p>
+                                    <p className="font-bold text-gray-900">{teamTargets.metToday} of {teamTargets.membersWithTarget}</p>
+                                    <p className="text-xs text-gray-500">members</p>
+                                  </div>
+                                  <div className="bg-gray-50 p-3 rounded-lg">
+                                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Pace</p>
+                                    <p className={`font-bold ${teamTargets.onPace ? "text-emerald-600" : "text-amber-600"}`}>{teamTargets.onPace ? "On pace" : "Behind pace"}</p>
+                                    <p className="text-xs text-gray-500">Day {teamTargets.dayOfMonth} of {teamTargets.daysInMonth}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="bg-amber-50 border border-amber-100 p-5 rounded-xl text-sm text-amber-800">
+                                Targets are on for this team, but none of its members has a target for this month. Set them on the staff profiles and the team target adds up automatically.
+                              </div>
+                            )
                           ) : (
                             <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center">
                               <div className="inline-block p-4 bg-indigo-100 rounded-full mb-4">
@@ -1224,27 +1326,41 @@ const TeamManagement = () => {
                               </p>
                               <div className="mt-6 flex justify-center gap-6">
                                 <div>
-                                  <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Current Pace</p>
-                                  <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(activeTeamStats.collected_revenue)}</p>
+                                  <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Service charges · {periodLabel}</p>
+                                  <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(activeTeamStats.service_charges)}</p>
                                 </div>
                               </div>
                             </div>
                           )}
 
-                          <div className="mt-8 h-[200px]">
+                          <h3 className="font-bold text-gray-900 mt-8 mb-3 flex items-center text-sm">
+                            <FiTrendingUp className="mr-2 text-indigo-600" /> Service charges by month, {trendYear}
+                          </h3>
+                          <div className="h-[200px]">
                             {trendChartData && <Line data={trendChartData} options={{ maintainAspectRatio: false, plugins: { legend: { display: false } } }} />}
                           </div>
                         </div>
 
                         <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col">
-                          <h3 className="font-bold text-gray-900 mb-4 flex items-center">
-                            <FiPieChart className="mr-2 text-blue-600" /> Service Mix
+                          <h3 className="font-bold text-gray-900 mb-1 flex items-center">
+                            <FiPieChart className="mr-2 text-blue-600" /> Service Charges by Service
                           </h3>
-                          <div className="flex-1 relative">
+                          <p className="text-xs text-gray-500 mb-4">{periodLabel}</p>
+                          <div className="flex-1 relative min-h-[220px]">
                             {serviceMix.length > 0 ? (
-                              <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } } }} />
+                              <Doughnut
+                                data={doughnutData}
+                                options={{
+                                  maintainAspectRatio: false,
+                                  cutout: '70%',
+                                  plugins: {
+                                    legend: { position: 'bottom', labels: { boxWidth: 10 } },
+                                    tooltip: { callbacks: { label: (ctx) => ` ${ctx.label}: ${inr(ctx.parsed)}` } },
+                                  },
+                                }}
+                              />
                             ) : (
-                              <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">No service data</div>
+                              <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">No completed services in this period</div>
                             )}
                           </div>
                         </div>
@@ -1254,45 +1370,58 @@ const TeamManagement = () => {
 
                   {/* TAB 2: LEADERBOARD */}
                   {analyticsTab === "leaderboard" && (
-                    <div className="grid grid-cols-3 gap-4">
-                      {contributionData.map((member, idx) => (
-                        <div key={member.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
-                          {idx === 0 && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-3 py-1 rounded-bl-lg">MVP</div>}
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                              {member.name.charAt(0)}
+                    <>
+                      <p className="text-xs text-gray-500 mb-3">Ranked by service charges · {periodLabel}. Target bars show this month.</p>
+                      {contributionData.length === 0 ? (
+                        <p className="py-10 text-center text-sm text-gray-500">This team has no members yet.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                          {contributionData.map((member, idx) => (
+                            <div key={member.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
+                              {idx === 0 && member.service_charges > 0 && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-3 py-1 rounded-bl-lg">MVP</div>}
+                              <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
+                                  {member.name.charAt(0)}
+                                </div>
+                                <div>
+                                  <h4 className="font-bold text-gray-900">{member.name}</h4>
+                                  <p className="text-xs text-gray-500">{member.role}{member.centre_name ? ` · ${member.centre_name}` : ""}</p>
+                                </div>
+                              </div>
+                              <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="bg-gray-50 p-2 rounded">
+                                  <p className="text-[10px] text-gray-500 uppercase font-semibold">Service charges</p>
+                                  <p className="font-bold text-emerald-600">{formatCurrency(member.service_charges)}</p>
+                                </div>
+                                <div className="bg-gray-50 p-2 rounded">
+                                  <p className="text-[10px] text-gray-500 uppercase font-semibold">Services done</p>
+                                  <p className="font-bold text-indigo-600">{member.services_completed}</p>
+                                </div>
+                              </div>
+                              <div className="mt-4">
+                                <p className="text-[10px] text-gray-500 uppercase font-semibold mb-1">This month's target</p>
+                                <MiniTargetBar achieved={member.month_achieved} target={member.target} onPace={member.on_pace} />
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="font-bold text-gray-900">{member.name}</h4>
-                              <p className="text-xs text-gray-500">{member.role}</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div className="bg-gray-50 p-2 rounded">
-                              <p className="text-[10px] text-gray-500 uppercase font-semibold">Collected</p>
-                              <p className="font-bold text-emerald-600">{formatCurrency(member.collected_revenue)}</p>
-                            </div>
-                            <div className="bg-gray-50 p-2 rounded">
-                              <p className="text-[10px] text-gray-500 uppercase font-semibold">Profit Added</p>
-                              <p className="font-bold text-indigo-600">{formatCurrency(member.net_profit)}</p>
-                            </div>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                    </div>
+                      )}
+                    </>
                   )}
 
-                  {/* TAB 3: SETTINGS */}
+                  {/* TAB 3: TARGETS */}
                   {analyticsTab === "settings" && (
-                    <div className="max-w-2xl mx-auto space-y-6">
+                    <div className="max-w-3xl mx-auto space-y-6">
                       <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-gray-900 mb-2">Team Culture & Targets</h3>
-                        <p className="text-sm text-gray-500 mb-6">Determine how this team is measured on their dashboard.</p>
-                        
+                        <h3 className="text-lg font-bold text-gray-900 mb-2">Team Targets</h3>
+                        <p className="text-sm text-gray-500 mb-6">
+                          The team's monthly target is the sum of its members' individual targets. Change a target on the staff profile and the team figure updates by itself.
+                        </p>
+
                         <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 mb-6">
                           <div>
-                            <p className="font-bold text-gray-900">Enable Strict Targets</p>
-                            <p className="text-sm text-gray-500 mt-1">If disabled, the team will see a "Growth Mindset" dashboard instead.</p>
+                            <p className="font-bold text-gray-900">Measure this team against targets</p>
+                            <p className="text-sm text-gray-500 mt-1">If off, the team sees a "Growth Mindset" dashboard instead.</p>
                           </div>
                           <label className="relative inline-flex items-center cursor-pointer">
                             <input type="checkbox" className="sr-only peer" checked={targetsEnabled} onChange={(e) => setTargetsEnabled(e.target.checked)} />
@@ -1300,23 +1429,64 @@ const TeamManagement = () => {
                           </label>
                         </div>
 
-                        {targetsEnabled && (
-                          <div className="space-y-4 animate-fade-in-up mb-6">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Revenue Target (₹)</label>
-                              <input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value))} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
-                            </div>
+                        <div className="rounded-xl border border-gray-200 overflow-hidden">
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-500">
+                                <tr>
+                                  <th className="py-3 px-4 text-left font-semibold">Member</th>
+                                  <th className="py-3 px-4 text-right font-semibold">Monthly target</th>
+                                  <th className="py-3 px-4 text-right font-semibold">Achieved</th>
+                                  <th className="py-3 px-4 text-right font-semibold">Daily target</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(teamTargets?.members || []).map((m) => (
+                                  <tr key={m.staff_id} className="border-t border-gray-100">
+                                    <td className="py-3 px-4">
+                                      <p className="font-medium text-gray-900">{m.name}</p>
+                                      <p className="text-xs text-gray-500">{m.centre_name || m.role}</p>
+                                    </td>
+                                    {m.has_target ? (
+                                      <>
+                                        <td className="py-3 px-4 text-right tabular-nums">{formatCurrency(m.target)}</td>
+                                        <td className="py-3 px-4 text-right tabular-nums">{formatCurrency(m.achieved)} <span className="text-xs text-gray-400">({m.progress.toFixed(0)}%)</span></td>
+                                        <td className="py-3 px-4 text-right tabular-nums">{formatCurrency(m.daily_target)}</td>
+                                      </>
+                                    ) : (
+                                      <td colSpan="3" className="py-3 px-4 text-right text-xs text-gray-400">No target set for this month</td>
+                                    )}
+                                  </tr>
+                                ))}
+                                {teamTargets && teamTargets.members.length > 0 && (
+                                  <tr className="border-t-2 border-gray-200 bg-indigo-50/50 font-bold text-gray-900">
+                                    <td className="py-3 px-4">Team total</td>
+                                    <td className="py-3 px-4 text-right tabular-nums">{formatCurrency(teamTargets.target)}</td>
+                                    <td className="py-3 px-4 text-right tabular-nums">{formatCurrency(teamTargets.achieved)} <span className="text-xs font-medium text-gray-500">({teamTargets.progress.toFixed(0)}%)</span></td>
+                                    <td className="py-3 px-4 text-right tabular-nums">{formatCurrency(teamTargets.dailyTarget)}</td>
+                                  </tr>
+                                )}
+                                {(!teamTargets || teamTargets.members.length === 0) && (
+                                  <tr><td colSpan="4" className="py-6 text-center text-sm text-gray-500">This team has no members yet.</td></tr>
+                                )}
+                              </tbody>
+                            </table>
                           </div>
-                        )}
+                        </div>
+                        <p className="mt-3 text-xs text-gray-500">
+                          Achieved = each member's completed service charges this month, the same figure they see on their own dashboard. Members without a target are left out of the totals.
+                        </p>
 
-                        <button 
-                          onClick={handleSaveSettings} 
-                          disabled={savingSettings} 
-                          className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition w-full disabled:opacity-50 flex justify-center items-center"
-                        >
-                          {savingSettings ? <FiLoader className="animate-spin mr-2" /> : null}
-                          {savingSettings ? "Saving Settings..." : "Save Settings"}
-                        </button>
+                        {isAdmin && (
+                          <button
+                            onClick={handleSaveSettings}
+                            disabled={savingSettings}
+                            className="mt-6 bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition w-full disabled:opacity-50 flex justify-center items-center"
+                          >
+                            {savingSettings ? <FiLoader className="animate-spin mr-2" /> : null}
+                            {savingSettings ? "Saving Settings..." : "Save Settings"}
+                          </button>
+                        )}
                       </div>
                     </div>
                   )}
