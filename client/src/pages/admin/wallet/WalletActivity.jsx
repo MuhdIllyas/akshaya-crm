@@ -389,6 +389,8 @@ const WalletActivity = () => {
   }
 
   const type = WALLET_TYPES[wallet.type] || { name: "Wallet", icon: FiCreditCard, tone: "bg-gray-50 text-gray-600 border-gray-100" };
+  const TYPE_COLOR = { bank: "#2563eb", cash: "#059669", card: "#9333ea", digital: "#ea580c", savings: "#e11d48" };
+  const accent = TYPE_COLOR[wallet.type] || "#64748b";
   const TypeIcon = type.icon;
   const online = wallet.status === "online";
   const topStaff = stats.topStaffId ? staffById[stats.topStaffId] : null;
@@ -418,7 +420,10 @@ const WalletActivity = () => {
             <Link to="/dashboard/admin/wallets" className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 shrink-0" title="Back to wallets">
               <FiArrowLeft size={20} />
             </Link>
-            <div className={`w-12 h-12 rounded-xl border flex items-center justify-center shrink-0 ${type.tone}`}>
+            <div
+              className="w-12 h-12 rounded-xl border flex items-center justify-center shrink-0"
+              style={{ background: `${accent}1A`, borderColor: `${accent}33`, color: accent }}
+            >
               <TypeIcon size={22} />
             </div>
             <div className="min-w-0">
@@ -451,7 +456,7 @@ const WalletActivity = () => {
         </div>
 
         {/* Balance strip */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4" style={{ borderTop: `3px solid ${accent}` }}>
           <div className="col-span-2 md:col-span-1">
             <p className="text-sm text-gray-500">Current balance</p>
             <p className="text-3xl font-bold text-gray-900">{formatAmount(wallet.balance)}</p>

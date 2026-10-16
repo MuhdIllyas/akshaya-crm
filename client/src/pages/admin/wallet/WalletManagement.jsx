@@ -28,6 +28,12 @@ const WALLET_TYPES = [
   { id: "digital", name: "Digital Wallet", icon: FiSmartphone, tone: "bg-amber-50 text-amber-600 border-amber-100" },
   { id: "savings", name: "Savings", icon: FiBriefcase, tone: "bg-rose-50 text-rose-600 border-rose-100" },
 ];
+
+// One accent colour per wallet category (all bank wallets share a colour, etc.)
+const TYPE_COLOR = { bank: "#2563eb", cash: "#059669", card: "#9333ea", digital: "#ea580c", savings: "#e11d48" };
+const walletColor = (w) => TYPE_COLOR[w?.wallet_type] || "#64748b";
+const tint = (hex, alpha = "1A") => `${hex}${alpha}`; // hex + 2-digit alpha
+
 const getType = (id) => WALLET_TYPES.find((t) => t.id === id) || { id, name: "Wallet", icon: FiCreditCard, tone: "bg-gray-50 text-gray-600 border-gray-100" };
 
 const formatAmount = (amount) =>
@@ -233,7 +239,7 @@ const WalletManagement = () => {
     wallets.forEach((w) => (m[String(w.id)] = w));
     return m;
   }, [wallets]);
-  const centreName = staffMembers.find((s) => Number(s.centre_id ?? s.centreId) === adminCentreId)?.centre_name;
+  const centreName = wallets.find((w) => w.centre_name)?.centre_name;
 
   /* ---------- derived ---------- */
   const totalBalance = wallets.reduce((s, w) => s + (Number(w.balance) || 0), 0);
@@ -279,8 +285,9 @@ const WalletManagement = () => {
       staffMembers
         .map((s) => {
           const own = wallets.filter((w) => !w.is_shared && String(w.assigned_staff_id) === String(s.id));
-          return { ...s, walletCount: own.length, walletTotal: own.reduce((sum, w) => sum + (Number(w.balance) || 0), 0) };
+          return { ...s, wallets: own, walletCount: own.length, walletTotal: own.reduce((sum, w) => sum + (Number(w.balance) || 0), 0) };
         })
+        .filter((s) => s.walletCount > 0)
         .sort((a, b) => b.walletTotal - a.walletTotal),
     [staffMembers, wallets]
   );
@@ -498,16 +505,21 @@ const WalletManagement = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
             {filteredWallets.map((w) => {
               const type = getType(w.wallet_type);
+              const color = walletColor(w);
               const TypeIcon = type.icon;
               const staff = staffById[String(w.assigned_staff_id)];
               const today = todayBalances[w.id];
               const online = w.status === "online";
               return (
-                <div key={w.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                <div key={w.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden">
+                  <div className="h-1" style={{ background: color }} />
                   <div className="p-5 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div className={`w-11 h-11 rounded-xl border flex items-center justify-center shrink-0 ${type.tone}`}>
+                        <div
+                          className="w-11 h-11 rounded-xl border flex items-center justify-center shrink-0"
+                          style={{ background: tint(color), borderColor: tint(color, "33"), color }}
+                        >
                           <TypeIcon size={20} />
                         </div>
                         <div className="min-w-0">
@@ -619,7 +631,14 @@ const WalletManagement = () => {
                           {t.created_at ? new Date(t.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "—"}
                         </td>
                         <td className="px-5 py-3 text-sm font-medium text-gray-900 max-w-xs truncate">{t.description || "No description"}</td>
-                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-600">{walletById[String(t.wallet_id)]?.name || "—"}</td>
+                        <td className="px-5 py-3 whitespace-nowrap text-sm text-gray-600">
+                          {walletById[String(t.wallet_id)] ? (
+                            <span className="inline-flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full" style={{ background: walletColor(walletById[String(t.wallet_id)]) }} />
+                              {walletById[String(t.wallet_id)].name}
+                            </span>
+                          ) : "—"}
+                        </td>
                         <td className="px-5 py-3 whitespace-nowrap">
                           {t.staff_id ? (
                             <div className="flex items-center gap-2">
@@ -671,19 +690,36 @@ const WalletManagement = () => {
               <SecondaryBtn onClick={fetchStaffData}>Retry</SecondaryBtn>
             </div>
           ) : staffWallets.length === 0 ? (
-            <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-sm text-gray-500">{loading ? "Loading…" : "No staff found."}</div>
+            <div className="bg-white rounded-2xl border border-gray-200 p-6 text-center text-sm text-gray-500">
+              {loading ? "Loading…" : "No personal wallets are assigned to staff yet."}
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {staffWallets.map((s) => (
-                <div key={s.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 flex items-center gap-3">
-                  <Avatar name={s.name} photo={s.photo} size="w-11 h-11" text="text-sm" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-gray-900 truncate">{s.name}</p>
-                    <p className="text-xs text-gray-500 capitalize">{s.role}</p>
+                <div key={s.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
+                  <div className="flex items-center gap-3">
+                    <Avatar name={s.name} photo={s.photo || s.photoUrl} size="w-11 h-11" text="text-sm" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-gray-900 truncate">{s.name}</p>
+                      <p className="text-xs text-gray-500 capitalize">{s.role}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-semibold text-gray-900">{formatAmount(s.walletTotal)}</p>
+                      <p className="text-xs text-gray-400">{s.walletCount} wallet{s.walletCount === 1 ? "" : "s"}</p>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-gray-900">{s.walletCount ? formatAmount(s.walletTotal) : "—"}</p>
-                    <p className="text-xs text-gray-400">{s.walletCount} wallet{s.walletCount === 1 ? "" : "s"}</p>
+                  <div className="mt-3 pt-3 border-t border-gray-100 space-y-1.5">
+                    {s.wallets.map((w) => (
+                      <Link
+                        key={w.id}
+                        to={`/dashboard/admin/wallets/${w.id}`}
+                        className="flex items-center gap-2 text-sm rounded-lg px-2 py-1 -mx-2 hover:bg-gray-50"
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: walletColor(w) }} />
+                        <span className="flex-1 truncate text-gray-700">{w.name}</span>
+                        <span className="font-medium text-gray-900">{formatAmount(w.balance)}</span>
+                      </Link>
+                    ))}
                   </div>
                 </div>
               ))}
@@ -726,10 +762,11 @@ const WalletManagement = () => {
                     type="button"
                     onClick={() => setFormField("walletType", t.id)}
                     className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs font-medium transition-colors ${
-                      active ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-600 hover:bg-gray-50"
+                      active ? "" : "border-gray-200 text-gray-600 hover:bg-gray-50"
                     }`}
+                    style={active ? { borderColor: TYPE_COLOR[t.id], background: `${TYPE_COLOR[t.id]}14`, color: TYPE_COLOR[t.id] } : undefined}
                   >
-                    <Icon size={16} />
+                    <Icon size={16} style={active ? undefined : { color: TYPE_COLOR[t.id] }} />
                     <span className="truncate w-full text-center">{t.name}</span>
                   </button>
                 );
