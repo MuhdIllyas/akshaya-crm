@@ -21,6 +21,16 @@ import {
   getWalletTodayBalance,
 } from "@/services/walletService";
 
+// Old transfers were saved as "Transfer from wallet 91 to wallet 82".
+// Show "Transfer from HDFC Bank (#91) to Cash (#82)" instead — display only, the database is untouched.
+const prettyDescription = (text, nameById) => {
+  if (!text) return text;
+  return String(text).replace(/\bwallet\s+#?(\d+)\b/gi, (match, id) => {
+    const name = nameById[String(id)];
+    return name ? `${name} (#${id})` : match;
+  });
+};
+
 const API_BASE = import.meta.env.VITE_API_URL;
 
 /* ───────────── constants & helpers ───────────── */
@@ -211,7 +221,9 @@ const WalletManagementSuperAdmin = () => {
       const [walletRes, txRes] = await Promise.all([getWallets(), getTransactions()]);
       const list = walletRes.data || [];
       setWallets(list);
-      setTransactions(txRes.data || []);
+      const nameById = {};
+      (list || []).forEach((w) => (nameById[String(w.id)] = w.name));
+      setTransactions((txRes.data || []).map((t) => ({ ...t, description: prettyDescription(t.description, nameById) })));
       // Today's opening/closing per wallet (same endpoint as before, now in parallel)
       const results = await Promise.all(list.map((w) => getWalletTodayBalance(w.id).catch(() => null)));
       const map = {};

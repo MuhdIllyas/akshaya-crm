@@ -17,7 +17,18 @@ import {
   rechargeWallet,
   getWalletById,
   getWalletTodayBalance,
+  getWallets,
 } from "@/services/walletService";
+
+// Old transfers were saved as "Transfer from wallet 91 to wallet 82".
+// Show "Transfer from HDFC Bank (#91) to Cash (#82)" instead — display only, the database is untouched.
+const prettyDescription = (text, nameById) => {
+  if (!text) return text;
+  return String(text).replace(/\bwallet\s+#?(\d+)\b/gi, (match, id) => {
+    const name = nameById[String(id)];
+    return name ? `${name} (#${id})` : match;
+  });
+};
 
 /* ───────────── constants & helpers ───────────── */
 const WALLET_TYPES = {
@@ -142,12 +153,15 @@ const WalletActivity = () => {
     }
     setError(null);
     try {
-      const [walletRes, txRes, staffRes, todayRes] = await Promise.all([
+      const [walletRes, txRes, staffRes, todayRes, allWalletsRes] = await Promise.all([
         getWalletById(walletId),
         getWalletTransactions(walletId, 100, 0),
         getStaff().catch(() => []),
         getWalletTodayBalance(walletId).catch(() => null),
+        getWallets().catch(() => null), // only used to show wallet names in old transfer descriptions
       ]);
+      const nameById = {};
+      (allWalletsRes?.data || []).forEach((x) => (nameById[String(x.id)] = x.name));
       const w = walletRes.data || {};
       if (!w.id) throw new Error("Wallet data is incomplete");
 
@@ -166,7 +180,7 @@ const WalletActivity = () => {
         (Array.isArray(txRes.data) ? txRes.data : []).map((t, i) => ({
           id: t.id ?? `tmp-${i}`,
           date: t.created_at,
-          description: t.description || "No description",
+          description: prettyDescription(t.description, nameById) || "No description",
           type: t.type === "credit" ? "credit" : "debit",
           amount: Math.abs(Number(t.amount) || 0), // always positive; use .type for direction
           category:
