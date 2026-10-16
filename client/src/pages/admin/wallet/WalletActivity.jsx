@@ -169,7 +169,11 @@ const WalletActivity = () => {
           description: t.description || "No description",
           type: t.type === "credit" ? "credit" : "debit",
           amount: Math.abs(Number(t.amount) || 0), // always positive; use .type for direction
-          category: t.category || "Other",
+          category:
+            t.category ||
+            (/^initial balance/i.test(t.description || "") ? "Opening Balance"
+              : /^transfer/i.test(t.description || "") ? "Transfer"
+              : "Uncategorised"),
           staffId: t.staff_id != null ? String(t.staff_id) : null,
           staffName: t.staff_name || null,
         }))

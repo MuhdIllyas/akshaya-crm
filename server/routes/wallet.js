@@ -571,6 +571,7 @@ router.get("/transactions/:walletId", async (req, res) => {
         wt.type,
         wt.amount,
         LEFT(wt.description, 200) AS description,
+        wt.category,
         wt.created_at,
         w.name AS wallet_name,
         s.name AS staff_name,
