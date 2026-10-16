@@ -471,10 +471,17 @@ const TeamManagement = () => {
 
   // Targets switch (the amount itself is the sum of members' individual targets)
   const [targetsEnabled, setTargetsEnabled] = useState(false);
+  const [targetMode, setTargetMode] = useState("staff"); // "staff" = sum of members, "manual" = typed for the team
+  const [manualTarget, setManualTarget] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
   const handleSaveSettings = async () => {
     if (!analyticsTeam) return;
+    const amount = Number(manualTarget);
+    if (targetMode === "manual" && !(Number.isFinite(amount) && amount > 0)) {
+      toast.error("Enter a monthly target above 0, or use the sum of staff targets");
+      return;
+    }
     setSavingSettings(true);
     try {
       const response = await fetch(`${API_BASE}/api/teams/${analyticsTeam.id}/settings`, {
@@ -483,10 +490,23 @@ const TeamManagement = () => {
           "Content-Type": "application/json",
           Authorization: `Bearer ${localStorage.getItem("token")}`
         },
-        body: JSON.stringify({ targets_enabled: targetsEnabled }),
+        body: JSON.stringify({
+          targets_enabled: targetsEnabled,
+          target_mode: targetMode,
+          monthly_target: targetMode === "manual" ? amount : undefined,
+        }),
       });
-      if (!response.ok) throw new Error("Failed to save settings");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Failed to save settings");
       toast.success("Team settings saved successfully!");
+
+      // the target figures change with the mode, so reload them here and in the table
+      const targetsRes = await fetch(`${API_BASE}/api/teams/${analyticsTeam.id}/targets?photos=1`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (targetsRes.ok) setTeamTargets(await targetsRes.json());
+      fetchFinancials();
+      if (expandedTeamId === analyticsTeam.id) loadTeamExtras(analyticsTeam.id);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -867,8 +887,12 @@ const TeamManagement = () => {
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
         setTargetsEnabled(!!settingsData.targets_enabled);
+        setTargetMode(settingsData.target_mode === "manual" ? "manual" : "staff");
+        setManualTarget(settingsData.monthly_target > 0 ? String(settingsData.monthly_target) : "");
       } else {
         setTargetsEnabled(false);
+        setTargetMode("staff");
+        setManualTarget("");
       }
 
     } catch (err) {
@@ -1036,7 +1060,7 @@ const TeamManagement = () => {
           value={`${targetPct}%`}
           tone={targetPct >= 100 ? "text-emerald-600" : "text-slate-900"}
           context={`${money(sumTotals.achieved)} of ${money(sumTotals.target)}`}
-          note="Sum of members' targets, this month"
+          note="Team targets, this month"
           bar={<TargetBar value={sumTotals.achieved} max={sumTotals.target} tone={targetPct >= 100 ? "bg-emerald-500" : "bg-blue-500"} />}
         />
       </div>
@@ -1149,7 +1173,7 @@ const TeamManagement = () => {
                                 {teamTargetsMap[team.id] && (
                                   <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                                     <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
-                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Team target this month</p>
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Team target this month{teamTargetsMap[team.id].mode === "manual" ? " · set for team" : ""}</p>
                                       {teamTargetsMap[team.id].target > 0 ? (
                                         <>
                                           <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
@@ -1383,7 +1407,7 @@ const TeamManagement = () => {
                           value={teamTargets && teamTargets.target > 0 ? `${Math.round(teamTargets.progress)}%` : "Not set"}
                           tone={teamTargets && teamTargets.progress >= 100 ? "text-emerald-600" : "text-slate-900"}
                           context={teamTargets && teamTargets.target > 0 ? `${money(teamTargets.achieved)} of ${money(teamTargets.target)}` : "No member targets this month"}
-                          note="Sum of members' targets"
+                          note={teamTargets?.mode === "manual" ? "Set for the team" : "Sum of members' targets"}
                           bar={teamTargets && teamTargets.target > 0 ? (
                             <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={teamTargets.progress >= 100 ? "bg-emerald-500" : teamTargets.onPace ? "bg-blue-500" : "bg-amber-500"} />
                           ) : null}
@@ -1403,7 +1427,7 @@ const TeamManagement = () => {
                         </div>
                       </div>
 
-                      <Panel title="Monthly target" hint="Sum of members' individual targets, this month">
+                      <Panel title="Monthly target" hint={teamTargets?.mode === "manual" ? "Target set for the team, this month" : "Sum of members' individual targets, this month"}>
                         {!targetsEnabled ? (
                           <p className="py-6 text-center text-sm text-slate-500">
                             Targets are switched off for this team, so it is not measured against them. Turn them on in the Targets tab.
@@ -1443,7 +1467,7 @@ const TeamManagement = () => {
                           </div>
                         ) : (
                           <p className="py-6 text-center text-sm text-slate-500">
-                            None of this team's members has a target for this month. Set them on the staff profiles and the team target adds up by itself.
+                            None of this team's members has a target for this month. Set them on the staff profiles and the team target adds up by itself, or set a target for the whole team in the Targets tab.
                           </p>
                         )}
                       </Panel>
@@ -1494,7 +1518,7 @@ const TeamManagement = () => {
                   {analyticsTab === "settings" && (
                     <Panel
                       title="Team targets"
-                      hint="A team's monthly target is the sum of its members' individual targets. Change one on a staff profile and the team figure follows"
+                      hint="Choose how this team's monthly target is set"
                     >
                       <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
                         <span>
@@ -1503,14 +1527,65 @@ const TeamManagement = () => {
                         </span>
                         <input
                           type="checkbox"
-                          className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-indigo-600"
+                          className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-navy-500"
                           checked={targetsEnabled}
                           onChange={(e) => setTargetsEnabled(e.target.checked)}
                           disabled={!isAdmin}
                         />
                       </label>
 
-                      <div className="-mx-5 mt-4 overflow-x-auto">
+                      <fieldset className="mt-4" disabled={!isAdmin}>
+                        <legend className="mb-2 text-sm font-medium text-slate-900">How is the monthly target set?</legend>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <label className={`cursor-pointer rounded-lg border p-4 ${targetMode === "staff" ? "border-navy-700 bg-blue-50/40 ring-1 ring-navy-700" : "border-slate-200 hover:bg-slate-50"}`}>
+                            <span className="flex items-start gap-3">
+                              <input type="radio" name="target-mode" value="staff" checked={targetMode === "staff"} onChange={() => setTargetMode("staff")} className="mt-0.5 h-4 w-4 border-slate-300 text-navy-700 focus:ring-navy-500" />
+                              <span>
+                                <span className="block text-sm font-medium text-slate-900">Sum of staff targets</span>
+                                <span className="mt-0.5 block text-xs text-slate-500">
+                                  Adds up each member's own target. Change one on a staff profile and the team figure follows.
+                                </span>
+                                <span className="mt-2 block text-sm font-semibold tabular-nums text-slate-900">
+                                  {money(teamTargets?.staffTarget || 0)} <span className="text-xs font-normal text-slate-500">right now</span>
+                                </span>
+                              </span>
+                            </span>
+                          </label>
+
+                          <label className={`cursor-pointer rounded-lg border p-4 ${targetMode === "manual" ? "border-navy-700 bg-blue-50/40 ring-1 ring-navy-700" : "border-slate-200 hover:bg-slate-50"}`}>
+                            <span className="flex items-start gap-3">
+                              <input type="radio" name="target-mode" value="manual" checked={targetMode === "manual"} onChange={() => setTargetMode("manual")} className="mt-0.5 h-4 w-4 border-slate-300 text-navy-700 focus:ring-navy-500" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium text-slate-900">Set a target for the team</span>
+                                <span className="mt-0.5 block text-xs text-slate-500">
+                                  One figure for the whole team, measured on the service charges of services done for this team this month.
+                                </span>
+                                <span className="mt-2 flex items-center gap-2">
+                                  <span className="text-sm text-slate-500" aria-hidden="true">₹</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    inputMode="numeric"
+                                    aria-label="Monthly team target in rupees"
+                                    value={manualTarget}
+                                    onChange={(e) => { setManualTarget(e.target.value); setTargetMode("manual"); }}
+                                    placeholder="e.g. 250000"
+                                    className={inputCls}
+                                  />
+                                </span>
+                              </span>
+                            </span>
+                          </label>
+                        </div>
+                      </fieldset>
+
+                      <h3 className="mt-6 text-sm font-medium text-slate-900">Member targets</h3>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {targetMode === "manual"
+                          ? "Shown for reference. With a team target set, the team is measured on its own figure, not on these."
+                          : "These add up to the team target. Members without a target are left out."}
+                      </p>
+                      <div className="-mx-5 mt-2 overflow-x-auto">
                         <table className="w-full min-w-[560px]">
                           <thead>
                             <tr className="border-y border-slate-100 bg-slate-50/70 text-left">
@@ -1535,7 +1610,7 @@ const TeamManagement = () => {
                                 {m.has_target ? (
                                   <>
                                     <td className="px-4 py-3 text-right tabular-nums text-slate-900">{money(m.target)}</td>
-                                    <td className="px-4 py-3 text-right tabular-nums text-slate-900"><span className="text-emerald-700">{money(m.achieved)}</span> <span className="text-xs text-slate-500">{Math.round(m.progress)}%</span></td>
+                                    <td className="px-4 py-3 text-right tabular-nums"><span className="text-emerald-700">{money(m.achieved)}</span> <span className="text-xs text-slate-500">{Math.round(m.progress)}%</span></td>
                                     <td className="px-4 py-3 text-right tabular-nums text-slate-700">{money(m.daily_target)}</td>
                                   </>
                                 ) : (
@@ -1545,10 +1620,9 @@ const TeamManagement = () => {
                             ))}
                             {teamTargets && teamTargets.members.length > 0 && (
                               <tr className="bg-slate-50/70 font-semibold text-slate-900">
-                                <td className="px-4 py-3">Team total</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{money(teamTargets.target)}</td>
-                                <td className="px-4 py-3 text-right tabular-nums">{money(teamTargets.achieved)} <span className="text-xs font-medium text-slate-500">{Math.round(teamTargets.progress)}%</span></td>
-                                <td className="px-4 py-3 text-right tabular-nums">{money(teamTargets.dailyTarget)}</td>
+                                <td className="px-4 py-3">Sum of staff targets</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{money(teamTargets.staffTarget)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums" colSpan="2" />
                               </tr>
                             )}
                             {(!teamTargets || teamTargets.members.length === 0) && (
@@ -1558,7 +1632,7 @@ const TeamManagement = () => {
                         </table>
                       </div>
                       <p className="mt-3 text-xs text-slate-500">
-                        Achieved is each member's completed service charges this month, the same figure they see on their own dashboard. Members without a target are left out of the totals.
+                        Staff achieved is each member's completed service charges this month, the same figure they see on their own dashboard.
                       </p>
 
                       {isAdmin && (
@@ -1571,6 +1645,7 @@ const TeamManagement = () => {
                       )}
                     </Panel>
                   )}
+
                 </>
               )}
             </div>

@@ -169,7 +169,21 @@ const checkTeamAccess = async (client, user, teamId) => {
 };
 
 /* ---------------------------------------------------------
-   TEAM TARGETS = the sum of its members' individual targets
+   TEAM TARGETS
+
+   Two ways to set a team's monthly target (team_targets.target_mode):
+
+   'staff'  (default) the sum of its members' individual targets,
+            measured on those members' completed service charges
+   'manual' a figure typed in for the team (team_targets.monthly_target),
+            measured on the completed service charges of the services
+            done for this team this month
+
+   Needs: ALTER TABLE team_targets
+            ADD COLUMN IF NOT EXISTS target_mode VARCHAR(10) NOT NULL DEFAULT 'staff';
+   Until that is run every team simply behaves as 'staff'.
+
+   The 'staff' maths:
 
    - monthly target  = SUM(staff_monthly_targets.target_amount)
                        for the current month, members with a target
@@ -252,6 +266,9 @@ const fetchTeamTargets = async (client, teamIds, { photos = false } = {}) => {
       today: 0,
       metToday: 0,
       onPace: false,
+      mode: "staff",
+      staffTarget: 0,
+      manualTarget: 0,
       members: [],
     });
   }
@@ -299,6 +316,62 @@ const fetchTeamTargets = async (client, teamIds, { photos = false } = {}) => {
       complete_days: Math.max(r.day_of_month - 1, 0),
       on_pace: hasTarget && achieved >= expected,
     });
+  }
+
+  for (const t of out.values()) {
+    t.staffTarget = t.target;
+  }
+
+  // Teams whose target is typed in instead of summed from staff
+  let manual = [];
+
+  try {
+    const settings = await client.query(
+      `SELECT team_id, target_mode, monthly_target
+       FROM team_targets
+       WHERE team_id = ANY($1::bigint[])`,
+      [teamIds]
+    );
+    manual = settings.rows.filter(
+      (r) => r.target_mode === "manual" && num(r.monthly_target) > 0
+    );
+  } catch (err) {
+    console.warn("team_targets.target_mode missing? Run the migration. ", err.message);
+  }
+
+  if (manual.length) {
+    const done = await client.query(
+      `
+      SELECT se.team_id,
+             COALESCE(SUM(se.service_charges), 0) AS month_sc,
+             COALESCE(SUM(CASE WHEN se.created_at::date = CURRENT_DATE
+                               THEN se.service_charges ELSE 0 END), 0) AS today_sc
+      FROM service_entries se
+      WHERE se.team_id = ANY($1::bigint[])
+        AND se.status = 'completed'
+        AND se.created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY se.team_id
+      `,
+      [manual.map((r) => r.team_id)]
+    );
+
+    const doneBy = new Map(done.rows.map((r) => [Number(r.team_id), r]));
+
+    for (const r of manual) {
+      const t = out.get(Number(r.team_id));
+      if (!t) continue;
+
+      const d = doneBy.get(Number(r.team_id));
+      const target = num(r.monthly_target);
+      const days = t.daysInMonth || 30;
+
+      t.mode = "manual";
+      t.manualTarget = target;
+      t.target = target;
+      t.achieved = d ? num(d.month_sc) : 0;
+      t.dailyTarget = Math.round(target / days);
+      t.today = d ? num(d.today_sc) : 0;
+    }
   }
 
   for (const t of out.values()) {
@@ -1526,10 +1599,9 @@ router.delete("/:id", async (req, res) => {
 /* =========================================================
    TEAM SETTINGS
 
-   Targets are no longer typed in per team: a team's monthly
-   target is the sum of its members' individual targets
-   (see GET /:id/targets). The only team setting left is
-   whether the team is measured against targets at all.
+   targets_enabled  whether the team is measured against targets
+   target_mode      'staff' = sum of members' targets (default)
+                    'manual' = monthly_target typed in for the team
 ========================================================= */
 
 // GET Team Settings
@@ -1542,13 +1614,29 @@ router.get("/:id/settings", async (req, res) => {
       return res.status(access.status).json({ error: access.error });
     }
 
-    const result = await client.query(
-      `SELECT targets_enabled FROM team_targets WHERE team_id = $1`,
-      [req.params.id]
-    );
+    let row = null;
+
+    try {
+      const result = await client.query(
+        `SELECT targets_enabled, target_mode, monthly_target
+         FROM team_targets WHERE team_id = $1`,
+        [req.params.id]
+      );
+      row = result.rows[0] || null;
+    } catch (err) {
+      // target_mode column not added yet: fall back to the old shape
+      console.warn("team_targets.target_mode missing? Run the migration. ", err.message);
+      const result = await client.query(
+        `SELECT targets_enabled, monthly_target FROM team_targets WHERE team_id = $1`,
+        [req.params.id]
+      );
+      row = result.rows[0] || null;
+    }
 
     res.json({
-      targets_enabled: result.rows.length ? !!result.rows[0].targets_enabled : false,
+      targets_enabled: row ? !!row.targets_enabled : false,
+      target_mode: row && row.target_mode === "manual" ? "manual" : "staff",
+      monthly_target: row ? num(row.monthly_target) : 0,
     });
   } catch (error) {
     console.error("Error fetching team settings:", error);
@@ -1572,21 +1660,38 @@ router.post("/:id/settings", async (req, res) => {
 
     const { id } = req.params;
     const targetsEnabled = !!req.body.targets_enabled;
+    const mode = req.body.target_mode === "manual" ? "manual" : "staff";
+    const monthly = Number(req.body.monthly_target);
 
-    // monthly_target is kept on the row for old data but no longer used;
-    // an existing value is left exactly as it was.
+    if (mode === "manual" && !(Number.isFinite(monthly) && monthly > 0)) {
+      return res.status(400).json({
+        error: "Enter a monthly target above 0, or switch to the sum of staff targets",
+      });
+    }
+
+    // In 'staff' mode a previously typed amount is kept on the row, untouched,
+    // so switching back and forth does not lose it.
     await client.query(
-      `INSERT INTO team_targets (team_id, targets_enabled, monthly_target, updated_at)
-       VALUES ($1, $2, 0, NOW())
+      `INSERT INTO team_targets (team_id, targets_enabled, monthly_target, target_mode, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
        ON CONFLICT (team_id)
-       DO UPDATE SET targets_enabled = $2, updated_at = NOW()`,
-      [id, targetsEnabled]
+       DO UPDATE SET
+         targets_enabled = $2,
+         target_mode = $4,
+         monthly_target = CASE WHEN $4 = 'manual' THEN $3 ELSE team_targets.monthly_target END,
+         updated_at = NOW()`,
+      [id, targetsEnabled, mode === "manual" ? monthly : 0, mode]
     );
 
     res.json({ success: true, message: "Settings saved successfully" });
   } catch (error) {
     console.error("Error saving team settings:", error);
-    res.status(500).json({ error: "Failed to save settings" });
+    res.status(500).json({
+      error:
+        error.code === "42703"
+          ? "Run the team_targets.target_mode migration first"
+          : "Failed to save settings",
+    });
   } finally {
     client.release();
   }
