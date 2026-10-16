@@ -1,97 +1,142 @@
-import { FiUser } from "react-icons/fi";
+import { useState } from "react";
 import { Link } from "react-router-dom";
+import { FiEdit2, FiEye } from "react-icons/fi";
 
+// ---------- helpers ----------
+export const getPhotoUrl = (photo) => {
+  if (!photo || photo === "null" || photo === "undefined") return null;
+  if (photo.startsWith("http") || photo.startsWith("data:image")) return photo;
+  return `${import.meta.env.VITE_API_URL}${photo.startsWith("/") ? "" : "/"}${photo}`;
+};
+
+// Formats "YYYY-MM-DD" (or an ISO string) without timezone shifts
+export const formatDate = (value, opts = { day: "2-digit", month: "short", year: "numeric" }) => {
+  if (!value) return "—";
+  const [y, m, d] = String(value).slice(0, 10).split("-").map(Number);
+  if (!y || !m || !d) return "—";
+  return new Date(y, m - 1, d).toLocaleDateString("en-IN", opts);
+};
+
+const getInitials = (name = "") =>
+  name.split(" ").filter(Boolean).map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "?";
+
+// Photo with initials fallback (also falls back if the image fails to load)
+export const StaffAvatar = ({ staff, size = "w-10 h-10", text = "text-sm", rounded = "rounded-full" }) => {
+  const [failed, setFailed] = useState(false);
+  const url = getPhotoUrl(staff.photo);
+
+  if (url && !failed) {
+    return (
+      <img
+        src={url}
+        alt={staff.name}
+        onError={() => setFailed(true)}
+        className={`${size} ${rounded} object-cover border border-gray-200 bg-gray-100 shrink-0`}
+      />
+    );
+  }
+  return (
+    <div className={`${size} ${rounded} bg-blue-50 text-blue-700 border border-blue-100 flex items-center justify-center font-semibold ${text} shrink-0`}>
+      {getInitials(staff.name)}
+    </div>
+  );
+};
+
+export const StatusBadge = ({ status }) => {
+  const map = {
+    Active: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    "On Leave": "bg-amber-50 text-amber-700 border-amber-200",
+    Terminated: "bg-red-50 text-red-700 border-red-200",
+  };
+  const dot = { Active: "bg-emerald-500", "On Leave": "bg-amber-500", Terminated: "bg-red-500" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border ${map[status] || map.Active}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot[status] || dot.Active}`} />
+      {status || "Active"}
+    </span>
+  );
+};
+
+export const RoleBadge = ({ role }) => {
+  const map = {
+    superadmin: "bg-purple-50 text-purple-700 border-purple-200",
+    admin: "bg-blue-50 text-blue-700 border-blue-200",
+    supervisor: "bg-amber-50 text-amber-700 border-amber-200",
+    staff: "bg-gray-50 text-gray-700 border-gray-200",
+  };
+  return (
+    <span className={`inline-flex text-xs font-medium px-2.5 py-1 rounded-full border capitalize ${map[role?.toLowerCase()] || map.staff}`}>
+      {role}
+    </span>
+  );
+};
+
+// ---------- table ----------
 const StaffTable = ({ staffList }) => {
   return (
-    <div className="overflow-x-auto rounded-xl border border-gray-200">
+    <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-gray-200">
         <thead className="bg-gray-50">
           <tr>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Staff Member
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Role
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Department
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Status
-            </th>
-            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Join Date
-            </th>
-            <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Actions
-            </th>
+            {["Staff Member", "Contact", "Role", "Department", "Status", "Joined", "Birthday"].map((h) => (
+              <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                {h}
+              </th>
+            ))}
+            <th className="px-5 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Actions</th>
           </tr>
         </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
+        <tbody className="bg-white divide-y divide-gray-100">
           {staffList.length > 0 ? (
             staffList.map((staff) => (
               <tr key={staff.id} className="hover:bg-gray-50 transition-colors">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center">
-                    {staff.photo ? (
-                      <img 
-                        src={staff.photo} 
-                        alt={staff.name} 
-                        className="w-10 h-10 rounded-xl object-cover border border-gray-200"
-                      />
-                    ) : (
-                      <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl w-10 h-10 flex items-center justify-center">
-                        <FiUser className="text-gray-400" />
-                      </div>
-                    )}
-                    <div className="ml-4 min-w-0">
-                      <div className="text-sm font-medium text-gray-900 truncate">{staff.name}</div>
-                      <div className="text-sm text-gray-500 truncate">@{staff.username}</div>
-                      <div className="text-xs text-blue-600 mt-1 truncate">{staff.email}</div>
-                      <div className="text-xs text-blue-600 truncate">{staff.phone}</div>
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                  <div className="flex items-center gap-3">
+                    <StaffAvatar staff={staff} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{staff.name}</p>
+                      <p className="text-xs text-gray-500 truncate">
+                        @{staff.username}
+                        {staff.employeeId && <span className="text-gray-400"> · {staff.employeeId}</span>}
+                      </p>
                     </div>
                   </div>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900 truncate">
-                  {staff.role}
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                  <p className="text-sm text-gray-700 truncate max-w-[220px]">{staff.email}</p>
+                  <p className="text-xs text-gray-500">{staff.phone || "—"}</p>
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 truncate">
-                  {staff.department}
+                <td className="px-5 py-3.5 whitespace-nowrap"><RoleBadge role={staff.role} /></td>
+                <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-600">{staff.department || "—"}</td>
+                <td className="px-5 py-3.5 whitespace-nowrap"><StatusBadge status={staff.status} /></td>
+                <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-600">{formatDate(staff.joinDate)}</td>
+                <td className="px-5 py-3.5 whitespace-nowrap text-sm text-gray-600">
+                  {staff.dateOfBirth || staff.dob ? formatDate(staff.dateOfBirth || staff.dob, { day: "2-digit", month: "short" }) : "—"}
                 </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                    staff.status === "Active" 
-                      ? "bg-green-100 text-green-800" 
-                      : staff.status === "On Leave" 
-                        ? "bg-yellow-100 text-yellow-800" 
-                        : "bg-red-100 text-red-800"
-                  }`}>
-                    {staff.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                  {staff.joinDate}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                  <Link
-                    to={`/dashboard/admin/staff/edit/${staff.id}`}
-                    className="text-blue-600 hover:text-blue-900 mr-3"
-                  >
-                    Edit
-                  </Link>
-                  <Link
-                    to={`/dashboard/admin/staff/${staff.id}`}
-                    className="text-gray-600 hover:text-gray-900"
-                  >
-                    View
-                  </Link>
+                <td className="px-5 py-3.5 whitespace-nowrap text-right">
+                  <div className="inline-flex gap-1">
+                    <Link
+                      to={`/dashboard/admin/staff/edit/${staff.id}`}
+                      className="p-2 rounded-lg text-gray-500 hover:text-blue-700 hover:bg-blue-50 transition-colors"
+                      title="Edit"
+                    >
+                      <FiEdit2 size={15} />
+                    </Link>
+                    <Link
+                      to={`/dashboard/admin/staff/${staff.id}`}
+                      className="p-2 rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
+                      title="View profile"
+                    >
+                      <FiEye size={15} />
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))
           ) : (
             <tr>
-              <td colSpan="6" className="px-6 py-4 text-center text-sm text-gray-500">
-                No staff members found matching your criteria
+              <td colSpan="8" className="px-6 py-12 text-center text-sm text-gray-500">
+                No staff members match your search or filters
               </td>
             </tr>
           )}

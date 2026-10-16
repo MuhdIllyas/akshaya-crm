@@ -42,112 +42,18 @@ export const authMiddleware = (allowedRoles) => async (req, res, next) => {
 };
 
 // ==============================================
-// STAFF DASHBOARD (Real data)
-// ==============================================
-router.get('/dashboard', authMiddleware(['staff']), async (req, res) => {
-  const staffId = req.user.id;
-
-  try {
-    // 1️⃣ Token statistics (only tokens assigned to this staff)
-    const tokenStats = await pool.query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE staff_id = $1) AS total_assigned,
-        COUNT(*) FILTER (WHERE staff_id = $1 AND status = 'pending') AS pending,
-        COUNT(*) FILTER (WHERE staff_id = $1 AND status IN ('in-progress','processing')) AS in_progress,
-        COUNT(*) FILTER (WHERE staff_id = $1 AND status = 'completed') AS completed,
-        COUNT(*) FILTER (WHERE staff_id = $1 AND type = 'campaign') AS campaign
-      FROM tokens
-      WHERE staff_id = $1
-    `, [staffId]);
-
-    const totalAssigned = parseInt(tokenStats.rows[0].total_assigned || 0);
-    const pending = parseInt(tokenStats.rows[0].pending || 0);
-    const inProgress = parseInt(tokenStats.rows[0].in_progress || 0);
-    const completed = parseInt(tokenStats.rows[0].completed || 0);
-    const campaign = parseInt(tokenStats.rows[0].campaign || 0);
-    const completionRate = totalAssigned > 0 ? Math.round((completed / totalAssigned) * 100) : 0;
-
-    // 2️⃣ Average service time (minutes) from completed service entries
-    const avgServiceTimeRes = await pool.query(`
-      SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) AS avg_minutes
-      FROM service_entries
-      WHERE staff_id = $1 AND status = 'completed' AND updated_at IS NOT NULL
-    `, [staffId]);
-
-    const avgMinutes = avgServiceTimeRes.rows[0].avg_minutes
-      ? Math.round(avgServiceTimeRes.rows[0].avg_minutes)
-      : 0;
-    const avgServiceTime = avgMinutes > 0 ? `${avgMinutes}min` : 'N/A';
-
-    // 3️⃣ Customer satisfaction (average service rating from submitted reviews)
-    const satisfactionRes = await pool.query(`
-      SELECT AVG(service_rating) AS avg_rating
-      FROM service_reviews
-      WHERE staff_id = $1 AND is_submitted = true
-    `, [staffId]);
-
-    const avgRating = satisfactionRes.rows[0].avg_rating
-      ? parseFloat(satisfactionRes.rows[0].avg_rating).toFixed(1)
-      : 0;
-    const customerSatisfaction = avgRating > 0 ? `${avgRating}/5` : 'N/A';
-
-    // 4️⃣ Recent activity (last 5 service entries)
-    const recentActivity = await pool.query(`
-      SELECT 
-        se.id, 
-        se.customer_name, 
-        se.created_at, 
-        se.status, 
-        s.name AS service_name
-      FROM service_entries se
-      LEFT JOIN services s ON se.category_id = s.id
-      WHERE se.staff_id = $1
-      ORDER BY se.created_at DESC
-      LIMIT 5
-    `, [staffId]);
-
-    const formattedRecent = recentActivity.rows.map(entry => ({
-      id: entry.id,
-      customerName: entry.customer_name,
-      serviceName: entry.service_name,
-      status: entry.status,
-      createdAt: entry.created_at,
-    }));
-
-    res.json({
-      success: true,
-      data: {
-        metrics: {
-          totalTokens: totalAssigned,
-          pending,
-          inProgress,
-          completed,
-          campaign,
-          completionRate,
-          avgServiceTime,
-          customerSatisfaction,
-        },
-        recentActivity: formattedRecent,
-      },
-    });
-  } catch (err) {
-    console.error('Error fetching staff dashboard:', err);
-    res.status(500).json({ error: 'Failed to fetch dashboard data' });
-  }
-});
-
-// ==============================================
 // 1. SELF‑PROFILE ROUTES (must come before /:id)
 // ==============================================
 
-// Shared: profile + manager name + centre name
+// Shared: own profile + manager name + centre name
 const getOwnProfile = async (id) => {
   const result = await pool.query(
     `SELECT s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
       s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
       s.employment_type AS "employmentType",
       s.reports_to AS "reportsTo", m.name AS "reportsToName",
-      s.dob, s.gender, s.emergency_contact AS "emergencyContact",
+      to_char(s.dob, 'YYYY-MM-DD') AS dob, to_char(s.dob, 'YYYY-MM-DD') AS "dateOfBirth",
+      s.gender, s.emergency_contact AS "emergencyContact",
       s.emergency_relationship AS "emergencyRelationship",
       s.centre_id AS "centreId", c.name AS "centreName",
       s.created_at
@@ -195,6 +101,27 @@ router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"])
   } catch (err) {
     console.error("Error updating own profile:", err);
     res.status(500).json({ error: "Failed to update profile" });
+  }
+});
+
+// Today's birthdays in the logged-in user's centre (IST date)
+router.get("/birthdays/today", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, name, photo, role
+       FROM staff
+       WHERE dob IS NOT NULL
+         AND status = 'Active'
+         AND centre_id = $1
+         AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM (NOW() AT TIME ZONE 'Asia/Kolkata'))
+         AND EXTRACT(DAY   FROM dob) = EXTRACT(DAY   FROM (NOW() AT TIME ZONE 'Asia/Kolkata'))
+       ORDER BY name`,
+      [req.user.centre_id]
+    );
+    res.json(result.rows.map(r => ({ ...r, isMe: Number(r.id) === Number(req.user.id) })));
+  } catch (err) {
+    console.error("Error fetching birthdays:", err);
+    res.status(500).json({ error: "Failed to fetch birthdays" });
   }
 });
 
@@ -298,7 +225,8 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
       RETURNING id, username, name, role, department, email, phone, status,
         join_date AS "joinDate", photo, employee_id AS "employeeId",
         employment_type AS "employmentType", reports_to AS "reportsTo",
-        salary, dob, gender, emergency_contact AS "emergencyContact",
+        salary, to_char(dob, 'YYYY-MM-DD') AS dob, to_char(dob, 'YYYY-MM-DD') AS "dateOfBirth",
+        gender, emergency_contact AS "emergencyContact",
         emergency_relationship AS "emergencyRelationship", centre_id AS "centreId",
         created_at`,
       [
@@ -391,7 +319,8 @@ router.get("/all", authMiddleware(["admin", "superadmin"]), async (req, res) => 
         s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
         s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
         s.employment_type AS "employmentType", s.reports_to AS "reportsTo",
-        s.salary, s.dob, s.gender, s.emergency_contact AS "emergencyContact",
+        s.salary, to_char(s.dob, 'YYYY-MM-DD') AS dob, to_char(s.dob, 'YYYY-MM-DD') AS "dateOfBirth",
+        s.gender, s.emergency_contact AS "emergencyContact",
         s.emergency_relationship AS "emergencyRelationship", s.centre_id AS "centreId",
         s.created_at,
         ss.start_time, ss.end_time, ss.effective_from,
@@ -451,24 +380,98 @@ router.post("/users/change-password", authMiddleware(["admin", "superadmin"]), a
   }
 });
 
-// Today's birthdays in the logged-in user's centre (IST date)
-router.get("/birthdays/today", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+// ==============================================
+// STAFF DASHBOARD (Real data)
+// ==============================================
+router.get('/dashboard', authMiddleware(['staff']), async (req, res) => {
+  const staffId = req.user.id;
+
   try {
-    const result = await pool.query(
-      `SELECT id, name, photo, role
-       FROM staff
-       WHERE dob IS NOT NULL
-         AND status = 'Active'
-         AND centre_id = $1
-         AND EXTRACT(MONTH FROM dob) = EXTRACT(MONTH FROM (NOW() AT TIME ZONE 'Asia/Kolkata'))
-         AND EXTRACT(DAY   FROM dob) = EXTRACT(DAY   FROM (NOW() AT TIME ZONE 'Asia/Kolkata'))
-       ORDER BY name`,
-      [req.user.centre_id]
-    );
-    res.json(result.rows.map(r => ({ ...r, isMe: Number(r.id) === Number(req.user.id) })));
+    // 1️⃣ Token statistics (only tokens assigned to this staff)
+    const tokenStats = await pool.query(`
+      SELECT 
+        COUNT(*) FILTER (WHERE staff_id = $1) AS total_assigned,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND status = 'pending') AS pending,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND status IN ('in-progress','processing')) AS in_progress,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND status = 'completed') AS completed,
+        COUNT(*) FILTER (WHERE staff_id = $1 AND type = 'campaign') AS campaign
+      FROM tokens
+      WHERE staff_id = $1
+    `, [staffId]);
+
+    const totalAssigned = parseInt(tokenStats.rows[0].total_assigned || 0);
+    const pending = parseInt(tokenStats.rows[0].pending || 0);
+    const inProgress = parseInt(tokenStats.rows[0].in_progress || 0);
+    const completed = parseInt(tokenStats.rows[0].completed || 0);
+    const campaign = parseInt(tokenStats.rows[0].campaign || 0);
+    const completionRate = totalAssigned > 0 ? Math.round((completed / totalAssigned) * 100) : 0;
+
+    // 2️⃣ Average service time (minutes) from completed service entries
+    const avgServiceTimeRes = await pool.query(`
+      SELECT AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 60) AS avg_minutes
+      FROM service_entries
+      WHERE staff_id = $1 AND status = 'completed' AND updated_at IS NOT NULL
+    `, [staffId]);
+
+    const avgMinutes = avgServiceTimeRes.rows[0].avg_minutes
+      ? Math.round(avgServiceTimeRes.rows[0].avg_minutes)
+      : 0;
+    const avgServiceTime = avgMinutes > 0 ? `${avgMinutes}min` : 'N/A';
+
+    // 3️⃣ Customer satisfaction (average service rating from submitted reviews)
+    const satisfactionRes = await pool.query(`
+      SELECT AVG(service_rating) AS avg_rating
+      FROM service_reviews
+      WHERE staff_id = $1 AND is_submitted = true
+    `, [staffId]);
+
+    const avgRating = satisfactionRes.rows[0].avg_rating
+      ? parseFloat(satisfactionRes.rows[0].avg_rating).toFixed(1)
+      : 0;
+    const customerSatisfaction = avgRating > 0 ? `${avgRating}/5` : 'N/A';
+
+    // 4️⃣ Recent activity (last 5 service entries)
+    const recentActivity = await pool.query(`
+      SELECT 
+        se.id, 
+        se.customer_name, 
+        se.created_at, 
+        se.status, 
+        s.name AS service_name
+      FROM service_entries se
+      LEFT JOIN services s ON se.category_id = s.id
+      WHERE se.staff_id = $1
+      ORDER BY se.created_at DESC
+      LIMIT 5
+    `, [staffId]);
+
+    const formattedRecent = recentActivity.rows.map(entry => ({
+      id: entry.id,
+      customerName: entry.customer_name,
+      serviceName: entry.service_name,
+      status: entry.status,
+      createdAt: entry.created_at,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        metrics: {
+          totalTokens: totalAssigned,
+          pending,
+          inProgress,
+          completed,
+          campaign,
+          completionRate,
+          avgServiceTime,
+          customerSatisfaction,
+        },
+        recentActivity: formattedRecent,
+      },
+    });
   } catch (err) {
-    console.error("Error fetching birthdays:", err);
-    res.status(500).json({ error: "Failed to fetch birthdays" });
+    console.error('Error fetching staff dashboard:', err);
+    res.status(500).json({ error: 'Failed to fetch dashboard data' });
   }
 });
 
@@ -485,13 +488,19 @@ router.get("/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => 
 
   try {
     const staffResult = await client.query(
-      `SELECT id, username, name, role, department, email, phone, status,
-        join_date AS "joinDate", photo, employee_id AS "employeeId",
-        employment_type AS "employmentType", reports_to AS "reportsTo",
-        salary, dob, gender, emergency_contact AS "emergencyContact",
-        emergency_relationship AS "emergencyRelationship", centre_id AS "centreId",
-        created_at
-      FROM staff WHERE id = $1`,
+      `SELECT s.id, s.username, s.name, s.role, s.department, s.email, s.phone, s.status,
+        s.join_date AS "joinDate", s.photo, s.employee_id AS "employeeId",
+        s.employment_type AS "employmentType",
+        s.reports_to AS "reportsTo", m.name AS "reportsToName",
+        s.salary, to_char(s.dob, 'YYYY-MM-DD') AS dob, to_char(s.dob, 'YYYY-MM-DD') AS "dateOfBirth",
+        s.gender, s.emergency_contact AS "emergencyContact",
+        s.emergency_relationship AS "emergencyRelationship",
+        s.centre_id AS "centreId", c.name AS "centreName",
+        s.created_at
+      FROM staff s
+      LEFT JOIN staff m   ON m.id = s.reports_to
+      LEFT JOIN centres c ON c.id = s.centre_id
+      WHERE s.id = $1`,
       [id]
     );
     if (staffResult.rows.length === 0) return res.status(404).json({ error: "Staff not found" });
@@ -596,10 +605,13 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
     start_time, end_time, effective_from,
   } = req.body; // 'photo' removed from destructuring
 
-  // NEW: Handle photo URL
-  let photoUrl = req.body.photo || null; 
+  // Photo: a new upload wins; otherwise keep the stored photo (COALESCE in the UPDATE).
+  // Only accept a stored relative path from the body, never a full URL or base64 preview.
+  let photoUrl = null;
   if (req.file) {
     photoUrl = `/uploads/staff/${req.file.filename}`;
+  } else if (typeof req.body.photo === "string" && req.body.photo.startsWith("/uploads/")) {
+    photoUrl = req.body.photo;
   }
 
   const client = await pool.connect();
@@ -632,13 +644,14 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
 
     const result = await client.query(
       `UPDATE staff SET username=$1, name=$2, role=$3, department=$4, email=$5, phone=$6, status=$7,
-        join_date=$8, photo=$9, employee_id=$10, employment_type=$11, reports_to=$12,
+        join_date=$8, photo=COALESCE($9, photo), employee_id=$10, employment_type=$11, reports_to=$12,
         salary=$13, dob=$14, gender=$15, emergency_contact=$16, emergency_relationship=$17,
         centre_id=$18, permissions=$19 WHERE id=$20
       RETURNING id, username, name, role, department, email, phone, status,
         join_date AS "joinDate", photo, employee_id AS "employeeId",
         employment_type AS "employmentType", reports_to AS "reportsTo",
-        salary, dob, gender, emergency_contact AS "emergencyContact",
+        salary, to_char(dob, 'YYYY-MM-DD') AS dob, to_char(dob, 'YYYY-MM-DD') AS "dateOfBirth",
+        gender, emergency_contact AS "emergencyContact",
         emergency_relationship AS "emergencyRelationship", centre_id AS "centreId",
         created_at`,
       [
