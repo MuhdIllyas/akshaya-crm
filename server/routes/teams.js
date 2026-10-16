@@ -847,6 +847,7 @@ router.get("/:teamId/contribution", async (req, res) => {
         s.name,
         s.role,
         s.photo,
+        TO_CHAR(s.dob::date, 'MM-DD') AS birthday,
         c.name AS centre_name,
 
         tm.is_primary,

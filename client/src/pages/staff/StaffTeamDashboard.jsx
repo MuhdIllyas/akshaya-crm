@@ -4,7 +4,7 @@ import {
   PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
 } from "recharts";
 import {
-  FiGlobe, FiUsers, FiRefreshCw, FiLoader, FiChevronRight, FiArrowUp, FiArrowDown, FiBell, FiAward
+  FiGlobe, FiUsers, FiRefreshCw, FiLoader, FiChevronRight, FiArrowUp, FiArrowDown, FiBell, FiAward, FiGift
 } from "react-icons/fi";
 
 // ==========================================
@@ -315,6 +315,25 @@ const formatDate = (date) => {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
+// Birthdays arrive as "MM-DD" (no birth year is sent to staff)
+const istTodayUtc = () => {
+  const [y, m, d] = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }).split("-").map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+
+const nextBirthday = (mmdd, base) => {
+  const [m, d] = String(mmdd).split("-").map(Number);
+  if (!m || !d) return null;
+  const y0 = new Date(base).getUTCFullYear();
+  for (const y of [y0, y0 + 1]) {
+    let t = Date.UTC(y, m - 1, d);
+    // 29 Feb falls on 1 Mar in years without one
+    if (m === 2 && d === 29 && new Date(t).getUTCMonth() !== 1) t = Date.UTC(y, 2, 1);
+    if (t >= base) return t;
+  }
+  return null;
+};
+
 const paceTone = (progress, onPace) => (progress >= 100 ? "bg-emerald-500" : onPace ? "bg-blue-500" : "bg-amber-500");
 const paceText = (progress, onPace) => (progress >= 100 ? "reached" : onPace ? "on pace" : "behind pace");
 const paceTextTone = (progress, onPace) => (progress >= 100 ? "text-emerald-700" : onPace ? "text-slate-500" : "text-amber-700");
@@ -485,6 +504,21 @@ const StaffTeamDashboard = () => {
     [mix]
   );
 
+  // Upcoming birthdays in the team, soonest first
+  const birthdays = useMemo(() => {
+    const base = istTodayUtc();
+    return members
+      .filter((m) => m.birthday)
+      .map((m) => {
+        const ts = nextBirthday(m.birthday, base);
+        return ts === null ? null : { member: m, ts, days: Math.round((ts - base) / 86400000) };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.days - b.days);
+  }, [members]);
+  const birthdaysSoon = birthdays.filter((b) => b.days <= 30);
+  const birthdaysToday = birthdays.filter((b) => b.days === 0);
+
   const maxCharges = Math.max(1, ...members.map((m) => Number(m.service_charges) || 0));
 
   const selectCls =
@@ -571,6 +605,12 @@ const StaffTeamDashboard = () => {
               {team?.is_global && <span className="rounded-full bg-indigo-50 px-2 py-0.5 font-medium text-indigo-700">Global team</span>}
               {(team?.is_primary || me?.is_primary) && <span className="rounded-full bg-emerald-50 px-2 py-0.5 font-medium text-emerald-700">Your primary team</span>}
               {team?.created_at && <span>Created {formatDate(team.created_at)}</span>}
+              {birthdaysToday.length > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-pink-50 px-2 py-0.5 font-medium text-pink-700">
+                  <FiGift className="h-3 w-3" aria-hidden="true" />
+                  {birthdaysToday.map((b) => (Number(b.member.id) === Number(myId) ? "Your" : `${b.member.name.split(" ")[0]}'s`)).join(", ")} birthday today
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -792,9 +832,10 @@ const StaffTeamDashboard = () => {
           </Panel>
         </div>
 
-        {/* Announcements */}
-        <div className="mt-4">
-          <Panel title="Team announcements" hint="From your team leaders and admins">
+        {/* Announcements + birthdays */}
+        <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-12">
+          <div className="xl:col-span-7">
+            <Panel title="Team announcements" hint="From your team leaders and admins">
             {announcements.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-500">No announcements for this team.</p>
             ) : (
@@ -821,6 +862,40 @@ const StaffTeamDashboard = () => {
               </ul>
             )}
           </Panel>
+          </div>
+          <div className="xl:col-span-5">
+            <Panel title="Team birthdays" hint="Next 30 days">
+              {birthdaysSoon.length === 0 ? (
+                <p className="py-6 text-center text-sm text-slate-500">
+                  No birthdays in the next 30 days.
+                  {birthdays[0] && (
+                    <span className="mt-1 block text-xs text-slate-400">
+                      Next: {birthdays[0].member.name} on {new Date(birthdays[0].ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}
+                    </span>
+                  )}
+                </p>
+              ) : (
+                <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
+                  {birthdaysSoon.map(({ member, ts, days }) => (
+                    <li key={member.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                      <Avatar name={member.name} photo={member.photo} size={36} />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-1.5 text-sm font-medium text-slate-900">
+                          <span className="truncate">{member.name}</span>
+                          {Number(member.id) === Number(myId) && <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700">You</span>}
+                        </p>
+                        <p className="text-xs text-slate-500">{new Date(ts).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "UTC" })}</p>
+                      </div>
+                      <span className={`inline-flex items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${days === 0 ? "bg-pink-50 text-pink-700" : "bg-slate-100 text-slate-600"}`}>
+                        {days === 0 && <FiGift className="h-3 w-3" aria-hidden="true" />}
+                        {days === 0 ? "Today" : days === 1 ? "Tomorrow" : `In ${days} days`}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </div>
         </div>
       </div>
     </div>
