@@ -130,9 +130,9 @@ const CampaignTokenManagementStaff = () => {
   const campaignLabel = (c) => (mode === 'past'
     ? `${c.campaign_name} (${shortDate(c.campaign_start)} – ${shortDate(c.campaign_end)})`
     : c.campaign_name);
-  const allLabel = mode === 'live'
-    ? (liveCampaigns.length > 1 ? 'All live campaigns' : 'Live campaign')
-    : (pastCampaigns.length > 1 ? 'All past campaigns' : 'Past campaign');
+  const allLabel = scopeCampaigns.length === 1
+    ? campaignLabel(scopeCampaigns[0])
+    : (mode === 'live' ? 'All live campaigns' : 'All past campaigns');
 
   const switchMode = (next) => {
     if (next === mode) return;
