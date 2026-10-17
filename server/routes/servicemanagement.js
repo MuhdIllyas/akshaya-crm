@@ -1038,11 +1038,18 @@ router.get('/entries', authenticateToken, async (req, res) => {
     const entriesResult = await client.query(query, values);
     const entries = [];
 
-    for (const entry of entriesResult.rows) {
+    // PERFORMANCE: fetch payments and charge transactions for ALL entries in 3 queries,
+    // instead of 3 queries per entry (300 round trips for 100 entries).
+    const entryIds = entriesResult.rows.map(r => Number(r.id));
+    const paymentsByEntry = new Map();
+    const deptTxByEntry = new Map();
+    const serviceTxByEntry = new Map();
 
-      // 🔥 ✅ ALL UNIQUE PAYMENTS (FIXED UUID CASTING)
-      const paymentsResult = await client.query(`
-        SELECT DISTINCT ON (COALESCE(p.correction_group_id::text, p.id::text))
+    if (entryIds.length > 0) {
+      // ALL UNIQUE PAYMENTS (latest of each correction group, reversals excluded)
+      const paymentsAll = await client.query(`
+        SELECT DISTINCT ON (p.service_entry_id, COALESCE(p.correction_group_id::text, p.id::text))
+          p.service_entry_id,
           p.id,
           p.wallet_id,
           p.amount,
@@ -1066,45 +1073,52 @@ router.get('/entries', authenticateToken, async (req, res) => {
         FROM payments p
         JOIN wallets w ON p.wallet_id = w.id
 
-        WHERE p.service_entry_id = $1
+        WHERE p.service_entry_id = ANY($1::int[])
           AND COALESCE(p.is_reversal, FALSE) = FALSE
           AND NOT EXISTS (
             SELECT 1 FROM wallet_transactions wt 
             WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
           )
 
-        ORDER BY COALESCE(p.correction_group_id::text, p.id::text), p.created_at DESC
-      `, [entry.id]);
+        ORDER BY p.service_entry_id, COALESCE(p.correction_group_id::text, p.id::text), p.created_at DESC
+      `, [entryIds]);
 
-      // 🔥 Department Charge (latest only)
-      const deptTxResult = await client.query(`
-        SELECT DISTINCT ON (wt.correction_group_id)
-          wt.id, wt.amount, wt.wallet_id,
-          w.name AS wallet_name,
-          wt.correction_group_id
-        FROM wallet_transactions wt
-        JOIN wallets w ON wt.wallet_id = w.id
-        WHERE wt.reference_id = $1
-          AND wt.category = 'Department Payment'
-          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-        ORDER BY wt.correction_group_id, wt.created_at DESC
-      `, [entry.id]);
+      for (const row of paymentsAll.rows) {
+        const key = Number(row.service_entry_id);
+        if (!paymentsByEntry.has(key)) paymentsByEntry.set(key, []);
+        paymentsByEntry.get(key).push(row);
+      }
 
-      // 🔥 Service Charge (latest only)
-      const serviceChargeTxResult = await client.query(`
-        SELECT DISTINCT ON (wt.correction_group_id)
-          wt.id, wt.amount, wt.wallet_id,
-          w.name AS wallet_name,
-          wt.correction_group_id
-        FROM wallet_transactions wt
-        JOIN wallets w ON wt.wallet_id = w.id
-        WHERE wt.reference_id = $1
-          AND wt.category = 'Service Charge'
-          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-        ORDER BY wt.correction_group_id, wt.created_at DESC
-      `, [entry.id]);
+      // Department / Service charge: latest transaction of each correction group, first group wins
+      const loadChargeTx = async (category, target) => {
+        const res = await client.query(`
+          SELECT DISTINCT ON (wt.reference_id, wt.correction_group_id)
+            wt.reference_id,
+            wt.id, wt.amount, wt.wallet_id,
+            w.name AS wallet_name,
+            wt.correction_group_id
+          FROM wallet_transactions wt
+          JOIN wallets w ON wt.wallet_id = w.id
+          WHERE wt.reference_id = ANY($1::int[])
+            AND wt.category = $2
+            AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+          ORDER BY wt.reference_id, wt.correction_group_id, wt.created_at DESC
+        `, [entryIds, category]);
+        for (const row of res.rows) {
+          const key = Number(row.reference_id);
+          if (!target.has(key)) target.set(key, row);
+        }
+      };
+      await loadChargeTx('Department Payment', deptTxByEntry);
+      await loadChargeTx('Service Charge', serviceTxByEntry);
+    }
 
-      const latestPayments = paymentsResult.rows;
+    for (const entry of entriesResult.rows) {
+      const entryKey = Number(entry.id);
+      const deptTx = deptTxByEntry.get(entryKey);
+      const serviceChargeTx = serviceTxByEntry.get(entryKey);
+
+      const latestPayments = paymentsByEntry.get(entryKey) || [];
 
       const paidAmount = latestPayments
         .filter(p => p.status === 'received')
@@ -1163,20 +1177,20 @@ router.get('/entries', authenticateToken, async (req, res) => {
           correction_group_id: p.correction_group_id,
         })),
 
-        departmentChargeTransaction: deptTxResult.rows[0] ? {
-          id: deptTxResult.rows[0].id,
-          amount: parseFloat(deptTxResult.rows[0].amount),
-          wallet_id: deptTxResult.rows[0].wallet_id,
-          wallet_name: deptTxResult.rows[0].wallet_name,
-          correction_group_id: deptTxResult.rows[0].correction_group_id,
+        departmentChargeTransaction: deptTx ? {
+          id: deptTx.id,
+          amount: parseFloat(deptTx.amount),
+          wallet_id: deptTx.wallet_id,
+          wallet_name: deptTx.wallet_name,
+          correction_group_id: deptTx.correction_group_id,
         } : null,
 
-        serviceChargeTransaction: serviceChargeTxResult.rows[0] ? {
-          id: serviceChargeTxResult.rows[0].id,
-          amount: parseFloat(serviceChargeTxResult.rows[0].amount),
-          wallet_id: serviceChargeTxResult.rows[0].wallet_id,
-          wallet_name: serviceChargeTxResult.rows[0].wallet_name,
-          correction_group_id: serviceChargeTxResult.rows[0].correction_group_id,
+        serviceChargeTransaction: serviceChargeTx ? {
+          id: serviceChargeTx.id,
+          amount: parseFloat(serviceChargeTx.amount),
+          wallet_id: serviceChargeTx.wallet_id,
+          wallet_name: serviceChargeTx.wallet_name,
+          correction_group_id: serviceChargeTx.correction_group_id,
         } : null,
 
         workSource: entry.work_source,
@@ -1642,6 +1656,20 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
     const results = [];
     let allServicesCompleted = true;
 
+    // PERFORMANCE: look service names and wallet types up once, not once per service/payment.
+    const categoryIds = [...new Set(services.map(sv => parseInt(sv.categoryId)).filter(Number.isInteger))];
+    const serviceNameById = new Map();
+    if (categoryIds.length > 0) {
+      const nameRows = await client.query('SELECT id, name FROM services WHERE id = ANY($1::int[])', [categoryIds]);
+      nameRows.rows.forEach(r => serviceNameById.set(Number(r.id), r.name));
+    }
+    const walletIds = [...new Set(paymentPool.map(p => p.wallet).filter(Number.isInteger))];
+    const walletTypeById = new Map();
+    if (walletIds.length > 0) {
+      const walletRows = await client.query('SELECT id, wallet_type FROM wallets WHERE id = ANY($1::int[])', [walletIds]);
+      walletRows.rows.forEach(r => walletTypeById.set(Number(r.id), r.wallet_type));
+    }
+
     // 4. Loop through the Cart
     for (let i = 0; i < services.length; i++) {
       const svc = services[i];
@@ -1708,8 +1736,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       `, [newEntryId, req.user.id]);
 
       // Fetch Service Name for Logging
-      const nameRes = await client.query('SELECT name FROM services WHERE id = $1', [svc.categoryId]);
-      const serviceName = nameRes.rows[0]?.name || 'Service';
+      const serviceName = serviceNameById.get(Number(svc.categoryId)) || 'Service';
 
       // C. Process Department Charges (Deduction)
       if (svc.serviceWalletId && svcDept > 0) {
@@ -1733,8 +1760,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
         await client.query('UPDATE payments SET original_payment_id = $1 WHERE id = $1', [newPmtId]);
 
         if (pmt.status === 'received') {
-          const walletRes = await client.query('SELECT wallet_type FROM wallets WHERE id = $1', [pmt.wallet]);
-          const walletType = walletRes.rows[0]?.wallet_type || 'digital';
+          const walletType = walletTypeById.get(Number(pmt.wallet)) || 'digital';
           
           await client.query('UPDATE wallets SET balance = balance + $1 WHERE id = $2', [pmt.amount, pmt.wallet]);
           await client.query(`
