@@ -3,7 +3,7 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiPlus, FiCalendar, FiTarget, FiCheckCircle, FiTrendingUp, FiEdit2, FiTrash2,
-  FiRefreshCw, FiChevronDown, FiClock, FiArchive, FiX, FiPackage, FiAward, FiUsers
+  FiRefreshCw, FiChevronDown, FiClock, FiArchive, FiX, FiPackage, FiAward
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -158,15 +158,6 @@ const fetchCampaignStats = async (centreId, campaignId) => {
   return res.data || {};
 };
 
-const initials = (name = '') => name.split(/\s+/).filter(Boolean).slice(0, 2).map((p) => p[0]).join('').toUpperCase() || '?';
-
-const StatTile = ({ label, value, tone }) => (
-  <div className="rounded-xl border border-slate-200 bg-white p-4">
-    <p className="text-xs text-slate-500">{label}</p>
-    <p className={`mt-1 text-2xl font-bold tabular-nums ${tone}`}>{value}</p>
-  </div>
-);
-
 const StaffPerformance = ({ campaigns, centreId }) => {
   const [scope, setScope] = useState('all');
   const [state, setState] = useState({ loading: true, error: false, data: null });
@@ -230,20 +221,32 @@ const StaffPerformance = ({ campaigns, centreId }) => {
     };
   }, [state.data]);
 
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => { setShowAll(false); }, [scope]);
+
   const leader = staff.length && staff[0].completed > 0 ? staff[0] : null;
   const unassigned = Math.max(0, total - assignedTotal);
+  const LIMIT = 5;
+  const rows = showAll ? staff : staff.slice(0, LIMIT);
+
+  const chips = [
+    { label: 'Total', value: total, cls: 'bg-slate-100 text-slate-700' },
+    { label: 'Done', value: `${summary.completed} (${summary.rate}%)`, cls: 'bg-emerald-50 text-emerald-700' },
+    { label: 'In progress', value: summary.inProgress, cls: 'bg-sky-50 text-sky-700' },
+    { label: 'Pending', value: summary.pending, cls: 'bg-amber-50 text-amber-700' },
+  ];
 
   return (
     <section aria-labelledby="perf-heading" className="mb-10">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 id="perf-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-500">Staff performance</h2>
-        <label className="flex items-center gap-2 text-sm text-slate-500">
-          <span className="sr-only sm:not-sr-only">Showing</span>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        {/* header: title, campaign picker, totals */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-slate-100 px-4 py-3">
+          <h2 id="perf-heading" className="text-sm font-semibold text-slate-800">Staff performance</h2>
           <select
             value={scope}
             onChange={(e) => setScope(e.target.value)}
             aria-label="Campaign to show staff performance for"
-            className="max-w-[15rem] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
+            className="max-w-[14rem] rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
           >
             <option value="all">All campaigns</option>
             {campaigns.map((c) => (
@@ -252,85 +255,79 @@ const StaffPerformance = ({ campaigns, centreId }) => {
               </option>
             ))}
           </select>
-        </label>
-      </div>
+        </div>
 
-      {state.loading && !state.data ? (
-        <div className="h-48 animate-pulse rounded-2xl border border-slate-200 bg-white" />
-      ) : state.error ? (
-        <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
-          <span>Could not load staff performance.</span>
-          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 font-medium hover:text-rose-900">
-            <FiRefreshCw className="h-3.5 w-3.5" /> Retry
-          </button>
-        </div>
-      ) : total === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
-          <FiUsers className="mx-auto mb-3 h-7 w-7 text-slate-300" />
-          No applications recorded for {scope === 'all' ? 'any campaign' : 'this campaign'} yet.
-        </div>
-      ) : (
-        <div className={`space-y-4 transition-opacity ${state.loading ? 'opacity-60' : ''}`}>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-            <StatTile label="Applications" value={total} tone="text-slate-900" />
-            <StatTile label="Completed" value={`${summary.completed} · ${summary.rate}%`} tone="text-emerald-600" />
-            <StatTile label="In progress" value={summary.inProgress} tone="text-sky-600" />
-            <StatTile label="Pending" value={summary.pending} tone="text-amber-600" />
+        {state.loading && !state.data ? (
+          <div className="h-32 animate-pulse bg-slate-50" />
+        ) : state.error ? (
+          <div className="flex items-center justify-between gap-3 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <span>Could not load staff performance.</span>
+            <button type="button" onClick={load} className="inline-flex items-center gap-1.5 font-medium hover:text-rose-900">
+              <FiRefreshCw className="h-3.5 w-3.5" /> Retry
+            </button>
           </div>
-
-          {leader && (
-            <div className="flex items-center gap-4 rounded-2xl border border-amber-200 bg-amber-50/60 px-5 py-4">
-              <div className="rounded-full bg-amber-100 p-2.5 text-amber-600"><FiAward className="h-5 w-5" /></div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-amber-700">Leader</p>
-                <p className="truncate font-semibold text-slate-900">{leader.name}</p>
-                <p className="text-sm text-slate-600">
-                  {leader.completed} completed of {leader.total} · {leader.rate}% completion
-                </p>
-              </div>
+        ) : total === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-slate-500">
+            No applications recorded for {scope === 'all' ? 'any campaign' : 'this campaign'} yet.
+          </p>
+        ) : (
+          <div className={`transition-opacity ${state.loading ? 'opacity-60' : ''}`}>
+            <div className="flex flex-wrap items-center gap-2 px-4 pt-3">
+              {chips.map((c) => (
+                <span key={c.label} className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${c.cls}`}>
+                  {c.label}
+                  <span className="font-bold tabular-nums">{c.value}</span>
+                </span>
+              ))}
+              {leader && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700 sm:ml-auto">
+                  <FiAward className="h-3.5 w-3.5" /> Leader
+                  <span className="max-w-[9rem] truncate font-bold">{leader.name}</span>
+                </span>
+              )}
             </div>
-          )}
 
-          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
             {staff.length === 0 ? (
-              <p className="px-6 py-8 text-center text-sm text-slate-500">No applications have been assigned to staff yet.</p>
+              <p className="px-4 py-6 text-center text-sm text-slate-500">No applications have been assigned to staff yet.</p>
             ) : (
-              <ol className="divide-y divide-slate-100">
-                {staff.map((r, i) => (
-                  <li key={r.id} className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold ${i === 0 && leader ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700">{initials(r.name)}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-baseline justify-between gap-3">
-                          <p className="truncate font-medium text-slate-900">{r.name}</p>
-                          <p className="shrink-0 text-sm font-semibold tabular-nums text-slate-700">{r.rate}%</p>
-                        </div>
-                        <div className="mt-2 flex h-2 w-full overflow-hidden rounded-full bg-slate-100" role="img" aria-label={`${r.completed} completed, ${r.inProgress} in progress, ${r.pending} pending`}>
-                          <div className="bg-emerald-500" style={{ width: `${r.total ? (r.completed / r.total) * 100 : 0}%` }} />
-                          <div className="bg-sky-400" style={{ width: `${r.total ? (r.inProgress / r.total) * 100 : 0}%` }} />
-                          <div className="bg-amber-400" style={{ width: `${r.total ? (r.pending / r.total) * 100 : 0}%` }} />
-                        </div>
-                        <p className="mt-1.5 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500">
-                          <span><span className="font-semibold tabular-nums text-emerald-600">{r.completed}</span> completed</span>
-                          <span><span className="font-semibold tabular-nums text-sky-600">{r.inProgress}</span> in progress</span>
-                          <span><span className="font-semibold tabular-nums text-amber-600">{r.pending}</span> pending</span>
-                          <span>{r.total} total</span>
-                        </p>
-                      </div>
+              <ol className="mt-2 divide-y divide-slate-50 px-2 pb-1">
+                {rows.map((r, i) => (
+                  <li key={r.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-2 py-2 hover:bg-slate-50 sm:flex-nowrap">
+                    <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${i === 0 && leader ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-slate-800 sm:w-40 sm:flex-none">{r.name}</span>
+                    <div
+                      className="order-last flex h-1.5 w-full overflow-hidden rounded-full bg-slate-100 sm:order-none sm:w-auto sm:flex-1"
+                      role="img"
+                      aria-label={`${r.completed} completed, ${r.inProgress} in progress, ${r.pending} pending`}
+                    >
+                      <div className="bg-emerald-500" style={{ width: `${r.total ? (r.completed / r.total) * 100 : 0}%` }} />
+                      <div className="bg-sky-400" style={{ width: `${r.total ? (r.inProgress / r.total) * 100 : 0}%` }} />
+                      <div className="bg-amber-400" style={{ width: `${r.total ? (r.pending / r.total) * 100 : 0}%` }} />
                     </div>
+                    <span className="flex shrink-0 items-center gap-2.5 text-xs tabular-nums text-slate-500" title="Completed / in progress / pending">
+                      <span className="font-semibold text-emerald-600">{r.completed}</span>
+                      <span className="font-semibold text-sky-600">{r.inProgress}</span>
+                      <span className="font-semibold text-amber-600">{r.pending}</span>
+                    </span>
+                    <span className="w-10 shrink-0 text-right text-sm font-semibold tabular-nums text-slate-700">{r.rate}%</span>
                   </li>
                 ))}
               </ol>
             )}
-            {unassigned > 0 && (
-              <p className="border-t border-slate-100 bg-slate-50 px-5 py-3 text-xs text-slate-500">
-                {unassigned} application{unassigned === 1 ? ' is' : 's are'} not assigned to any staff yet.
-              </p>
+
+            {(staff.length > LIMIT || unassigned > 0) && (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-2 text-xs text-slate-500">
+                <span>{unassigned > 0 ? `${unassigned} not assigned to staff yet` : ''}</span>
+                {staff.length > LIMIT && (
+                  <button type="button" onClick={() => setShowAll((v) => !v)} className="font-medium text-navy-700 hover:text-navy-800">
+                    {showAll ? 'Show top 5' : `Show all ${staff.length}`}
+                  </button>
+                )}
+              </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </section>
   );
 };
