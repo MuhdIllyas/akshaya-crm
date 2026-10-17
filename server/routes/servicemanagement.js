@@ -3031,7 +3031,7 @@ router.get('/campaigns/reports', authenticateToken, async (req, res) => {
 router.get('/campaigns/stats', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { centre_id, campaign_id } = req.query;
+    const { centre_id, campaign_id, live_only, campaign_state } = req.query;
     const userRole = req.user.role;
     const userId = req.user.id;
 
@@ -3075,6 +3075,13 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
     if (campaign_id) {
       tokenQuery += ` AND t.campaign_id = $${idx++}`;
       queryParams.push(parseInt(campaign_id));
+    }
+    // live_only=1 -> only campaigns that are running today
+    if (live_only === '1' || live_only === 'true' || campaign_state === 'live') {
+      tokenQuery += ` AND t.campaign_id IN (SELECT id FROM campaigns WHERE start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE)`;
+    } else if (campaign_state === 'ended') {
+      // campaign_state=ended -> only campaigns whose end date has passed
+      tokenQuery += ` AND t.campaign_id IN (SELECT id FROM campaigns WHERE end_date < CURRENT_DATE)`;
     }
 
     const tokensResult = await client.query(tokenQuery, queryParams);
@@ -3162,7 +3169,7 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
 
 // GET /api/servicemanagement/campaign-tokens/table
 router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
-  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search, staff_id } = req.query;
+  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search, staff_id, live_only, campaign_state } = req.query;
   const client = await pool.connect();
   try {
     let centreId = req.user.centre_id;
@@ -3194,6 +3201,12 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
     if (staff_id && staff_id !== 'all') {
       whereClause += ` AND t.staff_id = $${idx++}`;
       values.push(staff_id.toString());
+    }
+    // live_only=1 -> only tokens of campaigns that are running today
+    if (live_only === '1' || live_only === 'true' || campaign_state === 'live') {
+      whereClause += ` AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE`;
+    } else if (campaign_state === 'ended') {
+      whereClause += ` AND c.end_date < CURRENT_DATE`;
     }
 
     // --- ADD THIS NEW SEARCH BLOCK ---

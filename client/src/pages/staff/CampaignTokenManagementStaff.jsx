@@ -32,6 +32,15 @@ const isCampaignActive = (start, end) => {
   return Boolean(s && e && s <= t && t <= e);
 };
 
+const isCampaignEnded = (end) => {
+  const e = toYmd(end);
+  return Boolean(e && e < todayYmd());
+};
+const shortDate = (value) => {
+  const d = new Date(`${toYmd(value)}T00:00:00Z`);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+};
+
 // ---------- status ----------
 const normStatus = (s) => (s === 'in_progress' ? 'in-progress' : s);
 const STATUS = {
@@ -94,28 +103,55 @@ const CampaignTokenManagementStaff = () => {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
 
-  // Only campaigns that are running today are shown; their tokens are hidden once the campaign ends.
+  // 'live' = campaigns running today, 'past' = campaigns that have ended. Upcoming campaigns have no tokens yet.
+  const [mode, setMode] = useState('live');
   const liveCampaigns = useMemo(
     () => campaigns.filter((c) => isCampaignActive(c?.campaign_start, c?.campaign_end)),
     [campaigns]
   );
-  const liveNames = useMemo(() => new Set(liveCampaigns.map((c) => c.campaign_name)), [liveCampaigns]);
-  const ready = !campaignsLoading && liveCampaigns.length > 0;
+  const pastCampaigns = useMemo(
+    () => campaigns
+      .filter((c) => isCampaignEnded(c?.campaign_end))
+      .sort((x, y) => toYmd(y.campaign_end).localeCompare(toYmd(x.campaign_end))),
+    [campaigns]
+  );
+  const scopeCampaigns = mode === 'live' ? liveCampaigns : pastCampaigns;
+  const scopeNames = useMemo(() => new Set(scopeCampaigns.map((c) => c.campaign_name)), [scopeCampaigns]);
+  const ready = !campaignsLoading && scopeCampaigns.length > 0;
 
-  // if the picked campaign stops being live (or disappears), fall back to all live campaigns
-  useEffect(() => {
-    const isLive = (id) => liveCampaigns.some((c) => String(c.campaign_id) === String(id));
-    if (!campaignsLoading && scope !== 'all' && !isLive(scope)) setScope('all');
-    if (!campaignsLoading && campaignFilter !== 'all' && !isLive(campaignFilter)) setCampaignFilter('all');
-  }, [liveCampaigns, campaignsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Query params that limit a request to live campaigns. One live campaign -> pass its id (works on any backend);
-  // several -> live_only=1 (needs the matching backend change).
-  const liveScope = (campaignId) => {
+  // Query params that limit a request to the current view. One campaign in view -> pass its id (works on any backend);
+  // several -> campaign_state (needs the matching backend change).
+  const scopeParams = (campaignId) => {
     if (campaignId && campaignId !== 'all') return { campaign_id: campaignId };
-    if (liveCampaigns.length === 1) return { campaign_id: String(liveCampaigns[0].campaign_id) };
-    return { live_only: '1' };
+    if (scopeCampaigns.length === 1) return { campaign_id: String(scopeCampaigns[0].campaign_id) };
+    return mode === 'live' ? { live_only: '1', campaign_state: 'live' } : { campaign_state: 'ended' };
   };
+
+  const campaignLabel = (c) => (mode === 'past'
+    ? `${c.campaign_name} (${shortDate(c.campaign_start)} – ${shortDate(c.campaign_end)})`
+    : c.campaign_name);
+  const allLabel = mode === 'live'
+    ? (liveCampaigns.length > 1 ? 'All live campaigns' : 'Live campaign')
+    : (pastCampaigns.length > 1 ? 'All past campaigns' : 'Past campaign');
+
+  const switchMode = (next) => {
+    if (next === mode) return;
+    setMode(next);
+    setScope('all');
+    setCampaignFilter('all');
+    setPage(1);
+    setExpandedRows(new Set());
+    setShowAllStaff(false);
+    setStats(null);
+    setTokens([]);
+  };
+
+  // if the picked campaign leaves this view, fall back to the whole view
+  useEffect(() => {
+    const inView = (id) => scopeCampaigns.some((c) => String(c.campaign_id) === String(id));
+    if (!campaignsLoading && scope !== 'all' && !inView(scope)) setScope('all');
+    if (!campaignsLoading && campaignFilter !== 'all' && !inView(campaignFilter)) setCampaignFilter('all');
+  }, [scopeCampaigns, campaignsLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tableReq = useRef(0);
   const statsReq = useRef(0);
@@ -138,7 +174,7 @@ const CampaignTokenManagementStaff = () => {
     setStatsLoading(true);
     setStatsError(false);
     try {
-      const params = new URLSearchParams(liveScope(scope));
+      const params = new URLSearchParams(scopeParams(scope));
       const res = await axios.get(`${API_BASE_URL}/api/servicemanagement/campaigns/stats?${params.toString()}`, { headers: authHeaders() });
       if (req === statsReq.current) setStats(res.data);
     } catch (err) {
@@ -160,14 +196,14 @@ const CampaignTokenManagementStaff = () => {
         status: statusFilter,
         search: debouncedSearch,
         staff_id: staffFilter,
-        ...liveScope(campaignFilter),
+        ...scopeParams(campaignFilter),
       });
       if (dateFrom) params.set('from', dateFrom);
       if (dateTo) params.set('to', dateTo);
       const res = await axios.get(`${API_BASE_URL}/api/servicemanagement/campaign-tokens/table?${params.toString()}`, { headers: authHeaders() });
       if (req !== tableReq.current) return;
-      // safety net: never show tokens of a campaign that is not live
-      setTokens((res.data?.tokens || []).filter((t) => !t.campaignName || liveNames.has(t.campaignName)));
+      // safety net: never show tokens of a campaign outside the current view
+      setTokens((res.data?.tokens || []).filter((t) => !t.campaignName || scopeNames.has(t.campaignName)));
       setPagination((prev) => ({ ...prev, total: res.data?.total || 0, pages: res.data?.pages || 0 }));
     } catch (err) {
       console.error(err);
@@ -193,7 +229,7 @@ const CampaignTokenManagementStaff = () => {
     })();
   }, []);
 
-  useEffect(() => { if (ready) loadStats(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [scope, ready]);
+  useEffect(() => { if (ready) loadStats(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [scope, ready, mode]);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -206,22 +242,22 @@ const CampaignTokenManagementStaff = () => {
   }, [search]);
 
   // one fetch for any table change
-  useEffect(() => { if (ready) loadTokens(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [ready, page, dateFrom, dateTo, campaignFilter, statusFilter, staffFilter, debouncedSearch]);
+  useEffect(() => { if (ready) loadTokens(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [ready, mode, page, dateFrom, dateTo, campaignFilter, statusFilter, staffFilter, debouncedSearch]);
 
   // filter setters reset to page 1 in the same render, so only one request goes out
   const filter = (setter) => (e) => { setter(e.target.value); setPage(1); };
 
   // ---------- derived ----------
   const overall = useMemo(() => {
-    const all = liveCampaigns.flatMap((c) => c?.tokens || []);
+    const all = scopeCampaigns.flatMap((c) => c?.tokens || []);
     const completed = all.filter((t) => t?.token_status === 'completed' || t?.service_status === 'completed').length;
     return {
       total: all.length,
       completed,
       rate: all.length ? Math.round((completed / all.length) * 100) : 0,
-      active: liveCampaigns.length,
+      active: scopeCampaigns.length,
     };
-  }, [liveCampaigns]);
+  }, [scopeCampaigns]);
 
   const view = useMemo(() => {
     const ss = stats?.status_summary || {};
@@ -245,7 +281,7 @@ const CampaignTokenManagementStaff = () => {
       };
     }).sort((a, b) => b.completed - a.completed || b.rate - a.rate || b.total - a.total || a.name.localeCompare(b.name));
 
-    const perCampaign = (stats?.campaign_summary || []).filter((c) => !c.campaign_name || liveNames.has(c.campaign_name)).map((c) => ({
+    const perCampaign = (stats?.campaign_summary || []).filter((c) => !c.campaign_name || scopeNames.has(c.campaign_name)).map((c) => ({
       id: c.campaign_id,
       name: c.campaign_name,
       total: Number(c.total_tokens) || 0,
@@ -263,7 +299,7 @@ const CampaignTokenManagementStaff = () => {
       top,
       activeStaff: staff.filter((s) => s.total > 0).length,
     };
-  }, [stats, liveNames]);
+  }, [stats, scopeNames]);
 
   const segments = [
     { key: 'completed', label: 'Completed', value: view.completed, color: SEG.completed, text: 'text-emerald-600' },
@@ -344,10 +380,10 @@ const CampaignTokenManagementStaff = () => {
   };
 
   const summary = [
-    { label: 'Live campaign tokens', value: overall.total, tone: 'text-slate-900' },
+    { label: mode === 'live' ? 'Live campaign tokens' : 'Past campaign tokens', value: overall.total, tone: 'text-slate-900' },
     { label: 'Completed', value: `${overall.completed} · ${overall.rate}%`, tone: 'text-emerald-600' },
-    { label: 'Pending now', value: stats ? Number(stats.status_summary?.pending) || 0 : '-', tone: 'text-amber-600' },
-    { label: 'Live campaigns', value: overall.active, tone: 'text-navy-700' },
+    { label: mode === 'live' ? 'Pending now' : 'Never completed', value: stats ? Number(stats.status_summary?.pending) || 0 : '-', tone: 'text-amber-600' },
+    { label: mode === 'live' ? 'Live campaigns' : 'Past campaigns', value: overall.active, tone: 'text-navy-700' },
   ];
 
   return (
@@ -362,15 +398,51 @@ const CampaignTokenManagementStaff = () => {
           </div>
         </div>
 
+        {/* Live / past switch */}
+        {!campaignsLoading && (
+          <div role="tablist" aria-label="Campaign view" className="mb-5 inline-flex rounded-xl border border-slate-200 bg-white p-1">
+            {[
+              { key: 'live', label: 'Live now', count: liveCampaigns.length },
+              { key: 'past', label: 'Past campaigns', count: pastCampaigns.length },
+            ].map((t) => (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                aria-selected={mode === t.key}
+                onClick={() => switchMode(t.key)}
+                className={`rounded-lg px-4 py-1.5 text-sm font-medium transition-colors ${mode === t.key ? 'bg-navy-700 text-white' : 'text-slate-600 hover:bg-slate-50'}`}
+              >
+                {t.label}
+                <span className={`ml-1.5 text-xs tabular-nums ${mode === t.key ? 'text-white/70' : 'text-slate-400'}`}>{t.count}</span>
+              </button>
+            ))}
+          </div>
+        )}
+
         {campaignsLoading ? (
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
             {[0, 1, 2, 3].map((i) => <div key={i} className="h-[4.25rem] animate-pulse rounded-xl border border-slate-200 bg-white" />)}
           </div>
-        ) : liveCampaigns.length === 0 ? (
+        ) : scopeCampaigns.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
             <FiAward className="mx-auto mb-3 h-9 w-9 text-slate-300" />
-            <h2 className="text-lg font-semibold text-slate-800">No campaign is currently running</h2>
-            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Campaign tokens appear here only while a campaign is live.</p>
+            {mode === 'live' ? (
+              <>
+                <h2 className="text-lg font-semibold text-slate-800">No campaign is currently running</h2>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Tokens of a campaign appear here while it is live.</p>
+                {pastCampaigns.length > 0 && (
+                  <button type="button" onClick={() => switchMode('past')} className="mt-4 rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-navy-700 hover:bg-slate-50">
+                    View {pastCampaigns.length} past campaign{pastCampaigns.length === 1 ? '' : 's'}
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold text-slate-800">No past campaigns yet</h2>
+                <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Campaigns that have ended will be listed here with their tokens.</p>
+              </>
+            )}
           </div>
         ) : (
           <>
@@ -398,8 +470,8 @@ const CampaignTokenManagementStaff = () => {
               aria-label="Campaign for analytics"
               className="max-w-[15rem] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
             >
-              <option value="all">{liveCampaigns.length > 1 ? 'All live campaigns' : 'Live campaign'}</option>
-              {liveCampaigns.length > 1 && liveCampaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>)}
+              <option value="all">{allLabel}</option>
+              {scopeCampaigns.length > 1 && scopeCampaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{campaignLabel(c)}</option>)}
             </select>
           </div>
 
@@ -561,8 +633,8 @@ const CampaignTokenManagementStaff = () => {
               </label>
               <label className="text-xs text-slate-500">Campaign
                 <select value={campaignFilter} onChange={filter(setCampaignFilter)} className={`${inputCls} mt-1`}>
-                  <option value="all">{liveCampaigns.length > 1 ? 'All live campaigns' : 'Live campaign'}</option>
-                  {liveCampaigns.length > 1 && liveCampaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{c.campaign_name}</option>)}
+                  <option value="all">{allLabel}</option>
+                  {scopeCampaigns.length > 1 && scopeCampaigns.map((c) => <option key={c.campaign_id} value={c.campaign_id}>{campaignLabel(c)}</option>)}
                 </select>
               </label>
               <label className="text-xs text-slate-500">Staff
@@ -635,6 +707,7 @@ const CampaignTokenManagementStaff = () => {
                                   >
                                     {token.trackingId ? 'View service' : 'Start service'}
                                   </button>
+                                  {mode === 'live' && (
                                   <button
                                     type="button"
                                     onClick={() => { setCancelTarget({ tokenCode: token.tokenCode, customerName: token.customerName }); setCancelReason(''); }}
@@ -642,6 +715,7 @@ const CampaignTokenManagementStaff = () => {
                                   >
                                     Cancel
                                   </button>
+                                  )}
                                 </>
                               )}
                             </div>
@@ -664,6 +738,7 @@ const CampaignTokenManagementStaff = () => {
                                 >
                                   {token.trackingId ? 'View service' : 'Start service'}
                                 </button>
+                                {mode === 'live' && (
                                 <button
                                   type="button"
                                   onClick={() => { setCancelTarget({ tokenCode: token.tokenCode, customerName: token.customerName }); setCancelReason(''); }}
@@ -671,6 +746,7 @@ const CampaignTokenManagementStaff = () => {
                                 >
                                   Cancel
                                 </button>
+                                )}
                               </div>
                             )}
                           </td>
