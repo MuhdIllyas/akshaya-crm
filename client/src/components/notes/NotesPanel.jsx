@@ -15,11 +15,16 @@ const MENTION_RE = /@\[(.*?)\]\((\w+)\)/g;
 const plainText = (text) => (text || '').replace(MENTION_RE, '@$1');
 
 const FILTERS = [
-  { key: 'all', label: 'All' },
-  { key: 'mine', label: 'Mine' },
-  { key: 'mentions', label: 'Mentions' },
-  { key: 'centre', label: 'Centre' },
+  { key: 'all', label: 'All', empty: 'No notes yet' },
+  { key: 'mine', label: 'Mine', empty: "You haven't written any notes here" },
+  { key: 'mentions', label: 'Mentions', empty: 'No notes mention you' },
+  { key: 'centre', label: 'Centre', empty: 'No centre-wide notes' },
 ];
+
+// The notes API has used a few field names over time, so read them all.
+const firstDefined = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
+const authorId = (n) => firstDefined(n.created_by, n.creator_id, n.author_id, n.user_id, n.staff_id);
+const sameId = (a, b) => a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b);
 
 const VISIBILITY = {
   private: { label: 'Only me', Icon: FiLock, cls: 'text-slate-500' },
@@ -68,7 +73,7 @@ const NotesPanel = ({
   const [busyTask, setBusyTask] = useState(null);
   const reqRef = useRef(0);
 
-  const currentUserId = Number(localStorage.getItem('id'));
+  const currentUserId = localStorage.getItem('id');
   const userRole = (localStorage.getItem('role') || '').toLowerCase();
   const isManager = userRole === 'admin' || userRole === 'superadmin';
   const supported = (contextType === 'service_entry' || contextType === 'customer') && Boolean(contextId);
@@ -88,7 +93,9 @@ const NotesPanel = ({
         const raw =
           contextType === 'service_entry' ? await getServiceEntryNotes(contextId) : await getCustomerNotes(contextId);
         if (req !== reqRef.current) return;
-        setNotes(Array.isArray(raw) ? raw : Array.isArray(raw?.data) ? raw.data : []);
+        // noteService returns the response body, whose shape may be a bare array or wrapped.
+        const list = [raw, raw?.data, raw?.notes, raw?.rows].find(Array.isArray);
+        setNotes(list || []);
       } catch (err) {
         if (req !== reqRef.current) return;
         console.error('Failed to fetch notes:', err);
@@ -101,6 +108,12 @@ const NotesPanel = ({
     [contextType, contextId, supported]
   );
 
+  // A different entry/customer is a fresh list: don't carry over the old search or filter.
+  useEffect(() => {
+    setSearchTerm('');
+    setFilter('all');
+  }, [contextType, contextId]);
+
   useEffect(() => {
     fetchNotes();
     return () => {
@@ -110,32 +123,52 @@ const NotesPanel = ({
 
   const isMentioned = useCallback(
     (n) => {
-      if ((n.mentions || []).some((m) => Number(m.staff_id) === currentUserId)) return true;
+      if (n.is_mentioned === true || Number(n.is_mentioned) === 1) return true;
+      if ((n.mentions || []).some((m) => sameId(firstDefined(m.staff_id, m.id, m.user_id), currentUserId))) return true;
       const re = new RegExp(MENTION_RE.source, 'g');
       let m;
       while ((m = re.exec(n.content || '')) !== null) {
-        if (m[2] === 'all' || Number(m[2]) === currentUserId) return true;
+        if (m[2] === 'all' || sameId(m[2], currentUserId)) return true;
       }
       return false;
     },
     [currentUserId]
   );
 
-  const visible = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    return notes.filter((n) => {
-      if (q) {
-        const hay = `${n.title || ''} ${plainText(n.content)} ${n.task_title || ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      if (filter === 'mine') return Number(n.created_by) === currentUserId;
-      if (filter === 'mentions') return isMentioned(n);
-      if (filter === 'centre') return n.visibility === 'centre' || n.visibility === 'global';
+  const matchesFilter = useCallback(
+    (n, key) => {
+      if (key === 'mine') return sameId(authorId(n), currentUserId);
+      if (key === 'mentions') return isMentioned(n);
+      if (key === 'centre') return n.visibility === 'centre' || n.visibility === 'global';
       return true;
-    });
-  }, [notes, searchTerm, filter, currentUserId, isMentioned]);
+    },
+    [currentUserId, isMentioned]
+  );
 
-  const canEdit = (note) => isManager || Number(note.created_by) === currentUserId;
+  const matchesSearch = useCallback((n, q) => {
+    if (!q) return true;
+    return `${n.title || ''} ${plainText(n.content)} ${n.task_title || ''} ${n.created_by_name || n.creator_name || ''}`
+      .toLowerCase()
+      .includes(q);
+  }, []);
+
+  const query = searchTerm.trim().toLowerCase();
+
+  // Counts honour the search box, so each pill tells you what you'd get if you clicked it.
+  const counts = useMemo(() => {
+    const out = {};
+    FILTERS.forEach((f) => {
+      out[f.key] = notes.filter((n) => matchesSearch(n, query) && matchesFilter(n, f.key)).length;
+    });
+    return out;
+  }, [notes, query, matchesSearch, matchesFilter]);
+
+  const visible = useMemo(
+    () => notes.filter((n) => matchesSearch(n, query) && matchesFilter(n, filter)),
+    [notes, query, filter, matchesSearch, matchesFilter]
+  );
+
+  const canEdit = (note) => isManager || sameId(authorId(note), currentUserId);
 
   const refreshAfterChange = () => {
     fetchNotes({ silent: true });
@@ -263,6 +296,7 @@ const NotesPanel = ({
               }`}
             >
               {f.label}
+              <span className={`ml-1.5 text-xs ${filter === f.key ? 'text-white/70' : 'text-slate-400'}`}>{counts[f.key]}</span>
             </button>
           ))}
         </div>
@@ -300,7 +334,9 @@ const NotesPanel = ({
             </>
           ) : (
             <>
-              <p className="text-slate-600">No notes match</p>
+              <p className="text-slate-600">
+                {query ? 'No notes match your search' : FILTERS.find((f) => f.key === filter)?.empty}
+              </p>
               <button
                 type="button"
                 onClick={() => {
@@ -309,7 +345,7 @@ const NotesPanel = ({
                 }}
                 className="mt-1 text-sm font-medium text-navy-700 hover:underline"
               >
-                Clear search and filters
+                Show all notes
               </button>
             </>
           )}
