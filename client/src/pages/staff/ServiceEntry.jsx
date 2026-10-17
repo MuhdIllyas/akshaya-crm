@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -176,6 +176,18 @@ const ServiceEntry = () => {
   const [editingEntryId, setEditingEntryId] = useState(null);
   const isEditMode = Boolean(editingEntryId);
   const [staffList, setStaffList] = useState([]);
+  const [submitting, setSubmitting] = useState(false);
+  const submitLock = useRef(false); // a ref, so a fast double click can't slip past a stale closure
+
+  // Refresh today's table without blocking whatever the user is doing.
+  const refreshEntries = async () => {
+    try {
+      const res = await getServiceEntries(true, null, 500);
+      setServiceEntries(res.data || []);
+    } catch (err) {
+      console.warn('ServiceEntry.jsx: could not refresh today\'s entries', err.response?.data || err.message);
+    }
+  };
 
   const [automationPresets, setAutomationPresets] = useState([]);
   const [showAutomationErrors, setShowAutomationErrors] = useState(false);
@@ -1166,6 +1178,7 @@ const ServiceEntry = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (submitLock.current) return;
     const errors = [];
 
     if (!formData.customerName.trim()) errors.push('Customer name is required');
@@ -1237,6 +1250,9 @@ const ServiceEntry = () => {
     };
 
     const executeFinalSubmit = async () => {
+      if (submitLock.current) return; // already saving
+      submitLock.current = true;
+      setSubmitting(true);
       try {
         if (editingEntryId) {
           const editPayload = {
@@ -1257,14 +1273,12 @@ const ServiceEntry = () => {
           await updateServiceEntry(editingEntryId, editPayload);
           toast.success('Service entry updated successfully!');
           
-          const entriesRes = await getServiceEntries(true, null, 500);
-          setServiceEntries(entriesRes.data || []);
-          
           setFormData({
             tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
             services: [createEmptyService()]
           });
           setEditingEntryId(null);
+          refreshEntries(); // in the background: the form is already free
           
         } else {
           const submittedServicesData = [...formData.services];
@@ -1280,37 +1294,68 @@ const ServiceEntry = () => {
           });
           setEditingEntryId(null);
 
+          // The new row exists as soon as the POST returns, so show it now.
+          refreshEntries();
+
           const processBackgroundTasks = async () => {
             try {
-              await new Promise(resolve => setTimeout(resolve, 1500)); 
-              
-              let recentTrackingRecords = [];
-              try {
-                 const trackRes = await getTrackingEntries({ limit: 100 });
-                 recentTrackingRecords = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
-              } catch (err) {
-                 console.warn("Could not fetch tracking entries to map IDs", err);
-              }
+              // A tracking update is only needed when the user changed something from the defaults.
+              // (assignedTo defaults to the logged-in staff, which the server already assigns.)
+              const hasTrackingData = (f) =>
+                Boolean(
+                  f.applicationNumber ||
+                  (f.assignedTo && String(f.assignedTo) !== String(staffId)) ||
+                  f.estimatedDelivery ||
+                  f.aadhaar || f.email || f.averageTime || f.customerRemarks ||
+                  (f.priority && f.priority !== 'medium') ||
+                  (f.trackingStatus && f.trackingStatus !== 'pending') ||
+                  (f.currentStep && f.currentStep !== 'Submitted')
+                );
+
+              const entryIdOf = (svc) => svc.serviceEntryId || svc.id;
+              const needTrackingIds = createdServices
+                .filter((svc, i) => hasTrackingData(submittedServicesData[i] || {}))
+                .map(entryIdOf);
+
+              // Look the tracking rows up only if we need them, and retry briefly instead of
+              // always sleeping 1.5s first.
+              const loadTrackingRows = async () => {
+                if (needTrackingIds.length === 0) return [];
+                let rows = [];
+                for (const wait of [0, 600, 1500]) {
+                  if (wait) await new Promise(resolve => setTimeout(resolve, wait));
+                  try {
+                    const trackRes = await getTrackingEntries({ limit: 100 });
+                    rows = Array.isArray(trackRes?.data) ? trackRes.data : Array.isArray(trackRes) ? trackRes : [];
+                  } catch (err) {
+                    console.warn('Could not fetch tracking entries to map IDs', err);
+                    continue;
+                  }
+                  const have = new Set(rows.map(t => Number(t.service_entry_id ?? t.serviceEntryId)));
+                  if (needTrackingIds.every(id => have.has(Number(id)))) break;
+                }
+                return rows;
+              };
+              const trackingRowsPromise = loadTrackingRows();
+
+              let tableNeedsRefresh = false;
 
               const backgroundPromises = createdServices.map(async (svc, i) => {
-                const svcFormData = submittedServicesData[i]; 
+                const svcFormData = submittedServicesData[i];
+                if (!svcFormData) return;
+                const serviceEntryId = entryIdOf(svc);
 
-                const hasTrackingData = 
-                  svcFormData.applicationNumber || svcFormData.assignedTo || svcFormData.estimatedDelivery || 
-                  svcFormData.aadhaar || svcFormData.email || svcFormData.averageTime || svcFormData.customerRemarks ||
-                  (svcFormData.priority && svcFormData.priority !== 'medium') ||
-                  (svcFormData.trackingStatus && svcFormData.trackingStatus !== 'pending') ||
-                  (svcFormData.currentStep && svcFormData.currentStep !== 'Submitted');
-
-                if (hasTrackingData) {
+                // Tracking, note (+ task) and reminders don't depend on each other: run them together.
+                const trackingJob = async () => {
+                  if (!hasTrackingData(svcFormData)) return;
                   try {
-                    const serviceEntryId = svc.serviceEntryId || svc.id;
-                    const trackingRecord = recentTrackingRecords.find(t => 
+                    const recentTrackingRecords = await trackingRowsPromise;
+                    const trackingRecord = recentTrackingRecords.find(t =>
                       Number(t.service_entry_id) === Number(serviceEntryId) || Number(t.serviceEntryId) === Number(serviceEntryId)
                     );
 
                     if (trackingRecord) {
-                      // 🔥 COMBINED API CALL: Send the status here to prevent Double-WhatsApp messages
+                      // Status goes in the same call, so the customer gets one WhatsApp message, not two.
                       await updateTrackingEntry(trackingRecord.id, {
                         applicationNumber: svcFormData.applicationNumber || null,
                         assignedTo: svcFormData.assignedTo ? parseInt(svcFormData.assignedTo) : null,
@@ -1321,24 +1366,27 @@ const ServiceEntry = () => {
                         email: svcFormData.email || null,
                         priority: svcFormData.priority || 'medium',
                         currentStep: svcFormData.currentStep || 'Submitted',
-                        status: svcFormData.trackingStatus || 'pending', 
-                        progress: 25 
+                        status: svcFormData.trackingStatus || 'pending',
+                        progress: 25
                       });
                     } else {
                       console.warn(`Tracking row not found for Service Entry ${serviceEntryId}.`);
                     }
                   } catch (trackErr) {
-                    console.error(`Failed to link tracking data for Entry ${svc.serviceEntryId || svc.id}:`, trackErr);
+                    console.error(`Failed to link tracking data for Entry ${serviceEntryId}:`, trackErr);
+                    toast.warn('Entry saved, but some tracking details were not applied. Open the entry to update them.');
                   }
-                }
+                };
 
-                if (svcFormData.initialNote && svcFormData.initialNote.trim() !== '') {
+                const noteJob = async () => {
+                  if (!svcFormData.initialNote || svcFormData.initialNote.trim() === '') return;
                   try {
                     const noteRes = await createNote({
                       title: 'Initial Note', content: svcFormData.initialNote.trim(), visibility: svcFormData.initialNoteVisibility,
-                      related_service_entry_id: svc.serviceEntryId || svc.id, mentions: svcFormData.initialNoteMentions 
+                      related_service_entry_id: serviceEntryId, mentions: svcFormData.initialNoteMentions
                     });
-                    
+                    tableNeedsRefresh = true; // the notes badge changes
+
                     const savedNoteId = noteRes?.data?.id || noteRes?.id;
 
                     if (svcFormData.createTask && svcFormData.taskTitle && svcFormData.taskAssignee && savedNoteId) {
@@ -1346,18 +1394,20 @@ const ServiceEntry = () => {
                       await api.post('/add', {
                         title: svcFormData.taskTitle.trim(), description: svcFormData.initialNote.trim(), assigned_to: parseInt(svcFormData.taskAssignee),
                         due_date: svcFormData.taskDueDate ? new Date(svcFormData.taskDueDate).toISOString().split('T')[0] : null,
-                        priority: 'medium', related_service_entry_id: svc.serviceEntryId || svc.id, note_id: savedNoteId
+                        priority: 'medium', related_service_entry_id: serviceEntryId, note_id: savedNoteId
                       }, { baseURL: taskBaseUrl });
                     }
                   } catch (noteErr) {
-                    console.error(`Failed to save note/task for Entry:`, noteErr);
+                    console.error('Failed to save note/task for Entry:', noteErr);
+                    toast.warn('Entry saved, but the note or task could not be saved. Add it from the entry.');
                   }
-                }
+                };
 
-                if (svcFormData.automations?.length) {
+                const automationJob = async () => {
+                  if (!svcFormData.automations?.length) return;
                   try {
                     const res = await createAutomations(
-                      svc.serviceEntryId || svc.id,
+                      serviceEntryId,
                       svcFormData.automations.map(d =>
                         toApiAction(d, { service_name: getServiceLabel(svcFormData.category, svcFormData.subcategory) })
                       )
@@ -1369,13 +1419,15 @@ const ServiceEntry = () => {
                       { autoClose: 10000 }
                     );
                   }
-                }
+                };
+
+                await Promise.allSettled([trackingJob(), noteJob(), automationJob()]);
               });
 
               await Promise.allSettled(backgroundPromises);
 
-              const entriesRes = await getServiceEntries(true, null, 500);
-              setServiceEntries(entriesRes.data || []);
+              // The table was already refreshed right after saving; only reload if something changed since.
+              if (tableNeedsRefresh) await refreshEntries();
 
             } catch (err) {
               console.error("Background task execution failed:", err);
@@ -1386,6 +1438,9 @@ const ServiceEntry = () => {
         }
       } catch (err) {
         toast.error(err.response?.data?.error || 'Failed to submit service entries');
+      } finally {
+        submitLock.current = false;
+        setSubmitting(false);
       }
     };
 
@@ -2266,10 +2321,15 @@ const ServiceEntry = () => {
             </button>
             <button
               type="submit"
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg"
+              disabled={submitting}
+              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <FiCheckCircle className="h-5 w-5" />
-              {editingEntryId ? 'Update Service Entry' : 'Submit Service Entry'}
+              {submitting ? (
+                <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              ) : (
+                <FiCheckCircle className="h-5 w-5" />
+              )}
+              {submitting ? 'Saving...' : editingEntryId ? 'Update Service Entry' : 'Submit Service Entry'}
             </button>
           </div>
         </form>
