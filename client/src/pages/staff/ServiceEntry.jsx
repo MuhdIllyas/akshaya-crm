@@ -307,7 +307,7 @@ const ServiceEntry = () => {
       case 'cancelled': return { name: 'Cancelled', color: 'bg-rose-100 text-rose-800' };
       default: return { 
         name: status ? status.charAt(0).toUpperCase() + status.slice(1).replace('_', ' ') : 'Unknown', 
-        color: 'bg-gray-100 text-gray-800' 
+        color: 'bg-slate-100 text-slate-800' 
       };
     }
   };
@@ -1549,8 +1549,8 @@ const ServiceEntry = () => {
     return (
       <div className="max-w-6xl mx-auto p-6 flex justify-center items-center h-[80vh]">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600 font-medium">Loading service data...</p>
+          <div className="w-16 h-16 border-4 border-navy-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-slate-600 font-medium">Loading service data...</p>
         </div>
       </div>
     );
@@ -1562,7 +1562,7 @@ const ServiceEntry = () => {
         <div className="bg-rose-50 border border-rose-200 rounded-xl p-6 max-w-md mx-auto">
           <div className="text-rose-600 text-4xl mb-3">⚠️</div>
           <h3 className="text-lg font-medium text-rose-800 mb-2">Data Loading Error</h3>
-          <p className="text-gray-600">{error}</p>
+          <p className="text-slate-600">{error}</p>
           <button 
             onClick={() => window.location.reload()}
             className="mt-4 px-4 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition-colors"
@@ -1581,23 +1581,23 @@ const ServiceEntry = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-8"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8"
       >
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-slate-900">
               {tokenId ? 'Token-Based Service Entry' : 'New Service Entry'}
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="text-slate-600 mt-1">
               {tokenId ? `Processing token #${tokenId}` : 'Create a new service entry'}
             </p>
           </div>
           
           {tokenId && (
-            <div className="bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100">
+            <div className="bg-navy-500/5 px-4 py-2 rounded-lg border border-navy-500/15">
               <div className="flex items-center gap-2">
-                <span className="text-indigo-800 font-medium">Token ID</span>
-                <span className="bg-indigo-100 text-indigo-800 font-bold px-2.5 py-0.5 rounded-md">
+                <span className="text-navy-800 font-medium">Token ID</span>
+                <span className="bg-navy-500/10 text-navy-800 font-bold px-2.5 py-0.5 rounded-md">
                   #{tokenId}
                 </span>
               </div>
@@ -1626,22 +1626,22 @@ const ServiceEntry = () => {
             <div className="space-y-6">
               
               {/* 1. Customer Information */}
-              <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-2 mb-5">
-                  <div className="bg-indigo-100 p-2 rounded-lg">
-                    <FiUser className="h-5 w-5 text-indigo-600" />
+                  <div className="bg-navy-500/10 p-2 rounded-lg">
+                    <FiUser className="h-5 w-5 text-navy-700" />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-800">Customer Information</h3>
+                  <h3 className="text-lg font-semibold text-slate-800">Customer Information</h3>
                 </div>
                 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Customer Name <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <FiUser className="h-5 w-5 text-gray-400" />
+                        <FiUser className="h-5 w-5 text-slate-400" />
                       </div>
                       <input
                         type="text"
@@ -1649,19 +1649,19 @@ const ServiceEntry = () => {
                         value={formData.customerName}
                         onChange={handleTopLevelChange}
                         required
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-transparent"
                         placeholder="Full name"
                       />
                     </div>
                   </div>
                   
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Phone Number <span className="text-rose-500">*</span>
                     </label>
                     <div className="relative">
                       <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <FiPhone className="h-5 w-5 text-gray-400" />
+                        <FiPhone className="h-5 w-5 text-slate-400" />
                       </div>
                       <input
                         type="tel"
@@ -1670,7 +1670,7 @@ const ServiceEntry = () => {
                         onChange={handleTopLevelChange}
                         required
                         pattern="\+?[1-9]\d{1,14}"
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                        className="w-full pl-10 pr-4 py-3 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-transparent"
                         placeholder="+91 XXXXXXXXXX"
                       />
                     </div>
@@ -1681,8 +1681,8 @@ const ServiceEntry = () => {
               {/* 2. DYNAMIC SERVICES ARRAY (THE CART) */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="bg-indigo-100 p-2 rounded-lg"><FiCreditCard className="h-5 w-5 text-indigo-600" /></div>
-                  <h3 className="text-lg font-semibold text-gray-800">Service Cart</h3>
+                  <div className="bg-navy-500/10 p-2 rounded-lg"><FiCreditCard className="h-5 w-5 text-navy-700" /></div>
+                  <h3 className="text-lg font-semibold text-slate-800">Service Cart</h3>
                 </div>
                 
                 <AnimatePresence>
@@ -1718,25 +1718,25 @@ const ServiceEntry = () => {
 
                     return (
                       <motion.div key={svc.id} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.95 }}
-                        className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden relative">
+                        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden relative">
 
                         {/* Compact Header */}
-                        <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 flex justify-between items-center">
+                        <div className="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
                           <div className="flex items-center gap-3">
-                            <span className="bg-indigo-600 text-white h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shadow-sm">{index + 1}</span>
-                            <h4 className="font-semibold text-gray-800 text-sm">
+                            <span className="bg-navy-700 text-white h-6 w-6 rounded-full flex items-center justify-center text-xs font-bold shadow-sm">{index + 1}</span>
+                            <h4 className="font-semibold text-slate-800 text-sm">
                               {svc.category ? getCategoryName(svc.category) : 'Configure New Service'}
                             </h4>
                           </div>
                           {!isEditMode && formData.services.length > 1 && (
-                            <button type="button" onClick={() => removeServiceFromCart(index)} className="text-gray-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded transition">
+                            <button type="button" onClick={() => removeServiceFromCart(index)} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded transition">
                               <FiTrash2 className="h-4 w-4" />
                             </button>
                           )}
                         </div>
 
                         {/* ===== TABS ===== */}
-                        <div className="flex border-b border-gray-200 bg-white">
+                        <div className="flex border-b border-slate-200 bg-white">
                           {tabDefs.map(tab => {
                             const Icon = tab.icon;
                             const isActive = activeTab === tab.id;
@@ -1747,21 +1747,21 @@ const ServiceEntry = () => {
                                 onClick={() => handleCartChange(index, 'activeTab', tab.id)}
                                 className={`relative flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium transition-colors border-b-2 ${
                                   isActive
-                                    ? 'border-indigo-600 text-indigo-700 bg-indigo-50/40'
-                                    : 'border-transparent text-gray-500 hover:text-gray-800 hover:bg-gray-50'
+                                    ? 'border-navy-700 text-navy-800 bg-navy-500/5'
+                                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:bg-slate-50'
                                 }`}
                               >
-                                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-indigo-600' : ''}`} />
+                                <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-navy-700' : ''}`} />
                                 <span>{tab.label}</span>
                                 {tab.badge && (
                                   <span className={`inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px] font-bold ${
-                                    isActive ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'
+                                    isActive ? 'bg-navy-700 text-white' : 'bg-slate-200 text-slate-700'
                                   }`}>
                                     {tab.badge}
                                   </span>
                                 )}
                                 {tab.dot && !tab.badge && (
-                                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse"></span>
+                                  <span className="w-1.5 h-1.5 rounded-full bg-navy-500 animate-pulse"></span>
                                 )}
                               </button>
                             );
@@ -1777,25 +1777,25 @@ const ServiceEntry = () => {
                               {/* Selectors */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Category *</label>
+                                  <label className="block text-xs font-medium text-slate-700 mb-1">Category *</label>
                                   <div className="relative">
                                     <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required
-                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none">
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white appearance-none">
                                       <option value="">Select Category</option>
                                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-slate-400"/></div>
                                   </div>
                                 </div>
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Subcategory *</label>
+                                  <label className="block text-xs font-medium text-slate-700 mb-1">Subcategory *</label>
                                   <div className="relative">
                                     <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category}
-                                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white appearance-none disabled:bg-gray-50">
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white appearance-none disabled:bg-slate-50">
                                       <option value="">Select Subcategory</option>
                                       {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                     </select>
-                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-gray-400"/></div>
+                                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2"><FiChevronDown className="text-slate-400"/></div>
                                   </div>
                                 </div>
                               </div>
@@ -1811,11 +1811,11 @@ const ServiceEntry = () => {
                                   )}
                                   {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
                                     <div className="flex items-start gap-1.5">
-                                      <FiFileText className="text-indigo-500 shrink-0 mt-0.5" />
+                                      <FiFileText className="text-navy-500 shrink-0 mt-0.5" />
                                       <div className="flex flex-wrap gap-2">
-                                        <span className="font-semibold text-gray-700 mr-1">Required Docs:</span>
+                                        <span className="font-semibold text-slate-700 mr-1">Required Docs:</span>
                                         {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
-                                          <span key={i} className="inline-flex items-center gap-1 text-gray-600 bg-white px-2 py-0.5 rounded border border-gray-200">
+                                          <span key={i} className="inline-flex items-center gap-1 text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
                                             <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
                                           </span>
                                         ))}
@@ -1828,29 +1828,29 @@ const ServiceEntry = () => {
                               {/* Financials */}
                               <div className="grid grid-cols-3 gap-3">
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Service (₹)</label>
-                                  <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                  <label className="block text-xs font-medium text-slate-700 mb-1">Service (₹)</label>
+                                  <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Dept (₹)</label>
-                                  <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
+                                  <label className="block text-xs font-medium text-slate-700 mb-1">Dept (₹)</label>
+                                  <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
                                 </div>
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Total (₹)</label>
-                                  <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-indigo-50 border border-indigo-100 font-bold text-indigo-700 rounded-lg text-sm" />
+                                  <label className="block text-xs font-medium text-slate-700 mb-1">Total (₹)</label>
+                                  <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-navy-500/5 border border-navy-500/15 font-bold text-navy-800 rounded-lg text-sm" />
                                 </div>
                               </div>
 
                               {/* Expiry */}
                               {svc.hasExpiry && (
                                 <div>
-                                  <label className="block text-xs font-medium text-gray-700 mb-1">Service Expiry Date *</label>
+                                  <label className="block text-xs font-medium text-slate-700 mb-1">Service Expiry Date *</label>
                                   <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                      <FiCalendar className="h-4 w-4 text-gray-400" />
+                                      <FiCalendar className="h-4 w-4 text-slate-400" />
                                     </div>
                                     <input type="date" value={svc.expiryDate} onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} required
-                                      className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                                      className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-navy-500/30 focus:border-navy-500" />
                                   </div>
                                   {svc.expiryDate && (
                                     <p className={`text-xs mt-1.5 font-medium ${
@@ -1868,7 +1868,7 @@ const ServiceEntry = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleCartChange(index, 'activeTab', 'tracking')}
-                                  className="w-full text-left text-xs text-gray-400 hover:text-indigo-600 flex items-center justify-center gap-1 py-1 transition-colors"
+                                  className="w-full text-left text-xs text-slate-400 hover:text-navy-700 flex items-center justify-center gap-1 py-1 transition-colors"
                                 >
                                   <FiPackage className="h-3 w-3" />
                                   <span>Optional: add tracking / fulfillment details →</span>
@@ -1883,7 +1883,7 @@ const ServiceEntry = () => {
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                 {/* Application No (full width so long numbers stay readable) */}
                                 <div className="md:col-span-3">
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Application No.</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Application No.</label>
                                   <ApplicationNumberField
                                     mode="form"
                                     value={svc.applicationNumber}
@@ -1894,46 +1894,46 @@ const ServiceEntry = () => {
 
                                 {/* Aadhaar */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Aadhaar</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Aadhaar</label>
                                   <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                      <FiCreditCard className="h-3.5 w-3.5 text-gray-400" />
+                                      <FiCreditCard className="h-3.5 w-3.5 text-slate-400" />
                                     </div>
                                     <input type="text" inputMode="numeric" placeholder="12-digit Aadhaar"
                                       value={svc.aadhaar}
                                       onChange={(e) => handleCartChange(index, 'aadhaar', e.target.value)}
                                       maxLength="12"
-                                      className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
-                                        svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                      className={`w-full pl-8 pr-12 py-2 text-xs border rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm ${
+                                        svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar) ? 'border-rose-300 focus:border-rose-500' : 'border-slate-300 focus:border-navy-500'
                                       }`} />
                                     <span className={`absolute inset-y-0 right-2 flex items-center text-[10px] font-medium ${
-                                      svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-gray-400'
+                                      svc.aadhaar?.length === 12 ? 'text-emerald-600' : 'text-slate-400'
                                     }`}>{svc.aadhaar?.length || 0}/12</span>
                                   </div>
                                 </div>
 
                                 {/* Email */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Email</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Email</label>
                                   <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                      <FiMail className="h-3.5 w-3.5 text-gray-400" />
+                                      <FiMail className="h-3.5 w-3.5 text-slate-400" />
                                     </div>
                                     <input type="email" placeholder="customer@email.com"
                                       value={svc.email}
                                       onChange={(e) => handleCartChange(index, 'email', e.target.value)}
-                                      className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm ${
-                                        svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-gray-300 focus:border-indigo-500'
+                                      className={`w-full pl-8 pr-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm ${
+                                        svc.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(svc.email) ? 'border-rose-300 focus:border-rose-500' : 'border-slate-300 focus:border-navy-500'
                                       }`} />
                                   </div>
                                 </div>
 
                                 {/* Assign To */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Assign To</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Assign To</label>
                                   <select value={svc.assignedTo}
                                     onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm">
+                                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm">
                                     <option value="">Unassigned Staff</option>
                                     {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
                                   </select>
@@ -1941,39 +1941,39 @@ const ServiceEntry = () => {
 
                                 {/* Est Delivery */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Est. Delivery</label>
                                   <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                      <FiCalendar className="h-3.5 w-3.5 text-gray-400" />
+                                      <FiCalendar className="h-3.5 w-3.5 text-slate-400" />
                                     </div>
                                     <input type="date" value={svc.estimatedDelivery}
                                       onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm text-gray-700" />
+                                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm text-slate-700" />
                                   </div>
                                 </div>
 
                                 {/* Avg Time */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Avg. Time</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Avg. Time</label>
                                   <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
-                                      <FiClock className="h-3.5 w-3.5 text-gray-400" />
+                                      <FiClock className="h-3.5 w-3.5 text-slate-400" />
                                     </div>
                                     <input type="text" placeholder="e.g., 7 days"
                                       value={svc.averageTime}
                                       onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
-                                      className="w-full pl-8 pr-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm" />
+                                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm" />
                                   </div>
                                 </div>
 
                                 {/* Priority */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide flex items-center gap-1">
                                     <FiFlag className="h-3 w-3" /> Priority
                                   </label>
                                   <select value={svc.priority}
                                     onChange={(e) => handleCartChange(index, 'priority', e.target.value)}
-                                    className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium ${
+                                    className={`w-full px-3 py-2 text-xs border rounded-md focus:ring-2 focus:ring-navy-500/30 shadow-sm font-medium ${
                                       svc.priority === 'high' ? 'border-rose-200 bg-rose-50 text-rose-700' :
                                       svc.priority === 'low' ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
                                       'border-amber-200 bg-amber-50 text-amber-700'
@@ -1986,10 +1986,10 @@ const ServiceEntry = () => {
 
                                 {/* Current Step */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide">Current Step</label>
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Current Step</label>
                                   <select value={svc.currentStep}
                                     onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm">
+                                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm">
                                     <option value="Submitted">Submitted</option>
                                     <option value="Initial Review">Initial Review</option>
                                     <option value="Document Verification">Document Verification</option>
@@ -1999,7 +1999,7 @@ const ServiceEntry = () => {
 
                                 {/* Status */}
                                 <div>
-                                  <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide flex items-center gap-1">
                                     <FiActivity className="h-3 w-3" /> Status
                                   </label>
                                   <div className="relative">
@@ -2008,25 +2008,25 @@ const ServiceEntry = () => {
                                     }`} />
                                     <select value={svc.trackingStatus}
                                       onChange={(e) => handleCartChange(index, 'trackingStatus', e.target.value)}
-                                      className={`w-full pl-7 pr-8 py-2 text-xs border rounded-md focus:ring-2 focus:ring-indigo-500 shadow-sm font-medium appearance-none ${getTrackingStatusStyle(svc.trackingStatus)}`}>
+                                      className={`w-full pl-7 pr-8 py-2 text-xs border rounded-md focus:ring-2 focus:ring-navy-500/30 shadow-sm font-medium appearance-none ${getTrackingStatusStyle(svc.trackingStatus)}`}>
                                       {TRACKING_STATUS_OPTIONS.map(opt => (
                                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                                       ))}
                                     </select>
-                                    <FiChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400 pointer-events-none" />
+                                    <FiChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 pointer-events-none" />
                                   </div>
                                 </div>
                               </div>
 
                               {/* Customer Remarks */}
                               <div>
-                                <label className="block text-[11px] font-semibold text-gray-600 mb-1 uppercase tracking-wide flex items-center gap-1">
-                                  <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-gray-400 normal-case font-normal">(sent via WhatsApp)</span>
+                                <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide flex items-center gap-1">
+                                  <FiMessageCircle className="h-3 w-3" /> Customer Remarks <span className="text-slate-400 normal-case font-normal">(sent via WhatsApp)</span>
                                 </label>
                                 <textarea rows="2" placeholder="Remarks visible to customer..."
                                   value={svc.customerRemarks}
                                   onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 bg-white shadow-sm resize-none" />
+                                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm resize-none" />
                               </div>
 
                               {/* Quick "Clear all" link */}
@@ -2039,7 +2039,7 @@ const ServiceEntry = () => {
                                     handleCartChange(index, 'currentStep', 'Submitted');
                                     handleCartChange(index, 'trackingStatus', 'pending');
                                   }}
-                                  className="text-[11px] text-gray-400 hover:text-rose-600 flex items-center gap-1 transition-colors"
+                                  className="text-[11px] text-slate-400 hover:text-rose-600 flex items-center gap-1 transition-colors"
                                 >
                                   <FiTrash2 className="h-3 w-3" /> Clear all tracking fields
                                 </button>
@@ -2051,8 +2051,8 @@ const ServiceEntry = () => {
                           {activeTab === 'notes' && !isEditMode && (
                             <div className="space-y-3">
                               <div className="flex items-center gap-2">
-                                <FiMessageCircle className="text-indigo-500 h-4 w-4" />
-                                <span className="text-sm font-semibold text-gray-800">Internal Note & Task</span>
+                                <FiMessageCircle className="text-navy-500 h-4 w-4" />
+                                <span className="text-sm font-semibold text-slate-800">Internal Note & Task</span>
                               </div>
 
                               <MentionsInput
@@ -2068,43 +2068,43 @@ const ServiceEntry = () => {
                                 }}
                               >
                                 <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`}
-                                  renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-indigo-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
+                                  renderSuggestion={(suggestion, search, highlightedDisplay) => (<div className="flex items-center gap-2"><FiUser className="text-navy-500 h-3 w-3"/>{highlightedDisplay}</div>)} />
                               </MentionsInput>
 
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)}
-                                  className="text-xs bg-white border border-gray-300 rounded px-2 py-1.5 text-gray-700 shadow-sm">
+                                  className="text-xs bg-white border border-slate-300 rounded px-2 py-1.5 text-slate-700 shadow-sm">
                                   <option value="centre">🏢 Centre View</option>
                                   <option value="private">🔒 Private</option>
                                   <option value="mentioned_only">👥 Mentions Only</option>
                                 </select>
                                 <label className={`flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded shadow-sm border transition ${
                                     svc.initialNote?.trim()
-                                      ? 'cursor-pointer text-indigo-700 bg-white border-indigo-200 hover:bg-indigo-50'
-                                      : 'cursor-not-allowed text-gray-400 bg-gray-50 border-gray-200'
+                                      ? 'cursor-pointer text-navy-800 bg-white border-navy-500/20 hover:bg-navy-500/5'
+                                      : 'cursor-not-allowed text-slate-400 bg-slate-50 border-slate-200'
                                   }`}
                                     title={svc.initialNote?.trim() ? '' : 'Write a note first'}>
                                     <input type="checkbox"
                                       checked={svc.createTask}
                                       disabled={!svc.initialNote?.trim()}
                                       onChange={(e) => handleCartChange(index, 'createTask', e.target.checked)}
-                                      className="rounded text-indigo-600" />
+                                      className="rounded text-navy-700" />
                                     Convert to Task
                                 </label>
                               </div>
 
                               {svc.createTask && (
-                                <div className="bg-indigo-50/40 p-3 rounded-lg border border-indigo-100 space-y-3">
+                                <div className="bg-navy-500/5 p-3 rounded-lg border border-navy-500/15 space-y-3">
                                   <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required
-                                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:ring-indigo-500" />
+                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-navy-500/30" />
                                   <div className="grid grid-cols-2 gap-2">
                                     <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required
-                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white">
+                                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md bg-white">
                                       <option value="">Assign To *</option>
                                       {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
                                     </select>
                                     <DatePicker selected={svc.taskDueDate} onChange={(date) => handleCartChange(index, 'taskDueDate', date)} placeholderText="Due Date"
-                                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
+                                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md" minDate={new Date()} dateFormat="dd/MM/yyyy" />
                                   </div>
                                 </div>
                               )}
@@ -2135,7 +2135,7 @@ const ServiceEntry = () => {
 
                 {/* ADD ANOTHER SERVICE BUTTON */}
                 {!isEditMode && (
-                  <button type="button" onClick={addServiceToCart} className="w-full py-3 border-2 border-dashed border-indigo-200 rounded-xl text-indigo-600 font-semibold hover:bg-indigo-50 hover:border-indigo-300 transition flex items-center justify-center gap-2 shadow-sm">
+                  <button type="button" onClick={addServiceToCart} className="w-full py-3 border-2 border-dashed border-navy-500/20 rounded-xl text-navy-700 font-semibold hover:bg-navy-500/5 hover:border-navy-500/30 transition flex items-center justify-center gap-2 shadow-sm">
                     <FiPlus className="h-5 w-5" /> Add Another Service for this Customer
                   </button>
                 )}
@@ -2144,13 +2144,13 @@ const ServiceEntry = () => {
 
             {/* RIGHT COLUMN: PAYMENT DETAILS */}
             <div>
-              <div className="bg-gray-50 p-5 rounded-xl border border-gray-200 h-full flex flex-col">
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-2">
-                    <div className="bg-indigo-100 p-2 rounded-lg">
-                      <FiDollarSign className="h-5 w-5 text-indigo-600" />
+                    <div className="bg-navy-500/10 p-2 rounded-lg">
+                      <FiDollarSign className="h-5 w-5 text-navy-700" />
                     </div>
-                    <h3 className="text-lg font-semibold text-gray-800">Payment Details</h3>
+                    <h3 className="text-lg font-semibold text-slate-800">Payment Details</h3>
                   </div>
                   <button
                     type="button"
@@ -2158,8 +2158,8 @@ const ServiceEntry = () => {
                     disabled={isEditMode}
                     className={`flex items-center gap-1 px-3 py-2 rounded-lg text-sm transition-colors
                       ${isEditMode
-                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                        : 'bg-indigo-600 text-white hover:bg-indigo-700'}
+                        ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                        : 'bg-navy-700 text-white hover:bg-navy-800'}
                     `}
                   >
                     <FiPlus className="h-4 w-4" />
@@ -2177,14 +2177,14 @@ const ServiceEntry = () => {
                 
                 <div className="flex-grow space-y-4">
                   {formData.payments.length === 0 ? (
-                    <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-xl p-8 text-center h-full flex flex-col justify-center">
-                      <FiCreditCard className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-                      <p className="text-gray-600 font-medium">No payments added</p>
-                      <p className="text-gray-500 text-sm mt-1">Add your first payment method</p>
+                    <div className="bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl p-8 text-center h-full flex flex-col justify-center">
+                      <FiCreditCard className="mx-auto h-12 w-12 text-slate-400 mb-3" />
+                      <p className="text-slate-600 font-medium">No payments added</p>
+                      <p className="text-slate-500 text-sm mt-1">Add your first payment method</p>
                     </div>
                   ) : (
                     (formData.payments || []).map((payment, index) => (
-                      <div key={index} className="bg-white p-4 rounded-xl border border-gray-200 relative">
+                      <div key={index} className="bg-white p-4 rounded-xl border border-slate-200 relative">
                         <div className="absolute top-3 right-3">
                           <button
                             type="button"
@@ -2192,8 +2192,8 @@ const ServiceEntry = () => {
                             disabled={isEditMode}
                             className={`transition-colors
                               ${isEditMode
-                                ? 'text-gray-300 cursor-not-allowed'
-                                : 'text-gray-400 hover:text-rose-500'}
+                                ? 'text-slate-300 cursor-not-allowed'
+                                : 'text-slate-400 hover:text-rose-500'}
                             `}
                           >
                             <FiTrash2 className="h-5 w-5" />
@@ -2202,14 +2202,14 @@ const ServiceEntry = () => {
                         
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
                               Payment Method <span className="text-rose-500">*</span>
                             </label>
                             <select
                               value={payment.method}
                               disabled={isEditMode}
                               onChange={(e) => handlePaymentChange(index, 'method', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
                             >
                               <option value="cash">Cash</option>
                               <option value="wallet">Digital Wallet</option>
@@ -2217,14 +2217,14 @@ const ServiceEntry = () => {
                           </div>
                           
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
                               Wallet <span className="text-rose-500">*</span>
                             </label>
                             <select
                               value={payment.wallet}
                               disabled={isEditMode}
                               onChange={(e) => handlePaymentChange(index, 'wallet', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
                             >
                               <option value="">Select wallet</option>
                               {(payment.method === 'cash' ? wallets.offline : wallets.online).map(wallet => (
@@ -2236,12 +2236,12 @@ const ServiceEntry = () => {
                           </div>
                           
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
                               Amount (₹) <span className="text-rose-500">*</span>
                             </label>
                             <div className="relative">
                               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                <FiDollarSign className="h-4 w-4 text-gray-400" />
+                                <FiDollarSign className="h-4 w-4 text-slate-400" />
                               </div>
                               <input
                                 type="number"
@@ -2251,21 +2251,21 @@ const ServiceEntry = () => {
                                 required
                                 min="0"
                                 step="0.01"
-                                className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
                                 placeholder="0.00"
                               />
                             </div>
                           </div>
                           
                           <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-slate-700 mb-2">
                               Status <span className="text-rose-500">*</span>
                             </label>
                             <select
                               value={payment.status}
                               disabled={isEditMode}
                               onChange={(e) => handlePaymentChange(index, 'status', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
                             >
                               {paymentStatusOptions.map(option => (
                                 <option key={option.id} value={option.id}>
@@ -2280,10 +2280,10 @@ const ServiceEntry = () => {
                   )}
                 </div>
                 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 p-4 bg-white rounded-xl border border-gray-200 shadow-sm">
-                  <div className="space-y-1"><p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Grand Total</p><p className="text-2xl font-black text-gray-900">₹{grandTotal.toFixed(2)}</p></div>
-                  <div className="space-y-1"><p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Paid Amount</p><p className="text-2xl font-black text-emerald-600">₹{paidAmount.toFixed(2)}</p></div>
-                  <div className="space-y-1"><p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Pending</p><p className="text-2xl font-black text-amber-500">₹{pendingAmount.toFixed(2)}</p></div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <div className="space-y-1"><p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Grand Total</p><p className="text-2xl font-black text-slate-900">₹{grandTotal.toFixed(2)}</p></div>
+                  <div className="space-y-1"><p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Paid Amount</p><p className="text-2xl font-black text-emerald-600">₹{paidAmount.toFixed(2)}</p></div>
+                  <div className="space-y-1"><p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Pending</p><p className="text-2xl font-black text-amber-500">₹{pendingAmount.toFixed(2)}</p></div>
                   <div className="bg-rose-50 -m-4 p-4 rounded-r-xl border-l border-rose-100 flex flex-col justify-center"><p className="text-xs text-rose-600 uppercase tracking-wider font-semibold">Balance Due</p><p className="text-2xl font-black text-rose-600">₹{balanceAmount.toFixed(2)}</p></div>
                 </div>
               </div>
@@ -2292,7 +2292,7 @@ const ServiceEntry = () => {
           </div>
 
           {/* ACTION BUTTONS */}
-          <div className="flex justify-end mt-2 gap-4">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end mt-2 gap-3 sm:gap-4 [&>button]:justify-center">
             <button
               type="button"
               onClick={() => {
@@ -2306,7 +2306,7 @@ const ServiceEntry = () => {
                 });
                 setEditingEntryId(null);
               }}
-              className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
+              className="px-6 py-3 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors flex items-center gap-2"
             >
               <FiX className="h-5 w-5" />
               Cancel
@@ -2322,7 +2322,7 @@ const ServiceEntry = () => {
             <button
               type="submit"
               disabled={submitting}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+              className="px-6 py-3 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition-colors flex items-center gap-2 shadow-md hover:shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? (
                 <span className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -2338,13 +2338,13 @@ const ServiceEntry = () => {
       {/* ========== UPGRADED NOTES SECTION (EDIT MODE ONLY) ========== */}
       {isEditMode && editingEntryId && (
         <div className="mb-8 transition-all duration-300">
-          <div className="bg-gradient-to-r from-indigo-50 to-white rounded-xl p-5 border border-indigo-100 shadow-sm">
+          <div className="bg-gradient-to-r from-navy-500/5 to-white rounded-xl p-5 border border-navy-500/15 shadow-sm">
             <div className="flex items-center gap-2 mb-4">
-              <div className="bg-indigo-100 p-2 rounded-lg">
-                <FiMessageCircle className="h-5 w-5 text-indigo-600" />
+              <div className="bg-navy-500/10 p-2 rounded-lg">
+                <FiMessageCircle className="h-5 w-5 text-navy-700" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-800">Service Notes & Comments</h3>
-              <span className="ml-auto text-xs text-gray-400 bg-white px-2 py-1 rounded-full shadow-sm">
+              <h3 className="text-lg font-semibold text-slate-800">Service Notes & Comments</h3>
+              <span className="ml-auto text-xs text-slate-400 bg-white px-2 py-1 rounded-full shadow-sm">
                 Real-time updates
               </span>
             </div>
@@ -2356,7 +2356,7 @@ const ServiceEntry = () => {
             />
           </div>
 
-          <div className="mt-4 bg-white rounded-xl p-5 border border-gray-200 shadow-sm">
+          <div className="mt-4 bg-white rounded-xl p-5 border border-slate-200 shadow-sm">
             <ScheduledActionsPanel
               serviceEntryId={editingEntryId}
               categoryId={formData.services[0]?.category}
@@ -2373,14 +2373,14 @@ const ServiceEntry = () => {
       )}
 
       {/* ========== TODAY'S SERVICE ENTRIES TABLE ========== */}
-      <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
         <div className="flex justify-between items-center mb-5">
-          <h3 className="text-lg font-semibold text-gray-900">Today's Service Entries</h3>
+          <h3 className="text-lg font-semibold text-slate-900">Today's Service Entries</h3>
           <div className="flex items-center gap-4">
-            <div className="text-sm text-gray-500">{serviceEntries.length} records</div>
+            <div className="text-sm text-slate-500">{serviceEntries.length} records</div>
             <Link
               to="/dashboard/staff/all-entries"
-              className="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center gap-2"
+              className="text-navy-700 hover:text-navy-800 text-sm font-medium flex items-center gap-2"
             >
               <FiLink className="h-4 w-4" />
               View All Entries
@@ -2389,56 +2389,56 @@ const ServiceEntry = () => {
         </div>
         
         {serviceEntries.length === 0 ? (
-          <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-            <FiEye className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-            <p className="text-gray-600 font-medium">No service entries found for today</p>
-            <p className="text-gray-500 text-sm mt-1">Today's submitted service entries will appear here</p>
+          <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 text-center">
+            <FiEye className="mx-auto h-12 w-12 text-slate-400 mb-3" />
+            <p className="text-slate-600 font-medium">No service entries found for today</p>
+            <p className="text-slate-500 text-sm mt-1">Today's submitted service entries will appear here</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto rounded-lg border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">#</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token ID</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">#</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Token ID</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Customer</th>
                   
                   {(userRole === 'admin' || userRole === 'superadmin') && (
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Staff</th>
                   )}
                   
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transactions</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Service</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Total</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Transactions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y divide-slate-200">
                 {serviceEntries.map((entry, index) => {
                   const deptTx = entry.departmentChargeTransaction;
                   const serviceTx = entry.serviceChargeTransaction;
                   const safePayments = getLatestTransactions(entry.payments || []);
                   
                   return (
-                    <tr key={entry.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500 font-medium">
+                    <tr key={entry.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-500 font-medium">
                         {index + 1}
                       </td>
 
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                         {entry.tokenId ? `#${entry.tokenId}` : 'N/A'}
                       </td>
 
-                      <td className="px-6 py-4 text-sm text-gray-900">
+                      <td className="px-6 py-4 text-sm text-slate-900">
                         <div className="font-medium flex items-center gap-2">
-                          <span className="whitespace-normal break-words max-w-[150px] sm:max-w-[200px]">
+                          <span className="whitespace-normal break-words min-w-[110px] max-w-[200px]">
                             {entry.customerName}
                           </span>
                           
                           {entry.notes_count > 0 && (
                             <span 
-                              className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-indigo-100 flex-shrink-0 cursor-help transition-all hover:bg-indigo-100"
+                              className="inline-flex items-center gap-1 bg-navy-500/5 text-navy-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-navy-500/15 flex-shrink-0 cursor-help transition-all hover:bg-navy-500/10"
                               title={`${entry.notes_count} note(s) attached. Click details to view.`}
                             >
                               <FiMessageCircle className="h-3 w-3" />
@@ -2446,18 +2446,18 @@ const ServiceEntry = () => {
                             </span>
                           )}
                         </div>
-                        <div className="text-gray-500 mt-0.5">{entry.phone}</div>
+                        <div className="text-slate-500 mt-0.5">{entry.phone}</div>
                       </td>
 
                       {(userRole === 'admin' || userRole === 'superadmin') && (
-                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-medium">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
                           {entry.staffName || 'Unknown'}
                         </td>
                       )}
 
                       <td className="px-6 py-4 text-sm">
-                        <div className="font-semibold text-gray-900">{getCategoryName(entry.category)}</div>
-                        <div className="text-gray-500 mb-1.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
+                        <div className="font-semibold text-slate-900">{getCategoryName(entry.category)}</div>
+                        <div className="text-slate-500 mb-1.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
                         {entry.expiryDate && entry.expiryDate !== 'N/A' && (
                           <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-xs font-medium border border-blue-100">
                             <FiCalendar className="h-3 w-3" /> 
@@ -2465,13 +2465,13 @@ const ServiceEntry = () => {
                           </div>
                         )}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">
                         ₹{entry.totalCharge.toFixed(2)}
                        </td>
-                      <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
+                      <td className="px-6 py-4 text-sm text-slate-500 min-w-[230px] max-w-xs">
                         <div className="space-y-2">
                           {deptTx && deptTx.id && !deptTx.is_reversal && (
-                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
+                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-rose-600">
                                   <FiTrendingDown className="inline h-3 w-3 mr-1" />
@@ -2487,7 +2487,7 @@ const ServiceEntry = () => {
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => viewTransactionHistory(deptTx.id, 'department_charge')}
-                                  className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                  className="text-slate-400 hover:text-navy-700 p-0.5 rounded"
                                   title="View correction history"
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
@@ -2507,7 +2507,7 @@ const ServiceEntry = () => {
                           )}
 
                           {serviceTx && serviceTx.id && !serviceTx.is_reversal && (
-                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-gray-100">
+                            <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
                               <div className="flex items-center gap-2 flex-wrap">
                                 <span className="text-rose-600">
                                   <FiTrendingDown className="inline h-3 w-3 mr-1" />
@@ -2523,7 +2523,7 @@ const ServiceEntry = () => {
                               <div className="flex items-center gap-1">
                                 <button
                                   onClick={() => viewTransactionHistory(serviceTx.id, 'service_charge')}
-                                  className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                  className="text-slate-400 hover:text-navy-700 p-0.5 rounded"
                                   title="View correction history"
                                 >
                                   <FiHistory className="h-3.5 w-3.5" />
@@ -2562,7 +2562,7 @@ const ServiceEntry = () => {
                                 <div className="flex items-center gap-1">
                                   <button
                                     onClick={() => viewTransactionHistory(correctionId, 'payment')}
-                                    className="text-gray-400 hover:text-indigo-600 p-0.5 rounded"
+                                    className="text-slate-400 hover:text-navy-700 p-0.5 rounded"
                                     title="View correction history"
                                   >
                                     <FiHistory className="h-3.5 w-3.5" />
@@ -2590,10 +2590,11 @@ const ServiceEntry = () => {
                           {getServiceStatusDisplay(entry.status).name}
                         </span>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-2">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => setSelectedEntry(entry)}
-                          className="text-indigo-600 hover:text-indigo-900 p-1.5 rounded-lg hover:bg-indigo-50"
+                          className="text-navy-700 hover:text-navy-800 p-1.5 rounded-lg hover:bg-navy-500/5"
                           title="View details"
                         >
                           <FiEye className="h-5 w-5" />
@@ -2604,11 +2605,11 @@ const ServiceEntry = () => {
                             className={`p-1.5 rounded-lg ${entry.is_edited ? 'text-amber-600 hover:bg-amber-50' : 'text-emerald-600 hover:bg-emerald-50'}`}
                             title={entry.is_edited ? "Admin Override Edit" : "Edit this entry (once only)"}
                           >
-                            ✏️
+                            <FiEdit3 className="h-5 w-5" />
                           </button>
                         )}
                         {isToday(entry.created_at) && entry.is_edited && userRole === 'staff' && (
-                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-200 text-gray-700">
+                          <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-200 text-slate-700">
                             Edited
                           </span>
                         )}
@@ -2621,6 +2622,7 @@ const ServiceEntry = () => {
                             <FiTrash2 className="h-5 w-5" />
                           </button>
                         )}
+                       </div>
                       </td>
                     </tr>
                   );
@@ -2639,13 +2641,13 @@ const ServiceEntry = () => {
               <div className="bg-amber-100 p-2 rounded-full">
                 <FiAlertCircle className="h-6 w-6 text-amber-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">{confirmDialog.title}</h3>
+              <h3 className="text-lg font-bold text-slate-900">{confirmDialog.title}</h3>
             </div>
-            <p className="text-gray-600 text-sm mb-6">{confirmDialog.message}</p>
+            <p className="text-slate-600 text-sm mb-6">{confirmDialog.message}</p>
             <div className="flex justify-end gap-3">
               <button
                 onClick={() => setConfirmDialog({ isOpen: false, title: '', message: '', onConfirm: null })}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm"
               >
                 Cancel
               </button>
@@ -2666,10 +2668,10 @@ const ServiceEntry = () => {
           <div className="bg-white rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4 sticky top-0 bg-white pb-2 border-b">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <FiFileText className="h-5 w-5 text-indigo-600" />
+                <FiFileText className="h-5 w-5 text-navy-700" />
                 Service Entry Details
               </h2>
-              <button onClick={() => setSelectedEntry(null)} className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100">
+              <button onClick={() => setSelectedEntry(null)} className="text-slate-500 hover:text-slate-700 p-1 rounded-full hover:bg-slate-100">
                 <FiX className="h-5 w-5" />
               </button>
             </div>
@@ -2707,12 +2709,12 @@ const ServiceEntry = () => {
                 </ul>
               </div>
             </div>
-            <div className="mt-6 border-t border-gray-200 pt-5">
+            <div className="mt-6 border-t border-slate-200 pt-5">
               <div className="flex items-center gap-2 mb-3">
-                <FiMessageCircle className="h-4 w-4 text-indigo-500" />
-                <h4 className="font-semibold text-gray-800">Notes & Comments</h4>
+                <FiMessageCircle className="h-4 w-4 text-navy-500" />
+                <h4 className="font-semibold text-slate-800">Notes & Comments</h4>
                 {selectedEntry.notes_count > 0 && (
-                  <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                  <span className="text-xs bg-navy-500/10 text-navy-800 px-2 py-0.5 rounded-full">
                     {selectedEntry.notes_count} note(s)
                   </span>
                 )}
@@ -2724,7 +2726,7 @@ const ServiceEntry = () => {
                 showHeader={false}
               />
             </div>
-            <div className="mt-6 border-t border-gray-200 pt-5">
+            <div className="mt-6 border-t border-slate-200 pt-5">
               <ScheduledActionsPanel
                 serviceEntryId={selectedEntry.id}
                 categoryId={selectedEntry.category}
@@ -2752,7 +2754,7 @@ const ServiceEntry = () => {
               </h2>
               <button 
                 onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-slate-500 hover:text-slate-700"
               >
                 <FiX className="h-6 w-6" />
               </button>
@@ -2763,13 +2765,13 @@ const ServiceEntry = () => {
                 <p className="text-sm text-amber-800 font-medium mb-2">
                   Original {getTransactionTypeLabel(correctionModal.transactionType)}
                 </p>
-                <p className="text-gray-700">
+                <p className="text-slate-700">
                   <strong>Amount:</strong> ₹{formatAmount(correctionModal.transaction.amount)}
                 </p>
-                <p className="text-gray-700">
+                <p className="text-slate-700">
                   <strong>Wallet:</strong> {getWalletName(correctionModal.transaction.wallet_id || correctionModal.transaction.wallet)}
                 </p>
-                <p className="text-gray-700 text-xs mt-1">
+                <p className="text-slate-700 text-xs mt-1">
                   <strong>Type:</strong> {correctionModal.transactionType === 'payment' ? 'Credit (Money In)' : 'Debit (Money Out)'}
                 </p>
               </div>
@@ -2784,7 +2786,7 @@ const ServiceEntry = () => {
               )}
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   New Amount (₹) <span className="text-rose-500">*</span>
                 </label>
                 <input
@@ -2793,13 +2795,13 @@ const ServiceEntry = () => {
                   onChange={(e) => setCorrectionModal(prev => ({ ...prev, newAmount: e.target.value }))}
                   min="0.01"
                   step="0.01"
-                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                   placeholder="Enter new amount"
                 />
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   New Wallet <span className="text-rose-500">*</span>
                 </label>
                 <select
@@ -2825,7 +2827,7 @@ const ServiceEntry = () => {
                   }
                   setCorrectionModal(prev => ({ ...prev, newWalletId: value }));
                 }}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                 >
                   <option value="">Select wallet</option>
                   <optgroup label="Cash Wallets">
@@ -2846,21 +2848,21 @@ const ServiceEntry = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   Correction Reason <span className="text-rose-500">*</span>
                 </label>
                 <textarea
                   value={correctionModal.reason}
                   onChange={(e) => setCorrectionModal(prev => ({ ...prev, reason: e.target.value }))}
                   rows={3}
-                  className="w-full px-4 py-2.5 bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                   placeholder="Explain why this transaction needs correction..."
                 />
-                <p className="text-xs text-gray-500 mt-1">Minimum 5 characters</p>
+                <p className="text-xs text-slate-500 mt-1">Minimum 5 characters</p>
               </div>
               
-              <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
-                <p className="text-xs text-gray-600">
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <p className="text-xs text-slate-600">
                   <FiAlertCircle className="inline mr-1 text-amber-600" />
                   <strong>Note:</strong> This will reverse the original transaction and create a new corrected one. 
                   All changes are logged for audit purposes.
@@ -2871,7 +2873,7 @@ const ServiceEntry = () => {
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
               >
                 Cancel
               </button>
@@ -2903,12 +2905,12 @@ const ServiceEntry = () => {
           <div className="bg-white rounded-xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
-                <FiHistory className="h-5 w-5 text-indigo-600" />
+                <FiHistory className="h-5 w-5 text-navy-700" />
                 {getTransactionTypeLabel(historyModal.transactionType)} Correction History
               </h2>
               <button 
                 onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-slate-500 hover:text-slate-700"
               >
                 <FiX className="h-6 w-6" />
               </button>
@@ -2916,15 +2918,15 @@ const ServiceEntry = () => {
             
             {historyModal.loading ? (
               <div className="flex justify-center py-8">
-                <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+                <div className="w-8 h-8 border-4 border-navy-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : !Array.isArray(historyModal.history) || historyModal.history.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No correction history found</p>
+              <p className="text-slate-500 text-center py-8">No correction history found</p>
             ) : (
               <div className="space-y-4">
-                <div className="text-xs text-gray-500 mb-2 flex items-center gap-2">
+                <div className="text-xs text-slate-500 mb-2 flex items-center gap-2">
                   <span>Showing all versions (oldest first)</span>
-                  <span className="flex-1 h-px bg-gray-200"></span>
+                  <span className="flex-1 h-px bg-slate-200"></span>
                 </div>
                 
                 {[...historyModal.history]
@@ -2954,7 +2956,7 @@ const ServiceEntry = () => {
                     return (
                       <div key={idx} className="relative">
                         {idx < arr.length - 1 && (
-                          <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-gray-300 -mb-4"></div>
+                          <div className="absolute left-5 top-12 bottom-0 w-0.5 bg-slate-300 -mb-4"></div>
                         )}
                 
                         <div className={`p-4 rounded-lg border ${styles.bg} ${styles.border} relative ml-2`}>
@@ -2974,27 +2976,27 @@ const ServiceEntry = () => {
                                 </span>
                               )}
                             </div>
-                            <span className="text-xs text-gray-500">{formatDate(entry.created_at)}</span>
+                            <span className="text-xs text-slate-500">{formatDate(entry.created_at)}</span>
                           </div>
                 
                           <div className="ml-1 space-y-1.5">
                             <p className="text-sm font-medium">
                               Amount: <span className="font-semibold">₹{formatAmount(entry.amount)}</span>
-                              <span className="text-gray-500 mx-2">→</span>
+                              <span className="text-slate-500 mx-2">→</span>
                               <span className="font-medium">{entry.wallet_name || 'Unknown Wallet'}</span>
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-slate-500">
                               Type: <span className={entry.type === 'credit' ? 'text-emerald-600' : 'text-rose-600'}>
                                 {entry.type === 'credit' ? 'Credit (Money In)' : 'Debit (Money Out)'}
                               </span>
                             </p>
                             {entry.description && entry.description.includes('Reason:') && (
-                              <p className="text-sm text-gray-600 bg-white/50 p-2 rounded">
+                              <p className="text-sm text-slate-600 bg-white/50 p-2 rounded">
                                 <strong>Reason:</strong> {entry.description.split('Reason:')[1]?.split('(Was:')[0]?.trim()}
                               </p>
                             )}
                             {entry.staff_name && (
-                              <p className="text-xs text-gray-500 flex items-center gap-1">
+                              <p className="text-xs text-slate-500 flex items-center gap-1">
                                 <FiUser className="h-3 w-3" />
                                 Corrected by: {entry.staff_name}
                               </p>
@@ -3007,10 +3009,10 @@ const ServiceEntry = () => {
               </div>
             )}
             
-            <div className="flex justify-end mt-6 pt-3 border-t border-gray-200">
+            <div className="flex justify-end mt-6 pt-3 border-t border-slate-200">
               <button
                 onClick={() => setHistoryModal({ isOpen: false, transactionId: null, history: [], loading: false, transactionType: '' })}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
               >
                 Close
               </button>
@@ -3027,7 +3029,7 @@ const ServiceEntry = () => {
               <h2 className="text-xl font-bold">Edit Invoice</h2>
               <button
                 onClick={() => setInvoiceModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
+                className="text-slate-500 hover:text-slate-700"
               >
                 <FiX className="h-6 w-6" />
               </button>
@@ -3036,7 +3038,7 @@ const ServiceEntry = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Customer Name
                   </label>
                   <input
@@ -3045,11 +3047,11 @@ const ServiceEntry = () => {
                     onChange={(e) =>
                       setInvoiceData({ ...invoiceData, customerName: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     Phone
                   </label>
                   <input
@@ -3058,13 +3060,13 @@ const ServiceEntry = () => {
                     onChange={(e) =>
                       setInvoiceData({ ...invoiceData, phone: e.target.value })
                     }
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    className="w-full px-3 py-2 border border-slate-300 rounded-md"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   Invoice Items
                 </label>
                 {invoiceData.items.map((item, idx) => (
@@ -3078,7 +3080,7 @@ const ServiceEntry = () => {
                         newItems[idx].description = e.target.value;
                         setInvoiceData({ ...invoiceData, items: newItems });
                       }}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                      className="flex-1 px-3 py-2 border border-slate-300 rounded-md"
                     />
                     <input
                       type="number"
@@ -3089,7 +3091,7 @@ const ServiceEntry = () => {
                         newItems[idx].amount = e.target.value;
                         setInvoiceData({ ...invoiceData, items: newItems });
                       }}
-                      className="w-28 px-3 py-2 border border-gray-300 rounded-md"
+                      className="w-28 px-3 py-2 border border-slate-300 rounded-md"
                     />
                     {invoiceData.items.length > 1 && (
                       <button
@@ -3113,15 +3115,15 @@ const ServiceEntry = () => {
                       items: [...invoiceData.items, { description: '', amount: '' }],
                     })
                   }
-                  className="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                  className="text-sm text-navy-700 hover:text-navy-800 flex items-center gap-1"
                 >
                   <FiPlus className="h-4 w-4" /> Add Item
                 </button>
               </div>
 
-              <div className="bg-gray-50 p-3 rounded-lg flex justify-between">
+              <div className="bg-slate-50 p-3 rounded-lg flex justify-between">
                 <span className="font-medium">Total</span>
-                <span className="font-bold text-indigo-700">
+                <span className="font-bold text-navy-800">
                   ₹
                   {invoiceData.items
                     .reduce((sum, it) => sum + parseFloat(it.amount || 0), 0)
@@ -3130,7 +3132,7 @@ const ServiceEntry = () => {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-slate-700 mb-1">
                   Notes (optional)
                 </label>
                 <textarea
@@ -3139,7 +3141,7 @@ const ServiceEntry = () => {
                     setInvoiceData({ ...invoiceData, notes: e.target.value })
                   }
                   rows={2}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md"
                   placeholder="Any additional remarks…"
                 />
               </div>
@@ -3148,13 +3150,13 @@ const ServiceEntry = () => {
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setInvoiceModalOpen(false)}
-                className="px-4 py-2 bg-gray-200 text-gray-700 rounded-md"
+                className="px-4 py-2 bg-slate-200 text-slate-700 rounded-md"
               >
                 Cancel
               </button>
               <button
                 onClick={generateInvoicePDF}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 flex items-center gap-2"
+                className="px-4 py-2 bg-navy-700 text-white rounded-md hover:bg-navy-800 flex items-center gap-2"
               >
                 <FiFileText className="h-4 w-4" />
                 Download Invoice PDF
@@ -3172,9 +3174,9 @@ const ServiceEntry = () => {
               <div className="bg-rose-100 p-2 rounded-full">
                 <FiAlertCircle className="h-6 w-6 text-rose-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900">Delete Service Entry?</h3>
+              <h3 className="text-lg font-bold text-slate-900">Delete Service Entry?</h3>
             </div>
-            <p className="text-gray-600 text-sm mb-6">
+            <p className="text-slate-600 text-sm mb-6">
               Are you sure you want to permanently delete this service entry?
               <br/><br/>
               <strong>Note:</strong> You cannot delete an entry if payments have already been collected. You must reverse the payments first.
@@ -3183,7 +3185,7 @@ const ServiceEntry = () => {
               <button
                 onClick={() => setDeleteDialog({ isOpen: false, entryId: null, loading: false })}
                 disabled={deleteDialog.loading}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium text-sm"
+                className="px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors font-medium text-sm"
               >
                 Cancel
               </button>
