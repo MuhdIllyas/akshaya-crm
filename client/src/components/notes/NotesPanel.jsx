@@ -7,7 +7,7 @@ import {
 import { toast } from 'react-toastify';
 import { formatDistanceToNow } from 'date-fns';
 import NoteEditorModal from './NoteEditorModal';
-import { getServiceEntryNotes, getCustomerNotes, deleteNote, updateNote } from '@/services/noteService';
+import { getServiceEntryNotes, getCustomerNotes, deleteNote, updateNote, updateNoteColor } from '@/services/noteService';
 import api from '@/services/serviceService';
 import { colorOf, ColorPicker, loadColors, rememberNoteColor, resolveNoteColor } from './noteColors';
 
@@ -211,14 +211,11 @@ const NotesPanel = ({
     rememberNoteColor(note.id, key);
     setColors(loadColors());
     setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, color: key } : n)));
-    const payload = { title: note.title, content: note.content, visibility: note.visibility, color: key };
-    if (contextType === 'service_entry') payload.related_service_entry_id = parseInt(contextId, 10);
-    if (contextType === 'customer') payload.related_customer_id = parseInt(contextId, 10);
     try {
-      await updateNote(note.id, payload);
+      await updateNoteColor(note.id, key);
     } catch (err) {
       console.error(err);
-      toast.info('Colour kept on this device only');
+      toast.info('Could not save the colour for everyone; it is kept on this device only');
     }
   };
 

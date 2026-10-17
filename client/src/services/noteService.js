@@ -69,6 +69,12 @@ export const updateNote = async (noteId, noteData) => {
   return response.data;
 };
 
+// 4b. Change only the colour of a note (shared: everyone who can see the note sees it)
+export const updateNoteColor = async (noteId, color) => {
+  const response = await api.patch(`/${noteId}/color`, { color });
+  return response.data;
+};
+
 // 5. Delete a note
 export const deleteNote = async (noteId) => {
   console.log('notesService.js: Deleting note:', noteId);

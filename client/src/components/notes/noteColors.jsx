@@ -45,6 +45,7 @@ export const rememberNoteColor = (id, key) => {
 
 /** Colour a note should show: the API value wins, then this device's memory. */
 export const resolveNoteColor = (note, overrides) => {
+  // The saved colour is shared by everyone; this device's memory only covers notes that have none yet.
   if (note?.color && NOTE_COLORS.some((c) => c.key === note.color)) return note.color;
   return overrides?.[note?.id] || 'default';
 };
