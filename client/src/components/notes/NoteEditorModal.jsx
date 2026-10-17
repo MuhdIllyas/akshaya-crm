@@ -55,7 +55,7 @@ const NoteEditorModal = ({
 
   const [title, setTitle] = useState(initialTitle);
   const [content, setContent] = useState(note?.content || '');
-  const [visibility, setVisibility] = useState(note?.visibility || 'centre');
+  const [visibility, setVisibility] = useState(note?.visibility || (contextType === 'service_entry' ? 'private' : 'centre'));
   const [color, setColor] = useState(initialColor);
   const [createTask, setCreateTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
@@ -338,6 +338,11 @@ const NoteEditorModal = ({
               </p>
             </div>
 
+            {contextType === 'service_entry' && !note ? (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                <FiLock className="h-3.5 w-3.5" /> Private note: only you can see it.
+              </p>
+            ) : (
             <fieldset>
               <legend className="mb-2 text-sm font-medium text-slate-700">Visibility</legend>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -371,6 +376,7 @@ const NoteEditorModal = ({
                 })}
               </div>
             </fieldset>
+            )}
 
             <div>
               <span className="mb-2 block text-sm font-medium text-slate-700">Attachments</span>

@@ -66,7 +66,7 @@ router.get('/unread', authenticateToken, async (req, res) => {
         AND n.created_at > curr_user.last_viewed
         AND (
           n.visibility = 'global'
-          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+          OR (n.visibility <> 'private' AND EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1))
         )
       `;
       values = [userId];
@@ -81,7 +81,7 @@ router.get('/unread', authenticateToken, async (req, res) => {
         AND (
           n.visibility = 'global' 
           OR (n.visibility = 'centre' AND s.centre_id = $2)
-          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+          OR (n.visibility <> 'private' AND EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1))
         )
       `;
       values = [userId, centre_id];
@@ -136,7 +136,7 @@ router.get('/all', authenticateToken, async (req, res) => {
       n.visibility = 'global' OR 
       n.visibility = 'centre' OR 
       n.created_by = $1 OR 
-      EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+      (n.visibility <> 'private' AND EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1))
     )`;
 
     query += ` ORDER BY n.created_at DESC LIMIT 100`;
@@ -159,7 +159,7 @@ router.post("/", async (req, res) => {
       title,
       content,
       visibility = "centre",
-      mentions = [],
+      mentions: rawMentions = [],
       related_customer_id,
       related_service_id,
       related_service_entry_id,
@@ -171,6 +171,9 @@ router.post("/", async (req, res) => {
     if (!content?.trim()) {
       return res.status(400).json({ error: "Content is required" });
     }
+
+    // A private note is visible only to its author, so it can't mention (or notify) anyone.
+    const mentions = visibility === 'private' ? [] : rawMentions;
 
     await client.query("BEGIN");
 
@@ -277,9 +280,15 @@ router.get("/customer/:id", async (req, res) => {
       LEFT JOIN tasks t ON t.note_id = n.id
       LEFT JOIN staff ts ON ts.id = t.assigned_to
       WHERE n.related_customer_id = $1
+      AND (
+        n.created_by = $2
+        OR n.visibility = 'global'
+        OR (n.visibility = 'centre' AND ($3 = 'superadmin' OR (n.centre_id = $4 OR s.centre_id = $4)))
+        OR (n.visibility = 'mentioned_only' AND EXISTS (SELECT 1 FROM note_mentions vm WHERE vm.note_id = n.id AND vm.staff_id = $2))
+      )
       ORDER BY n.created_at DESC
       `,
-      [req.params.id]
+      [req.params.id, req.user.id, req.user.role, req.user.centre_id]
     );
     res.json(result.rows);
   } catch (err) {
@@ -312,9 +321,15 @@ router.get("/service-entry/:id", async (req, res) => {
       LEFT JOIN tasks t ON t.note_id = n.id
       LEFT JOIN staff ts ON ts.id = t.assigned_to
       WHERE n.related_service_entry_id = $1
+      AND (
+        n.created_by = $2
+        OR n.visibility = 'global'
+        OR (n.visibility = 'centre' AND ($3 = 'superadmin' OR (n.centre_id = $4 OR s.centre_id = $4)))
+        OR (n.visibility = 'mentioned_only' AND EXISTS (SELECT 1 FROM note_mentions vm WHERE vm.note_id = n.id AND vm.staff_id = $2))
+      )
       ORDER BY n.created_at DESC
       `,
-      [req.params.id]
+      [req.params.id, req.user.id, req.user.role, req.user.centre_id]
     );
     res.json(result.rows);
   } catch (err) {
@@ -371,7 +386,7 @@ router.put("/:id", async (req, res) => {
     const result = await pool.query(
       `
       UPDATE notes
-      SET title = $1, content = $2, visibility = $3, updated_at = NOW()
+      SET title = $1, content = $2, visibility = COALESCE($3, visibility), updated_at = NOW()
       WHERE id = $4
       RETURNING *
       `,

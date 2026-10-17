@@ -95,7 +95,8 @@ const NotesPanel = ({
         if (req !== reqRef.current) return;
         // noteService returns the response body, whose shape may be a bare array or wrapped.
         const list = [raw, raw?.data, raw?.notes, raw?.rows].find(Array.isArray);
-        setNotes(list || []);
+        // Notes written during a service entry are private to their author; never show someone else's.
+        setNotes((list || []).filter((n) => n.visibility !== 'private' || sameId(authorId(n), currentUserId)));
       } catch (err) {
         if (req !== reqRef.current) return;
         console.error('Failed to fetch notes:', err);
