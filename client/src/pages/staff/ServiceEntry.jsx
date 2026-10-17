@@ -177,7 +177,6 @@ const ServiceEntry = () => {
   const isEditMode = Boolean(editingEntryId);
   const [staffList, setStaffList] = useState([]);
   const [submitting, setSubmitting] = useState(false);
-  const [expandedTx, setExpandedTx] = useState({}); // which table rows show their payment/charge details
   const submitLock = useRef(false); // a ref, so a fast double click can't slip past a stale closure
 
   // Refresh today's table without blocking whatever the user is doing.
@@ -1582,7 +1581,7 @@ const ServiceEntry = () => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 sm:p-8 mb-8"
+        className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-8"
       >
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
@@ -1621,13 +1620,13 @@ const ServiceEntry = () => {
           )}
 
           {/* MAIN 2-COLUMN GRID */}
-          <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-8 items-start">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             
             {/* LEFT COLUMN: CUSTOMER INFO & CART */}
-            <div className="space-y-8">
+            <div className="space-y-6">
               
               {/* 1. Customer Information */}
-              <div className="bg-white p-6 rounded-xl border border-slate-200">
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200">
                 <div className="flex items-center gap-2 mb-5">
                   <div className="bg-navy-500/10 p-2 rounded-lg">
                     <FiUser className="h-5 w-5 text-navy-700" />
@@ -2144,8 +2143,8 @@ const ServiceEntry = () => {
             </div>
 
             {/* RIGHT COLUMN: PAYMENT DETAILS */}
-            <div className="lg:sticky lg:top-4">
-              <div className="bg-white p-6 rounded-xl border border-slate-200 flex flex-col">
+            <div>
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 h-full flex flex-col">
                 <div className="flex justify-between items-center mb-5">
                   <div className="flex items-center gap-2">
                     <div className="bg-navy-500/10 p-2 rounded-lg">
@@ -2178,8 +2177,8 @@ const ServiceEntry = () => {
                 
                 <div className="flex-grow space-y-4">
                   {formData.payments.length === 0 ? (
-                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-6 text-center flex flex-col justify-center">
-                      <FiCreditCard className="mx-auto h-9 w-9 text-slate-300 mb-2" />
+                    <div className="bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl p-8 text-center h-full flex flex-col justify-center">
+                      <FiCreditCard className="mx-auto h-12 w-12 text-slate-400 mb-3" />
                       <p className="text-slate-600 font-medium">No payments added</p>
                       <p className="text-slate-500 text-sm mt-1">Add your first payment method</p>
                     </div>
@@ -2281,25 +2280,11 @@ const ServiceEntry = () => {
                   )}
                 </div>
                 
-                <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <span className="text-sm font-medium text-slate-500">Grand total</span>
-                    <span className="text-3xl font-bold tabular-nums text-slate-900">₹{grandTotal.toFixed(2)}</span>
-                  </div>
-                  <dl className="mt-4 space-y-2.5 border-t border-slate-200 pt-4 text-sm">
-                    <div className="flex items-center justify-between">
-                      <dt className="text-slate-500">Paid</dt>
-                      <dd className="font-semibold tabular-nums text-emerald-600">₹{paidAmount.toFixed(2)}</dd>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <dt className="text-slate-500">Pending</dt>
-                      <dd className="font-semibold tabular-nums text-amber-600">₹{pendingAmount.toFixed(2)}</dd>
-                    </div>
-                    <div className={`flex items-center justify-between rounded-lg px-3 py-2 ${balanceAmount > 0 ? 'bg-rose-50' : 'bg-emerald-50'}`}>
-                      <dt className={`font-medium ${balanceAmount > 0 ? 'text-rose-700' : 'text-emerald-700'}`}>Balance due</dt>
-                      <dd className={`text-lg font-bold tabular-nums ${balanceAmount > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>₹{balanceAmount.toFixed(2)}</dd>
-                    </div>
-                  </dl>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
+                  <div className="space-y-1"><p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Grand Total</p><p className="text-2xl font-black text-slate-900">₹{grandTotal.toFixed(2)}</p></div>
+                  <div className="space-y-1"><p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Paid Amount</p><p className="text-2xl font-black text-emerald-600">₹{paidAmount.toFixed(2)}</p></div>
+                  <div className="space-y-1"><p className="text-xs text-slate-500 uppercase tracking-wider font-semibold">Pending</p><p className="text-2xl font-black text-amber-500">₹{pendingAmount.toFixed(2)}</p></div>
+                  <div className="bg-rose-50 -m-4 p-4 rounded-r-xl border-l border-rose-100 flex flex-col justify-center"><p className="text-xs text-rose-600 uppercase tracking-wider font-semibold">Balance Due</p><p className="text-2xl font-black text-rose-600">₹{balanceAmount.toFixed(2)}</p></div>
                 </div>
               </div>
             </div>
@@ -2307,7 +2292,7 @@ const ServiceEntry = () => {
           </div>
 
           {/* ACTION BUTTONS */}
-          <div className="mt-8 flex flex-col-reverse gap-3 rounded-b-xl border-t border-slate-200 bg-white/95 px-6 py-4 backdrop-blur sm:sticky sm:bottom-0 sm:z-20 -mx-6 -mb-6 sm:-mx-8 sm:-mb-8 sm:flex-row sm:justify-end sm:gap-4 sm:px-8 [&>button]:justify-center">
+          <div className="flex flex-col-reverse sm:flex-row sm:justify-end mt-2 gap-3 sm:gap-4 [&>button]:justify-center">
             <button
               type="button"
               onClick={() => {
@@ -2389,25 +2374,10 @@ const ServiceEntry = () => {
 
       {/* ========== TODAY'S SERVICE ENTRIES TABLE ========== */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="flex flex-wrap justify-between items-center gap-2 mb-5">
+        <div className="flex justify-between items-center mb-5">
           <h3 className="text-lg font-semibold text-slate-900">Today's Service Entries</h3>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 whitespace-nowrap">
+          <div className="flex items-center gap-4">
             <div className="text-sm text-slate-500">{serviceEntries.length} records</div>
-            {serviceEntries.length > 0 && (
-              <button
-                type="button"
-                onClick={() =>
-                  setExpandedTx(
-                    serviceEntries.every(e => expandedTx[e.id])
-                      ? {}
-                      : Object.fromEntries(serviceEntries.map(e => [e.id, true]))
-                  )
-                }
-                className="text-sm font-medium text-slate-500 hover:text-navy-700"
-              >
-                {serviceEntries.every(e => expandedTx[e.id]) ? 'Hide all details' : 'Show all details'}
-              </button>
-            )}
             <Link
               to="/dashboard/staff/all-entries"
               className="text-navy-700 hover:text-navy-800 text-sm font-medium flex items-center gap-2"
@@ -2499,25 +2469,6 @@ const ServiceEntry = () => {
                         ₹{entry.totalCharge.toFixed(2)}
                        </td>
                       <td className="px-6 py-4 text-sm text-slate-500 min-w-[230px] max-w-xs">
-                        {!expandedTx[entry.id] ? (
-                          <button
-                            type="button"
-                            onClick={() => setExpandedTx(prev => ({ ...prev, [entry.id]: true }))}
-                            className="group text-left"
-                            title="Show payment and charge details"
-                          >
-                            <div className="font-medium tabular-nums text-slate-800">
-                              Paid ₹{formatAmount(entry.paidAmount ?? safePayments.filter(p => p.status === 'received').reduce((sum, p) => sum + (parseFloat(p.amount) || 0), 0))}
-                              {Number(entry.pendingAmount) > 0 && (
-                                <span className="text-amber-600"> · Pending ₹{formatAmount(entry.pendingAmount)}</span>
-                              )}
-                            </div>
-                            <div className="mt-0.5 text-xs text-slate-400 group-hover:text-navy-700">
-                              {safePayments.length + (deptTx?.id ? 1 : 0) + (serviceTx?.id ? 1 : 0)} transaction(s) · View details
-                            </div>
-                          </button>
-                        ) : (
-                        <>
                         <div className="space-y-2">
                           {deptTx && deptTx.id && !deptTx.is_reversal && (
                             <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-100">
@@ -2633,15 +2584,6 @@ const ServiceEntry = () => {
                             );
                           })}
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => setExpandedTx(prev => ({ ...prev, [entry.id]: false }))}
-                          className="mt-2 text-xs text-slate-400 hover:text-navy-700"
-                        >
-                          Hide details
-                        </button>
-                        </>
-                        )}
                        </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${getServiceStatusDisplay(entry.status).color}`}>
