@@ -618,7 +618,7 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
                     <input
                       id="cm-name" type="text" name="name" value={formData.name} onChange={handleInputChange} required
                       className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
-                      placeholder="e.g., Diwali Offer"
+                      placeholder="e.g., HSCAP Admission"
                     />
                   </div>
                   <div>
