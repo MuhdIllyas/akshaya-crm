@@ -1,40 +1,138 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { toast } from "react-toastify";
 import {
-  FiDollarSign, FiUser, FiPhone, FiClock, FiCalendar,
-  FiEye, FiDownload, FiFilter, FiSearch, FiX,
-  FiMessageSquare, FiFileText, FiCreditCard, FiCheck,
-  FiAlertCircle, FiTrendingUp, FiBarChart2, FiRefreshCw,
-  FiSend, FiPrinter, FiMail, FiBell,
-  FiCheckCircle, FiFile, FiArchive, FiPercent
-} from 'react-icons/fi';
-import { motion, AnimatePresence } from 'framer-motion';
-import { getPendingPayments, receiveServicePayment, getWallets, getPendingPaymentsHistory } from '@/services/serviceService';
-import { toast } from 'react-toastify';
+  FiDollarSign, FiPhone, FiCalendar, FiEye, FiDownload, FiSearch, FiX,
+  FiMessageSquare, FiFileText, FiCreditCard, FiAlertCircle, FiRefreshCw,
+  FiCheckCircle, FiClock, FiPercent, FiBarChart2, FiUser, FiFile, FiChevronDown,
+} from "react-icons/fi";
+import {
+  getPendingPayments, receiveServicePayment, getWallets, getPendingPaymentsHistory,
+} from "@/services/serviceService";
 
-const role = localStorage.getItem("role");
+/* ---------- Helpers ---------- */
+const IST = "Asia/Kolkata";
+const OVERDUE_DAYS = 7;
+const PAGE_SIZE = 50;
 
-const isStaff = role === "staff";
-const isAdmin = role === "admin";
-const isSuperadmin = role === "superadmin";
+// 'YYYY-MM-DD' in IST for any date value (a plain date string is used as it is)
+const ymd = (v) => {
+  if (!v) return "";
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-CA", { timeZone: IST });
+};
+const formatDate = (v) => {
+  const s = ymd(v);
+  if (!s) return "—";
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+};
+const dayNumber = (s) => {
+  const [y, m, d] = s.split("-").map(Number);
+  return Date.UTC(y, m - 1, d) / 86400000;
+};
+// whole calendar days (IST) since the given date
+const daysSince = (v) => {
+  const s = ymd(v);
+  if (!s) return 0;
+  return Math.max(0, dayNumber(ymd(new Date())) - dayNumber(s));
+};
+const isOverdue = (createdAt) => daysSince(createdAt) > OVERDUE_DAYS;
 
-// Error Boundary Component
+const formatCurrency = (amount) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(amount) || 0);
+
+const csvCell = (v) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toList = (res, ...keys) => {
+  if (Array.isArray(res)) return res;
+  for (const k of ["data", ...keys]) if (Array.isArray(res?.[k])) return res[k];
+  return [];
+};
+const errMsg = (err, fallback) =>
+  err?.response?.data?.error || err?.response?.data?.message || err?.message || fallback;
+
+const initials = (name) =>
+  (name || "U").split(" ").filter(Boolean).map((n) => n[0]).join("").slice(0, 2).toUpperCase() || "U";
+
+// wa.me needs the country code; 10-digit Indian numbers get 91
+const waNumber = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
+  return digits;
+};
+
+const normalizePayments = (rows = []) =>
+  rows.map((r) => {
+    const total = Number(r.total_charges || 0);
+    const paid = Number(r.paid_amount || 0);
+    const due = Number(r.pending_amount || 0);
+
+    let status = "pending";
+    if (paid > 0 && due > 0) status = "partially_paid";
+    if (due === 0 && paid >= total) status = "completed";
+
+    return {
+      id: String(r.service_entry_id),
+      customer: { name: r.customer_name || "Unknown Customer", phone: r.customer_phone || "" },
+      service: { type: r.service_name || "—", subcategory: r.subcategory_name || "", description: r.description || "" },
+      total,
+      paid,
+      due,
+      createdAt: r.created_at,
+      status,
+      // the backend returns the latest payment of each chain
+      paymentHistory: Array.isArray(r.payment_history)
+        ? r.payment_history.map((p) => ({
+            id: p.id,
+            amount: Number(p.amount) || 0,
+            status: p.status,
+            method: p.wallet_name || "—",
+            date: formatDate(p.created_at),
+            remarks: p.status === "received" ? "Payment received" : "Pending payment",
+          }))
+        : [],
+      notes: Array.isArray(r.notes) ? r.notes : [],
+      documents: Array.isArray(r.documents) ? r.documents : [],
+    };
+  });
+
+const PAYMENT_METHODS = [
+  { value: "cash", label: "Cash" },
+  { value: "upi", label: "UPI" },
+  { value: "bank_transfer", label: "Bank transfer" },
+  { value: "credit_card", label: "Credit card" },
+  { value: "debit_card", label: "Debit card" },
+  { value: "cheque", label: "Cheque" },
+  { value: "other", label: "Other" },
+];
+
+const TABS = [
+  { id: "all", label: "All" },
+  { id: "overdue", label: "Overdue" },
+  { id: "pending", label: "Unpaid" },
+  { id: "partially_paid", label: "Partially paid" },
+  { id: "history", label: "Cleared history" },
+];
+
+const inputCls =
+  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40 disabled:bg-slate-50 disabled:text-slate-400";
+
+/* ---------- Small components ---------- */
 class ErrorBoundary extends React.Component {
   state = { hasError: false };
-
-  static getDerivedStateFromError(error) {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    console.error('Error in PendingPayments:', error, errorInfo);
-  }
-
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error, info) { console.error("Error in PendingPayments:", error, info); }
   render() {
     if (this.state.hasError) {
       return (
         <div className="p-6 text-center">
-          <h3 className="text-lg font-bold text-red-600">Something went wrong</h3>
-          <p className="text-gray-600">Please try refreshing the page or contact support.</p>
+          <h3 className="text-lg font-bold text-rose-600">Something went wrong</h3>
+          <p className="text-slate-600">Please refresh the page or contact support.</p>
         </div>
       );
     }
@@ -42,1343 +140,795 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-const formatDate = (date) => {
-  if (!date) return "—";
-  const d = new Date(date);
-  return isNaN(d) ? "—" : d.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
+const StatusChip = ({ payment }) => {
+  let cfg;
+  if (payment.due <= 0) cfg = { name: "Cleared", chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" };
+  else if (isOverdue(payment.createdAt)) cfg = { name: "Overdue", chip: "bg-rose-50 text-rose-700 ring-rose-200", dot: "bg-rose-500" };
+  else if (payment.status === "partially_paid") cfg = { name: "Partially paid", chip: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" };
+  else cfg = { name: "Unpaid", chip: "bg-amber-50 text-amber-700 ring-amber-200", dot: "bg-amber-500" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${cfg.chip}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.name}
+    </span>
+  );
 };
 
-// Stat Card Component
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300"
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-        <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
-        <p className="text-sm text-gray-500">{subtitle}</p>
-        {trend !== undefined && (
-          <p className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-gray-600'}`}>
-            {trend > 0 ? '+' : ''}{trend}% from last month
-          </p>
-        )}
-      </div>
-      <div className={`p-3 rounded-xl ${color}`}>
-        <Icon className="h-6 w-6 text-white" />
-      </div>
+const PaidBar = ({ paid, total }) => {
+  const pct = total > 0 ? Math.min(100, Math.round((paid / total) * 100)) : 0;
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      <div className="h-full rounded-full bg-emerald-500" style={{ width: `${pct}%` }} />
     </div>
-  </motion.div>
+  );
+};
+
+const Modal = ({ onClose, children, width = "max-w-md" }) => {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog" aria-modal="true"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
+        className={`max-h-[90vh] w-full ${width} overflow-y-auto rounded-2xl bg-white shadow-xl`}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const Section = ({ title, icon: Icon, children }) => (
+  <div className="rounded-xl border border-slate-100 bg-slate-50 p-4">
+    <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-800">
+      <Icon className="h-4 w-4 text-navy-700" /> {title}
+    </h4>
+    {children}
+  </div>
 );
 
-// Service Entry Detail Modal
-const PendingPaymentDetailModal = ({ isOpen, onClose, serviceEntry }) => {
-  if (!serviceEntry) return null;
+const Row = ({ label, children }) => (
+  <div className="flex items-start justify-between gap-4 py-1.5 text-sm">
+    <span className="shrink-0 text-slate-500">{label}</span>
+    <span className="min-w-0 break-words text-right font-medium text-slate-800">{children}</span>
+  </div>
+);
+
+/* ---------- Detail modal ---------- */
+const PendingPaymentDetailModal = ({ payment, onClose, onRecord }) => {
+  const latest = payment.paymentHistory[0];
+  const pct = payment.total > 0 ? Math.min(100, Math.round((payment.paid / payment.total) * 100)) : 0;
+  const days = daysSince(payment.createdAt);
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Service Entry Details</h3>
-                <p className="text-sm text-gray-600">ID: {serviceEntry.id}</p>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <FiX className="h-5 w-5 text-gray-600" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Customer Info */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiUser className="h-4 w-4" />
-                    Customer Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-gray-600">Name</p>
-                      <p className="font-medium">{serviceEntry.customer.name}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600">Phone</p>
-                      <a 
-                        href={`tel:${serviceEntry.customer.phone}`}
-                        className="font-medium text-indigo-600 hover:text-indigo-800"
-                      >
-                        {serviceEntry.customer.phone}
-                      </a>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Service Details */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiCheckCircle className="h-4 w-4" />
-                    Service Details
-                  </h4>
-                  <div className="space-y-4">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Service Type</span>
-                      <span className="font-medium">{serviceEntry.service.type}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Subcategory</span>
-                      <span className="font-medium">{serviceEntry.service.subcategory}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Description</span>
-                      <span className="font-medium">{serviceEntry.service.description}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Service Date</span>
-                     <span className="font-medium">{formatDate(serviceEntry.createdAt)}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Due Since</span>
-                      <span className="font-medium text-rose-600">
-                        {Math.floor(
-                          (Date.now() - new Date(serviceEntry.createdAt)) /
-                          (1000 * 60 * 60 * 24)
-                        )} days
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Workflow & Notes */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiMessageSquare className="h-4 w-4" />
-                    Workflow & Notes
-                  </h4>
-                  <div className="space-y-3">
-                    {serviceEntry.notes?.map((note, index) => (
-                      <div key={index} className="flex items-start space-x-3 p-3 bg-white rounded border border-gray-200">
-                        <div className="flex-shrink-0 w-2 h-2 bg-indigo-500 rounded-full mt-2"></div>
-                        <div className="flex-1">
-                          <p className="text-sm">{note.text}</p>
-                          <p className="text-xs text-gray-500 mt-1">{note.date}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Payment History & Documents */}
-              <div className="space-y-6">
-                {/* Latest Payment (formerly Payment History) */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiCreditCard className="h-4 w-4" />
-                    Latest Payment
-                  </h4>
-                  <div className="space-y-3">
-                    {serviceEntry.paymentHistory?.length > 0 ? (
-                      // Since backend returns only the latest payment per chain, we show the first (and only) entry.
-                      <div className="border-b border-gray-200 pb-3">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <span className="text-sm font-medium">{serviceEntry.paymentHistory[0].date}</span>
-                            <p className="text-xs text-gray-500">{serviceEntry.paymentHistory[0].method}</p>
-                          </div>
-                          <span className="text-sm font-bold text-emerald-600">
-                            ₹{serviceEntry.paymentHistory[0].amount.toLocaleString('en-IN')}
-                          </span>
-                        </div>
-                        {serviceEntry.paymentHistory[0].remarks && (
-                          <p className="text-xs text-gray-600 mt-1">{serviceEntry.paymentHistory[0].remarks}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500">No payment recorded yet</p>
-                    )}
-                  </div>
-                </div>
-
-                {/* Documents */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiFileText className="h-4 w-4" />
-                    Documents
-                  </h4>
-                  <div className="space-y-2">
-                    {serviceEntry.documents?.map((doc, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 hover:bg-white rounded border border-gray-200">
-                        <div className="flex items-center space-x-2">
-                          <FiFile className="h-4 w-4 text-gray-500" />
-                          <span className="text-sm">{doc.name}</span>
-                        </div>
-                        <button className="text-indigo-600 hover:text-indigo-800 text-sm p-1">
-                          <FiDownload className="h-4 w-4" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Summary */}
-                <div className="bg-gray-50 rounded-lg p-6">
-                  <h4 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                    <FiBarChart2 className="h-4 w-4" />
-                    Payment Summary
-                  </h4>
-                  <div className="space-y-2">
-                    <div className="flex justify-between py-2">
-                      <span className="text-gray-600">Total Amount</span>
-                      <span className="font-bold">₹{serviceEntry.total.toLocaleString('en-IN')}</span>
-                    </div>
-                    <div className="flex justify-between py-2">
-                      <span className="text-gray-600">Amount Paid</span>
-                      <span className="font-bold text-emerald-600">
-                        ₹{serviceEntry.paid.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                    <div className="flex justify-between py-2 border-t border-gray-300 pt-3">
-                      <span className="text-gray-600 font-semibold">Balance Due</span>
-                      <span className="font-bold text-rose-600">
-                        ₹{serviceEntry.due.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                    {serviceEntry.total > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-300">
-                        <div className="flex justify-between items-center">
-                          <span className="text-sm text-gray-600">Payment Progress</span>
-                          <span className="text-sm font-medium">
-                            {Math.round((serviceEntry.paid / serviceEntry.total) * 100)}%
-                          </span>
-                        </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
-                          <div 
-                            className="bg-emerald-600 h-2 rounded-full"
-                            style={{ width: `${(serviceEntry.paid / serviceEntry.total) * 100}%` }}
-                          ></div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6 pt-6 border-t border-gray-200">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => {
-                  // In real app, this would trigger receive payment modal
-                  toast.info('Redirecting to receive payment...');
-                  onClose();
-                }}
-                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-              >
-                Record Payment
-              </button>
-            </div>
-          </motion.div>
+    <Modal onClose={onClose} width="max-w-4xl">
+      <div className="p-5 sm:p-6">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Service entry details</h3>
+            <p className="mt-0.5 text-sm text-slate-500">ID: {payment.id}</p>
+          </div>
+          <button type="button" onClick={onClose} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Close"><FiX className="h-5 w-5" /></button>
         </div>
-      )}
-    </AnimatePresence>
+
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <div className="space-y-4 lg:col-span-2">
+            <Section title="Customer" icon={FiUser}>
+              <Row label="Name">{payment.customer.name}</Row>
+              <Row label="Phone">
+                {payment.customer.phone
+                  ? <a href={`tel:${payment.customer.phone}`} className="text-navy-700 hover:underline">{payment.customer.phone}</a>
+                  : "—"}
+              </Row>
+            </Section>
+
+            <Section title="Service" icon={FiCheckCircle}>
+              <Row label="Service type">{payment.service.type}</Row>
+              <Row label="Subcategory">{payment.service.subcategory || "—"}</Row>
+              <Row label="Description">{payment.service.description || "—"}</Row>
+              <Row label="Service date">{formatDate(payment.createdAt)}</Row>
+              <Row label="Pending for">
+                <span className={payment.due > 0 && days > OVERDUE_DAYS ? "text-rose-600" : ""}>{days} {days === 1 ? "day" : "days"}</span>
+              </Row>
+            </Section>
+
+            {payment.notes.length > 0 && (
+              <Section title="Workflow & notes" icon={FiMessageSquare}>
+                <ul className="space-y-2">
+                  {payment.notes.map((note, i) => (
+                    <li key={i} className="rounded-lg border border-slate-100 bg-white p-3">
+                      <p className="text-sm text-slate-700">{note.text}</p>
+                      {note.date && <p className="mt-1 text-xs text-slate-400">{note.date}</p>}
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <Section title="Payment summary" icon={FiBarChart2}>
+              <Row label="Total amount"><span className="tabular-nums">{formatCurrency(payment.total)}</span></Row>
+              <Row label="Amount paid"><span className="tabular-nums text-emerald-600">{formatCurrency(payment.paid)}</span></Row>
+              <div className="mt-1 border-t border-slate-200 pt-1">
+                <Row label="Balance due"><span className="text-base font-bold tabular-nums text-rose-600">{formatCurrency(payment.due)}</span></Row>
+              </div>
+              {payment.total > 0 && (
+                <div className="mt-3">
+                  <div className="mb-1 flex justify-between text-xs text-slate-500"><span>Collected</span><span className="font-medium text-slate-700">{pct}%</span></div>
+                  <PaidBar paid={payment.paid} total={payment.total} />
+                </div>
+              )}
+            </Section>
+
+            <Section title="Latest payment" icon={FiCreditCard}>
+              {latest ? (
+                <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-800">{latest.date}</p>
+                      <p className="text-xs text-slate-500">{latest.method}</p>
+                    </div>
+                    <span className="text-sm font-bold tabular-nums text-emerald-600">{formatCurrency(latest.amount)}</span>
+                  </div>
+                  {latest.remarks && <p className="mt-1 text-xs text-slate-500">{latest.remarks}</p>}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">No payment recorded yet</p>
+              )}
+            </Section>
+
+            {payment.documents.length > 0 && (
+              <Section title="Documents" icon={FiFileText}>
+                <ul className="space-y-1.5">
+                  {payment.documents.map((doc, i) => (
+                    <li key={i} className="flex items-center gap-2 rounded-lg border border-slate-100 bg-white px-3 py-2 text-sm text-slate-700">
+                      <FiFile className="h-4 w-4 shrink-0 text-slate-400" /> <span className="truncate">{doc.name}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Section>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
+          <button type="button" onClick={onClose} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Close</button>
+          {payment.due > 0 && (
+            <button type="button" onClick={() => onRecord(payment)} className="inline-flex items-center justify-center gap-2 rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-navy-800">
+              <FiCreditCard /> Record payment
+            </button>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 };
 
-// Receive Payment Modal
-const ReceivePaymentModal = ({ isOpen, onClose, onSuccess, payment, wallets }) => {
-  const [formData, setFormData] = useState({
-    amount: payment?.due || 0,
-    wallet: '',
-    paymentMethod: 'cash',
-    remarks: '',
-    receiptNumber: `REC-${Date.now().toString().slice(-6)}`,
-    date: new Date().toISOString().split('T')[0]
-  });
+/* ---------- Receive payment modal ---------- */
+const ReceivePaymentModal = ({ payment, wallets, walletsLoading, onClose, onSuccess }) => {
+  const [amount, setAmount] = useState(String(payment.due));
+  const [wallet, setWallet] = useState("");
+  const [method, setMethod] = useState("cash");
+  const [remarks, setRemarks] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-const handleSubmit = async () => {
-  try {
-    await receiveServicePayment(payment.id, {
-      amount: formData.amount,
-      wallet_id: formData.wallet,
-      payment_method: formData.paymentMethod,
-      remarks: formData.remarks
-    });
+  // a single wallet is picked automatically
+  useEffect(() => {
+    if (!wallet && wallets.length === 1) setWallet(String(wallets[0].id));
+  }, [wallets, wallet]);
 
-    toast.success("Payment recorded successfully");
-    onSuccess();
-    onClose();
+  const amt = Number(amount);
+  const amountError = !amount
+    ? "Enter an amount"
+    : !(amt > 0)
+      ? "Amount must be greater than 0"
+      : amt > payment.due
+        ? `Cannot be more than the balance due (${formatCurrency(payment.due)})`
+        : "";
+  const walletError = wallet ? "" : "Select a wallet";
+  const close = () => { if (!saving) onClose(); };
 
-  } catch (err) {
-    toast.error(err.response?.data?.error || "Payment failed");
-  }
-};
-
-  const paymentMethods = [
-    { value: 'cash', label: 'Cash' },
-    { value: 'upi', label: 'UPI' },
-    { value: 'bank_transfer', label: 'Bank Transfer' },
-    { value: 'credit_card', label: 'Credit Card' },
-    { value: 'debit_card', label: 'Debit Card' },
-    { value: 'cheque', label: 'Cheque' },
-    { value: 'other', label: 'Other' }
-  ];
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setSubmitted(true);
+    if (amountError || walletError || saving) return;
+    setSaving(true);
+    try {
+      await receiveServicePayment(payment.id, {
+        amount: amt,
+        wallet_id: wallet,
+        payment_method: method,
+        remarks: remarks.trim(),
+      });
+      toast.success("Payment recorded successfully");
+      onSuccess();
+    } catch (err) {
+      toast.error(errMsg(err, "Payment failed"));
+      setSaving(false);
+    }
+  };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-white rounded-xl p-6 max-w-md w-full"
-          >
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">Receive Payment</h3>
-                <p className="text-sm text-gray-600">
-                  {payment?.customer?.name} • {payment?.id}
-                </p>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-              >
-                <FiX className="h-5 w-5 text-gray-600" />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              {/* Payment Summary */}
-              <div className="bg-gray-50 rounded-lg p-4">
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Total Amount:</span>
-                  <span className="font-bold">₹{payment?.total?.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-gray-600">Already Paid:</span>
-                  <span className="text-emerald-600 font-bold">₹{payment?.paid?.toLocaleString('en-IN')}</span>
-                </div>
-                <div className="flex justify-between pt-2 border-t border-gray-300">
-                  <span className="text-gray-700 font-semibold">Balance Due:</span>
-                  <span className="text-rose-600 font-bold text-lg">
-                    ₹{payment?.due?.toLocaleString('en-IN')}
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Amount (₹)
-                </label>
-                <input
-                  type="number"
-                  value={formData.amount}
-                  onChange={(e) => setFormData(prev => ({ 
-                    ...prev, 
-                    amount: Math.min(parseFloat(e.target.value) || 0, payment?.due || 0)
-                  }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  max={payment?.due || 0}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Maximum: ₹{payment?.due?.toLocaleString('en-IN') || 0}
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Payment Date
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.date}
-                    onChange={(e) => setFormData(prev => ({ ...prev, date: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Receipt No.
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.receiptNumber}
-                    onChange={(e) => setFormData(prev => ({ ...prev, receiptNumber: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Payment Method
-                </label>
-                <select
-                  value={formData.paymentMethod}
-                  onChange={(e) => setFormData(prev => ({ ...prev, paymentMethod: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  {paymentMethods.map(method => (
-                    <option key={method.value} value={method.value}>
-                      {method.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Credit to Wallet
-                </label>
-                <select
-                  value={formData.wallet}
-                  onChange={(e) =>
-                    setFormData(prev => ({ ...prev, wallet: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                >
-                  <option value="">Select wallet</option>
-                  {wallets.map(w => (
-                    <option key={w.id} value={w.id}>
-                      {w.name} - ₹{Number(w.balance).toLocaleString('en-IN')}
-                    </option>
-                  ))}
-                  {wallets.length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    No wallets available
-                  </p>
-                )}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Remarks
-                </label>
-                <textarea
-                  value={formData.remarks}
-                  onChange={(e) => setFormData(prev => ({ ...prev, remarks: e.target.value }))}
-                  rows={3}
-                  placeholder="Add any remarks about this payment..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex space-x-3 mt-6">
-              <button
-                onClick={onClose}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSubmit}
-                disabled={!formData.amount || formData.amount <= 0}
-                className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Record Payment
-              </button>
-            </div>
-          </motion.div>
+    <Modal onClose={close} width="max-w-md">
+      <form onSubmit={handleSubmit} className="p-5 sm:p-6">
+        <div className="mb-5 flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">Receive payment</h3>
+            <p className="mt-0.5 text-sm text-slate-500">{payment.customer.name} · ID {payment.id}</p>
+          </div>
+          <button type="button" onClick={close} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100" aria-label="Close"><FiX className="h-5 w-5" /></button>
         </div>
-      )}
-    </AnimatePresence>
+
+        <div className="mb-4 rounded-xl border border-slate-100 bg-slate-50 p-4 text-sm">
+          <div className="flex justify-between py-0.5"><span className="text-slate-500">Total amount</span><span className="font-semibold tabular-nums">{formatCurrency(payment.total)}</span></div>
+          <div className="flex justify-between py-0.5"><span className="text-slate-500">Already paid</span><span className="font-semibold tabular-nums text-emerald-600">{formatCurrency(payment.paid)}</span></div>
+          <div className="mt-1 flex justify-between border-t border-slate-200 pt-2"><span className="font-medium text-slate-700">Balance due</span><span className="text-base font-bold tabular-nums text-rose-600">{formatCurrency(payment.due)}</span></div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label htmlFor="pp-amount" className="text-sm font-medium text-slate-700">Amount (₹)</label>
+              <button type="button" onClick={() => setAmount(String(payment.due))} className="text-xs font-medium text-navy-700 hover:underline">Full balance</button>
+            </div>
+            <input
+              id="pp-amount" type="number" inputMode="decimal" min="0" step="0.01" value={amount}
+              onChange={(e) => setAmount(e.target.value)} className={inputCls} autoFocus
+            />
+            {submitted && amountError && <p className="mt-1 text-xs text-rose-600">{amountError}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="pp-method" className="mb-1.5 block text-sm font-medium text-slate-700">Payment method</label>
+            <div className="relative">
+              <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <select id="pp-method" value={method} onChange={(e) => setMethod(e.target.value)} className={`${inputCls} appearance-none pr-9`}>
+                {PAYMENT_METHODS.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label htmlFor="pp-wallet" className="mb-1.5 block text-sm font-medium text-slate-700">Credit to wallet</label>
+            <div className="relative">
+              <FiChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <select id="pp-wallet" value={wallet} onChange={(e) => setWallet(e.target.value)} disabled={walletsLoading} className={`${inputCls} appearance-none pr-9`}>
+                <option value="">{walletsLoading ? "Loading wallets…" : "Select wallet"}</option>
+                {wallets.map((w) => (
+                  <option key={w.id} value={w.id}>{w.name} · {formatCurrency(w.balance)}</option>
+                ))}
+              </select>
+            </div>
+            {!walletsLoading && wallets.length === 0 && <p className="mt-1 text-xs text-amber-600">No wallets available for this centre.</p>}
+            {submitted && walletError && wallets.length > 0 && <p className="mt-1 text-xs text-rose-600">{walletError}</p>}
+          </div>
+
+          <div>
+            <label htmlFor="pp-remarks" className="mb-1.5 block text-sm font-medium text-slate-700">Remarks <span className="font-normal text-slate-400">(optional)</span></label>
+            <textarea
+              id="pp-remarks" rows={3} value={remarks} onChange={(e) => setRemarks(e.target.value)}
+              placeholder="Add any remarks about this payment…" className={inputCls}
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" onClick={close} disabled={saving} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+          <button type="submit" disabled={saving} className="inline-flex items-center justify-center gap-2 rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-navy-800 disabled:opacity-60">
+            {saving ? <><FiRefreshCw className="animate-spin" /> Saving…</> : <><FiCheckCircle /> Record payment</>}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 
-// Get status badge color
-const getStatusBadge = (status, createdAt) => {
-  if (status === 'overdue' || isOverdue(createdAt)) {
-    return 'bg-rose-100 text-rose-800 border border-rose-200';
-  }
-
-  switch (status) {
-    case 'pending':
-      return 'bg-amber-100 text-amber-800 border border-amber-200';
-    case 'partially_paid':
-      return 'bg-blue-100 text-blue-800 border border-blue-200';
-    default:
-      return 'bg-gray-100 text-gray-800 border border-gray-200';
-  }
-};
-
-const isOverdue = (createdAt, days = 7) => {
-  if (!createdAt) return false;
-  const diffDays =
-    (Date.now() - new Date(createdAt)) / (1000 * 60 * 60 * 24);
-  return diffDays > days;
-};
-
+/* ========== MAIN COMPONENT ========== */
 const PendingPayments = () => {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filter, setFilter] = useState('all');
-  const [selectedService, setSelectedService] = useState(null);
-  const [showServiceModal, setShowServiceModal] = useState(false);
-  const [selectedPayment, setSelectedPayment] = useState(null);
-  const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState("all");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [shown, setShown] = useState(PAGE_SIZE);
+
+  const [detailPayment, setDetailPayment] = useState(null);
+  const [receivePayment, setReceivePayment] = useState(null);
   const [wallets, setWallets] = useState([]);
-  const [stats, setStats] = useState({
-    totalDue: 0,
-    overdueCount: 0,
-    pendingCount: 0,
-    averageDue: 0,
-    totalReceivables: 0,
-    collectionRate: 0
-  });
+  const [walletsLoading, setWalletsLoading] = useState(false);
   const [sendingWhatsappId, setSendingWhatsappId] = useState(null);
+  const reqRef = useRef(0);
 
-  // Filtered payments - now includes sorting by due descending
+  const mode = filter === "history" ? "history" : "pending";
+
+  const fetchPayments = async (silent = false) => {
+    const id = ++reqRef.current;
+    if (silent) setRefreshing(true); else setLoading(true);
+    try {
+      const response = mode === "history" ? await getPendingPaymentsHistory() : await getPendingPayments();
+      if (id !== reqRef.current) return;
+      setPendingPayments(normalizePayments(toList(response)));
+      setLoadError(false);
+    } catch (err) {
+      if (id !== reqRef.current) return;
+      console.error("Pending payments fetch error:", err);
+      setLoadError(true);
+      toast.error("Failed to load payments: " + errMsg(err, "Unknown error"));
+    } finally {
+      if (id === reqRef.current) { setLoading(false); setRefreshing(false); }
+    }
+  };
+
+  // reload only when switching between the pending list and the cleared history
+  useEffect(() => { setPendingPayments([]); fetchPayments(false); }, [mode]);
+
+  // wallets for the receive-payment dropdown, refreshed each time the modal opens
+  useEffect(() => {
+    if (!receivePayment) return undefined;
+    let cancelled = false;
+    setWalletsLoading(true);
+    getWallets()
+      .then((res) => { if (!cancelled) setWallets(toList(res, "wallets")); })
+      .catch((err) => { if (!cancelled) toast.error("Could not load wallets: " + errMsg(err, "Unknown error")); })
+      .finally(() => { if (!cancelled) setWalletsLoading(false); });
+    return () => { cancelled = true; };
+  }, [receivePayment?.id]);
+
   const filteredPayments = useMemo(() => {
-    let filtered = [...pendingPayments];
-
-    // Search filter
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(payment =>
-        payment.customer.name.toLowerCase().includes(query) ||
-        payment.customer.phone.includes(query) ||
-        payment.service.type.toLowerCase().includes(query) ||
-        String(payment.id).includes(query)  // Fixed: convert id to string
+    let list = pendingPayments;
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p) =>
+        (p.customer.name || "").toLowerCase().includes(q) ||
+        (p.customer.phone || "").includes(q) ||
+        (p.service.type || "").toLowerCase().includes(q) ||
+        (p.service.subcategory || "").toLowerCase().includes(q) ||
+        String(p.id).includes(q)
       );
     }
-
-    // Date filter
     if (fromDate || toDate) {
-      filtered = filtered.filter(payment => {
-        const paymentDate = new Date(payment.createdAt);
-        const from = fromDate ? new Date(fromDate) : null;
-        const to = toDate ? new Date(toDate) : null;
-        
-        let include = true;
-        if (from) {
-          include = include && paymentDate >= from;
-        }
-        if (to) {
-          const toEndOfDay = new Date(to);
-          toEndOfDay.setHours(23, 59, 59, 999);
-          include = include && paymentDate <= toEndOfDay;
-        }
-        return include;
+      list = list.filter((p) => {
+        const d = ymd(p.createdAt);
+        if (!d) return false;
+        if (fromDate && d < fromDate) return false;
+        if (toDate && d > toDate) return false;
+        return true;
       });
     }
-
-    // Status filter
-    if (filter === 'overdue') {
-      filtered = filtered.filter(payment =>
-        isOverdue(payment.createdAt)
-      );
-    } else if (filter === 'pending') {
-      filtered = filtered.filter(payment => payment.paid === 0);
-    } else if (filter === 'partially_paid') {
-      filtered = filtered.filter(payment => payment.paid > 0 && payment.due > 0);
-    }
-
-    // Sort by due amount descending (highest pending first)
-    filtered.sort((a, b) => b.due - a.due);
-
-    return filtered;
+    if (filter === "overdue") list = list.filter((p) => isOverdue(p.createdAt));
+    else if (filter === "pending") list = list.filter((p) => p.paid === 0);
+    else if (filter === "partially_paid") list = list.filter((p) => p.paid > 0 && p.due > 0);
+    return [...list].sort((a, b) => b.due - a.due);
   }, [pendingPayments, searchQuery, filter, fromDate, toDate]);
 
-const fetchPendingPayments = async () => {
-  try {
-    setLoading(true);
-    console.log("Fetching pending payments with filter:", filter);
+  useEffect(() => { setShown(PAGE_SIZE); }, [searchQuery, filter, fromDate, toDate, pendingPayments]);
 
-    const response =
-      filter === "history"
-        ? await getPendingPaymentsHistory()
-        : await getPendingPayments();
-
-    console.log("API Response received:", response);
-
-    const rows = Array.isArray(response?.data)
-      ? response.data
-      : Array.isArray(response)
-        ? response
-        : [];
-
-    console.log(`Processing ${rows.length} rows`);
-    
-    const normalized = normalizePayments(rows);
-    console.log("Normalized payments:", normalized);
-    setPendingPayments(normalized);
-
-    // Calculate stats
-    if (rows.length > 0) {
-      console.log("Calculating stats from", rows.length, "rows");
-      
-      const totalDue = rows.reduce((sum, row) => {
-        const pending = Number(row.pending_amount || 0);
-        return sum + pending;
-      }, 0);
-
-      const totalReceivables = rows.reduce((sum, row) => {
-        return sum + Number(row.total_charges || 0);
-      }, 0);
-
-      const overdueCount = rows.filter(row => {
-        if (!row.created_at) return false;
-        const createdDate = new Date(row.created_at);
-        const diffDays = (Date.now() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
-        return diffDays > 7;
-      }).length;
-
-      const pendingCount = rows.filter(row => {
-        const paid = Number(row.paid_amount || 0);
-        return paid === 0;
-      }).length;
-
-      const paidTotal = rows.reduce((sum, row) => {
-        return sum + Number(row.paid_amount || 0);
-      }, 0);
-
-      const collectionRate = totalReceivables > 0 
-        ? Math.round((paidTotal / totalReceivables) * 100)
-        : 0;
-
-      console.log("Calculated stats:", {
-        totalDue,
-        totalReceivables,
-        overdueCount,
-        pendingCount,
-        collectionRate
-      });
-
-      setStats({
-        totalDue,
-        overdueCount,
-        pendingCount,
-        averageDue: rows.length > 0 ? totalDue / rows.length : 0,
-        totalReceivables,
-        collectionRate
-      });
-    } else {
-      console.log("No rows found, resetting stats");
-      setStats({
-        totalDue: 0,
-        overdueCount: 0,
-        pendingCount: 0,
-        averageDue: 0,
-        totalReceivables: 0,
-        collectionRate: 0
-      });
-    }
-
-  } catch (err) {
-    console.error("Pending payments fetch error:", err);
-    toast.error("Failed to load payments: " + (err.response?.data?.error || err.message));
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Fetch pending payments on mount or filter change
-  useEffect(() => {
-    fetchPendingPayments();
-  }, [filter]);
-
-  // Wallets Dropdown
-  useEffect(() => {
-    if (showPaymentModal) {
-      getWallets().then(res => setWallets(res.data));
-    }
-  }, [showPaymentModal]);
-
-  // Update stats when filtered payments change
-  useEffect(() => {
-    if (filteredPayments.length > 0) {
-      const totalDue = filteredPayments.reduce((sum, p) => sum + p.due, 0);
-      const totalReceivables = filteredPayments.reduce((sum, p) => sum + p.total, 0);
-      const overdueCount = filteredPayments.filter(p => 
-        isOverdue(p.createdAt)
-      ).length;
-      const pendingCount = filteredPayments.filter(p => p.paid === 0).length;
-      const paidTotal = filteredPayments.reduce((sum, p) => sum + p.paid, 0);
-      const collectionRate = totalReceivables > 0 
-        ? Math.round((paidTotal / totalReceivables) * 100)
-        : 0;
-
-      setStats({
-        totalDue,
-        overdueCount,
-        pendingCount,
-        averageDue: filteredPayments.length > 0 ? totalDue / filteredPayments.length : 0,
-        totalReceivables,
-        collectionRate
-      });
-    }
+  const stats = useMemo(() => {
+    const totalDue = filteredPayments.reduce((s, p) => s + p.due, 0);
+    const totalReceivables = filteredPayments.reduce((s, p) => s + p.total, 0);
+    const paidTotal = filteredPayments.reduce((s, p) => s + p.paid, 0);
+    return {
+      totalDue,
+      totalReceivables,
+      paidTotal,
+      overdueCount: filteredPayments.filter((p) => p.due > 0 && isOverdue(p.createdAt)).length,
+      unpaidCount: filteredPayments.filter((p) => p.paid === 0).length,
+      partialCount: filteredPayments.filter((p) => p.paid > 0 && p.due > 0).length,
+      collectionRate: totalReceivables > 0 ? Math.round((paidTotal / totalReceivables) * 100) : 0,
+    };
   }, [filteredPayments]);
 
-  // Handle view service details
-  const handleViewService = async (payment) => {
-    try {
-      setSelectedService(payment);
-      setShowServiceModal(true);
-    } catch (error) {
-      console.error('Error fetching service details:', error);
-      toast.error('Failed to load service details');
-    }
-  };
+  const tabCounts = useMemo(() => {
+    if (mode === "history") return {};
+    return {
+      all: pendingPayments.length,
+      overdue: pendingPayments.filter((p) => isOverdue(p.createdAt)).length,
+      pending: pendingPayments.filter((p) => p.paid === 0).length,
+      partially_paid: pendingPayments.filter((p) => p.paid > 0 && p.due > 0).length,
+    };
+  }, [pendingPayments, mode]);
 
-  // Handle receive payment
-  const handleReceivePayment = (payment) => {
-    setSelectedPayment(payment);
-    setShowPaymentModal(true);
-  };
+  const filtersActive = Boolean(searchQuery || fromDate || toDate || (filter !== "all" && filter !== "history"));
+  const clearFilters = () => { setSearchQuery(""); setFromDate(""); setToDate(""); if (filter !== "history") setFilter("all"); };
 
-  // Handle send reminder
+  const visible = filteredPayments.slice(0, shown);
+
   const handleSendReminder = async (payment) => {
+    setSendingWhatsappId(payment.id);
     try {
-      setSendingWhatsappId(payment.id);
-
       const token = localStorage.getItem("token");
-
       const response = await fetch(
         `${import.meta.env.VITE_API_URL}/api/servicemanagement/pending-payments/${payment.id}/send-whatsapp`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-        }
+        { method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } }
       );
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to send WhatsApp");
-      }
-
-      toast.success(
-        `WhatsApp reminder sent to ${payment.customer.name}`
-      );
-
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Failed to send WhatsApp");
+      toast.success(`WhatsApp reminder sent to ${payment.customer.name}`);
     } catch (error) {
       console.error("WhatsApp reminder error:", error);
-
-      toast.error(
-        error.message || "Failed to send WhatsApp reminder"
-      );
-
+      toast.error(error.message || "Failed to send WhatsApp reminder");
     } finally {
       setSendingWhatsappId(null);
     }
   };
 
-  // Handle payment success
+  const openReceive = (payment) => { setDetailPayment(null); setReceivePayment(payment); };
+
   const handlePaymentSuccess = () => {
-    fetchPendingPayments(); // Refresh the list
-    toast.success('Payment recorded successfully!');
+    setReceivePayment(null);
+    fetchPayments(true);
   };
 
-const normalizePayments = (rows = []) =>
-  rows.map(r => {
-    const total = Number(r.total_charges || 0);
-    const paid = Number(r.paid_amount || 0);
-    const due  = Number(r.pending_amount || 0);
-
-    let status = "pending";
-    if (paid > 0 && due > 0) status = "partially_paid";
-    if (due === 0 && paid >= total) status = "completed";
-
-    return {
-      // Use service_entry_id as the primary id
-      id: String(r.service_entry_id),
-
-      customer: {
-        name: r.customer_name || "Unknown Customer",
-        phone: r.customer_phone || ""
-      },
-
-      service: {
-        type: r.service_name || "—",
-        subcategory: r.subcategory_name || "",
-        description: r.description || ""
-      },
-
-      total,
-      paid,
-      due,
-      createdAt: r.created_at,
-      status,
-
-      // Payment history (now an array, but usually contains latest)
-      paymentHistory: Array.isArray(r.payment_history)
-        ? r.payment_history.map(p => ({
-            id: p.id,
-            amount: Number(p.amount),
-            status: p.status,
-            method: p.wallet_name || "—",
-            date: formatDate(p.created_at),
-            remarks:
-              p.status === "received"
-                ? "Payment received"
-                : "Pending payment"
-          }))
-        : [],
-
-      notes: r.notes || [],
-      documents: r.documents || []
-    };
-  });
-
-  // Calculate payment progress
-  const calculatePaymentProgress = () => {
-    if (pendingPayments.length === 0) return 0;
-    const total = pendingPayments.reduce((sum, p) => sum + p.total, 0);
-    const paid = pendingPayments.reduce((sum, p) => sum + p.paid, 0);
-    return total > 0 ? Math.round((paid / total) * 100) : 0;
+  const exportCsv = () => {
+    if (filteredPayments.length === 0) { toast.info("Nothing to export"); return; }
+    const head = ["Service ID", "Customer", "Phone", "Service", "Subcategory", "Total", "Paid", "Due", "Service date", "Days pending", "Status"];
+    const lines = [head, ...filteredPayments.map((p) => [
+      p.id, p.customer.name, p.customer.phone, p.service.type, p.service.subcategory,
+      p.total, p.paid, p.due, ymd(p.createdAt), daysSince(p.createdAt),
+      p.due <= 0 ? "Cleared" : isOverdue(p.createdAt) ? "Overdue" : p.status === "partially_paid" ? "Partially paid" : "Unpaid",
+    ])].map((r) => r.map(csvCell).join(","));
+    const blob = new Blob(["﻿" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${mode === "history" ? "cleared-payments" : "pending-payments"}-${ymd(new Date())}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
+
+  const tiles = [
+    { label: "Total receivables", value: formatCurrency(stats.totalReceivables), sub: `${filteredPayments.length} ${filteredPayments.length === 1 ? "service" : "services"}`, icon: FiBarChart2, tone: "bg-violet-50 text-violet-600" },
+    { label: "Pending amount", value: formatCurrency(stats.totalDue), sub: "Balance to collect", icon: FiDollarSign, tone: "bg-rose-50 text-rose-600" },
+    { label: "Unpaid services", value: stats.unpaidCount, sub: `${stats.partialCount} partially paid`, icon: FiAlertCircle, tone: "bg-amber-50 text-amber-600", onClick: () => setFilter("pending") },
+    { label: "Overdue", value: stats.overdueCount, sub: `Older than ${OVERDUE_DAYS} days`, icon: FiClock, tone: "bg-red-50 text-red-600", onClick: () => setFilter("overdue") },
+    { label: "Collection rate", value: `${stats.collectionRate}%`, sub: `${formatCurrency(stats.paidTotal)} collected`, icon: FiPercent, tone: "bg-emerald-50 text-emerald-600", bar: true },
+  ];
+
+  const topDue = filteredPayments.filter((p) => p.due > 0).slice(0, 5);
+
+  /* ---- render helpers (functions, not components, so they never remount) ---- */
+  const renderActions = (p) => (
+    <div className="flex items-center gap-1">
+      <button type="button" onClick={() => setDetailPayment(p)} title="View details" aria-label={`View ${p.customer.name}`} className="rounded-lg p-2 text-navy-700 hover:bg-slate-100">
+        <FiEye className="h-4 w-4" />
+      </button>
+      <button
+        type="button" onClick={() => handleSendReminder(p)} disabled={sendingWhatsappId === p.id || p.due <= 0}
+        title="Send WhatsApp reminder" aria-label={`Send WhatsApp reminder to ${p.customer.name}`}
+        className="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 disabled:opacity-40"
+      >
+        {sendingWhatsappId === p.id ? <FiRefreshCw className="h-4 w-4 animate-spin" /> : <FiMessageSquare className="h-4 w-4" />}
+      </button>
+      <button
+        type="button" onClick={() => openReceive(p)} disabled={p.due <= 0}
+        className="ml-1 inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <FiCreditCard className="h-3.5 w-3.5" /> Receive
+      </button>
+    </div>
+  );
+
+  const renderPhone = (p) =>
+    p.customer.phone ? (
+      <a href={`https://wa.me/${waNumber(p.customer.phone)}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-sm text-slate-600 hover:text-emerald-600">
+        <FiPhone className="h-3.5 w-3.5" /> {p.customer.phone}
+      </a>
+    ) : (
+      <span className="text-sm text-slate-400">—</span>
+    );
+
+  if (loading && pendingPayments.length === 0) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+        <div className="w-full animate-pulse space-y-4">
+          <div className="h-10 w-72 rounded-lg bg-white" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{[0, 1, 2, 3, 4].map((i) => <div key={i} className="h-24 rounded-xl bg-white" />)}</div>
+          <div className="h-16 rounded-2xl bg-white" />
+          <div className="h-80 rounded-2xl bg-white" />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
-        {/* Header */}
-        <div className="bg-white border-b border-gray-200 sticky top-0 z-30">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-10 h-10 bg-indigo-500 rounded-xl flex items-center justify-center">
-                  <FiDollarSign className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Pending Payments</h1>
-                  <p className="text-gray-600">Manage customer payments and due amounts</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => {
-                    fetchPendingPayments();
-                    toast.info("Refreshing data...");
-                  }}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+        <div className="w-full">
+          {/* Header */}
+          <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Pending Payments</h1>
+              <p className="mt-1 text-sm text-slate-500">Manage customer payments and due amounts</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="button" onClick={() => fetchPayments(true)} disabled={refreshing || loading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-navy-700 hover:bg-slate-50 disabled:opacity-60">
+                <FiRefreshCw className={refreshing || loading ? "animate-spin" : ""} /> Refresh
+              </button>
+              <button type="button" onClick={exportCsv} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-navy-800">
+                <FiDownload /> Export CSV
+              </button>
+            </div>
+          </div>
+
+          {loadError && (
+            <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <span className="flex items-center gap-2"><FiAlertCircle className="h-4 w-4" /> Could not load payments.</span>
+              <button type="button" onClick={() => fetchPayments(true)} className="font-medium underline">Retry</button>
+            </div>
+          )}
+
+          {/* Stats */}
+          <div className="mb-2 grid grid-cols-2 gap-3 lg:grid-cols-5">
+            {tiles.map((t, i) => {
+              const Tag = t.onClick ? "button" : "div";
+              return (
+                <Tag
+                  key={t.label} type={t.onClick ? "button" : undefined} onClick={t.onClick}
+                  className={`flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4 text-left ${t.onClick ? "hover:bg-slate-50" : ""} ${i === tiles.length - 1 ? "col-span-2 lg:col-span-1" : ""}`}
                 >
-                  <FiRefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  <span>Refresh</span>
-                </button>
-                <button 
-                  onClick={() => toast.info('Export functionality would be implemented here')}
-                  className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-                >
-                  <FiDownload className="h-4 w-4" />
-                  <span>Export</span>
-                </button>
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${t.tone}`}><t.icon className="h-5 w-5" /></span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs text-slate-500">{t.label}</span>
+                    <span className="block truncate text-xl font-bold tabular-nums text-slate-900">{t.value}</span>
+                    <span className="block truncate text-xs text-slate-400">{t.sub}</span>
+                    {t.bar && <span className="mt-1.5 block"><PaidBar paid={stats.paidTotal} total={stats.totalReceivables} /></span>}
+                  </span>
+                </Tag>
+              );
+            })}
+          </div>
+          <p className={`mb-6 h-4 text-xs text-slate-400 ${filtersActive ? "" : "invisible"}`}>Figures follow the filters below.</p>
+
+          {/* Filters */}
+          <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div className="relative lg:w-96">
+                <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search customer, phone, service or ID…" aria-label="Search payments"
+                  className={`${inputCls} pl-9`}
+                />
               </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-            <StatCard
-              title="Total Receivables"
-              value={`₹${stats.totalReceivables.toLocaleString('en-IN')}`}
-              subtitle="Sum of all service amounts"
-              icon={FiBarChart2}
-              color="bg-purple-500"
-            />
-            <StatCard
-              title="Pending Amount"
-              value={`₹${stats.totalDue.toLocaleString('en-IN')}`}
-              subtitle="Balance to be collected"
-              icon={FiDollarSign}
-              color="bg-rose-500"
-            />
-            <StatCard
-              title="Pending Services"
-              value={stats.pendingCount}
-              subtitle="Services awaiting payment"
-              icon={FiAlertCircle}
-              color="bg-amber-500"
-            />
-            <StatCard
-              title="Overdue"
-              value={stats.pendingCount}
-              subtitle="Past due date"
-              icon={FiClock}
-              color="bg-red-500"
-            />
-            <StatCard
-              title="Collection Rate"
-              value={`${stats.collectionRate}%`}
-              subtitle="Amount collected"
-              icon={FiPercent}
-              color="bg-emerald-500"
-            />
-          </div>
-
-          {/* Collection Progress */}
-          <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Payment Collection Progress</h3>
-              <span className="text-sm font-medium">{calculatePaymentProgress()}%</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-3">
-              <div 
-                className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-3 rounded-full"
-                style={{ width: `${calculatePaymentProgress()}%` }}
-              ></div>
-            </div>
-            <div className="flex justify-between text-sm text-gray-600 mt-2">
-              <span>₹{pendingPayments.reduce((sum, p) => sum + p.paid, 0).toLocaleString('en-IN')} Collected</span>
-              <span>₹{stats.totalReceivables.toLocaleString('en-IN')} Total</span>
-            </div>
-          </div>
-
-          {/* Filters and Search */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
-              <div className="flex flex-col lg:flex-row lg:items-center lg:space-x-4 space-y-4 lg:space-y-0">
+              <div className="flex flex-wrap items-center gap-2">
                 <div className="relative">
-                  <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search by customer, phone, service, or ID..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full lg:w-80"
-                  />
+                  <FiCalendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input type="date" value={fromDate} max={toDate || undefined} onChange={(e) => setFromDate(e.target.value)} aria-label="From date" className={`${inputCls} w-auto pl-9`} />
                 </div>
-                <div className="flex items-center space-x-2">
-                  <FiFilter className="h-4 w-4 text-gray-500" />
-                  <select
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value)}
-                    className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                <span className="text-sm text-slate-400">to</span>
+                <div className="relative">
+                  <FiCalendar className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} aria-label="To date" className={`${inputCls} w-auto pl-9`} />
+                </div>
+                {filtersActive && (
+                  <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-navy-700 hover:bg-slate-100">
+                    <FiX className="h-4 w-4" /> Clear
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3 flex gap-1 overflow-x-auto border-t border-slate-100 pt-3" role="tablist" aria-label="Payment status">
+              {TABS.map((t) => {
+                const active = filter === t.id;
+                return (
+                  <button
+                    key={t.id} type="button" role="tab" aria-selected={active} onClick={() => setFilter(t.id)}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition ${active ? "bg-navy-700 text-white" : "text-slate-600 hover:bg-slate-100"}`}
                   >
-                    <option value="all">All Payments</option>
-                    <option value="overdue">Overdue Only</option>
-                    <option value="pending">Unpaid Only</option>
-                    <option value="partially_paid">Partially Paid</option>
-                    <option value="history">Cleared Pending History</option>
-                  </select>
-                </div>
-                {/* Date Filter */}
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="relative">
-                    <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                      className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm w-full lg:w-auto"
-                    />
-                  </div>
-                  <span className="text-gray-500">to</span>
-                  <div className="relative">
-                    <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                      className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm w-full lg:w-auto"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={fetchPendingPayments}
-                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
-                    >
-                      Apply
-                    </button>
-                    <button
-                      onClick={() => {
-                        setFromDate('');
-                        setToDate('');
-                        fetchPendingPayments();
-                      }}
-                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
-                    >
-                      Clear
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button 
-                  onClick={() => toast.info('Bulk reminders would be implemented here')}
-                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors"
-                >
-                  <FiSend className="h-4 w-4" />
-                  <span>Bulk Reminders</span>
-                </button>
-              </div>
+                    {t.label}
+                    {tabCounts[t.id] !== undefined && (
+                      <span className={`rounded-full px-1.5 text-xs tabular-nums ${active ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}>{tabCounts[t.id]}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Payments Table */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200 bg-gray-50">
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Customer
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Phone
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Service
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Total (₹)
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Paid (₹)
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Due (₹)
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Due Since
-                    </th>
-                    <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td colSpan="8" className="py-12 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                          <p className="text-gray-600">Loading pending payments...</p>
-                        </div>
-                      </td>
-                    </tr>
-                  ) : filteredPayments.length > 0 ? (
-                    filteredPayments.map((payment) => {
-                      const overdue = isOverdue(payment.createdAt);
-                      return (
-                        <tr 
-                          key={payment.id} 
-                          className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${overdue ? 'bg-rose-50 hover:bg-rose-100' : ''}`}
-                        >
-                          {/* Customer Cell - Clickable */}
-                          <td className="py-4 px-4">
-                            <button
-                              onClick={() => handleViewService(payment)}
-                              className="text-left hover:text-indigo-600 transition-colors group"
-                            >
-                              <div className="flex items-center space-x-3">
-                                <div className="w-8 h-8 bg-blue-900 rounded-full flex items-center justify-center">
-                                  <span className="text-white font-bold text-xs">
-                                    {(payment.customer.name || "U")
-                                      .split(' ')
-                                      .filter(Boolean)
-                                      .map(n => n[0])
-                                      .join('')
-                                    }
-                                  </span>
-                                </div>
-                                <div>
-                                  <p className="font-medium text-gray-900 group-hover:text-indigo-600">
-                                    {payment.customer.name}
-                                  </p>
-                                  <p className="text-xs text-gray-500">ID: {payment.id}</p>
-                                </div>
-                              </div>
-                            </button>
-                          </td>
-                          
-                          {/* Phone Cell - WhatsApp Link */}
-                          <td className="py-4 px-4">
-                            <a
-                              href={`https://wa.me/${payment.customer.phone.replace(/\D/g, '')}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center space-x-2 text-gray-600 hover:text-emerald-600 transition-colors group"
-                            >
-                              <div className="p-1.5 bg-emerald-50 rounded-lg group-hover:bg-emerald-100">
-                                <FiPhone className="h-3.5 w-3.5" />
-                              </div>
-                              <span>{payment.customer.phone}</span>
-                            </a>
-                          </td>
-                          
-                          {/* Service */}
-                          <td className="py-4 px-4">
-                            <div>
-                              <p className="font-medium text-gray-900">{payment.service.type}</p>
-                              <p className="text-xs text-gray-500 truncate max-w-xs">
-                                {payment.service.subcategory}
-                              </p>
-                            </div>
-                          </td>
-                          
-                          {/* Total */}
-                          <td className="py-4 px-4">
-                            <p className="font-bold text-gray-900">
-                              ₹{payment.total.toLocaleString('en-IN')}
-                            </p>
-                          </td>
-                          
-                          {/* Paid */}
-                          <td className="py-4 px-4">
-                            <div className="flex items-center space-x-2">
-                              <div className={`p-1.5 rounded-lg ${payment.paid > 0 ? 'bg-emerald-50' : 'bg-gray-100'}`}>
-                                <FiCreditCard className={`h-3.5 w-3.5 ${payment.paid > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
-                              </div>
-                              <p className={`font-medium ${payment.paid > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>
-                                ₹{payment.paid.toLocaleString('en-IN')}
-                              </p>
-                            </div>
-                          </td>
-                          
-                          {/* Due - Highlighted */}
-                          <td className="py-4 px-4">
-                            <div className="flex items-center space-x-2">
-                              <div className={`p-1.5 rounded-lg ${payment.due > 0 ? 'bg-rose-50' : 'bg-emerald-50'}`}>
-                                <FiAlertCircle className={`h-3.5 w-3.5 ${payment.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`} />
-                              </div>
-                              <p className={`font-bold ${payment.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                ₹{payment.due.toLocaleString('en-IN')}
-                              </p>
-                            </div>
-                          </td>
-                          
-                          {/* Due Since */}
-                          <td className="py-4 px-4">
-                            <div className="flex items-center space-x-2">
-                              <FiCalendar className={`h-4 w-4 ${overdue ? 'text-rose-500' : 'text-amber-500'}`} />
-                              <div>
-                                <span>{formatDate(payment.createdAt)}</span>
-                                {overdue && (
-                                  <p className="text-xs text-rose-500 mt-0.5">Overdue</p>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          
-                          {/* Actions */}
-                          <td className="py-4 px-4">
-                            <div className="flex items-center space-x-1">
-                              {/* View Button */}
-                              <button
-                                onClick={() => handleViewService(payment)}
-                                className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors group"
-                                title="View Service Details"
-                              >
-                                <FiEye className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                              </button>
-                              
-                              {/* Receive Payment Button */}
-                              <button
-                                onClick={() => handleReceivePayment(payment)}
-                                className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors group"
-                                title="Receive Payment"
-                                disabled={payment.due === 0}
-                              >
-                                <FiCreditCard className={`h-4 w-4 group-hover:scale-110 transition-transform ${payment.due === 0 ? 'opacity-50' : ''}`} />
-                              </button>
-                              
-                              {/* Send Reminder Button */}
-                              <button
-                                onClick={() => handleSendReminder(payment)}
-                                disabled={sendingWhatsappId === payment.id}
-                                className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors group disabled:opacity-50"
-                                title="Send WhatsApp Reminder"
-                              >
-                                {sendingWhatsappId === payment.id ? (
-                                  <FiRefreshCw className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <FiMessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                )}
-                              </button>
-
-                              {/* Additional action for overdue */}
-                              {overdue && (
-                                <button
-                                  onClick={() => toast.info('Priority action for overdue payment')}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
-                                  title="Mark as High Priority"
-                                >
-                                  <FiBell className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                                </button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan="8" className="py-12 text-center">
-                        <div className="flex flex-col items-center justify-center">
-                          <FiFileText className="h-16 w-16 text-gray-300 mb-4" />
-                          <p className="text-gray-500 text-lg font-medium mb-2">
-                            {searchQuery || filter !== 'all'
-                              ? 'No matching payments found'
-                              : 'No pending payments'}
-                          </p>
-                          {searchQuery && (
-                            <button
-                              onClick={() => setSearchQuery('')}
-                              className="text-indigo-600 hover:text-indigo-800 text-sm"
-                            >
-                              Clear search
-                            </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+          {mode === "history" && (
+            <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
+              Showing payments that were pending and have since been cleared. This list is read-only.
             </div>
+          )}
 
-            {/* Summary Footer */}
-            {filteredPayments.length > 0 && (
-              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">
-                      Showing <span className="font-medium">{filteredPayments.length}</span> of{' '}
-                      <span className="font-medium">{pendingPayments.length}</span> pending payments
-                    </p>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Total due amount: <span className="font-bold text-rose-600">
-                        ₹{filteredPayments.reduce((sum, p) => sum + p.due, 0).toLocaleString('en-IN')}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm text-gray-600">Showing all records</span>
-                  </div>
-                </div>
+          {/* List */}
+          <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+            {filteredPayments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+                <FiFileText className="mb-3 h-12 w-12 text-slate-300" />
+                <p className="text-base font-medium text-slate-600">
+                  {filtersActive ? "No matching payments found" : mode === "history" ? "No cleared payments yet" : "No pending payments"}
+                </p>
+                {filtersActive && <button type="button" onClick={clearFilters} className="mt-2 text-sm font-medium text-navy-700 hover:underline">Clear filters</button>}
               </div>
+            ) : (
+              <>
+                {/* Mobile cards */}
+                <ul className="divide-y divide-slate-100 md:hidden">
+                  {visible.map((p) => {
+                    const overdue = p.due > 0 && isOverdue(p.createdAt);
+                    return (
+                      <li key={p.id} className={`p-4 ${overdue ? "bg-rose-50/40" : ""}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <button type="button" onClick={() => setDetailPayment(p)} className="flex min-w-0 items-center gap-3 text-left">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-700 text-xs font-bold text-white">{initials(p.customer.name)}</span>
+                            <span className="min-w-0">
+                              <span className="block truncate font-medium text-slate-900">{p.customer.name}</span>
+                              <span className="block text-xs text-slate-400">ID: {p.id}</span>
+                            </span>
+                          </button>
+                          <StatusChip payment={p} />
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-800">{p.service.type}</p>
+                            {p.service.subcategory && <p className="truncate text-xs text-slate-500">{p.service.subcategory}</p>}
+                          </div>
+                          {renderPhone(p)}
+                        </div>
+                        <div className="mt-3">
+                          <div className="mb-1 flex justify-between text-xs text-slate-500">
+                            <span>Paid <span className="font-medium tabular-nums text-emerald-600">{formatCurrency(p.paid)}</span> of <span className="tabular-nums">{formatCurrency(p.total)}</span></span>
+                            <span className="font-semibold tabular-nums text-rose-600">Due {formatCurrency(p.due)}</span>
+                          </div>
+                          <PaidBar paid={p.paid} total={p.total} />
+                        </div>
+                        <div className="mt-3 flex items-center justify-between">
+                          <span className={`inline-flex items-center gap-1.5 text-xs ${overdue ? "text-rose-600" : "text-slate-500"}`}>
+                            <FiCalendar className="h-3.5 w-3.5" /> {formatDate(p.createdAt)} · {daysSince(p.createdAt)}d
+                          </span>
+                          {renderActions(p)}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+
+                {/* Desktop table */}
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="min-w-full text-sm">
+                    <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3">Customer</th>
+                        <th className="px-4 py-3">Phone</th>
+                        <th className="px-4 py-3">Service</th>
+                        <th className="px-4 py-3 text-right">Total</th>
+                        <th className="px-4 py-3">Paid</th>
+                        <th className="px-4 py-3 text-right">Due</th>
+                        <th className="px-4 py-3">Pending since</th>
+                        <th className="px-4 py-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {visible.map((p) => {
+                        const overdue = p.due > 0 && isOverdue(p.createdAt);
+                        return (
+                          <tr key={p.id} className={overdue ? "bg-rose-50/40 hover:bg-rose-50" : "hover:bg-slate-50"}>
+                            <td className="px-4 py-3">
+                              <button type="button" onClick={() => setDetailPayment(p)} className="group flex items-center gap-3 text-left">
+                                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-700 text-xs font-bold text-white">{initials(p.customer.name)}</span>
+                                <span>
+                                  <span className="block font-medium text-slate-900 group-hover:text-navy-700">{p.customer.name}</span>
+                                  <span className="block text-xs text-slate-400">ID: {p.id}</span>
+                                </span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">{renderPhone(p)}</td>
+                            <td className="px-4 py-3">
+                              <p className="font-medium text-slate-800">{p.service.type}</p>
+                              {p.service.subcategory && <p className="max-w-[14rem] truncate text-xs text-slate-500" title={p.service.subcategory}>{p.service.subcategory}</p>}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">{formatCurrency(p.total)}</td>
+                            <td className="min-w-[8rem] px-4 py-3">
+                              <p className={`font-medium tabular-nums ${p.paid > 0 ? "text-emerald-600" : "text-slate-400"}`}>{formatCurrency(p.paid)}</p>
+                              <div className="mt-1"><PaidBar paid={p.paid} total={p.total} /></div>
+                            </td>
+                            <td className={`px-4 py-3 text-right font-bold tabular-nums ${p.due > 0 ? "text-rose-600" : "text-emerald-600"}`}>{formatCurrency(p.due)}</td>
+                            <td className="whitespace-nowrap px-4 py-3">
+                              <p className="text-slate-700">{formatDate(p.createdAt)}</p>
+                              <p className="mt-0.5"><StatusChip payment={p} /></p>
+                            </td>
+                            <td className="px-4 py-3">{renderActions(p)}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Footer */}
+                <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-sm text-slate-600">
+                    Showing <span className="font-medium">{visible.length}</span> of <span className="font-medium">{filteredPayments.length}</span>
+                    {filteredPayments.length !== pendingPayments.length && <> (filtered from {pendingPayments.length})</>}
+                    <span className="mx-2 text-slate-300">·</span>
+                    Total due <span className="font-bold tabular-nums text-rose-600">{formatCurrency(stats.totalDue)}</span>
+                  </p>
+                  {visible.length < filteredPayments.length && (
+                    <button type="button" onClick={() => setShown((n) => n + PAGE_SIZE)} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-navy-700 hover:bg-slate-50">
+                      Show {Math.min(PAGE_SIZE, filteredPayments.length - visible.length)} more
+                    </button>
+                  )}
+                </div>
+              </>
             )}
           </div>
 
-          {/* Quick Stats */}
-          <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h4 className="font-semibold text-gray-900 mb-4">Payment Distribution</h4>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Fully Paid</span>
-                  <span className="font-medium text-emerald-600">
-                    {pendingPayments.filter(p => p.due === 0).length} services
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Partially Paid</span>
-                  <span className="font-medium text-blue-600">
-                    {pendingPayments.filter(p => p.paid > 0 && p.due > 0).length} services
-                  </span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-600">Unpaid</span>
-                  <span className="font-medium text-amber-600">
-                    {pendingPayments.filter(p => p.paid === 0).length} services
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h4 className="font-semibold text-gray-900 mb-4">Top Due Amounts</h4>
-              <div className="space-y-3">
-                {pendingPayments
-                  .sort((a, b) => b.due - a.due)
-                  .slice(0, 3)
-                  .map(payment => (
-                    <div key={payment.id} className="flex justify-between items-center py-2 border-b border-gray-100">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">{payment.customer.name}</p>
-                        <p className="text-xs text-gray-500">{payment.service.type}</p>
+          {/* Summary cards */}
+          {filteredPayments.length > 0 && (
+            <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Payment distribution</h3>
+                <ul className="space-y-3">
+                  {[
+                    { label: "Unpaid", n: stats.unpaidCount, bar: "bg-amber-500", text: "text-amber-600" },
+                    { label: "Partially paid", n: stats.partialCount, bar: "bg-sky-500", text: "text-sky-600" },
+                    { label: "Overdue", n: stats.overdueCount, bar: "bg-rose-500", text: "text-rose-600" },
+                  ].map((r) => (
+                    <li key={r.label}>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span className="text-slate-600">{r.label}</span>
+                        <span className={`font-medium tabular-nums ${r.text}`}>{r.n} {r.n === 1 ? "service" : "services"}</span>
                       </div>
-                      <span className="font-bold text-rose-600">
-                        ₹{payment.due.toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                  ))
-                }
+                      <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                        <div className={`h-full rounded-full ${r.bar}`} style={{ width: `${(r.n / filteredPayments.length) * 100}%` }} />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-6">
-              <h4 className="font-semibold text-gray-900 mb-4">Quick Actions</h4>
-              <div className="space-y-3">
-                <button 
-                  onClick={() => toast.info('Send reminders to all overdue customers')}
-                  className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <span className="text-gray-700">Send Bulk Reminders</span>
-                  <FiSend className="h-4 w-4 text-blue-600" />
-                </button>
-                <button 
-                  onClick={() => toast.info('Generate monthly report')}
-                  className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <span className="text-gray-700">Generate Report</span>
-                  <FiFileText className="h-4 w-4 text-purple-600" />
-                </button>
-                <button 
-                  onClick={() => toast.info('View collection analytics')}
-                  className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
-                >
-                  <span className="text-gray-700">View Analytics</span>
-                  <FiBarChart2 className="h-4 w-4 text-indigo-600" />
-                </button>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5">
+                <h3 className="mb-3 text-sm font-semibold text-slate-800">Top due amounts</h3>
+                {topDue.length === 0 ? (
+                  <p className="text-sm text-slate-400">Nothing due.</p>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {topDue.map((p) => (
+                      <li key={p.id}>
+                        <button type="button" onClick={() => setDetailPayment(p)} className="flex w-full items-center justify-between gap-3 py-2.5 text-left hover:bg-slate-50">
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-slate-900">{p.customer.name}</span>
+                            <span className="block truncate text-xs text-slate-500">{p.service.type}</span>
+                          </span>
+                          <span className="shrink-0 font-bold tabular-nums text-rose-600">{formatCurrency(p.due)}</span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Modals */}
-        <PendingPaymentDetailModal
-          isOpen={showServiceModal}
-          onClose={() => {
-            setShowServiceModal(false);
-            setSelectedService(null);
-          }}
-          serviceEntry={selectedService}
-        />
-
-        <ReceivePaymentModal
-          isOpen={showPaymentModal}
-          onClose={() => {
-            setShowPaymentModal(false);
-            setSelectedPayment(null);
-          }}
-          onSuccess={handlePaymentSuccess}
-          payment={selectedPayment}
-          wallets={wallets}
-        />
+        <AnimatePresence>
+          {detailPayment && (
+            <PendingPaymentDetailModal key="detail" payment={detailPayment} onClose={() => setDetailPayment(null)} onRecord={openReceive} />
+          )}
+          {receivePayment && (
+            <ReceivePaymentModal
+              key={`receive-${receivePayment.id}`} payment={receivePayment} wallets={wallets} walletsLoading={walletsLoading}
+              onClose={() => setReceivePayment(null)} onSuccess={handlePaymentSuccess}
+            />
+          )}
+        </AnimatePresence>
       </div>
     </ErrorBoundary>
   );
