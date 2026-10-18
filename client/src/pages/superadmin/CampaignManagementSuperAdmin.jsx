@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiPlus, FiCalendar, FiTarget, FiCheckCircle, FiTrendingUp, FiEdit2, FiTrash2,
-  FiRefreshCw, FiChevronDown, FiBarChart2, FiFilter, FiDownload, FiX, FiPackage, FiMapPin, FiLayers,
+  FiRefreshCw, FiChevronDown, FiBarChart2, FiFilter, FiDownload, FiX, FiPackage, FiMapPin, FiLayers, FiAward,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -185,6 +186,242 @@ const GroupDetails = ({ group, centreName, onEdit, onDelete }) => {
         </ul>
       </div>
     </div>
+  );
+};
+
+// ---------- staff distribution + application status ----------
+// Uses GET /api/servicemanagement/campaigns/stats (centre_id optional for superadmin, campaign_id may be a comma list).
+const fetchCampaignStats = async (centreId, campaignId) => {
+  const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/servicemanagement/campaigns/stats`, {
+    params: { ...(centreId && centreId !== 'all' ? { centre_id: centreId } : {}), ...(campaignId ? { campaign_id: campaignId } : {}) },
+    headers: { Authorization: `Bearer ${(localStorage.getItem('token') || '').trim()}` },
+  });
+  return res.data || {};
+};
+
+const StaffPerformance = ({ groups, centreId, centreLabel }) => {
+  const [scope, setScope] = useState('all');
+  const [state, setState] = useState({ loading: true, error: false, data: null });
+  const scopeInit = useRef(false);
+  const reqRef = useRef(0);
+
+  // Default to the first running campaign once the list has loaded
+  useEffect(() => {
+    if (scopeInit.current || groups.length === 0) return;
+    scopeInit.current = true;
+    const running = groups.find((g) => g.status === 'active');
+    if (running) setScope(running.key);
+  }, [groups]);
+
+  // a campaign created for several centres has one id per centre
+  const scopeGroup = groups.find((g) => g.key === scope);
+  const scopeIds = scopeGroup ? scopeGroup.rows.map((r) => r.id).join(',') : null;
+  useEffect(() => { if (scope !== 'all' && !scopeGroup) setScope('all'); }, [groups]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const load = async () => {
+    const req = ++reqRef.current;
+    setState((p) => ({ ...p, loading: true, error: false }));
+    try {
+      const data = await fetchCampaignStats(centreId, scope === 'all' ? null : scopeIds);
+      if (req === reqRef.current) setState({ loading: false, error: false, data });
+    } catch (err) {
+      console.error('CampaignManagementSuperAdmin.jsx: staff performance failed:', err);
+      if (req === reqRef.current) setState({ loading: false, error: true, data: null });
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, centreId, scopeIds]);
+
+  const { staff, summary, assignedTotal, total } = useMemo(() => {
+    const d = state.data || {};
+    const rows = (d.staff_contributions || []).map((r) => {
+      const totalTokens = Number(r.total_tokens) || 0;
+      const completed = Number(r.completed_tokens) || 0;
+      return {
+        id: r.staff_id,
+        name: r.staff_name || `Staff ${r.staff_id}`,
+        total: totalTokens,
+        completed,
+        inProgress: Number(r.in_progress_tokens) || 0,
+        pending: Number(r.pending_tokens) || 0,
+        rate: totalTokens ? Math.round((completed / totalTokens) * 100) : 0,
+      };
+    });
+    rows.sort((a, b) => b.completed - a.completed || b.rate - a.rate || b.total - a.total || a.name.localeCompare(b.name));
+    const ss = d.status_summary || {};
+    const t = Number(d.total_tokens) || 0;
+    const done = Number(ss.completed) || 0;
+    return {
+      staff: rows,
+      assignedTotal: rows.reduce((n, r) => n + r.total, 0),
+      total: t,
+      summary: {
+        completed: done,
+        inProgress: (Number(ss.in_progress) || 0) + (Number(ss.processed) || 0),
+        pending: Number(ss.pending) || 0,
+        rate: t ? Math.round((done / t) * 100) : 0,
+      },
+    };
+  }, [state.data]);
+
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => { setShowAll(false); }, [scope]);
+
+  const leader = staff.length && staff[0].completed > 0 ? staff[0] : null;
+  const unassigned = Math.max(0, total - assignedTotal);
+  const LIMIT = 6;
+  const rows = showAll ? staff : staff.slice(0, LIMIT);
+  const maxTotal = Math.max(1, ...staff.map((r) => r.total));
+
+  // donut segments (percent of the circle, circumference = 100)
+  const other = Math.max(0, total - summary.completed - summary.inProgress - summary.pending);
+  const segments = [
+    { key: 'completed', label: 'Completed', value: summary.completed, color: '#10b981', text: 'text-emerald-600' },
+    { key: 'inProgress', label: 'In progress', value: summary.inProgress, color: '#38bdf8', text: 'text-sky-600' },
+    { key: 'pending', label: 'Pending', value: summary.pending, color: '#fbbf24', text: 'text-amber-600' },
+    ...(other > 0 ? [{ key: 'other', label: 'Other', value: other, color: '#cbd5e1', text: 'text-slate-500' }] : []),
+  ];
+  let acc = 0;
+  const arcs = segments.map((seg) => {
+    const pct = total ? (seg.value / total) * 100 : 0;
+    const arc = { ...seg, pct, offset: 25 - acc };
+    acc += pct;
+    return arc;
+  });
+
+  return (
+    <section aria-labelledby="perf-heading" className="mb-10">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 id="perf-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Staff distribution &amp; application status
+          <span className="ml-2 font-normal normal-case tracking-normal text-slate-400">· {centreLabel}</span>
+        </h2>
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value)}
+          aria-label="Campaign to show staff performance for"
+          className="max-w-[15rem] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
+        >
+          <option value="all">All campaigns</option>
+          {groups.map((g) => (
+            <option key={g.key} value={g.key}>
+              {g.name} ({STATUS_STYLE[g.status].label})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {state.loading && !state.data ? (
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white lg:col-span-2" />
+          <div className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white lg:col-span-3" />
+        </div>
+      ) : state.error ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+          <span>Could not load staff performance.</span>
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 font-medium hover:text-rose-900">
+            <FiRefreshCw className="h-3.5 w-3.5" /> Retry
+          </button>
+        </div>
+      ) : total === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-500">
+          No applications recorded for {scope === 'all' ? 'any campaign' : 'this campaign'} yet.
+        </div>
+      ) : (
+        <div className={`grid gap-4 transition-opacity lg:grid-cols-5 ${state.loading ? 'opacity-60' : ''}`}>
+          {/* Graph 1: status split */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+            <h3 className="text-sm font-semibold text-slate-800">Application status</h3>
+            <div className="mt-4 flex items-center gap-5">
+              <div className="relative h-32 w-32 shrink-0">
+                <svg viewBox="0 0 36 36" className="h-full w-full" role="img" aria-label={`${summary.completed} of ${total} applications completed`}>
+                  <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#f1f5f9" strokeWidth="4.5" />
+                  {arcs.filter((a) => a.pct > 0).map((a) => (
+                    <circle
+                      key={a.key}
+                      cx="18" cy="18" r="15.9155" fill="none"
+                      stroke={a.color} strokeWidth="4.5"
+                      strokeDasharray={`${Math.max(0, a.pct - (arcs.filter((x) => x.pct > 0).length > 1 ? 0.6 : 0))} ${100 - a.pct + (arcs.filter((x) => x.pct > 0).length > 1 ? 0.6 : 0)}`}
+                      strokeDashoffset={a.offset}
+                    />
+                  ))}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-2xl font-bold tabular-nums text-slate-900">{summary.rate}%</span>
+                  <span className="text-[11px] text-slate-500">completed</span>
+                </div>
+              </div>
+              <ul className="min-w-0 flex-1 space-y-2">
+                {segments.map((seg) => (
+                  <li key={seg.key} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
+                      {seg.label}
+                    </span>
+                    <span className={`font-semibold tabular-nums ${seg.text}`}>{seg.value}</span>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-sm">
+                  <span className="text-slate-500">Total</span>
+                  <span className="font-semibold tabular-nums text-slate-800">{total}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Graph 2: staff bars */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-800">Applications by staff</h3>
+              {leader && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                  <FiAward className="h-3.5 w-3.5" /> Leader
+                  <span className="max-w-[9rem] truncate font-bold">{leader.name}</span>
+                </span>
+              )}
+            </div>
+            {staff.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">No applications have been assigned to staff yet.</p>
+            ) : (
+              <ol className="mt-4 space-y-3">
+                {rows.map((r, i) => (
+                  <li key={r.id} className="grid grid-cols-[1.25rem_minmax(0,6.5rem)_minmax(0,1fr)_2.5rem] items-center gap-x-3 sm:grid-cols-[1.25rem_minmax(0,8rem)_minmax(0,1fr)_2.5rem]">
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${i === 0 && leader ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                    <span className="truncate text-sm font-medium text-slate-800" title={r.name}>{r.name}</span>
+                    <div
+                      className="flex h-3 overflow-hidden rounded-full bg-slate-100"
+                      role="img"
+                      aria-label={`${r.completed} completed, ${r.inProgress} in progress, ${r.pending} pending`}
+                      title={`${r.completed} completed · ${r.inProgress} in progress · ${r.pending} pending`}
+                    >
+                      <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${(r.total / maxTotal) * 100}%` }}>
+                        <div className="bg-emerald-500" style={{ width: `${r.total ? (r.completed / r.total) * 100 : 0}%` }} />
+                        <div className="bg-sky-400" style={{ width: `${r.total ? (r.inProgress / r.total) * 100 : 0}%` }} />
+                        <div className="bg-amber-400" style={{ width: `${r.total ? (r.pending / r.total) * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                    <span className="text-right text-sm font-semibold tabular-nums text-slate-700">{r.total}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {(staff.length > LIMIT || unassigned > 0) && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                <span>{unassigned > 0 ? `${unassigned} not assigned to staff yet` : ''}</span>
+                {staff.length > LIMIT && (
+                  <button type="button" onClick={() => setShowAll((v) => !v)} className="font-medium text-navy-700 hover:text-navy-800">
+                    {showAll ? `Show top ${LIMIT}` : `Show all ${staff.length}`}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
   );
 };
 
@@ -553,6 +790,15 @@ const CampaignManagementSuperAdmin = () => {
             </div>
           )}
         </section>
+
+        {/* Staff distribution & application status */}
+        {!initialLoading && groups.length > 0 && (
+          <StaffPerformance
+            groups={groups}
+            centreId={selectedCentre}
+            centreLabel={selectedCentre === 'all' ? 'All centres' : centres.find((c) => String(c.id) === String(selectedCentre))?.name || 'Centre'}
+          />
+        )}
 
         {/* History */}
         <section aria-labelledby="history-heading">

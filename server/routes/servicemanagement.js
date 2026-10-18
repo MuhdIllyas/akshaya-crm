@@ -3073,8 +3073,12 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
       queryParams.push(targetCentreId);
     }
     if (campaign_id) {
-      tokenQuery += ` AND t.campaign_id = $${idx++}`;
-      queryParams.push(parseInt(campaign_id));
+      // accepts one id or a comma-separated list (a campaign created for several centres has one id per centre)
+      const campaignIds = String(campaign_id).split(',').map((v) => parseInt(v, 10)).filter((v) => !isNaN(v));
+      if (campaignIds.length > 0) {
+        tokenQuery += ` AND t.campaign_id = ANY($${idx++}::int[])`;
+        queryParams.push(campaignIds);
+      }
     }
     // live_only=1 -> only campaigns that are running today
     if (live_only === '1' || live_only === 'true' || campaign_state === 'live') {
