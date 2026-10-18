@@ -2584,8 +2584,8 @@ const TrackServicePage = () => {
   if (id) {
     return (
       <ErrorBoundary>
-        <div className="min-h-screen bg-gray-50">
-          <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 space-y-4">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+          <div className="w-full space-y-4">
             <div className="flex items-center justify-between gap-3">
               <button
                 onClick={handleBackToList}
@@ -2623,8 +2623,8 @@ const TrackServicePage = () => {
   /* ---------- All applications ---------- */
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-[1600px] mx-auto px-4 sm:px-6 py-5 space-y-4">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+        <div className="w-full space-y-4">
           {/* Header */}
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
