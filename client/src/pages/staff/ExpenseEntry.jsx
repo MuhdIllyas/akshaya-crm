@@ -1,1061 +1,823 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import {
-  FiPlus,
-  FiDollarSign,
-  FiCalendar,
-  FiFileText,
-  FiTag,
-  FiCreditCard,
-  FiSave,
-  FiEdit2,
-  FiTrash2,
-  FiFilter,
-  FiDownload,
-  FiPrinter,
-  FiUser,
-  FiCheck,
-  FiX,
-  FiClock,
-  FiCreditCard as FiWallet,
-  FiRefreshCw,   //  ✅ NEW for correction icon
+  FiPlus, FiDollarSign, FiCalendar, FiFileText, FiTag, FiSave, FiTrash2, FiDownload, FiUser,
+  FiCheck, FiClock, FiRefreshCw, FiEdit3, FiSearch, FiAlertCircle, FiInfo, FiInbox,
 } from "react-icons/fi";
 import { createExpense, getMyExpenses, deleteExpense, correctExpense } from "@/services/expenseService";
 import { getWalletsForCentre } from "@/services/walletService";
 
-const ExpenseEntry = () => {
-  // Hardcoded expense categories with approval requirement flag
-  const categories = [
-    { id: 1, name: "Salary", color: "#3B82F6", icon: "💰", requires_approval: true },
-    { id: 2, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
-    { id: 3, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
-    { id: 4, name: "Electricity Bill", color: "#EF4444", icon: "⚡", requires_approval: false },
-    { id: 5, name: "Maintenance", color: "#F59E0B", icon: "🔧", requires_approval: false },
-    { id: 6, name: "Ink Purchase", color: "#8B5CF6", icon: "🖨️", requires_approval: false },
-    { id: 7, name: "Paper Purchase", color: "#8B5CF6", icon: "📄", requires_approval: false },
-    { id: 8, name: "Internet Bill", color: "#EC4899", icon: "🌐", requires_approval: false },
-    { id: 9, name: "Transportation", color: "#14B8A6", icon: "🚗", requires_approval: false },
-    { id: 10, name: "Office Supplies", color: "#84CC16", icon: "📦", requires_approval: false },
-    { id: 11, name: "Cleaning Supplies", color: "#84CC16", icon: "🧹", requires_approval: false },
-    { id: 12, name: "Stationery", color: "#84CC16", icon: "✏️", requires_approval: false },
-    { id: 13, name: "Bank / CDM Charges", color: "#64748B", icon: "🏦", requires_approval: false },
-    { id: 14, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
-    { id: 15, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true },
-    { id: 16, name: "Shortage", color: "#EF4444", icon: "📉", requires_approval: false },
-    { id: 17, name: "Daily Adjustment", color: "#F59E0B", icon: "⚖️", requires_approval: false },
-    { id: 18, name: "Refreshments / Pantry", color: "#0EA5E9", icon: "💧", requires_approval: false },
-    { id: 19, name: "Software Subscriptions", color: "#8B5CF6", icon: "☁️", requires_approval: false }
-  ];
+/* ---------- Helpers ---------- */
+const IST = "Asia/Kolkata";
+// 'YYYY-MM-DD' in IST for any date value (a plain date string is used as it is)
+const ymd = (v) => {
+  if (!v) return "";
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleDateString("en-CA", { timeZone: IST });
+};
+const formatDate = (v) => {
+  const s = ymd(v);
+  if (!s) return "-";
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+};
+const formatCurrency = (amount) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(Number(amount) || 0);
+const csvCell = (v) => {
+  const s = v === null || v === undefined ? "" : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
+const toList = (res, ...keys) => {
+  if (Array.isArray(res)) return res;
+  for (const k of ["data", ...keys]) if (Array.isArray(res?.[k])) return res[k];
+  return [];
+};
+const errMsg = (err, fallback) => err?.response?.data?.error || err?.response?.data?.message || err?.message || fallback;
 
+const PAGE_SIZE = 50;
+
+// Hardcoded expense categories with approval requirement flag
+const CATEGORIES = [
+  { id: 1, name: "Salary", color: "#3B82F6", icon: "💰", requires_approval: true },
+  { id: 2, name: "Salary Advance", color: "#3B82F6", icon: "💰", requires_approval: true },
+  { id: 3, name: "Rent Payment", color: "#10B981", icon: "🏠", requires_approval: true },
+  { id: 4, name: "Electricity Bill", color: "#EF4444", icon: "⚡", requires_approval: false },
+  { id: 5, name: "Maintenance", color: "#F59E0B", icon: "🔧", requires_approval: false },
+  { id: 6, name: "Ink Purchase", color: "#8B5CF6", icon: "🖨️", requires_approval: false },
+  { id: 7, name: "Paper Purchase", color: "#8B5CF6", icon: "📄", requires_approval: false },
+  { id: 8, name: "Internet Bill", color: "#EC4899", icon: "🌐", requires_approval: false },
+  { id: 9, name: "Transportation", color: "#14B8A6", icon: "🚗", requires_approval: false },
+  { id: 10, name: "Office Supplies", color: "#84CC16", icon: "📦", requires_approval: false },
+  { id: 11, name: "Cleaning Supplies", color: "#84CC16", icon: "🧹", requires_approval: false },
+  { id: 12, name: "Stationery", color: "#84CC16", icon: "✏️", requires_approval: false },
+  { id: 13, name: "Bank / CDM Charges", color: "#64748B", icon: "🏦", requires_approval: false },
+  { id: 14, name: "Other Expenses", color: "#6B7280", icon: "📝", requires_approval: false },
+  { id: 15, name: "Entrepreneur Withdrawal", color: "#4F46E5", icon: "💼", requires_approval: true },
+  { id: 16, name: "Shortage", color: "#EF4444", icon: "📉", requires_approval: false },
+  { id: 17, name: "Daily Adjustment", color: "#F59E0B", icon: "⚖️", requires_approval: false },
+  { id: 18, name: "Refreshments / Pantry", color: "#0EA5E9", icon: "💧", requires_approval: false },
+  { id: 19, name: "Software Subscriptions", color: "#8B5CF6", icon: "☁️", requires_approval: false },
+];
+
+const STATUSES = [
+  { id: "pending", name: "Pending", chip: "bg-amber-50 text-amber-700 ring-amber-200", dot: "bg-amber-500" },
+  { id: "approved", name: "Approved", chip: "bg-emerald-50 text-emerald-700 ring-emerald-200", dot: "bg-emerald-500" },
+  { id: "auto_approved", name: "Auto approved", chip: "bg-violet-50 text-violet-700 ring-violet-200", dot: "bg-violet-500" },
+  { id: "paid", name: "Paid", chip: "bg-sky-50 text-sky-700 ring-sky-200", dot: "bg-sky-500" },
+  { id: "rejected", name: "Rejected", chip: "bg-rose-50 text-rose-700 ring-rose-200", dot: "bg-rose-500" },
+];
+
+const WALLET_TYPE_META = {
+  bank: { label: "Bank account", icon: "🏦" },
+  cash: { label: "Cash", icon: "💰" },
+  credit_card: { label: "Credit card", icon: "💳" },
+  digital: { label: "Digital wallet", icon: "📱" },
+  savings: { label: "Savings", icon: "🏧" },
+};
+const getWalletMeta = (wallet) => WALLET_TYPE_META[wallet?.type || wallet?.wallet_type] || { label: "Wallet", icon: "💼" };
+
+const PAYMENT_METHODS = [
+  { id: "cash", name: "Cash", icon: "💰" },
+  { id: "bank_transfer", name: "Bank transfer", icon: "🏦" },
+  { id: "cheque", name: "Cheque", icon: "📝" },
+  { id: "online", name: "Online payment", icon: "💳" },
+];
+const paymentMeta = (id) => PAYMENT_METHODS.find((p) => p.id === id);
+
+const inputCls =
+  "w-full rounded-lg border bg-white px-3 py-2.5 text-sm text-slate-800 placeholder-slate-400 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40 disabled:bg-slate-50";
+
+/* ---------- Small components ---------- */
+const StatusChip = ({ status }) => {
+  const s = STATUSES.find((x) => x.id === status) || { name: status || "Unknown", chip: "bg-slate-100 text-slate-600 ring-slate-200", dot: "bg-slate-400" };
+  return (
+    <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${s.chip}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.name}
+    </span>
+  );
+};
+
+const Field = ({ label, required, error, hint, children }) => (
+  <div className="space-y-1.5" data-error={error ? "true" : undefined}>
+    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+      {label}{required && <span className="text-rose-500"> *</span>}
+    </span>
+    {children}
+    {error ? (
+      <p className="flex items-center gap-1 text-xs text-rose-600"><FiAlertCircle className="h-3.5 w-3.5 shrink-0" />{error}</p>
+    ) : hint ? (
+      <p className="text-xs text-slate-400">{hint}</p>
+    ) : null}
+  </div>
+);
+
+const IconInput = ({ icon: Icon, error, ...props }) => (
+  <span className="relative block">
+    <Icon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+    <input {...props} className={`${inputCls} pl-9 ${error ? "border-rose-300" : "border-slate-200"}`} />
+  </span>
+);
+
+const Modal = ({ onClose, children, width = "max-w-md" }) => {
   useEffect(() => {
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const walletsData = await getWalletsForCentre();
-        setWallets(walletsData);
-        const expenseData = await getMyExpenses();
-        setExpenses(expenseData);
-      } catch (err) {
-        toast.error("Failed to load expenses or wallets");
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadData();
-  }, []);
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <motion.div
+      initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+      onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog" aria-modal="true"
+    >
+      <motion.div
+        initial={{ opacity: 0, y: 12, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 12 }}
+        className={`max-h-[90vh] w-full ${width} overflow-y-auto rounded-2xl bg-white shadow-xl`}
+      >
+        {children}
+      </motion.div>
+    </motion.div>
+  );
+};
 
-  // State variables
+const emptyForm = () => ({
+  category_id: "",
+  amount: "",
+  description: "",
+  payment_method: "cash",
+  wallet_id: "",
+  expense_date: new Date().toLocaleDateString("en-CA", { timeZone: IST }),
+  receipt_number: "",
+  remarks: "",
+});
+
+const ExpenseEntry = () => {
   const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [wallets, setWallets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showCorrectModal, setShowCorrectModal] = useState(false);
   const [correctingExpense, setCorrectingExpense] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+
+  const now = new Date();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [selectedStatus, setSelectedStatus] = useState("all");
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [selectedMonth, setSelectedMonth] = useState(now.getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(now.getFullYear());
   const [selectedWallet, setSelectedWallet] = useState("all");
-  const [wallets, setWallets] = useState([]);
+  const [visible, setVisible] = useState(PAGE_SIZE);
 
-  // Expense statuses (UI helper)
-  const statuses = [
-    { id: "pending", name: "Pending", color: "bg-yellow-100 text-yellow-800" },
-    { id: "approved", name: "Approved", color: "bg-green-100 text-green-800" },
-    { id: "rejected", name: "Rejected", color: "bg-red-100 text-red-800" },
-    { id: "paid", name: "Paid", color: "bg-blue-100 text-blue-800" },
-    { id: "auto_approved", name: "Auto Approved", color: "bg-purple-100 text-purple-800" }
-  ];
+  const [newExpense, setNewExpense] = useState(emptyForm());
+  const [categorySearch, setCategorySearch] = useState("");
+  const [errors, setErrors] = useState({});
+  const [errorTick, setErrorTick] = useState(0);
+  const [correctionForm, setCorrectionForm] = useState({ amount: "", wallet_id: "", reason: "" });
+  const reqRef = useRef(0);
 
-  const WALLET_TYPE_META = {
-    bank: { label: "Bank Account", icon: "🏦", color: "text-blue-600", bg: "bg-blue-50" },
-    cash: { label: "Cash", icon: "💰", color: "text-green-600", bg: "bg-green-50" },
-    credit_card: { label: "Credit Card", icon: "💳", color: "text-purple-600", bg: "bg-purple-50" },
-    digital: { label: "Digital Wallet", icon: "📱", color: "text-indigo-600", bg: "bg-indigo-50" },
-    savings: { label: "Savings", icon: "🏧", color: "text-teal-600", bg: "bg-teal-50" },
-  };
-
-  const getWalletMeta = (wallet) => {
-    const type = wallet.type || wallet.wallet_type;
-    return WALLET_TYPE_META[type] || {
-      label: "Wallet",
-      icon: "💼",
-      color: "text-gray-600",
-      bg: "bg-gray-50",
-    };
-  };
-
-  const paymentMethods = [
-    { id: "cash", name: "Cash", icon: "💰" },
-    { id: "bank_transfer", name: "Bank Transfer", icon: "🏦" },
-    { id: "cheque", name: "Cheque", icon: "📝" },
-    { id: "online", name: "Online Payment", icon: "💳" }
-  ];
-
-  // New expense form data
-  const [newExpense, setNewExpense] = useState({
-    category_id: "",
-    amount: "",
-    description: "",
-    payment_method: "cash",
-    wallet_id: "",
-    expense_date: new Date().toISOString().split('T')[0],
-    receipt_number: "",
-    remarks: "",
-    is_recurring: false,
-    recurrence_type: "none",
-    attachment: ""
-  });
-
-  // Correction form state (stores only the editable fields)
-  const [correctionForm, setCorrectionForm] = useState({
-    amount: "",
-    wallet_id: "",
-    reason: ""
-  });
-
-  // Calculate wallet balances based on wallets
-  const walletBalances = wallets.reduce((acc, w) => {
-    acc[w.id] = Number(w.balance);
-    return acc;
-  }, {});
-
-  // Stats calculation
-  const calculateStats = () => {
-    const currentMonthExpenses = expenses.filter(exp => {
-      if (!exp.expense_date) return false;
-      const expenseDate = new Date(exp.expense_date);
-      return (
-        expenseDate.getMonth() + 1 === selectedMonth &&
-        expenseDate.getFullYear() === selectedYear
-      );
-    });
-    const totalAmount = currentMonthExpenses.reduce((sum, exp) => {
-      const amount = Number(exp.amount);
-      return sum + (isNaN(amount) ? 0 : amount);
-    }, 0);
-    const pendingCount = currentMonthExpenses.filter(exp => exp.status === "pending").length;
-    const autoApprovedCount = currentMonthExpenses.filter(exp => exp.status === "auto_approved").length;
-    const approvedCount = currentMonthExpenses.filter(exp => exp.status === "approved").length;
-    const paidCount = currentMonthExpenses.filter(exp => exp.status === "paid").length;
-    return {
-      totalAmount,
-      pendingCount,
-      autoApprovedCount,
-      approvedCount,
-      paidCount,
-      totalCount: currentMonthExpenses.length
-    };
-  };
-
-  const stats = calculateStats();
-
-  // Filter expenses
-  const filteredExpenses = expenses.filter(expense => {
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
-      const matchesSearch =
-        expense.description.toLowerCase().includes(query) ||
-        expense.receipt_number.toLowerCase().includes(query) ||
-        expense.category.toLowerCase().includes(query) ||
-        expense.remarks.toLowerCase().includes(query) ||
-        expense.wallet_name.toLowerCase().includes(query);
-      if (!matchesSearch) return false;
+  /* ---------- data ---------- */
+  const loadData = async (isRefresh = false) => {
+    const req = ++reqRef.current;
+    if (isRefresh) setRefreshing(true);
+    setLoadError(false);
+    try {
+      const [w, e] = await Promise.allSettled([getWalletsForCentre(), getMyExpenses()]);
+      if (req !== reqRef.current) return;
+      if (w.status === "fulfilled") setWallets(toList(w.value, "wallets"));
+      else toast.error("Failed to load wallets");
+      if (e.status === "fulfilled") setExpenses(toList(e.value, "expenses"));
+      else { setLoadError(true); toast.error("Failed to load expenses"); }
+    } finally {
+      if (req === reqRef.current) { setLoading(false); setRefreshing(false); }
     }
-    if (selectedCategory !== "all" && expense.category_id !== parseInt(selectedCategory)) return false;
-    if (selectedStatus !== "all" && expense.status !== selectedStatus) return false;
-    if (selectedWallet !== "all" && expense.wallet_id !== parseInt(selectedWallet)) return false;
-    const expenseDate = new Date(expense.expense_date);
-    if (expenseDate.getMonth() + 1 !== selectedMonth || expenseDate.getFullYear() !== selectedYear) return false;
-    return true;
-  });
+  };
+  useEffect(() => { loadData(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
 
-  // Handle form input change
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setNewExpense(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+  const walletBalances = useMemo(() => wallets.reduce((acc, w) => { acc[w.id] = Number(w.balance); return acc; }, {}), [wallets]);
+  const totalBalance = wallets.reduce((s, w) => s + (Number(w.balance) || 0), 0);
+
+  /* ---------- filtering & stats ---------- */
+  const inSelectedMonth = (exp) => {
+    const day = ymd(exp.expense_date);
+    return !!day && Number(day.slice(5, 7)) === selectedMonth && Number(day.slice(0, 4)) === selectedYear;
   };
 
-  // Handle correction form change
-  const handleCorrectionInputChange = (e) => {
-    const { name, value } = e.target;
-    setCorrectionForm(prev => ({ ...prev, [name]: value }));
-  };
+  const stats = useMemo(() => {
+    const month = expenses.filter(inSelectedMonth);
+    const sum = month.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const pending = month.filter((e) => e.status === "pending");
+    return {
+      totalAmount: sum,
+      totalCount: month.length,
+      pendingCount: pending.length,
+      pendingAmount: pending.reduce((s, e) => s + (Number(e.amount) || 0), 0),
+      autoApprovedCount: month.filter((e) => e.status === "auto_approved").length,
+      approvedCount: month.filter((e) => e.status === "approved" || e.status === "auto_approved" || e.status === "paid").length,
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenses, selectedMonth, selectedYear]);
 
-  // Open correction modal for a given expense
-  const openCorrectModal = (expense) => {
-    // Pre‑fill with current values
-    setCorrectingExpense(expense);
-    setCorrectionForm({
-      amount: expense.amount.toString(),
-      wallet_id: expense.wallet_id.toString(),
-      reason: ""
+  const filteredExpenses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return expenses.filter((expense) => {
+      if (q) {
+        // any of these can be null, so never call string methods on them directly
+        const hit = [expense.description, expense.receipt_number, expense.category, expense.remarks, expense.wallet_name]
+          .some((f) => f && String(f).toLowerCase().includes(q));
+        if (!hit) return false;
+      }
+      if (selectedCategory !== "all" && expense.category_id !== parseInt(selectedCategory, 10)) return false;
+      if (selectedStatus !== "all" && expense.status !== selectedStatus) return false;
+      if (selectedWallet !== "all" && expense.wallet_id !== parseInt(selectedWallet, 10)) return false;
+      return inSelectedMonth(expense);
     });
-    setShowCorrectModal(true);
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expenses, searchQuery, selectedCategory, selectedStatus, selectedWallet, selectedMonth, selectedYear]);
 
-  // Handle add expense (unchanged)
+  useEffect(() => { setVisible(PAGE_SIZE); }, [searchQuery, selectedCategory, selectedStatus, selectedWallet, selectedMonth, selectedYear]);
+  const shownExpenses = filteredExpenses.slice(0, visible);
+
+  /* ---------- add expense ---------- */
+  const filteredCategories = useMemo(() => {
+    const q = categorySearch.trim().toLowerCase();
+    return CATEGORIES.filter((c) => c.name.toLowerCase().includes(q));
+  }, [categorySearch]);
+
+  const selectedCat = CATEGORIES.find((c) => c.id === parseInt(newExpense.category_id, 10));
+  const selectedFormWallet = wallets.find((w) => w.id === parseInt(newExpense.wallet_id, 10));
+  const amountNum = Number(newExpense.amount) || 0;
+  const formBalance = selectedFormWallet ? Number(selectedFormWallet.balance) || 0 : 0;
+  const overdraw = !!selectedFormWallet && amountNum > formBalance;
+
+  useEffect(() => {
+    if (errorTick === 0) return;
+    document.querySelector('[data-error="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [errorTick]);
+
+  const setField = (name, value) => {
+    setNewExpense((prev) => ({ ...prev, [name]: value }));
+    setErrors((prev) => (prev[name] ? { ...prev, [name]: undefined } : prev));
+  };
+  const handleInputChange = (e) => setField(e.target.name, e.target.value);
+
+  const resetForm = () => { setNewExpense(emptyForm()); setCategorySearch(""); setErrors({}); };
+  const closeAdd = () => { setShowAddModal(false); resetForm(); };
+
   const handleAddExpense = async (e) => {
     e.preventDefault();
+    if (saving) return;
+    const er = {};
+    if (!selectedCat) er.category_id = "Select a category";
+    if (!(amountNum > 0)) er.amount = "Enter an amount greater than 0";
+    if (!newExpense.description.trim()) er.description = "Add a short description";
+    if (!newExpense.expense_date) er.expense_date = "Select the expense date";
+    if (!selectedFormWallet) er.wallet_id = "Select the wallet the money is debited from";
+    setErrors(er);
+    if (Object.keys(er).length > 0) { setErrorTick((t) => t + 1); return; }
+
+    setSaving(true);
     try {
-      const categoryObj = categories.find(c => c.id === parseInt(newExpense.category_id));
-      if (!categoryObj) {
-        toast.error("Invalid category selected");
-        return;
-      }
       const payload = {
-        category: categoryObj.name,
-        category_id: categoryObj.id,
+        category: selectedCat.name,
+        category_id: selectedCat.id,
         amount: Number(newExpense.amount),
-        description: newExpense.description,
+        description: newExpense.description.trim(),
         payment_method: newExpense.payment_method,
         wallet_id: Number(newExpense.wallet_id),
         expense_date: newExpense.expense_date,
         receipt_number: newExpense.receipt_number,
         remarks: newExpense.remarks,
-        requires_approval: categoryObj.requires_approval,
+        requires_approval: selectedCat.requires_approval,
       };
       await createExpense(payload);
-      toast.success(
-        categoryObj.requires_approval
-          ? "Expense submitted for admin approval"
-          : "Expense auto-approved and wallet debited"
-      );
-      setShowAddModal(false);
-      resetForm();
-      const [updatedExpenses, updatedWallets] = await Promise.all([
-        getMyExpenses(),
-        getWalletsForCentre(),
-      ]);
-      setExpenses(updatedExpenses);
-      setWallets(updatedWallets);
+      toast.success(selectedCat.requires_approval ? "Expense submitted for admin approval" : "Expense auto-approved and wallet debited");
+      closeAdd();
+      await loadData(true);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to add expense");
+      toast.error(errMsg(err, "Failed to add expense"));
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Handle correction submission
+  /* ---------- correct / delete ---------- */
+  const openCorrectModal = (expense) => {
+    setCorrectingExpense(expense);
+    setCorrectionForm({ amount: String(expense.amount ?? ""), wallet_id: expense.wallet_id != null ? String(expense.wallet_id) : "", reason: "" });
+    setShowCorrectModal(true);
+  };
+  const closeCorrect = () => { setShowCorrectModal(false); setCorrectingExpense(null); };
+
   const handleCorrectExpense = async (e) => {
     e.preventDefault();
-    if (!correctionForm.amount || !correctionForm.wallet_id) {
-      toast.error("Please fill amount and select a wallet");
+    if (!correctionForm.amount || Number(correctionForm.amount) <= 0 || !correctionForm.wallet_id) {
+      toast.error("Enter an amount greater than 0 and select a wallet");
       return;
     }
+    setSaving(true);
     try {
       await correctExpense(correctingExpense.id, {
         amount: Number(correctionForm.amount),
         wallet_id: Number(correctionForm.wallet_id),
-        reason: correctionForm.reason || "Correction"
+        reason: correctionForm.reason || "Correction",
       });
       toast.success("Expense corrected successfully");
-      setShowCorrectModal(false);
-      setCorrectingExpense(null);
-      const [updatedExpenses, updatedWallets] = await Promise.all([
-        getMyExpenses(),
-        getWalletsForCentre(),
-      ]);
-      setExpenses(updatedExpenses);
-      setWallets(updatedWallets);
+      closeCorrect();
+      await loadData(true);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to correct expense");
+      toast.error(errMsg(err, "Failed to correct expense"));
+    } finally {
+      setSaving(false);
     }
   };
 
-  // Handle delete expense (unchanged)
-  const handleDeleteExpense = async (expenseId) => {
-    if (!window.confirm("Are you sure you want to delete this expense?")) return;
+  const confirmDelete = async () => {
+    const target = deleteTarget;
+    setDeleteTarget(null);
+    if (!target) return;
+    setBusyId(target.id);
     try {
-      await deleteExpense(expenseId);
+      await deleteExpense(target.id);
       toast.success("Expense deleted successfully");
-      const updatedExpenses = await getMyExpenses();
-      setExpenses(updatedExpenses);
+      await loadData(true);
     } catch (err) {
-      toast.error(err.response?.data?.error || "Failed to delete expense");
+      toast.error(errMsg(err, "Failed to delete expense"));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  // Reset add form
-  const resetForm = () => {
-    setNewExpense({
-      category_id: "",
-      amount: "",
-      description: "",
-      payment_method: "cash",
-      wallet_id: "",
-      expense_date: new Date().toISOString().split('T')[0],
-      receipt_number: "",
-      remarks: "",
-      is_recurring: false,
-      recurrence_type: "none",
-      attachment: ""
-    });
-  };
-
-  // Formatting functions
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      minimumFractionDigits: 0,
-    }).format(amount || 0);
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "-";
-    const d = new Date(dateString);
-    return isNaN(d) ? "-" : d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const getStatusIcon = (status) => {
-    switch(status) {
-      case 'approved': return <FiCheck className="text-green-500" />;
-      case 'rejected': return <FiX className="text-red-500" />;
-      case 'pending': return <FiClock className="text-yellow-500" />;
-      case 'paid': return <FiDollarSign className="text-blue-500" />;
-      case 'auto_approved': return <FiCheck className="text-purple-500" />;
-      default: return null;
-    }
-  };
-
-  const getPaymentIcon = (method) => {
-    const payment = paymentMethods.find(p => p.id === method);
-    return payment ? payment.icon : '💵';
-  };
-
-  const months = [
-    "January", "February", "March", "April", "May", "June",
-    "July", "August", "September", "October", "November", "December"
-  ];
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 3 }, (_, i) => currentYear - i);
-
+  /* ---------- export ---------- */
   const exportToCSV = () => {
-    const csvContent = [
+    if (filteredExpenses.length === 0) { toast.info("Nothing to export for this selection"); return; }
+    const rows = [
       ["Date", "Category", "Description", "Amount", "Wallet", "Payment Method", "Receipt No", "Status", "Remarks"],
-      ...filteredExpenses.map(exp => [
-        exp.expense_date,
-        exp.category,
-        exp.description,
-        exp.amount,
-        exp.wallet_name,
-        exp.payment_method,
-        exp.receipt_number,
-        exp.status,
-        exp.remarks
-      ])
-    ].map(row => row.join(",")).join("\n");
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
+      ...filteredExpenses.map((e) => [ymd(e.expense_date), e.category, e.description, e.amount, e.wallet_name, e.payment_method, e.receipt_number, e.status, e.remarks]),
+    ];
+    const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `expenses_${selectedMonth}_${selectedYear}.csv`;
-    a.click();
-    toast.success("Expenses exported successfully!");
+    a.download = `expenses_${selectedYear}_${String(selectedMonth).padStart(2, "0")}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filteredExpenses.length} entries`);
   };
 
-  const [categorySearch, setCategorySearch] = useState("");
-  const filteredCategories = categories.filter(category => 
-    category.name.toLowerCase().includes(categorySearch.toLowerCase())
+  const resetFilters = () => {
+    setSearchQuery(""); setSelectedCategory("all"); setSelectedStatus("all"); setSelectedWallet("all");
+    setSelectedMonth(now.getMonth() + 1); setSelectedYear(now.getFullYear());
+  };
+  const filtersActive = searchQuery || selectedCategory !== "all" || selectedStatus !== "all" || selectedWallet !== "all"
+    || selectedMonth !== now.getMonth() + 1 || selectedYear !== now.getFullYear();
+
+  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const years = useMemo(() => {
+    const y = new Date().getFullYear();
+    const list = Array.from({ length: 3 }, (_, i) => y - i);
+    if (!list.includes(selectedYear)) list.push(selectedYear);
+    return list.sort((a, b) => b - a);
+  }, [selectedYear]);
+
+  const tiles = [
+    { label: "Monthly total", value: formatCurrency(stats.totalAmount), sub: `${months[selectedMonth - 1]} ${selectedYear}`, icon: FiDollarSign, tone: "bg-navy-700/10 text-navy-700" },
+    { label: "Pending approval", value: stats.pendingCount, sub: `${formatCurrency(stats.pendingAmount)} waiting`, icon: FiClock, tone: "bg-amber-50 text-amber-600" },
+    { label: "Approved", value: stats.approvedCount, sub: `${stats.autoApprovedCount} auto-approved`, icon: FiCheck, tone: "bg-emerald-50 text-emerald-600" },
+    { label: "Total entries", value: stats.totalCount, sub: "this month", icon: FiFileText, tone: "bg-violet-50 text-violet-600" },
+  ];
+
+  const todayLabel = new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric", timeZone: IST });
+
+  const renderActions = (expense) => {
+    const canDelete = expense.status === "pending" && expense.requires_approval === true;
+    const canCorrect = expense.status !== "pending"; // any non-pending expense can be corrected
+    const busy = busyId === expense.id;
+    const btn = "rounded-lg p-2 transition disabled:opacity-40";
+    if (!canDelete && !canCorrect) return <span className="text-xs italic text-slate-400">No actions available</span>;
+    return (
+      <div className="flex items-center gap-1">
+        {canDelete && <button type="button" disabled={busy} onClick={() => setDeleteTarget(expense)} className={`${btn} text-rose-600 hover:bg-rose-50`} title="Delete expense" aria-label="Delete expense"><FiTrash2 className="h-[18px] w-[18px]" /></button>}
+        {canCorrect && <button type="button" disabled={busy} onClick={() => openCorrectModal(expense)} className={`${btn} text-navy-700 hover:bg-slate-100`} title="Correct expense" aria-label="Correct expense"><FiEdit3 className="h-[18px] w-[18px]" /></button>}
+      </div>
+    );
+  };
+
+  const renderDetails = (expense) => {
+    const category = CATEGORIES.find((c) => c.id === expense.category_id);
+    const pm = paymentMeta(expense.payment_method);
+    return (
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-lg">{category?.icon || "📝"}</span>
+        <div className="min-w-0">
+          <p className="font-medium text-slate-900">{expense.description}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1"><FiCalendar className="h-3 w-3" />{formatDate(expense.expense_date)}</span>
+            <span className="rounded-full px-2 py-0.5 font-medium" style={{ backgroundColor: `${category?.color || "#6B7280"}1f`, color: category?.color || "#6B7280" }}>{expense.category}</span>
+            {expense.receipt_number && <span className="inline-flex items-center gap-1"><FiFileText className="h-3 w-3" />{expense.receipt_number}</span>}
+            {expense.payment_method && <span>{pm?.icon} {pm?.name || String(expense.payment_method).replace(/_/g, " ")}</span>}
+            {expense.is_recurring && <span className="rounded-full bg-violet-50 px-2 py-0.5 font-medium text-violet-700">Recurring{expense.recurrence_type && expense.recurrence_type !== "none" ? ` (${expense.recurrence_type})` : ""}</span>}
+          </div>
+          {expense.remarks && <p className="mt-2 rounded-lg bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600">{expense.remarks}</p>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderStatus = (expense) => (
+    <div className="space-y-1.5">
+      <StatusChip status={expense.status} />
+      <p className={`text-xs ${expense.requires_approval ? "text-amber-600" : "text-emerald-600"}`}>{expense.requires_approval ? "Needs admin approval" : "Auto-approved"}</p>
+      <p className="text-xs text-slate-400">Submitted {formatDate(expense.submitted_at)}{expense.approved_at ? ` · Approved ${formatDate(expense.approved_at)}` : ""}</p>
+      {expense.approved_by && <p className="flex items-center gap-1 text-xs text-slate-500"><FiUser className="h-3 w-3" />By {expense.approved_by}</p>}
+    </div>
   );
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+        <div className="mx-auto max-w-7xl animate-pulse space-y-4">
+          <div className="h-10 w-80 rounded-lg bg-white" />
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-24 rounded-xl bg-white" />)}</div>
+          <div className="h-28 rounded-2xl bg-white" />
+          <div className="h-80 rounded-2xl bg-white" />
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-blue-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+      <div className="mx-auto max-w-7xl">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-gray-100">
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">Expense Entry - Staff Portal</h1>
-            <p className="text-gray-600 mt-1">
-              Enter and track your expense claims - {new Date().toLocaleDateString('en-IN', { 
-                weekday: 'long', 
-                year: 'numeric', 
-                month: 'long', 
-                day: 'numeric' 
+            <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Expense Entry</h1>
+            <p className="mt-1 text-sm text-slate-500">Enter and track your expense claims · {todayLabel}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button" onClick={() => loadData(true)} disabled={refreshing} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-navy-700 hover:bg-slate-50 disabled:opacity-60">
+              <FiRefreshCw className={refreshing ? "animate-spin" : ""} /> Refresh
+            </button>
+            <button type="button" onClick={() => setShowAddModal(true)} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-navy-800">
+              <FiPlus /> New expense entry
+            </button>
+          </div>
+        </div>
+
+        {loadError && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <span className="flex items-center gap-2"><FiAlertCircle className="h-4 w-4" /> Could not load your expenses.</span>
+            <button type="button" onClick={() => loadData(true)} className="font-medium underline">Retry</button>
+          </div>
+        )}
+
+        {/* Stats */}
+        <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {tiles.map((t) => (
+            <div key={t.label} className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-4">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${t.tone}`}><t.icon className="h-5 w-5" /></span>
+              <div className="min-w-0">
+                <p className="truncate text-xs text-slate-500">{t.label}</p>
+                <p className="truncate text-xl font-bold tabular-nums text-slate-900">{t.value}</p>
+                <p className="truncate text-xs text-slate-400">{t.sub}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Wallets */}
+        <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-5">
+          <div className="mb-3 flex items-baseline justify-between gap-2">
+            <h2 className="text-sm font-semibold text-slate-800">Wallet balances</h2>
+            {wallets.length > 0 && <p className="text-sm text-slate-500">Total <span className="font-semibold tabular-nums text-slate-900">{formatCurrency(totalBalance)}</span></p>}
+          </div>
+          {wallets.length === 0 ? (
+            <p className="text-sm text-slate-400">No wallets found for your centre.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-5">
+              {wallets.map((wallet) => {
+                const meta = getWalletMeta(wallet);
+                const neg = Number(wallet.balance) < 0;
+                return (
+                  <div key={wallet.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{meta.icon}</span>
+                      <span className="truncate text-sm font-medium text-slate-800" title={wallet.name}>{wallet.name}</span>
+                    </div>
+                    <p className="mt-0.5 text-xs text-slate-500">{meta.label}</p>
+                    <p className={`mt-1.5 text-lg font-bold tabular-nums ${neg ? "text-rose-600" : "text-slate-900"}`}>{formatCurrency(walletBalances[wallet.id])}</p>
+                  </div>
+                );
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Filters */}
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-12">
+            <select className={`${inputCls} border-slate-200 lg:col-span-2`} value={selectedMonth} onChange={(e) => setSelectedMonth(parseInt(e.target.value, 10))} aria-label="Month">
+              {months.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+            <select className={`${inputCls} border-slate-200 lg:col-span-1`} value={selectedYear} onChange={(e) => setSelectedYear(parseInt(e.target.value, 10))} aria-label="Year">
+              {years.map((y) => <option key={y} value={y}>{y}</option>)}
+            </select>
+            <select className={`${inputCls} border-slate-200 lg:col-span-3`} value={selectedCategory} onChange={(e) => setSelectedCategory(e.target.value)} aria-label="Category">
+              <option value="all">All categories</option>
+              {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.name}{c.requires_approval ? " · needs approval" : ""}</option>)}
+            </select>
+            <select className={`${inputCls} border-slate-200 lg:col-span-3`} value={selectedWallet} onChange={(e) => setSelectedWallet(e.target.value)} aria-label="Wallet">
+              <option value="all">All wallets</option>
+              {wallets.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+            <select className={`${inputCls} col-span-2 border-slate-200 lg:col-span-3`} value={selectedStatus} onChange={(e) => setSelectedStatus(e.target.value)} aria-label="Status">
+              <option value="all">All status</option>
+              {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input type="text" placeholder="Search description, receipt, wallet…" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className={`${inputCls} border-slate-200 pl-9`} aria-label="Search expenses" />
+            </div>
+            {filtersActive && (
+              <button type="button" onClick={resetFilters} className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-medium text-slate-600 hover:bg-slate-50"><FiRefreshCw className="h-4 w-4" /> Reset</button>
+            )}
+            <button type="button" onClick={exportToCSV} className="inline-flex items-center justify-center gap-2 rounded-lg bg-navy-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-navy-800">
+              <FiDownload className="h-4 w-4" /> Export CSV
+            </button>
+          </div>
+        </div>
+
+        {/* Entries */}
+        <div className="mb-2 flex items-baseline justify-between px-1">
+          <h2 className="text-sm font-semibold text-slate-800">My expense entries</h2>
+          <span className="text-sm text-slate-500">Showing {shownExpenses.length} of {filteredExpenses.length} · {expenses.length} in total</span>
+        </div>
+
+        {filteredExpenses.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-14 text-center">
+            <FiInbox className="mx-auto h-10 w-10 text-slate-300" />
+            <h3 className="mt-3 text-sm font-semibold text-slate-800">No expenses found</h3>
+            <p className="mt-1 text-sm text-slate-500">
+              {filtersActive ? "Try changing your filters or search." : "Get started by adding your first expense entry."}
             </p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => setShowAddModal(true)}
-            className="mt-4 md:mt-0 bg-[#1e3a5f] hover:bg-[#172a45] text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 shadow-md hover:shadow-lg"
-          >
-            <FiPlus className="mr-2" />
-            New Expense Entry
-          </motion.button>
-        </div>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <motion.div 
-            className="rounded-2xl shadow-lg p-5 border border-blue-200 bg-gradient-to-br from-blue-100 to-blue-50"
-            whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-          >
-            <div className="flex items-center">
-              <FiDollarSign className="text-3xl text-blue-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Monthly Total</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(stats.totalAmount)}</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div 
-            className="rounded-2xl shadow-lg p-5 border border-yellow-200 bg-gradient-to-br from-yellow-100 to-yellow-50"
-            whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-          >
-            <div className="flex items-center">
-              <FiClock className="text-3xl text-yellow-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Pending Approval</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.pendingCount}</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div 
-            className="rounded-2xl shadow-lg p-5 border border-purple-200 bg-gradient-to-br from-purple-100 to-purple-50"
-            whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-          >
-            <div className="flex items-center">
-              <FiCheck className="text-3xl text-purple-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Auto Approved</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.autoApprovedCount}</p>
-              </div>
-            </div>
-          </motion.div>
-
-          <motion.div 
-            className="rounded-2xl shadow-lg p-5 border border-green-200 bg-gradient-to-br from-green-100 to-green-50"
-            whileHover={{ y: -5, boxShadow: "0 10px 25px -5px rgba(0, 0, 0, 0.1)" }}
-          >
-            <div className="flex items-center">
-              <FiFileText className="text-3xl text-green-600 mr-3" />
-              <div>
-                <p className="text-sm text-gray-600">Total Entries</p>
-                <p className="text-2xl font-bold text-gray-900">{stats.totalCount}</p>
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        {/* Wallet Balances */}
-        <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4">Wallet Balances</h3>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            {wallets.map(wallet => (
-              <div key={wallet.id} className="border border-gray-100 rounded-xl p-4 bg-gray-50">
-                <div className="flex items-center mb-2">
-                  <span className="text-xl mr-2">{getWalletMeta(wallet).icon}</span>
-                  <span className="font-medium text-gray-900">{wallet.name}</span>
+        ) : (
+          <>
+            {/* phones: cards */}
+            <div className="space-y-3 md:hidden">
+              {shownExpenses.map((expense) => (
+                <div key={expense.id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    {renderDetails(expense)}
+                    <p className="shrink-0 text-lg font-bold tabular-nums text-slate-900">{formatCurrency(expense.amount)}</p>
+                  </div>
+                  <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-3">
+                    <span className="text-xs text-slate-500">{getWalletMeta(wallets.find((w) => w.id === expense.wallet_id)).icon} {expense.wallet_name}</span>
+                    {renderActions(expense)}
+                  </div>
+                  <div className="mt-3 border-t border-slate-100 pt-3">{renderStatus(expense)}</div>
                 </div>
-                <div className="text-xs text-gray-500 mt-1">{getWalletMeta(wallet).label}</div>
-                <div className="text-sm text-gray-600">Balance:</div>
-                <div className="text-lg font-bold text-gray-900">{formatCurrency(walletBalances[wallet.id])}</div>
-              </div>
-            ))}
-          </div>
-        </div>
+              ))}
+            </div>
 
-        {/* Filters & Actions */}
-        <div className="bg-white p-5 rounded-2xl shadow-lg border border-gray-100 mb-8">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 flex-1">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Month</label>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {months.map((month, index) => (
-                    <option key={index} value={index + 1}>{month}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Year</label>
-                <select
-                  value={selectedYear}
-                  onChange={(e) => setSelectedYear(parseInt(e.target.value))}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {years.map(year => (
-                    <option key={year} value={year}>{year}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => setSelectedCategory(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Categories</option>
-                  {categories.map(category => (
-                    <option key={category.id} value={category.id}>
-                      {category.name} {category.requires_approval ? '👑' : '✅'}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Wallet</label>
-                <select
-                  value={selectedWallet}
-                  onChange={(e) => setSelectedWallet(e.target.value)}
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="all">All Wallets</option>
-                  {wallets.map(wallet => (
-                    <option key={wallet.id} value={wallet.id}>{wallet.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={exportToCSV}
-                className="px-4 py-3 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium flex items-center"
-              >
-                <FiDownload className="mr-2" />
-                Export CSV
-              </motion.button>
-            </div>
-          </div>
-
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
-              <select
-                value={selectedStatus}
-                onChange={(e) => setSelectedStatus(e.target.value)}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="all">All Status</option>
-                {statuses.map(status => (
-                  <option key={status.id} value={status.id}>{status.name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search expenses</label>
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search by description, receipt, wallet..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                <svg
-                  className="absolute left-4 top-3.5 h-5 w-5 text-gray-400"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 text-sm text-gray-600">
-            <span className="font-medium">Legend:</span> 
-            <span className="ml-3">👑 = Requires Admin Approval</span>
-            <span className="ml-3">✅ = Auto Approved</span>
-          </div>
-        </div>
-
-        {/* Expenses Table */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 bg-gray-50">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-semibold text-gray-800">My Expense Entries</h2>
-              <span className="text-sm text-gray-600">
-                Showing {filteredExpenses.length} of {expenses.length} entries
-              </span>
-            </div>
-          </div>
-
-          {filteredExpenses.length === 0 ? (
-            <div className="text-center py-12">
-              <FiFileText className="mx-auto h-12 w-12 text-gray-400" />
-              <h3 className="mt-4 text-lg font-medium text-gray-900">No expenses found</h3>
-              <p className="mt-2 text-gray-600">
-                {searchQuery || selectedCategory !== "all" || selectedStatus !== "all"
-                  ? "Try changing your filters or search query."
-                  : "Get started by adding your first expense entry."}
-              </p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            {/* desktop: table */}
+            <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white md:block">
+              <table className="w-full">
+                <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Details</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount & Wallet</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status & Approval</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3">Date & details</th>
+                    <th className="px-4 py-3">Amount & wallet</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredExpenses.map((expense) => {
-                    const canDelete = expense.status === "pending" && expense.requires_approval === true;
-                    const canCorrect = expense.status !== "pending"; // any non‑pending expense can be corrected
-
-                    const status = statuses.find(s => s.id === expense.status);
-                    const category = categories.find(c => c.id === expense.category_id);
-                    const wallet = wallets.find(w => w.id === expense.wallet_id);
-
+                <tbody className="divide-y divide-slate-100">
+                  {shownExpenses.map((expense) => {
+                    const wallet = wallets.find((w) => w.id === expense.wallet_id);
                     return (
-                      <tr key={expense.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="flex items-center">
-                              <span className="text-xl mr-3">{category?.icon || "📝"}</span>
-                              <div>
-                                <p className="font-medium text-gray-900">{expense.description}</p>
-                                <div className="flex items-center gap-3 mt-1">
-                                  <span className="text-sm text-gray-600 flex items-center">
-                                    <FiCalendar className="mr-1 h-4 w-4" />
-                                    {formatDate(expense.expense_date)}
-                                  </span>
-                                  <span className={`px-2.5 py-1 rounded-full text-xs font-medium`}
-                                        style={{ backgroundColor: `${category?.color}20`, color: category?.color }}>
-                                    {expense.category}
-                                    {category?.requires_approval ? ' 👑' : ''}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              {expense.receipt_number && (
-                                <div className="flex items-center text-sm text-gray-600">
-                                  <FiFileText className="mr-1 h-4 w-4" />
-                                  Receipt: {expense.receipt_number}
-                                </div>
-                              )}
-                              <div className="flex items-center text-sm text-gray-600">
-                                <span className="mr-1 text-lg">{getPaymentIcon(expense.payment_method)}</span>
-                                <span className="capitalize">{expense.payment_method.replace('_', ' ')}</span>
-                              </div>
-                            </div>
-                            {expense.remarks && (
-                              <p className="mt-2 text-sm text-gray-600 bg-gray-50 p-2 rounded-lg">{expense.remarks}</p>
-                            )}
-                            {expense.is_recurring && (
-                              <span className="inline-block mt-2 px-2 py-1 text-xs font-medium bg-purple-100 text-purple-800 rounded-full">
-                                🔄 Recurring ({expense.recurrence_type})
-                              </span>
-                            )}
-                          </div>
+                      <tr key={expense.id} className="align-top transition-colors hover:bg-slate-50/70">
+                        <td className="max-w-md px-4 py-3.5">{renderDetails(expense)}</td>
+                        <td className="px-4 py-3.5">
+                          <p className="text-lg font-bold tabular-nums text-slate-900">{formatCurrency(expense.amount)}</p>
+                          <p className="mt-0.5 text-xs text-slate-500">{getWalletMeta(wallet).icon} {expense.wallet_name}</p>
+                          <p className="text-xs text-slate-400">Balance {formatCurrency(walletBalances[expense.wallet_id])}</p>
                         </td>
-                        <td className="px-6 py-4">
-                          <div className="space-y-2">
-                            <div>
-                              <p className="text-2xl font-bold text-gray-900">{formatCurrency(expense.amount)}</p>
-                            </div>
-                            <div className="flex items-center p-3 bg-gray-50 rounded-lg">
-                              <span className="text-xl mr-3">{getWalletMeta(wallet).icon}</span>
-                              <div>
-                                <p className="font-medium text-gray-900">{expense.wallet_name}</p>
-                                <p className="text-xs text-gray-600">Balance: {formatCurrency(walletBalances[expense.wallet_id])}</p>
-                              </div>
-                            </div>
-                            <div className="text-xs text-gray-500">Submitted: {formatDate(expense.submitted_at)}</div>
-                            {expense.approved_at && (
-                              <div className="text-xs text-gray-500">Approved: {formatDate(expense.approved_at)}</div>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center">
-                            {getStatusIcon(expense.status)}
-                            <span className={`ml-2 px-3 py-1 rounded-full text-sm font-medium ${status?.color}`}>
-                              {status?.name}
-                            </span>
-                          </div>
-                          {expense.requires_approval ? (
-                            <div className="mt-2 flex items-center text-sm text-yellow-600 bg-yellow-50 p-2 rounded-lg">
-                              👑 Requires Admin Approval
-                            </div>
-                          ) : (
-                            <div className="mt-2 flex items-center text-sm text-green-600 bg-green-50 p-2 rounded-lg">
-                              ✅ Auto Approved
-                            </div>
-                          )}
-                          {expense.approved_by && (
-                            <div className="mt-2 text-sm text-gray-600 flex items-center">
-                              <FiUser className="mr-1 h-4 w-4" />
-                              By: {expense.approved_by}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex items-center space-x-3">
-                            {canDelete && (
-                              <button
-                                onClick={() => handleDeleteExpense(expense.id)}
-                                title="Delete expense"
-                                className="text-red-600 hover:text-red-800 transition-colors"
-                              >
-                                <FiTrash2 size={22} />
-                              </button>
-                            )}
-                            {canCorrect && (
-                              <button
-                                onClick={() => openCorrectModal(expense)}
-                                title="Correct expense"
-                                className="text-blue-600 hover:text-blue-800 transition-colors"
-                              >
-                                <FiRefreshCw size={22} />
-                              </button>
-                            )}
-                            {/* If neither, show nothing (read‑only state) */}
-                            {!canDelete && !canCorrect && (
-                              <span className="text-sm text-gray-500 italic">No actions available</span>
-                            )}
-                          </div>
-                        </td>
+                        <td className="px-4 py-3.5">{renderStatus(expense)}</td>
+                        <td className="px-4 py-3.5">{renderActions(expense)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+
+            {filteredExpenses.length > shownExpenses.length && (
+              <div className="mt-4 text-center">
+                <button type="button" onClick={() => setVisible((v) => v + PAGE_SIZE)} className="rounded-lg border border-slate-200 bg-white px-5 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                  Show {Math.min(PAGE_SIZE, filteredExpenses.length - shownExpenses.length)} more
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
-      {/* Add Expense Modal (unchanged from original, keep as is) */}
+      {/* Add Expense Modal */}
       <AnimatePresence>
         {showAddModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
-            >
-              <div className="bg-white border-b border-gray-200 p-6">
-                <h2 className="text-xl font-bold text-gray-900">New Expense Entry</h2>
-                <p className="text-sm text-gray-500 mt-1">Select wallet from which money will be debited</p>
+          <Modal onClose={closeAdd} width="max-w-2xl">
+            <div className="border-b border-slate-100 px-6 py-5">
+              <h2 className="text-lg font-semibold text-slate-900">New expense entry</h2>
+              <p className="mt-1 text-sm text-slate-500">Choose what it was for, how much, and which wallet it is paid from.</p>
+            </div>
+            <form onSubmit={handleAddExpense} className="space-y-6 px-6 py-5" noValidate>
+              {/* Category */}
+              <Field label="Category" required error={errors.category_id}>
+                <div className="relative">
+                  <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input type="text" placeholder="Search categories…" value={categorySearch} onChange={(e) => setCategorySearch(e.target.value)} className={`${inputCls} border-slate-200 pl-9`} aria-label="Search categories" />
+                </div>
+                <div className="grid max-h-52 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" role="radiogroup" aria-label="Category">
+                  {filteredCategories.length === 0 && <p className="col-span-full py-4 text-center text-sm text-slate-400">No category matches “{categorySearch}”</p>}
+                  {filteredCategories.map((category) => {
+                    const on = parseInt(newExpense.category_id, 10) === category.id;
+                    return (
+                      <label key={category.id} className={`flex cursor-pointer items-center gap-2.5 rounded-xl border-2 px-3 py-2 transition focus-within:ring-2 focus-within:ring-navy-500/40 ${on ? "border-navy-500 bg-slate-50" : "border-slate-200 hover:border-slate-300"}`}>
+                        <input type="radio" name="category_id" value={category.id} checked={on} onChange={handleInputChange} className="sr-only" />
+                        <span className="text-lg">{category.icon}</span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-medium text-slate-800">{category.name}</span>
+                          <span className={`block text-xs ${category.requires_approval ? "text-amber-600" : "text-emerald-600"}`}>{category.requires_approval ? "Needs admin approval" : "Auto-approved"}</span>
+                        </span>
+                        {on && <FiCheck className="h-4 w-4 shrink-0 text-navy-700" />}
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedCat && (
+                  <p className="flex items-start gap-1.5 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                    <FiInfo className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                    {selectedCat.requires_approval ? "This will be sent to an admin for approval before the wallet is debited." : "This is auto-approved and the wallet is debited straight away."}
+                  </p>
+                )}
+              </Field>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Field label="Amount (₹)" required error={errors.amount}>
+                  <IconInput icon={FiDollarSign} error={errors.amount} type="number" inputMode="decimal" name="amount" value={newExpense.amount} onChange={handleInputChange} placeholder="0.00" min="0" step="0.01" />
+                </Field>
+                <Field label="Expense date" required error={errors.expense_date}>
+                  <IconInput icon={FiCalendar} error={errors.expense_date} type="date" name="expense_date" value={newExpense.expense_date} onChange={handleInputChange} />
+                </Field>
+                <div className="sm:col-span-2">
+                  <Field label="Description" required error={errors.description}>
+                    <IconInput icon={FiFileText} error={errors.description} type="text" name="description" value={newExpense.description} onChange={handleInputChange} placeholder="Brief description of the expense" />
+                  </Field>
+                </div>
               </div>
-              <div className="overflow-y-auto flex-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                <form onSubmit={handleAddExpense} className="p-6">
-                  {/* ... all the existing add form fields ... */}
-                  {/* Keep them exactly as they were, nothing deleted */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Left Column */}
-                    <div className="space-y-5">
-                      {/* Category Search */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Expense Category *
-                          <span className="ml-2 text-xs text-gray-500">👑 = Needs Admin Approval | ✅ = Auto Approved</span>
-                        </label>
-                        <div className="relative mb-2">
-                          <input
-                            type="text"
-                            placeholder="Search categories..."
-                            value={categorySearch}
-                            onChange={(e) => setCategorySearch(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          />
-                          <svg className="absolute right-4 top-3.5 h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                          </svg>
-                        </div>
-                        <div className="space-y-2 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                          {filteredCategories.map(category => (
-                            <label
-                              key={category.id}
-                              className={`flex items-center p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                                parseInt(newExpense.category_id) === category.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                              } ${category.requires_approval ? 'border-l-4 border-l-yellow-500' : 'border-l-4 border-l-green-500'}`}
-                            >
-                              <input type="radio" name="category_id" value={category.id} checked={parseInt(newExpense.category_id) === category.id} onChange={handleInputChange} className="sr-only" required />
-                              <span className="text-xl mr-3">{category.icon}</span>
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900">{category.name}</p>
-                                <p className="text-xs text-gray-600 mt-1">
-                                  {category.requires_approval ? '👑 Requires admin approval' : '✅ Auto approved (no approval needed)'}
-                                </p>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Amount */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Amount (₹) *</label>
-                        <input type="number" name="amount" value={newExpense.amount} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter amount" required min="0" step="0.01" />
-                      </div>
-                      {/* Description */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Description *</label>
-                        <input type="text" name="description" value={newExpense.description} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Brief description of expense" required />
-                      </div>
-                      {/* Date */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Expense Date *</label>
-                        <input type="date" name="expense_date" value={newExpense.expense_date} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" required />
-                      </div>
-                    </div>
-                    {/* Right Column */}
-                    <div className="space-y-5">
-                      {/* Wallet Selection */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Select Wallet (Money will be debited from) *</label>
-                        <div className="space-y-2">
-                          {wallets.map(wallet => (
-                            <label
-                              key={wallet.id}
-                              className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                                parseInt(newExpense.wallet_id) === wallet.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              <div className="flex items-center">
-                                <input type="radio" name="wallet_id" value={wallet.id} checked={parseInt(newExpense.wallet_id) === wallet.id} onChange={handleInputChange} className="sr-only" required />
-                                <span className="text-2xl mr-3">{getWalletMeta(wallet).icon}</span>
-                                <div>
-                                  <p className="font-medium text-gray-900">{wallet.name}</p>
-                                  <p className="text-xs text-gray-600">{getWalletMeta(wallet).label}</p>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <p className="text-sm font-bold text-gray-900">{formatCurrency(walletBalances[wallet.id])}</p>
-                                <p className="text-xs text-gray-600">Available</p>
-                              </div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Payment Method */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method *</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {paymentMethods.map(method => (
-                            <label
-                              key={method.id}
-                              className={`flex items-center p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                                newExpense.payment_method === method.id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                              }`}
-                            >
-                              <input type="radio" name="payment_method" value={method.id} checked={newExpense.payment_method === method.id} onChange={handleInputChange} className="sr-only" required />
-                              <span className="text-xl mr-3">{method.icon}</span>
-                              <div><p className="font-medium text-gray-900">{method.name}</p></div>
-                            </label>
-                          ))}
-                        </div>
-                      </div>
-                      {/* Receipt Number */}
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Receipt/Bill Number</label>
-                        <input type="text" name="receipt_number" value={newExpense.receipt_number} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter receipt number if any" />
-                      </div>
-                      {/* Recurring Expense */}
-                      <div className="space-y-3">
-                        <label className="flex items-center">
-                          <input type="checkbox" name="is_recurring" checked={newExpense.is_recurring} onChange={handleInputChange} className="rounded text-blue-600 focus:ring-blue-500 h-5 w-5" />
-                          <span className="ml-3 text-sm text-gray-700 font-medium">This is a recurring expense</span>
-                        </label>
-                        {newExpense.is_recurring && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Recurrence Type</label>
-                            <select name="recurrence_type" value={newExpense.recurrence_type} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500">
-                              <option value="none">Select type</option>
-                              <option value="monthly">Monthly</option>
-                              <option value="quarterly">Quarterly</option>
-                              <option value="yearly">Yearly</option>
-                            </select>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  {/* Remarks & Attachment */}
-                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Remarks / Additional Notes</label>
-                      <textarea name="remarks" value={newExpense.remarks} onChange={handleInputChange} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Any additional notes or explanation..." rows={3}></textarea>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Attachment (Optional)</label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center hover:border-gray-400 transition-colors">
-                        <FiFileText className="mx-auto h-10 w-10 text-gray-400" />
-                        <p className="mt-2 text-sm text-gray-600">Drag & drop receipt/bill image or click to upload</p>
-                        <input type="file" className="hidden" accept="image/*,.pdf" onChange={(e) => {
-                          const file = e.target.files[0];
-                          if (file) {
-                            setNewExpense(prev => ({ ...prev, attachment: file.name }));
-                            toast.info("File selected: " + file.name);
-                          }
-                        }} />
-                        <button type="button" onClick={() => document.querySelector('input[type="file"]').click()} className="mt-3 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium">Choose File</button>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-8 flex justify-end gap-3 border-t border-gray-200 pt-5">
-                    <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }} type="button" onClick={() => { setShowAddModal(false); resetForm(); setCategorySearch(""); }} className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium">
-                      Cancel
-                    </motion.button>
-                    <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.98 }} type="submit" className="px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center">
-                      <FiSave className="mr-2" /> Submit Expense
-                    </motion.button>
-                  </div>
-                </form>
+
+              {/* Wallet */}
+              <Field label="Pay from wallet" required error={errors.wallet_id} hint={wallets.length === 0 ? "No wallets are available for your centre." : undefined}>
+                <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2" role="radiogroup" aria-label="Wallet">
+                  {wallets.map((wallet) => {
+                    const on = parseInt(newExpense.wallet_id, 10) === wallet.id;
+                    const meta = getWalletMeta(wallet);
+                    const bal = Number(wallet.balance) || 0;
+                    return (
+                      <label key={wallet.id} className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border-2 px-3 py-2.5 transition focus-within:ring-2 focus-within:ring-navy-500/40 ${on ? "border-navy-500 bg-slate-50" : "border-slate-200 hover:border-slate-300"}`}>
+                        <span className="flex min-w-0 items-center gap-2.5">
+                          <input type="radio" name="wallet_id" value={wallet.id} checked={on} onChange={handleInputChange} className="sr-only" />
+                          <span className="text-xl">{meta.icon}</span>
+                          <span className="min-w-0">
+                            <span className="block truncate text-sm font-medium text-slate-900">{wallet.name}</span>
+                            <span className="block text-xs text-slate-500">{meta.label}</span>
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-right">
+                          <span className={`block text-sm font-semibold tabular-nums ${bal < 0 ? "text-rose-600" : "text-slate-900"}`}>{formatCurrency(bal)}</span>
+                          <span className="block text-xs text-slate-400">Available</span>
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedFormWallet && amountNum > 0 && (
+                  <p className={`flex items-center gap-1.5 text-xs ${overdraw ? "text-amber-600" : "text-slate-500"}`}>
+                    {overdraw && <FiAlertCircle className="h-3.5 w-3.5" />}
+                    {overdraw ? `This is ${formatCurrency(amountNum - formBalance)} more than the wallet holds.` : `Balance after this expense: ${formatCurrency(formBalance - amountNum)}`}
+                  </p>
+                )}
+              </Field>
+
+              {/* Payment method */}
+              <Field label="Payment method" required>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Payment method">
+                  {PAYMENT_METHODS.map((method) => {
+                    const on = newExpense.payment_method === method.id;
+                    return (
+                      <label key={method.id} className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 px-2 py-2 text-sm font-medium transition focus-within:ring-2 focus-within:ring-navy-500/40 ${on ? "border-navy-500 bg-slate-50 text-navy-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
+                        <input type="radio" name="payment_method" value={method.id} checked={on} onChange={handleInputChange} className="sr-only" />
+                        <span>{method.icon}</span><span className="truncate">{method.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+
+              <Field label="Receipt / bill number">
+                <IconInput icon={FiTag} type="text" name="receipt_number" value={newExpense.receipt_number} onChange={handleInputChange} placeholder="If any" />
+              </Field>
+
+              <Field label="Remarks / notes">
+                <textarea name="remarks" value={newExpense.remarks} onChange={handleInputChange} className={`${inputCls} border-slate-200`} placeholder="Any additional notes or explanation…" rows={3} />
+              </Field>
+
+              <div className="sticky bottom-0 -mx-6 -mb-5 flex justify-end gap-2 border-t border-slate-100 bg-white/95 px-6 py-4 backdrop-blur">
+                <button type="button" onClick={closeAdd} disabled={saving} className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">Cancel</button>
+                <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60">
+                  <FiSave className="h-4 w-4" /> {saving ? "Submitting…" : "Submit expense"}
+                </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </form>
+          </Modal>
         )}
       </AnimatePresence>
 
-      {/* ✅ CORRECTION MODAL (new) */}
+      {/* Delete confirmation */}
+      <AnimatePresence>
+        {deleteTarget && (
+          <Modal onClose={() => setDeleteTarget(null)} width="max-w-sm">
+            <div className="p-6">
+              <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-600"><FiTrash2 className="h-5 w-5" /></span>
+              <h2 className="mt-4 text-lg font-semibold text-slate-900">Delete this expense?</h2>
+              <p className="mt-1 text-sm text-slate-500">{deleteTarget.description} · {formatCurrency(deleteTarget.amount)}. This cannot be undone.</p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="button" onClick={confirmDelete} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Delete</button>
+              </div>
+            </div>
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* Correction Modal */}
       <AnimatePresence>
         {showCorrectModal && correctingExpense && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
-          >
-            <motion.div
-              initial={{ scale: 0.95, y: 20 }}
-              animate={{ scale: 1, y: 0 }}
-              exit={{ scale: 0.95, y: 20 }}
-              className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-gray-200 flex flex-col overflow-hidden"
-            >
-              <div className="bg-white border-b border-gray-200 p-6">
-                <h2 className="text-xl font-bold text-gray-900">Correct Expense</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  Original: {correctingExpense.description} – {formatCurrency(correctingExpense.amount)} on {formatDate(correctingExpense.expense_date)}
-                </p>
-              </div>
-              <div className="overflow-y-auto flex-1 p-6 space-y-5">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">New Amount (₹) *</label>
-                  <input
-                    type="number"
-                    name="amount"
-                    value={correctionForm.amount}
-                    onChange={handleCorrectionInputChange}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    required
-                    min="0"
-                    step="0.01"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">New Wallet *</label>
-                  <div className="space-y-2">
-                    {wallets.map(wallet => (
-                      <label
-                        key={wallet.id}
-                        className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
-                          correctionForm.wallet_id === wallet.id.toString() ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="flex items-center">
-                          <input
-                            type="radio"
-                            name="wallet_id"
-                            value={wallet.id}
-                            checked={correctionForm.wallet_id === wallet.id.toString()}
-                            onChange={handleCorrectionInputChange}
-                            className="sr-only"
-                            required
-                          />
-                          <span className="text-2xl mr-3">{getWalletMeta(wallet).icon}</span>
-                          <div>
-                            <p className="font-medium text-gray-900">{wallet.name}</p>
-                            <p className="text-xs text-gray-600">{getWalletMeta(wallet).label}</p>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-gray-900">{formatCurrency(walletBalances[wallet.id])}</p>
-                          <p className="text-xs text-gray-600">Available</p>
-                        </div>
+          <Modal onClose={closeCorrect}>
+            <div className="border-b border-slate-100 p-6">
+              <h2 className="text-lg font-semibold text-slate-900">Correct expense</h2>
+              <p className="mt-1 text-sm text-slate-500">Original: {correctingExpense.description} · {formatCurrency(correctingExpense.amount)} on {formatDate(correctingExpense.expense_date)}</p>
+            </div>
+            <form onSubmit={handleCorrectExpense} className="space-y-4 p-6">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">New amount (₹) *</span>
+                <input type="number" value={correctionForm.amount} onChange={(e) => setCorrectionForm((p) => ({ ...p, amount: e.target.value }))} className={`${inputCls} border-slate-200`} required min="0.01" step="0.01" />
+              </label>
+              <div className="space-y-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">New wallet *</span>
+                <div className="max-h-44 space-y-2 overflow-y-auto">
+                  {wallets.map((wallet) => {
+                    const on = correctionForm.wallet_id === String(wallet.id);
+                    return (
+                      <label key={wallet.id} className={`flex cursor-pointer items-center justify-between rounded-xl border-2 p-3 transition ${on ? "border-navy-500 bg-slate-50" : "border-slate-200 hover:border-slate-300"}`}>
+                        <span className="flex items-center gap-2">
+                          <input type="radio" name="correction_wallet" value={String(wallet.id)} checked={on} onChange={(e) => setCorrectionForm((p) => ({ ...p, wallet_id: e.target.value }))} className="sr-only" required />
+                          <span className="text-xl">{getWalletMeta(wallet).icon}</span>
+                          <span>
+                            <span className="block text-sm font-medium text-slate-900">{wallet.name}</span>
+                            <span className="block text-xs text-slate-500">{getWalletMeta(wallet).label}</span>
+                          </span>
+                        </span>
+                        <span className="text-sm font-semibold tabular-nums text-slate-700">{formatCurrency(walletBalances[wallet.id])}</span>
                       </label>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Reason for Correction</label>
-                  <textarea
-                    name="reason"
-                    value={correctionForm.reason}
-                    onChange={handleCorrectionInputChange}
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="Explain why you are correcting this expense..."
-                    rows={3}
-                  ></textarea>
+                    );
+                  })}
                 </div>
               </div>
-              <div className="border-t border-gray-200 p-5 flex justify-end gap-3">
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="button"
-                  onClick={() => { setShowCorrectModal(false); setCorrectingExpense(null); }}
-                  className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                >
-                  Cancel
-                </motion.button>
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.98 }}
-                  type="submit"
-                  onClick={handleCorrectExpense}
-                  className="px-5 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium flex items-center"
-                >
-                  <FiRefreshCw className="mr-2" />
-                  Submit Correction
-                </motion.button>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Reason for correction</span>
+                <textarea value={correctionForm.reason} onChange={(e) => setCorrectionForm((p) => ({ ...p, reason: e.target.value }))} className={`${inputCls} border-slate-200`} rows={3} placeholder="Explain why you are correcting this expense…" />
+              </label>
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={closeCorrect} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
+                <button type="submit" disabled={saving} className="inline-flex items-center gap-2 rounded-lg bg-navy-700 px-4 py-2 text-sm font-medium text-white hover:bg-navy-800 disabled:opacity-60">
+                  <FiRefreshCw className="h-4 w-4" /> {saving ? "Saving…" : "Submit correction"}
+                </button>
               </div>
-            </motion.div>
-          </motion.div>
+            </form>
+          </Modal>
         )}
       </AnimatePresence>
     </div>
