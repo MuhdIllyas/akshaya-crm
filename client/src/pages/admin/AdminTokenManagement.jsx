@@ -395,7 +395,11 @@ const AdminTokenManagement = () => {
   };
 
   // ---------- derived ----------
-  const sourceRows = tokenView === 'active' ? tokens : campaignHistory;
+  // History lists only tokens whose campaign is still running; tokens of campaigns past their end date are left out
+  const sourceRows = useMemo(() => {
+    if (tokenView === 'active') return tokens;
+    return campaignHistory.filter((t) => !isPast(campaignMap[t.campaignId]?.endDate ?? t.campaignEndDate));
+  }, [tokenView, tokens, campaignHistory, campaignMap]);
 
   const filteredTokens = useMemo(() => {
     const q = searchTerm.trim().toLowerCase();
@@ -686,7 +690,7 @@ const AdminTokenManagement = () => {
 
           {tokenView === 'history' && (
             <p className="mt-3 flex items-center gap-2 rounded-lg bg-violet-50 px-3 py-2 text-sm text-violet-700">
-              <FiFileText className="h-4 w-4 shrink-0" /> All campaign tokens, including ended campaigns, kept for records.
+              <FiFileText className="h-4 w-4 shrink-0" /> Campaign tokens of campaigns that are still running. Expired campaigns are not listed.
             </p>
           )}
         </div>
@@ -700,7 +704,7 @@ const AdminTokenManagement = () => {
             <h3 className="mt-3 text-sm font-semibold text-slate-800">No tokens found</h3>
             <p className="mt-1 text-sm text-slate-500">
               {sourceRows.length === 0
-                ? (tokenView === 'active' ? 'No active tokens yet. Generate one above to get started.' : 'No campaign history available.')
+                ? (tokenView === 'active' ? 'No active tokens yet. Generate one above to get started.' : 'No tokens from running campaigns.')
                 : 'Nothing matches the current filters.'}
             </p>
           </div>
