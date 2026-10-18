@@ -35,28 +35,33 @@ import {
 import { getPendingPayments, getPendingPaymentsHistory, receiveServicePayment, getWallets } from '@/services/serviceService';
 import { toast } from "react-toastify";
 
+// Shared style tokens (UI only)
+const fieldCls =
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500';
+const thCls = 'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500';
+
 // Pending Payments Stat Card
 const PendingPaymentsStatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, compact = false }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className={`bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 cursor-pointer ${
-      compact ? 'p-4' : 'p-6'
+    className={`rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md ${onClick ? 'cursor-pointer' : ''} ${
+      compact ? 'p-3' : 'p-4 sm:p-5'
     }`}
     onClick={onClick}
   >
-    <div className="flex items-center justify-between">
-      <div className={`${compact ? 'w-4/5' : ''}`}>
-        <p className={`font-medium text-gray-600 mb-1 ${compact ? 'text-xs' : 'text-sm'}`}>{title}</p>
-        <p className={`font-bold text-gray-900 mb-1 ${compact ? 'text-lg' : 'text-2xl'}`}>{value}</p>
-        <p className={`text-gray-500 ${compact ? 'text-xs' : 'text-sm'}`}>{subtitle}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className={`mb-1 truncate font-bold text-slate-900 ${compact ? 'text-lg' : 'text-2xl'}`}>{value}</p>
+        <p className="text-xs text-slate-500">{subtitle}</p>
         {trend !== undefined && (
-          <p className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-gray-600'}`}>
+          <p className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : trend < 0 ? 'text-rose-600' : 'text-slate-600'}`}>
             {trend > 0 ? '+' : ''}{trend}% from last month
           </p>
         )}
       </div>
-      <div className={`rounded-xl ${color} ${compact ? 'p-2' : 'p-3'}`}>
-        <Icon className={`text-white ${compact ? 'h-4 w-4' : 'h-6 w-6'}`} />
+      <div className={`shrink-0 rounded-xl ${color} ${compact ? 'p-2' : 'p-2.5'}`}>
+        <Icon className={`text-white ${compact ? 'h-4 w-4' : 'h-5 w-5'}`} />
       </div>
     </div>
   </motion.div>
@@ -79,78 +84,82 @@ const PendingPaymentDetailModal = ({ isOpen, onClose, serviceEntry }) => {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={onClose}>
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Service details"
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto"
+            className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-5 shadow-xl sm:p-6"
           >
-            <div className="flex items-center justify-between mb-6">
+            <div className="mb-5 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-lg font-bold text-gray-900">Service Details</h3>
-                <p className="text-sm text-gray-600">ID: {serviceEntry.id} • Staff: {serviceEntry.staff?.name}</p>
+                <h3 className="text-lg font-bold text-slate-900">Service Details</h3>
+                <p className="text-sm text-slate-500">ID: {serviceEntry.id} • Staff: {serviceEntry.staff?.name}</p>
               </div>
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                <FiX className="h-5 w-5 text-gray-600" />
+              <button onClick={onClose} aria-label="Close" className="rounded-lg p-2 transition-colors hover:bg-slate-100">
+                <FiX className="h-5 w-5 text-slate-600" />
               </button>
             </div>
 
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Customer & Service Info */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500 mb-1">Customer Name</p>
-                  <p className="font-semibold text-gray-900">{serviceEntry.customer.name}</p>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="mb-1 text-xs text-slate-500">Customer Name</p>
+                  <p className="font-semibold text-slate-900">{serviceEntry.customer.name}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500 mb-1">Phone Number</p>
-                  <p className="font-semibold text-gray-900">{serviceEntry.customer.phone}</p>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="mb-1 text-xs text-slate-500">Phone Number</p>
+                  <p className="font-semibold text-slate-900">{serviceEntry.customer.phone}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500 mb-1">Service Type</p>
-                  <p className="font-semibold text-gray-900">{serviceEntry.service.type}</p>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="mb-1 text-xs text-slate-500">Service Type</p>
+                  <p className="font-semibold text-slate-900">{serviceEntry.service.type}</p>
                 </div>
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <p className="text-sm text-gray-500 mb-1">Subcategory</p>
-                  <p className="font-semibold text-gray-900">{serviceEntry.service.subcategory || "—"}</p>
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <p className="mb-1 text-xs text-slate-500">Subcategory</p>
+                  <p className="font-semibold text-slate-900">{serviceEntry.service.subcategory || "—"}</p>
                 </div>
               </div>
 
               {/* Financials */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h4 className="font-bold text-gray-900 mb-3 border-b pb-2">Financial Summary</h4>
-                <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Total Amount</span>
-                  <span className="font-bold text-gray-900">₹{serviceEntry.total.toLocaleString('en-IN')}</span>
+              <div className="rounded-xl border border-slate-200 p-4">
+                <h4 className="mb-3 border-b border-slate-100 pb-2 text-sm font-bold text-slate-900">Financial Summary</h4>
+                <div className="flex justify-between py-1 text-sm">
+                  <span className="text-slate-600">Total Amount</span>
+                  <span className="font-bold text-slate-900">₹{serviceEntry.total.toLocaleString('en-IN')}</span>
                 </div>
-                <div className="flex justify-between py-1">
-                  <span className="text-gray-600">Amount Paid</span>
+                <div className="flex justify-between py-1 text-sm">
+                  <span className="text-slate-600">Amount Paid</span>
                   <span className="font-bold text-emerald-600">₹{serviceEntry.paid.toLocaleString('en-IN')}</span>
                 </div>
-                <div className="flex justify-between py-1 border-t mt-2 pt-2">
-                  <span className="font-bold text-gray-900">Balance Due</span>
-                  <span className="font-bold text-rose-600 text-lg">₹{serviceEntry.due.toLocaleString('en-IN')}</span>
+                <div className="mt-2 flex justify-between border-t border-slate-100 pt-2">
+                  <span className="font-bold text-slate-900">Balance Due</span>
+                  <span className="text-lg font-bold text-rose-600">₹{serviceEntry.due.toLocaleString('en-IN')}</span>
                 </div>
               </div>
 
               {/* Payment History */}
               <div>
-                <h4 className="font-bold text-gray-900 mb-3">Payment History</h4>
+                <h4 className="mb-3 text-sm font-bold text-slate-900">Payment History</h4>
                 {serviceEntry.paymentHistory && serviceEntry.paymentHistory.length > 0 ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {serviceEntry.paymentHistory.map((ph, idx) => (
-                      <div key={idx} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 p-3">
                         <div>
-                          <p className="font-medium text-gray-900">{formatDate(ph.created_at)}</p>
-                          <p className="text-xs text-gray-500">{ph.wallet_name || 'Wallet'}</p>
+                          <p className="text-sm font-medium text-slate-900">{formatDate(ph.created_at)}</p>
+                          <p className="text-xs text-slate-500">{ph.wallet_name || 'Wallet'}</p>
                         </div>
                         <span className="font-bold text-emerald-600">+₹{Number(ph.amount).toLocaleString('en-IN')}</span>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-gray-500 italic">No payments recorded yet.</p>
+                  <p className="text-sm italic text-slate-500">No payments recorded yet.</p>
                 )}
               </div>
             </div>
@@ -204,43 +213,47 @@ const ReceivePaymentModal = ({ isOpen, onClose, onSuccess, payment }) => {
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm" onClick={onClose}>
           <motion.div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Receive payment"
+            onClick={(e) => e.stopPropagation()}
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="bg-white rounded-xl p-6 max-w-md w-full"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl sm:p-6"
           >
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold text-gray-900">Receive Payment</h3>
-              <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
-                <FiX className="h-5 w-5 text-gray-600" />
+            <div className="mb-4 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-slate-900">Receive Payment</h3>
+              <button onClick={onClose} aria-label="Close" className="rounded-lg p-2 transition-colors hover:bg-slate-100">
+                <FiX className="h-5 w-5 text-slate-600" />
               </button>
             </div>
 
-            <div className="bg-rose-50 p-3 rounded-lg mb-4 flex justify-between items-center border border-rose-100">
-              <span className="text-rose-800 font-medium">Balance Due</span>
-              <span className="text-rose-800 font-bold text-xl">₹{payment.due.toLocaleString('en-IN')}</span>
+            <div className="mb-4 flex items-center justify-between rounded-xl border border-rose-100 bg-rose-50 p-3">
+              <span className="text-sm font-medium text-rose-800">Balance Due</span>
+              <span className="text-xl font-bold text-rose-800">₹{payment.due.toLocaleString('en-IN')}</span>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Collection Amount (₹)</label>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Collection Amount (₹)</label>
                 <input
                   type="number"
                   max={payment.due}
                   value={formData.amount}
                   onChange={(e) => setFormData(prev => ({ ...prev, amount: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className={fieldCls}
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Credit to Wallet</label>
+                <label className="mb-1 block text-xs font-medium text-slate-600">Credit to Wallet</label>
                 <select
                   value={formData.wallet}
                   onChange={(e) => setFormData(prev => ({ ...prev, wallet: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  className={fieldCls}
                 >
                   <option value="">Select a wallet...</option>
                   {wallets.map(w => (
@@ -249,14 +262,14 @@ const ReceivePaymentModal = ({ isOpen, onClose, onSuccess, payment }) => {
                 </select>
               </div>
 
-              <div className="pt-4 flex space-x-3">
-                <button onClick={onClose} className="flex-1 px-4 py-2 border rounded-lg text-gray-700 hover:bg-gray-50">
+              <div className="flex gap-3 pt-2">
+                <button onClick={onClose} className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50">
                   Cancel
                 </button>
                 <button 
                   onClick={handleSubmit} 
                   disabled={loading || !formData.amount || !formData.wallet}
-                  className="flex-1 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 flex justify-center items-center"
+                  className="flex flex-1 items-center justify-center rounded-xl bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {loading ? <FiRefreshCw className="animate-spin" /> : "Record Payment"}
                 </button>
@@ -492,19 +505,79 @@ const PendingPaymentsSection = ({
     return total > 0 ? Math.round((paid / total) * 100) : 0;
   };
 
+  // UI helpers (open modals / row actions) — same state setters and handlers as before
+  const openDetails = (payment) => {
+    setSelectedService(payment);
+    setShowServiceModal(true);
+  };
+
+  const renderActions = (payment) => (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => openDetails(payment)}
+        className="rounded-lg p-2 text-navy-700 transition-colors hover:bg-slate-100"
+        title="View Details"
+        aria-label="View details"
+      >
+        <FiEye className="h-4 w-4" />
+      </button>
+
+      <button
+        onClick={() => {
+          setSelectedPayment(payment);
+          setShowPaymentModal(true);
+        }}
+        className="rounded-lg p-2 text-emerald-600 transition-colors hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
+        title="Receive Payment"
+        aria-label="Receive payment"
+        disabled={payment.due === 0}
+      >
+        <FiCreditCard className="h-4 w-4" />
+      </button>
+
+      <button
+        onClick={() => handleSendReminder(payment)}
+        disabled={sendingWhatsappId === payment.id}
+        className="rounded-lg p-2 text-green-600 transition-colors hover:bg-green-50 disabled:opacity-50"
+        title="Send WhatsApp Reminder"
+        aria-label="Send WhatsApp reminder"
+      >
+        {sendingWhatsappId === payment.id ? (
+          <FiRefreshCw className="h-4 w-4 animate-spin" />
+        ) : (
+          <FiMessageSquare className="h-4 w-4" />
+        )}
+      </button>
+      {isOverdue(payment.createdAt) && (
+        <button
+          onClick={() => {}}
+          className="rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50"
+          title="Mark as High Priority"
+          aria-label="Mark as high priority"
+        >
+          <FiBell className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  );
+
+  const initials = (name) =>
+    (name || "U")
+      .split(' ')
+      .filter(Boolean)
+      .map(n => n[0])
+      .join('');
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* Stats Cards */}
-      <div className={`grid gap-3 mb-6 ${
-        isMobile ? 'grid-cols-2' : 
-        'grid-cols-2 md:grid-cols-4'
-      }`}>
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <PendingPaymentsStatCard
           title="Total Receivables"
           value={`₹${stats.totalReceivables.toLocaleString('en-IN')}`}
           subtitle="Sum of all service amounts"
           icon={FiBarChart2}
-          color="bg-purple-500"
+          color="bg-navy-700"
           compact={isMobile}
         />
         <PendingPaymentsStatCard
@@ -512,7 +585,7 @@ const PendingPaymentsSection = ({
           value={`₹${stats.totalDue.toLocaleString('en-IN')}`}
           subtitle="Balance to be collected"
           icon={FiDollarSign}
-          color="bg-rose-500"
+          color="bg-rose-600"
           compact={isMobile}
         />
         <PendingPaymentsStatCard
@@ -520,7 +593,7 @@ const PendingPaymentsSection = ({
           value={stats.pendingCount}
           subtitle="Services awaiting payment"
           icon={FiAlertCircle}
-          color="bg-amber-500"
+          color="bg-amber-600"
           compact={isMobile}
         />
         <PendingPaymentsStatCard
@@ -528,49 +601,57 @@ const PendingPaymentsSection = ({
           value={stats.overdueCount}
           subtitle="Past due date"
           icon={FiClock}
-          color="bg-red-500"
+          color="bg-red-600"
           compact={isMobile}
         />
       </div>
 
       {/* Collection Progress */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="font-semibold text-gray-900">Payment Collection Progress</h3>
-          <span className="text-sm font-medium">{calculatePaymentProgress()}%</span>
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-slate-900">Payment Collection Progress</h3>
+          <span className="text-sm font-semibold text-slate-700">{calculatePaymentProgress()}%</span>
         </div>
-        <div className="w-full bg-gray-200 rounded-full h-3">
-          <div 
-            className="bg-gradient-to-r from-emerald-500 to-emerald-600 h-3 rounded-full"
+        <div
+          className="h-2.5 w-full overflow-hidden rounded-full bg-slate-200"
+          role="progressbar"
+          aria-valuenow={calculatePaymentProgress()}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div
+            className="h-2.5 rounded-full bg-emerald-500 transition-all duration-500"
             style={{ width: `${calculatePaymentProgress()}%` }}
           ></div>
         </div>
-        <div className="flex justify-between text-sm text-gray-600 mt-2">
+        <div className="mt-2 flex justify-between text-xs text-slate-500">
           <span>₹{payments.reduce((sum, p) => sum + p.paid, 0).toLocaleString('en-IN')} Collected</span>
           <span>₹{stats.totalReceivables.toLocaleString('en-IN')} Total</span>
         </div>
       </div>
 
       {/* Filters and Search */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4 mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between space-y-4 lg:space-y-0">
-          <div className="flex flex-col lg:flex-row lg:items-center lg:space-x-4 space-y-4 lg:space-y-0">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-center">
             <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search by customer, phone, service, or ID..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full lg:w-80"
+                aria-label="Search payments"
+                className={`${fieldCls} pl-10 lg:w-80`}
               />
             </div>
-            <div className="flex items-center space-x-2">
-              <FiFilter className="h-4 w-4 text-gray-500" />
+            <div className="flex items-center gap-2">
+              <FiFilter className="h-4 w-4 text-slate-400" />
               <select
                 value={activeFilter}
                 onChange={(e) => setActiveFilter(e.target.value)}
-                className="border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                aria-label="Payment filter"
+                className={`${fieldCls} lg:w-auto`}
               >
                 <option value="all">All Payments</option>
                 <option value="overdue">Overdue Only</option>
@@ -580,24 +661,26 @@ const PendingPaymentsSection = ({
               </select>
             </div>
             {/* Date Filter */}
-            <div className="flex flex-wrap items-center gap-3">
-              <div className="relative">
-                <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative flex-1 sm:flex-none">
+                <FiCalendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="date"
                   value={activeFromDate}
                   onChange={(e) => setActiveFromDate(e.target.value)}
-                  className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm w-full lg:w-auto"
+                  aria-label="From date"
+                  className={`${fieldCls} pl-10 lg:w-auto`}
                 />
               </div>
-              <span className="text-gray-500">to</span>
-              <div className="relative">
-                <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <span className="text-sm text-slate-500">to</span>
+              <div className="relative flex-1 sm:flex-none">
+                <FiCalendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="date"
                   value={activeToDate}
                   onChange={(e) => setActiveToDate(e.target.value)}
-                  className="pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm w-full lg:w-auto"
+                  aria-label="To date"
+                  className={`${fieldCls} pl-10 lg:w-auto`}
                 />
               </div>
               <div className="flex items-center gap-2">
@@ -605,7 +688,7 @@ const PendingPaymentsSection = ({
                   onClick={() => {
                     if (!isSuperAdmin) fetchPendingPayments();
                   }}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors text-sm font-medium"
+                  className="rounded-xl bg-navy-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-800"
                 >
                   Apply
                 </button>
@@ -615,19 +698,19 @@ const PendingPaymentsSection = ({
                     setActiveToDate('');
                     if (!isSuperAdmin) fetchPendingPayments();
                   }}
-                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors text-sm font-medium"
+                  className="rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                 >
                   Clear
                 </button>
               </div>
             </div>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center">
             <button 
               onClick={() => {
                 if (!isSuperAdmin) fetchPendingPayments();
               }}
-              className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               <FiRefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
               <span>Refresh</span>
@@ -636,39 +719,84 @@ const PendingPaymentsSection = ({
         </div>
       </div>
 
-      {/* Payments Table */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
+      {/* Payments */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* Mobile cards */}
+        <div className="divide-y divide-slate-100 md:hidden">
+          {isLoading ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <div className="mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-navy-700"></div>
+              <p className="text-sm text-slate-600">Loading pending payments...</p>
+            </div>
+          ) : filteredPayments.length > 0 ? (
+            filteredPayments.map((payment) => (
+              <div key={payment.id} className={`p-4 ${isOverdue(payment.createdAt) ? 'bg-rose-50/60' : ''}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <button onClick={() => openDetails(payment)} className="flex min-w-0 items-center gap-3 text-left">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-700">
+                      <span className="text-xs font-bold text-white">{initials(payment.customer.name)}</span>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-slate-900">{payment.customer.name}</p>
+                      <p className="text-xs text-slate-500">ID: {payment.id}</p>
+                    </div>
+                  </button>
+                  <div className="shrink-0 text-right">
+                    <p className={`font-bold ${payment.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>₹{payment.due.toLocaleString('en-IN')}</p>
+                    <p className="text-xs text-slate-500">due</p>
+                  </div>
+                </div>
+                <div className="mt-3 text-sm">
+                  <p className="font-medium text-slate-900">{payment.service.type}</p>
+                  {payment.service.subcategory && <p className="truncate text-xs text-slate-500">{payment.service.subcategory}</p>}
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
+                  <span>Total: <span className="font-semibold text-slate-800">₹{payment.total.toLocaleString('en-IN')}</span></span>
+                  <span>Paid: <span className={`font-semibold ${payment.paid > 0 ? 'text-emerald-600' : 'text-slate-600'}`}>₹{payment.paid.toLocaleString('en-IN')}</span></span>
+                  <span>Since: <span className="font-semibold text-slate-800">{formatDate(payment.createdAt)}</span></span>
+                  <span>Staff: <span className="font-semibold text-slate-800">{payment.staff.name}</span></span>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <a
+                    href={`https://wa.me/${payment.customer.phone.replace(/\D/g, '')}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-sm text-slate-600 hover:text-emerald-600"
+                  >
+                    <FiPhone className="h-3.5 w-3.5" />
+                    <span>{payment.customer.phone}</span>
+                  </a>
+                  {isOverdue(payment.createdAt) && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">Overdue</span>}
+                </div>
+                <div className="mt-2 border-t border-slate-100 pt-2">{renderActions(payment)}</div>
+              </div>
+            ))
+          ) : (
+            <div className="flex flex-col items-center justify-center py-12">
+              <FiFileText className="mb-3 h-12 w-12 text-slate-300" />
+              <p className="text-base font-medium text-slate-500">
+                {searchQuery || activeFilter !== 'all'
+                  ? 'No matching payments found'
+                  : 'No pending payments'}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full">
             <thead>
-              <tr className="border-b border-gray-200 bg-gray-50">
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Customer
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Phone
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Service
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Total (₹)
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Paid (₹)
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Due (₹)
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Due Since
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Staff
-                </th>
-                <th className="py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+              <tr className="border-b border-slate-200 bg-slate-50">
+                <th className={thCls}>Customer</th>
+                <th className={thCls}>Phone</th>
+                <th className={thCls}>Service</th>
+                <th className={thCls}>Total (₹)</th>
+                <th className={thCls}>Paid (₹)</th>
+                <th className={thCls}>Due (₹)</th>
+                <th className={thCls}>Due Since</th>
+                <th className={thCls}>Staff</th>
+                <th className={thCls}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -676,82 +804,71 @@ const PendingPaymentsSection = ({
                 <tr>
                   <td colSpan="9" className="py-12 text-center">
                     <div className="flex flex-col items-center justify-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
-                      <p className="text-gray-600">Loading pending payments...</p>
+                      <div className="mb-4 h-10 w-10 animate-spin rounded-full border-b-2 border-navy-700"></div>
+                      <p className="text-sm text-slate-600">Loading pending payments...</p>
                     </div>
                   </td>
                 </tr>
               ) : filteredPayments.length > 0 ? (
                 filteredPayments.map((payment) => (
-                  <tr key={payment.id} className={`border-b border-gray-200 hover:bg-gray-50 transition-colors ${isOverdue(payment.createdAt) ? 'bg-rose-50 hover:bg-rose-100' : ''}`}>
-                    <td className="py-4 px-4">
-                      {/* 🔥 FIXED CLICK HANDLER HERE */}
+                  <tr key={payment.id} className={`border-b border-slate-100 transition-colors ${isOverdue(payment.createdAt) ? 'bg-rose-50/60 hover:bg-rose-50' : 'hover:bg-slate-50'}`}>
+                    <td className="px-4 py-3.5">
                       <button
-                        onClick={() => {
-                          setSelectedService(payment);
-                          setShowServiceModal(true);
-                        }}
-                        className="text-left hover:text-indigo-600 transition-colors group w-full"
+                        onClick={() => openDetails(payment)}
+                        className="group w-full text-left"
                       >
-                        <div className="flex items-center space-x-3">
-                          <div className="w-8 h-8 bg-blue-900 rounded-full flex items-center justify-center">
-                            <span className="text-white font-bold text-xs">
-                              {(payment.customer.name || "U")
-                                .split(' ')
-                                .filter(Boolean)
-                                .map(n => n[0])
-                                .join('')
-                              }
-                            </span>
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-navy-700">
+                            <span className="text-xs font-bold text-white">{initials(payment.customer.name)}</span>
                           </div>
-                          <div className="text-left">
-                            <p className="font-medium text-gray-900 group-hover:text-indigo-600 truncate">
+                          <div className="min-w-0 text-left">
+                            <p className="truncate font-medium text-slate-900 group-hover:text-navy-700">
                               {payment.customer.name}
                             </p>
-                            <p className="text-xs text-gray-500">ID: {payment.id}</p>
+                            <p className="text-xs text-slate-500">ID: {payment.id}</p>
                           </div>
                         </div>
                       </button>
                     </td>
-                    <td className="py-4 px-4">
+                    <td className="px-4 py-3.5">
                       <a
                         href={`https://wa.me/${payment.customer.phone.replace(/\D/g, '')}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center space-x-2 text-gray-600 hover:text-emerald-600 transition-colors group"
+                        className="group flex items-center gap-2 text-slate-600 transition-colors hover:text-emerald-600"
                       >
-                        <div className="p-1.5 bg-emerald-50 rounded-lg group-hover:bg-emerald-100">
+                        <div className="rounded-lg bg-emerald-50 p-1.5 group-hover:bg-emerald-100">
                           <FiPhone className="h-3.5 w-3.5" />
                         </div>
                         <span className="text-sm">{payment.customer.phone}</span>
                       </a>
                     </td>
-                    <td className="py-4 px-4">
+                    <td className="px-4 py-3.5">
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{payment.service.type}</p>
-                        <p className="text-xs text-gray-500 truncate max-w-xs">
+                        <p className="text-sm font-medium text-slate-900">{payment.service.type}</p>
+                        <p className="max-w-xs truncate text-xs text-slate-500">
                           {payment.service.subcategory}
                         </p>
                       </div>
                     </td>
-                    <td className="py-4 px-4">
-                      <p className="font-bold text-gray-900">
+                    <td className="px-4 py-3.5">
+                      <p className="font-bold text-slate-900">
                         ₹{payment.total.toLocaleString('en-IN')}
                       </p>
                     </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center space-x-2">
-                        <div className={`p-1.5 rounded-lg ${payment.paid > 0 ? 'bg-emerald-50' : 'bg-gray-100'}`}>
-                          <FiCreditCard className={`h-3.5 w-3.5 ${payment.paid > 0 ? 'text-emerald-600' : 'text-gray-400'}`} />
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`rounded-lg p-1.5 ${payment.paid > 0 ? 'bg-emerald-50' : 'bg-slate-100'}`}>
+                          <FiCreditCard className={`h-3.5 w-3.5 ${payment.paid > 0 ? 'text-emerald-600' : 'text-slate-400'}`} />
                         </div>
-                        <p className={`font-medium ${payment.paid > 0 ? 'text-emerald-600' : 'text-gray-500'}`}>
+                        <p className={`font-medium ${payment.paid > 0 ? 'text-emerald-600' : 'text-slate-500'}`}>
                           ₹{payment.paid.toLocaleString('en-IN')}
                         </p>
                       </div>
                     </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center space-x-2">
-                        <div className={`p-1.5 rounded-lg ${payment.due > 0 ? 'bg-rose-50' : 'bg-emerald-50'}`}>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <div className={`rounded-lg p-1.5 ${payment.due > 0 ? 'bg-rose-50' : 'bg-emerald-50'}`}>
                           <FiAlertCircle className={`h-3.5 w-3.5 ${payment.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`} />
                         </div>
                         <p className={`font-bold ${payment.due > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
@@ -759,67 +876,20 @@ const PendingPaymentsSection = ({
                         </p>
                       </div>
                     </td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center space-x-2">
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center gap-2">
                         <FiCalendar className={`h-4 w-4 ${isOverdue(payment.createdAt) ? 'text-rose-500' : 'text-amber-500'}`} />
                         <div>
-                          <span className="text-sm">{formatDate(payment.createdAt)}</span>
+                          <span className="text-sm text-slate-700">{formatDate(payment.createdAt)}</span>
                           {isOverdue(payment.createdAt) && (
-                            <p className="text-xs text-rose-500 mt-0.5">Overdue</p>
+                            <p className="mt-0.5 text-xs text-rose-500">Overdue</p>
                           )}
                         </div>
                       </div>
                     </td>
-                    <td>{payment.staff.name}</td>
-                    <td className="py-4 px-4">
-                      <div className="flex items-center space-x-1">
-                        {/* 🔥 FIXED CLICK HANDLER HERE */}
-                        <button
-                          onClick={() => {
-                            setSelectedService(payment);
-                            setShowServiceModal(true);
-                          }}
-                          className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors group"
-                          title="View Details"
-                        >
-                          <FiEye className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                        </button>
-                        
-                        {/* 🔥 FIXED CLICK HANDLER HERE */}
-                        <button
-                          onClick={() => {
-                            setSelectedPayment(payment);
-                            setShowPaymentModal(true);
-                          }}
-                          className="p-2 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors group"
-                          title="Receive Payment"
-                          disabled={payment.due === 0}
-                        >
-                          <FiCreditCard className={`h-4 w-4 group-hover:scale-110 transition-transform ${payment.due === 0 ? 'opacity-50' : ''}`} />
-                        </button>
-                        
-                        <button
-                          onClick={() => handleSendReminder(payment)}
-                          disabled={sendingWhatsappId === payment.id}
-                          className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors group disabled:opacity-50"
-                          title="Send WhatsApp Reminder"
-                        >
-                          {sendingWhatsappId === payment.id ? (
-                            <FiRefreshCw className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <FiMessageSquare className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          )}
-                        </button>
-                        {isOverdue(payment.createdAt) && (
-                          <button
-                            onClick={() => {}}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors group"
-                            title="Mark as High Priority"
-                          >
-                            <FiBell className="h-4 w-4 group-hover:scale-110 transition-transform" />
-                          </button>
-                        )}
-                      </div>
+                    <td className="px-4 py-3.5 text-sm text-slate-700">{payment.staff.name}</td>
+                    <td className="px-4 py-3.5">
+                      {renderActions(payment)}
                     </td>
                   </tr>
                 ))
@@ -827,8 +897,8 @@ const PendingPaymentsSection = ({
                 <tr>
                   <td colSpan="9" className="py-12 text-center">
                     <div className="flex flex-col items-center justify-center">
-                      <FiFileText className="h-16 w-16 text-gray-300 mb-4" />
-                      <p className="text-gray-500 text-lg font-medium mb-2">
+                      <FiFileText className="mb-3 h-12 w-12 text-slate-300" />
+                      <p className="text-base font-medium text-slate-500">
                         {searchQuery || activeFilter !== 'all'
                           ? 'No matching payments found'
                           : 'No pending payments'}
@@ -843,14 +913,14 @@ const PendingPaymentsSection = ({
 
         {/* Summary Footer */}
         {filteredPayments.length > 0 && (
-          <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="border-t border-slate-200 bg-slate-50 px-4 py-4 sm:px-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-slate-600">
                   Showing <span className="font-medium">{filteredPayments.length}</span> of{' '}
                   <span className="font-medium">{payments.length}</span> pending payments
                 </p>
-                <p className="text-sm text-gray-600 mt-1">
+                <p className="mt-1 text-sm text-slate-600">
                   Total due amount: <span className="font-bold text-rose-600">
                     ₹{filteredPayments.reduce((sum, p) => sum + p.due, 0).toLocaleString('en-IN')}
                   </span>
@@ -862,27 +932,24 @@ const PendingPaymentsSection = ({
       </div>
 
       {/* Quick Stats */}
-      <div className={`mt-8 grid gap-6 ${
-        isMobile ? 'grid-cols-1' : 
-        'grid-cols-1 md:grid-cols-3'
-      }`}>
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h4 className="font-semibold text-gray-900 mb-4">Payment Distribution</h4>
-          <div className="space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Fully Paid</span>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h4 className="mb-4 text-sm font-semibold text-slate-900">Payment Distribution</h4>
+          <div className="space-y-3 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600">Fully Paid</span>
               <span className="font-medium text-emerald-600">
                 {payments.filter(p => p.due === 0).length} services
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Partially Paid</span>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600">Partially Paid</span>
               <span className="font-medium text-blue-600">
                 {payments.filter(p => p.paid > 0 && p.due > 0).length} services
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-gray-600">Unpaid</span>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600">Unpaid</span>
               <span className="font-medium text-amber-600">
                 {payments.filter(p => p.paid === 0).length} services
               </span>
@@ -890,19 +957,19 @@ const PendingPaymentsSection = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h4 className="font-semibold text-gray-900 mb-4">Top Due Amounts</h4>
-          <div className="space-y-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h4 className="mb-4 text-sm font-semibold text-slate-900">Top Due Amounts</h4>
+          <div className="space-y-1">
             {payments
               .sort((a, b) => b.due - a.due)
               .slice(0, 3)
               .map(payment => (
-                <div key={payment.id} className="flex justify-between items-center py-2 border-b border-gray-100">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{payment.customer.name}</p>
-                    <p className="text-xs text-gray-500">{payment.service.type}</p>
+                <div key={payment.id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 last:border-0">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-slate-900">{payment.customer.name}</p>
+                    <p className="truncate text-xs text-slate-500">{payment.service.type}</p>
                   </div>
-                  <span className="font-bold text-rose-600">
+                  <span className="shrink-0 font-bold text-rose-600">
                     ₹{payment.due.toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -911,31 +978,30 @@ const PendingPaymentsSection = ({
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h4 className="font-semibold text-gray-900 mb-4">Quick Actions</h4>
-          <div className="space-y-3">
-            <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <span className="text-gray-700">Send Bulk Reminders</span>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h4 className="mb-4 text-sm font-semibold text-slate-900">Quick Actions</h4>
+          <div className="space-y-2">
+            <button className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-sm transition-colors hover:bg-slate-50">
+              <span className="text-slate-700">Send Bulk Reminders</span>
               <FiMail className="h-4 w-4 text-blue-600" />
             </button>
-            <button className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-              <span className="text-gray-700">Generate Report</span>
+            <button className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-sm transition-colors hover:bg-slate-50">
+              <span className="text-slate-700">Generate Report</span>
               <FiFileText className="h-4 w-4 text-purple-600" />
             </button>
             <button 
               onClick={() => {
                 if (!isSuperAdmin) fetchPendingPayments();
               }}
-              className="w-full flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-sm transition-colors hover:bg-slate-50"
             >
-              <span className="text-gray-700">Refresh Data</span>
-              <FiRefreshCw className="h-4 w-4 text-indigo-600" />
+              <span className="text-slate-700">Refresh Data</span>
+              <FiRefreshCw className="h-4 w-4 text-navy-700" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* 🔥 THE MODALS ARE NOW GUARANTEED TO RENDER */}
       {showServiceModal && (
         <PendingPaymentDetailModal
           isOpen={showServiceModal}

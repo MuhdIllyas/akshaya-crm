@@ -24,19 +24,30 @@ import {
   ComposedChart
 } from "recharts";
 
+// Shared style tokens (UI only)
+const fieldCls =
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500';
+const cardCls = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+const thCls = 'px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500';
+const walletTone = (wallet) =>
+  wallet.type?.toLowerCase() === 'bank' ? 'bg-blue-600' :
+  wallet.type?.toLowerCase() === 'cash' ? 'bg-emerald-600' :
+  wallet.type?.toLowerCase() === 'digital' ? 'bg-purple-600' :
+  'bg-navy-700';
+
 // Compact StatCard Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer p-3"
+    className={`${cardCls} p-4 transition-shadow hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
     onClick={onClick}
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className="mb-1 truncate text-xl font-bold text-slate-900">{value}</p>
         <div className="flex items-center">
-          <p className="text-gray-500 text-xs">{subtitle}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
           {trend && (
             <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {trend > 0 ? <FiTrendingUp2 className="mr-1" /> : <FiTrendingDown2 className="mr-1" />}
@@ -45,8 +56,8 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
           )}
         </div>
       </div>
-      <div className={`rounded-lg ${color} p-2`}>
-        <Icon className="text-white h-4 w-4" />
+      <div className={`shrink-0 rounded-xl ${color} p-2.5`}>
+        <Icon className="h-4 w-4 text-white" />
       </div>
     </div>
   </motion.div>
@@ -91,9 +102,9 @@ const formatDateTime = (value) => {
 const DailyFlowChart = ({ data }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center text-center text-sm text-gray-400 py-8">
-        <FiBarChart2 className="h-8 w-8 mb-2 text-gray-300" />
-        <p className="text-gray-500">No closed-day data available</p>
+      <div className="flex flex-col items-center justify-center py-8 text-center text-sm">
+        <FiBarChart2 className="mb-2 h-8 w-8 text-slate-300" />
+        <p className="text-slate-500">No closed-day data available</p>
       </div>
     );
   }
@@ -101,22 +112,22 @@ const DailyFlowChart = ({ data }) => {
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100">
-          <p className="font-semibold text-gray-900 mb-1 text-sm">{formatDateTime(label)}</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-md">
+          <p className="mb-1 text-sm font-semibold text-slate-900">{formatDateTime(label)}</p>
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></div>
-                <span className="text-gray-600 text-sm">Inflow</span>
+                <div className="mr-2 h-2 w-2 rounded-full bg-emerald-500"></div>
+                <span className="text-sm text-slate-600">Inflow</span>
               </div>
-              <span className="font-bold text-emerald-600 text-sm">₹{payload[0]?.value?.toLocaleString()}</span>
+              <span className="text-sm font-bold text-emerald-600">₹{payload[0]?.value?.toLocaleString()}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4">
               <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full bg-rose-500 mr-2"></div>
-                <span className="text-gray-600 text-sm">Outflow</span>
+                <div className="mr-2 h-2 w-2 rounded-full bg-rose-500"></div>
+                <span className="text-sm text-slate-600">Outflow</span>
               </div>
-              <span className="font-bold text-rose-600 text-sm">₹{payload[1]?.value?.toLocaleString()}</span>
+              <span className="text-sm font-bold text-rose-600">₹{payload[1]?.value?.toLocaleString()}</span>
             </div>
           </div>
         </div>
@@ -134,7 +145,7 @@ const DailyFlowChart = ({ data }) => {
         >
           <CartesianGrid 
             strokeDasharray="3 3" 
-            stroke="#f0f0f0" 
+            stroke="#eef2f7" 
             vertical={false}
           />
           <XAxis 
@@ -142,13 +153,13 @@ const DailyFlowChart = ({ data }) => {
             tickFormatter={formatDateTime}
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#6b7280', fontSize: 11 }}
+            tick={{ fill: '#64748b', fontSize: 11 }}
             padding={{ left: 5, right: 5 }}
           />
           <YAxis 
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#6b7280', fontSize: 11 }}
+            tick={{ fill: '#64748b', fontSize: 11 }}
             tickFormatter={(value) => `₹${value / 1000}k`}
           />
           <Tooltip content={<CustomTooltip />} />
@@ -156,14 +167,14 @@ const DailyFlowChart = ({ data }) => {
             dataKey="inflow"
             name="Inflow"
             fill="#10B981"
-            radius={[2, 2, 0, 0]}
+            radius={[4, 4, 0, 0]}
             barSize={16}
           />
           <Bar
             dataKey="outflow"
             name="Outflow"
             fill="#EF4444"
-            radius={[2, 2, 0, 0]}
+            radius={[4, 4, 0, 0]}
             barSize={16}
           />
         </ComposedChart>
@@ -173,7 +184,7 @@ const DailyFlowChart = ({ data }) => {
 };
 
 const COLORS = [
-  "#6366F1", // indigo
+  "#1e3a5f", // navy
   "#10B981", // emerald
   "#F59E0B", // amber
   "#EF4444", // red
@@ -185,9 +196,9 @@ const COLORS = [
 const WalletDistributionChart = ({ data }) => {
   if (!data || data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center text-center text-sm text-gray-400 py-8">
-        <FiPieChart className="h-8 w-8 mb-2 text-gray-300" />
-        <p className="text-gray-500">No wallet distribution data available</p>
+      <div className="flex flex-col items-center justify-center py-8 text-center text-sm">
+        <FiPieChart className="mb-2 h-8 w-8 text-slate-300" />
+        <p className="text-slate-500">No wallet distribution data available</p>
       </div>
     );
   }
@@ -196,15 +207,15 @@ const WalletDistributionChart = ({ data }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       return (
-        <div className="bg-white p-3 rounded-lg shadow-lg border border-gray-100">
-          <div className="flex items-center mb-1">
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-md">
+          <div className="mb-1 flex items-center">
             <div 
-              className="w-2 h-2 rounded-full mr-2" 
+              className="mr-2 h-2 w-2 rounded-full" 
               style={{ backgroundColor: payload[0].color }}
             ></div>
-            <p className="font-semibold text-gray-900 text-sm">{data.name}</p>
+            <p className="text-sm font-semibold text-slate-900">{data.name}</p>
           </div>
-          <p className="text-lg font-bold text-gray-900">
+          <p className="text-lg font-bold text-slate-900">
             ₹{data.value.toLocaleString()}
           </p>
         </div>
@@ -217,8 +228,8 @@ const WalletDistributionChart = ({ data }) => {
 
   return (
     <div className="relative">
-      <div className="flex items-center h-64">
-        <div className="relative flex-1 h-full">
+      <div className="flex flex-col items-stretch sm:h-64 sm:flex-row sm:items-center">
+        <div className="relative h-56 w-full sm:h-full sm:w-auto sm:flex-1">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -245,7 +256,7 @@ const WalletDistributionChart = ({ data }) => {
                 y="50%"
                 textAnchor="middle"
                 dominantBaseline="middle"
-                className="text-lg font-bold fill-gray-900"
+                className="fill-slate-900 text-lg font-bold"
               >
                 ₹{totalValue.toLocaleString()}
               </text>
@@ -253,24 +264,24 @@ const WalletDistributionChart = ({ data }) => {
           </ResponsiveContainer>
         </div>
         
-        <div className="flex-1 pl-4">
-          <div className="space-y-2 max-h-56 overflow-y-auto pr-2">
+        <div className="flex-1 pt-3 sm:pl-4 sm:pt-0">
+          <div className="max-h-56 space-y-2 overflow-y-auto pr-2">
             {data.map((item, index) => {
               const percentage = ((item.value / totalValue) * 100).toFixed(1);
               return (
-                <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors">
-                  <div className="flex items-center flex-1 min-w-0">
+                <div key={index} className="flex items-center justify-between rounded-xl bg-slate-50 p-2 transition-colors hover:bg-slate-100">
+                  <div className="flex min-w-0 flex-1 items-center">
                     <div 
-                      className="w-2 h-2 rounded-full mr-2" 
+                      className="mr-2 h-2 w-2 shrink-0 rounded-full" 
                       style={{ backgroundColor: COLORS[index % COLORS.length] }}
                     ></div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 text-sm truncate">{item.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-slate-900">{item.name}</p>
                     </div>
                   </div>
-                  <div className="text-right whitespace-nowrap">
-                    <p className="font-bold text-gray-900 text-sm">₹{item.value.toLocaleString()}</p>
-                    <p className="text-gray-500 text-xs">{percentage}%</p>
+                  <div className="whitespace-nowrap text-right">
+                    <p className="text-sm font-bold text-slate-900">₹{item.value.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500">{percentage}%</p>
                   </div>
                 </div>
               );
@@ -294,70 +305,64 @@ const WalletCard = ({ wallet, onClick, isSelected = false }) => {
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`bg-white rounded-lg border hover:shadow-md transition-all duration-200 cursor-pointer p-3 ${
-        isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'
+      className={`cursor-pointer rounded-2xl border p-4 shadow-sm transition-shadow hover:shadow-md ${
+        isSelected ? 'border-navy-500 bg-slate-50 ring-2 ring-navy-500/20' : 'border-slate-200 bg-white'
       }`}
       onClick={onClick}
     >
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <div className={`rounded-lg flex items-center justify-center w-8 h-8 ${
-            wallet.type?.toLowerCase() === 'bank' ? 'bg-blue-500' :
-            wallet.type?.toLowerCase() === 'cash' ? 'bg-emerald-500' :
-            wallet.type?.toLowerCase() === 'digital' ? 'bg-purple-500' :
-            'bg-indigo-500'
-          }`}>
-            <WalletIcon className="text-white h-4 w-4" />
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${walletTone(wallet)}`}>
+            <WalletIcon className="h-4 w-4 text-white" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-gray-900 text-xs truncate">{wallet.name}</h3>
-            <p className="text-gray-500 text-xs capitalize">{wallet.type}</p>
+            <h3 className="truncate text-sm font-semibold text-slate-900">{wallet.name}</h3>
+            <p className="text-xs capitalize text-slate-500">{wallet.type}</p>
           </div>
         </div>
-        <div className="text-right">
-          <p className="font-bold text-gray-900 text-sm">
+        <div className="shrink-0 text-right">
+          <p className="text-sm font-bold text-slate-900">
             ₹{wallet.currentBalance.toLocaleString()}
           </p>
-          <div className={`inline-flex items-center px-1 py-0.5 rounded text-xs font-medium mt-0.5 ${
+          <div className={`mt-0.5 inline-flex items-center rounded-full px-1.5 py-0.5 text-xs font-medium ${
             balanceChange >= 0 
               ? 'bg-emerald-50 text-emerald-700' 
               : 'bg-rose-50 text-rose-700'
           }`}>
-            {balanceChange >= 0 ? <FiTrendingUp2 className="mr-1 h-2 w-2" /> : <FiTrendingDown2 className="mr-1 h-2 w-2" />}
+            {balanceChange >= 0 ? <FiTrendingUp2 className="mr-1 h-2.5 w-2.5" /> : <FiTrendingDown2 className="mr-1 h-2.5 w-2.5" />}
             {Math.abs(changePercentage)}%
           </div>
         </div>
       </div>
 
-      {/* Original list layout for balance items */}
-      <div className="space-y-1.5 mb-2">
+      <div className="mb-3 space-y-1.5">
         <div className="flex items-center justify-between">
-          <span className="text-gray-500 text-xs">Opening Balance</span>
-          <span className="font-medium text-blue-600 text-xs">
+          <span className="text-xs text-slate-500">Opening Balance</span>
+          <span className="text-xs font-medium text-blue-600">
             ₹{wallet.openingBalance.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-gray-500 text-xs">Closing Balance</span>
-          <span className="font-medium text-indigo-600 text-xs">
+          <span className="text-xs text-slate-500">Closing Balance</span>
+          <span className="text-xs font-medium text-navy-700">
             ₹{wallet.currentBalance.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-gray-500 text-xs">Last Closed Day In</span>
-          <span className="font-medium text-emerald-600 text-xs">
+          <span className="text-xs text-slate-500">Last Closed Day In</span>
+          <span className="text-xs font-medium text-emerald-600">
             ₹{wallet.credit.toLocaleString()}
           </span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-gray-500 text-xs">Last Closed Day Out</span>
-          <span className="font-medium text-rose-600 text-xs">
+          <span className="text-xs text-slate-500">Last Closed Day Out</span>
+          <span className="text-xs font-medium text-rose-600">
             ₹{wallet.debit.toLocaleString()}
           </span>
         </div>
       </div>
       
-      <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
+      <div className="flex items-center justify-between border-t border-slate-100 pt-2 text-xs text-slate-400">
         <span>View details</span>
         <FiChevronRight className="h-3 w-3" />
       </div>
@@ -680,52 +685,57 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
   return (
     <>
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Balance history"
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col border-l border-gray-200 w-full max-w-4xl"
+        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-4xl flex-col border-l border-slate-200 bg-white shadow-2xl"
       >
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 p-4">
+          <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Back"
+              className="rounded-lg p-2 transition-colors hover:bg-slate-100"
             >
-              <FiArrowLeft className="h-4 w-4 text-gray-600" />
+              <FiArrowLeft className="h-4 w-4 text-slate-600" />
             </button>
             <div>
-              <h2 className="text-base font-bold text-gray-900">Balance History</h2>
-              <p className="text-xs text-gray-600">Opening & Closing Balances</p>
+              <h2 className="text-base font-bold text-slate-900">Balance History</h2>
+              <p className="text-xs text-slate-500">Opening & Closing Balances</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Close"
+            className="rounded-lg p-2 transition-colors hover:bg-slate-100"
           >
-            <FiX className="h-4 w-4 text-gray-600" />
+            <FiX className="h-4 w-4 text-slate-600" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
           {/* Filters */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900 flex items-center text-sm">
-                <FiFilter className="h-4 w-4 mr-2 text-indigo-600" />
+          <div className={`${cardCls} mb-4 p-4`}>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center text-sm font-semibold text-slate-900">
+                <FiFilter className="mr-2 h-4 w-4 text-navy-700" />
                 Filters
               </h3>
-              <div className="flex space-x-2">
+              <div className="flex gap-2">
                 <button
                   onClick={exportToCSV}
-                  className="flex items-center space-x-2 px-3 py-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors text-xs"
+                  className="flex items-center gap-2 rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-700"
                 >
                   <FiDownload className="h-3 w-3" />
                   <span>Export CSV</span>
                 </button>
                 <button
                   onClick={loadData}
-                  className="flex items-center space-x-2 px-3 py-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors text-xs"
+                  className="flex items-center gap-2 rounded-xl bg-navy-700 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-navy-800"
                 >
                   <FiRefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
                   <span>Refresh</span>
@@ -733,10 +743,10 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
               </div>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
               {/* Wallet Filter */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
                   Wallet
                 </label>
                 <select
@@ -745,7 +755,7 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
                     const val = e.target.value;
                     setSelectedWallet(val ? Number(val) : null);
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  className={fieldCls}
                 >
                   <option value="">Select Wallet</option>
                   {wallets.map(wallet => (
@@ -758,41 +768,43 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
               
               {/* Date Range */}
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
                   Start Date
                 </label>
                 <input
                   type="date"
                   value={dateRange.start}
                   onChange={(e) => setDateRange({...dateRange, start: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  className={fieldCls}
                 />
               </div>
               
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">
+                <label className="mb-1 block text-xs font-medium text-slate-600">
                   End Date
                 </label>
                 <input
                   type="date"
                   value={dateRange.end}
                   onChange={(e) => setDateRange({...dateRange, end: e.target.value})}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                  className={fieldCls}
                 />
               </div>
             </div>
             
             {/* View Mode Toggle */}
             <div className="mt-3">
-              <label className="block text-xs font-medium text-gray-700 mb-2">
+              <label className="mb-2 block text-xs font-medium text-slate-600">
                 View Mode
               </label>
-              <div className="flex space-x-2">
+              <div role="tablist" className="inline-flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
                 {['daily', 'weekly', 'monthly'].map(mode => (
                   <button
                     key={mode}
+                    role="tab"
+                    aria-selected={viewMode === mode}
                     onClick={() => setViewMode(mode)}
-                    className={`px-3 py-1.5 rounded-lg capitalize text-sm ${viewMode === mode ? 'bg-indigo-500 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
+                    className={`rounded-lg px-3 py-1.5 text-sm capitalize transition-colors ${viewMode === mode ? 'bg-navy-700 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                   >
                     {mode}
                   </button>
@@ -802,54 +814,42 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-            <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-              <p className="text-xs text-blue-700 mb-1">Opening</p>
+          <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+              <p className="mb-1 text-xs text-blue-700">Opening</p>
               <p className="font-bold text-blue-900">₹{summary.totalOpening.toLocaleString()}</p>
             </div>
-            <div className="bg-indigo-50 rounded-lg p-3 border border-indigo-200">
-              <p className="text-xs text-indigo-700 mb-1">Closing</p>
-              <p className="font-bold text-indigo-900">₹{summary.totalClosing.toLocaleString()}</p>
+            <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+              <p className="mb-1 text-xs text-navy-700">Closing</p>
+              <p className="font-bold text-slate-900">₹{summary.totalClosing.toLocaleString()}</p>
             </div>
-            <div className="bg-emerald-50 rounded-lg p-3 border border-emerald-200">
-              <p className="text-xs text-emerald-700 mb-1">Inflow</p>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="mb-1 text-xs text-emerald-700">Inflow</p>
               <p className="font-bold text-emerald-900">₹{summary.totalIn.toLocaleString()}</p>
             </div>
-            <div className="bg-rose-50 rounded-lg p-3 border border-rose-200">
-              <p className="text-xs text-rose-700 mb-1">Outflow</p>
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <p className="mb-1 text-xs text-rose-700">Outflow</p>
               <p className="font-bold text-rose-900">₹{summary.totalOut.toLocaleString()}</p>
             </div>
           </div>
 
           {/* Balance History Table */}
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            <table className="min-w-full divide-y divide-slate-200">
+              <thead className="bg-slate-50">
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
+                  <th className={thCls}>
                     {viewMode === 'daily' ? 'Date' : 'Period'}
                   </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Wallet
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Opening
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Closing
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    In
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    Out
-                  </th>
-                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">
-                    TXN
-                  </th>
+                  <th className={thCls}>Wallet</th>
+                  <th className={thCls}>Opening</th>
+                  <th className={thCls}>Closing</th>
+                  <th className={thCls}>In</th>
+                  <th className={thCls}>Out</th>
+                  <th className={thCls}>TXN</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-slate-100 bg-white">
                 {filteredData.length > 0 ? (
                   filteredData.map((item, index) => {
                     // Format the date based on view mode
@@ -858,27 +858,27 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
                       : formatPeriod(item.period, viewMode);
                     
                     return (
-                      <tr key={index} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">
+                      <tr key={index} className="transition-colors hover:bg-slate-50">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-sm text-slate-900">
                           {displayDate}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-sm text-slate-600">
                           {item.walletId ? getWalletName(item.walletId) : 'Multiple'}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-blue-600">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-sm font-medium text-blue-600">
                           ₹{item.openingBalance.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-indigo-600">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-sm font-medium text-navy-700">
                           ₹{item.closingBalance.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-emerald-600">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-sm font-medium text-emerald-600">
                           ₹{item.totalIn.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-rose-600">
+                        <td className="whitespace-nowrap px-4 py-2.5 text-sm font-medium text-rose-600">
                           ₹{item.totalOut.toLocaleString()}
                         </td>
-                        <td className="px-4 py-2 whitespace-nowrap">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                        <td className="whitespace-nowrap px-4 py-2.5">
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-800">
                             {item.transactions}
                           </span>
                         </td>
@@ -887,9 +887,9 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
                   })
                 ) : (
                   <tr>
-                    <td colSpan="7" className="px-4 py-6 text-center">
-                      <FiFileText className="h-8 w-8 mx-auto mb-2 text-gray-300" />
-                      <p className="text-gray-500 text-sm">No balance history found</p>
+                    <td colSpan="7" className="px-4 py-8 text-center">
+                      <FiFileText className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                      <p className="text-sm text-slate-500">No balance history found</p>
                     </td>
                   </tr>
                 )}
@@ -911,49 +911,49 @@ const WalletDetailsPanel = ({ wallet, onClose }) => {
   return (
     <>
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${wallet.name} details`}
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full bg-white shadow-lg z-40 flex flex-col border-l border-gray-200 w-full max-w-sm"
+        className="fixed right-0 top-0 z-40 flex h-full w-full max-w-sm flex-col border-l border-slate-200 bg-white shadow-2xl"
       >
-        <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center space-x-2">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-slate-50/60 p-4">
+          <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Back"
+              className="rounded-lg p-2 transition-colors hover:bg-slate-100"
             >
-              <FiArrowLeft className="h-4 w-4 text-gray-600" />
+              <FiArrowLeft className="h-4 w-4 text-slate-600" />
             </button>
             <div>
-              <h2 className="text-base font-bold text-gray-900">{wallet.name}</h2>
-              <p className="text-xs text-gray-600 capitalize">{wallet.type}</p>
+              <h2 className="text-base font-bold text-slate-900">{wallet.name}</h2>
+              <p className="text-xs capitalize text-slate-500">{wallet.type}</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-label="Close"
+            className="rounded-lg p-2 transition-colors hover:bg-slate-100"
           >
-            <FiX className="h-4 w-4 text-gray-600" />
+            <FiX className="h-4 w-4 text-slate-600" />
           </button>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4">
           <div className="space-y-4">
             {/* Balance Summary */}
-            <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <div className="flex items-center space-x-3 mb-3">
-                <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-                  wallet.type?.toLowerCase() === 'bank' ? 'bg-blue-500' :
-                  wallet.type?.toLowerCase() === 'cash' ? 'bg-emerald-500' :
-                  wallet.type?.toLowerCase() === 'digital' ? 'bg-purple-500' :
-                  'bg-indigo-500'
-                }`}>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="mb-3 flex items-center gap-3">
+                <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${walletTone(wallet)}`}>
                   <WalletIcon className="h-6 w-6 text-white" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-gray-900">{wallet.name}</h3>
-                  <div className={`inline-flex items-center mt-1 px-2 py-0.5 rounded text-xs font-bold ${
+                  <h3 className="font-bold text-slate-900">{wallet.name}</h3>
+                  <div className={`mt-1 inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold ${
                     netChange >= 0 
                       ? 'bg-emerald-50 text-emerald-700' 
                       : 'bg-rose-50 text-rose-700'
@@ -965,33 +965,33 @@ const WalletDetailsPanel = ({ wallet, onClose }) => {
               </div>
               
               <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-1">Current Balance</p>
-                <p className="text-2xl font-bold text-gray-900">₹{wallet.currentBalance.toLocaleString()}</p>
+                <p className="mb-1 text-sm text-slate-500">Current Balance</p>
+                <p className="text-2xl font-bold text-slate-900">₹{wallet.currentBalance.toLocaleString()}</p>
               </div>
 
-              {/* Balance list (original style) */}
+              {/* Balance list */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-sm">Opening Balance</span>
-                  <span className="font-medium text-blue-600 text-sm">
+                  <span className="text-sm text-slate-600">Opening Balance</span>
+                  <span className="text-sm font-medium text-blue-600">
                     ₹{wallet.openingBalance.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-sm">Closing Balance</span>
-                  <span className="font-medium text-indigo-600 text-sm">
+                  <span className="text-sm text-slate-600">Closing Balance</span>
+                  <span className="text-sm font-medium text-navy-700">
                     ₹{wallet.currentBalance.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-sm">Today In</span>
-                  <span className="font-medium text-emerald-600 text-sm">
+                  <span className="text-sm text-slate-600">Today In</span>
+                  <span className="text-sm font-medium text-emerald-600">
                     ₹{wallet.credit.toLocaleString()}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-sm">Today Out</span>
-                  <span className="font-medium text-rose-600 text-sm">
+                  <span className="text-sm text-slate-600">Today Out</span>
+                  <span className="text-sm font-medium text-rose-600">
                     ₹{wallet.debit.toLocaleString()}
                   </span>
                 </div>
@@ -1147,18 +1147,18 @@ const loadWalletSummary = async () => {
     <>
       <div className="mb-6">
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center">
-              <FiSmartphone className="h-5 w-5 mr-2 text-indigo-600" />
+            <h2 className="flex items-center text-lg font-bold text-slate-900">
+              <FiSmartphone className="mr-2 h-5 w-5 text-navy-700" />
               Wallet Management
             </h2>
-            <p className="text-gray-600 text-sm mt-1">Manage your financial accounts</p>
+            <p className="mt-1 text-sm text-slate-500">Manage your financial accounts</p>
           </div>
-          <div className="flex items-center space-x-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={() => setShowBalanceHistory(true)}
-              className="flex items-center space-x-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
+              className="flex items-center gap-2 rounded-xl bg-navy-700 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-800"
             >
               <FiCalendar className="h-4 w-4" />
               <span>Balance History</span>
@@ -1167,9 +1167,9 @@ const loadWalletSummary = async () => {
             <button
               onClick={handleManualDailyClose}
               disabled={closing}
-              className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm ${
+              className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold ${
                 closing
-                  ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                  ? "cursor-not-allowed bg-slate-200 text-slate-500"
                   : "bg-amber-500 text-white hover:bg-amber-600"
               }`}
             >
@@ -1180,35 +1180,35 @@ const loadWalletSummary = async () => {
         </div>
 
         {/* Date Range Filters */}
-        <div className="flex flex-wrap gap-3 mb-4 items-end">
+        <div className={`${cardCls} mb-4 flex flex-wrap items-end gap-3 p-3`}>
           <div>
-            <label className="block text-sm text-gray-600 mb-1">From</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600">From</label>
             <input
               type="date"
               value={dateRange.start}
               onChange={(e) =>
                 setDateRange(prev => ({ ...prev, start: e.target.value }))
               }
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+              className={fieldCls}
             />
           </div>
 
           <div>
-            <label className="block text-sm text-gray-600 mb-1">To</label>
+            <label className="mb-1 block text-xs font-medium text-slate-600">To</label>
             <input
               type="date"
               value={dateRange.end}
               onChange={(e) =>
                 setDateRange(prev => ({ ...prev, end: e.target.value }))
               }
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+              className={fieldCls}
             />
           </div>
 
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setDateRange({ start: today, end: today })}
-              className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               Today
             </button>
@@ -1221,7 +1221,7 @@ const loadWalletSummary = async () => {
                   end: today,
                 });
               }}
-              className="px-3 py-2 bg-indigo-100 text-indigo-700 rounded-lg hover:bg-indigo-200 text-sm"
+              className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
             >
               This Month
             </button>
@@ -1229,13 +1229,13 @@ const loadWalletSummary = async () => {
         </div>
 
         {/* Wallet Stats */}
-        <div className="grid gap-3 mb-4 grid-cols-2 md:grid-cols-4">
+        <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
             title="Total Balance"
             value={`₹${walletStats.totalWalletBalance.toLocaleString()}`}
             subtitle="All wallets"
             icon={FiSmartphone}
-            color="bg-indigo-600"
+            color="bg-navy-700"
           />
           <StatCard
             title="Bank Balance"
@@ -1261,11 +1261,11 @@ const loadWalletSummary = async () => {
         </div>
 
         {/* Last Closed Info */}
-        <div className="mb-4 rounded-lg bg-blue-50 border border-blue-200 px-4 py-3">
-          <div className="font-medium text-blue-900 text-sm">
+        <div className="mb-4 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3">
+          <div className="text-sm font-medium text-blue-900">
             Last accounting close
           </div>
-          <div className="mt-1 text-blue-700 text-sm">
+          <div className="mt-1 text-sm text-blue-700">
             Closed at <span className="font-semibold">
               {lastClosedAt
                 ? formatDateTime(lastClosedAt)
@@ -1275,41 +1275,41 @@ const loadWalletSummary = async () => {
         </div>
 
         {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+        <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
           {/* Daily Inflow vs Outflow Chart */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-4">
+          <div className={`${cardCls} p-4 sm:p-5`}>
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-gray-900 text-sm">Daily Inflow vs Outflow</h3>
-                <p className="text-gray-500 text-xs">Closed days</p>
+                <h3 className="text-sm font-semibold text-slate-900">Daily Inflow vs Outflow</h3>
+                <p className="text-xs text-slate-500">Closed days</p>
               </div>
-              <FiBarChart2 className="h-4 w-4 text-indigo-600" />
+              <FiBarChart2 className="h-4 w-4 text-navy-700" />
             </div>
             <DailyFlowChart data={dailyFlowData} />
           </div>
 
           {/* Wallet-wise Distribution */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-4">
+          <div className={`${cardCls} p-4 sm:p-5`}>
+            <div className="mb-4 flex items-center justify-between">
               <div>
-                <h3 className="font-semibold text-gray-900 text-sm">Wallet Distribution</h3>
-                <p className="text-gray-500 text-xs">Movement across wallets</p>
+                <h3 className="text-sm font-semibold text-slate-900">Wallet Distribution</h3>
+                <p className="text-xs text-slate-500">Movement across wallets</p>
               </div>
-              <FiPieChart className="h-4 w-4 text-indigo-600" />
+              <FiPieChart className="h-4 w-4 text-navy-700" />
             </div>
             <WalletDistributionChart data={walletDistribution} />
           </div>
         </div>
 
-        {/* Wallets Grid - 5 cards per row on large screens */}
+        {/* Wallets Grid */}
         <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="font-semibold text-gray-900 text-sm">All Wallets</h3>
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+          <div className="mb-3 flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-900">All Wallets</h3>
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
               {wallets.length} wallets
             </span>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {wallets.map((wallet) => (
               <WalletCard
                 key={wallet.id}

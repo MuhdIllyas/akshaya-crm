@@ -20,19 +20,23 @@ import AdminExpenseEntry from './AdminExpenseEntry';
 // Today's date in IST (YYYY-MM-DD)
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
+// Shared style tokens (UI only)
+const inputCls =
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed';
+
 // Compact StatCard Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer p-3"
+    className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
     onClick={onClick}
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className="mb-1 truncate text-xl font-bold text-slate-900">{value}</p>
         <div className="flex items-center">
-          <p className="text-gray-500 text-xs">{subtitle}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
           {trend && (
             <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {trend > 0 ? <FiTrendingUp className="mr-1 h-2 w-2" /> : <FiTrendingDown className="mr-1 h-2 w-2" />}
@@ -41,8 +45,8 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
           )}
         </div>
       </div>
-      <div className={`rounded-lg ${color} p-2`}>
-        <Icon className="text-white h-4 w-4" />
+      <div className={`shrink-0 rounded-xl ${color} p-2.5`}>
+        <Icon className="h-4 w-4 text-white" />
       </div>
     </div>
   </motion.div>
@@ -107,33 +111,33 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-gray-900 text-sm flex items-center">
-            <FiCheckCircle className="h-4 w-4 mr-2 text-indigo-600" />
+          <h3 className="flex items-center text-sm font-bold text-slate-900">
+            <FiCheckCircle className="mr-2 h-4 w-4 text-navy-700" />
             Nightly Accounting Checklist
           </h3>
-          <p className="text-xs text-gray-600">Date: {date}</p>
+          <p className="mt-0.5 text-xs text-slate-500">Date: {date}</p>
           {existingData && (
-            <div className="mt-1">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                <FiCheckCircle className="h-3 w-3 mr-1" />
+            <div className="mt-1.5">
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                <FiCheckCircle className="mr-1 h-3 w-3" />
                 Closed on {new Date(existingData.timestamp).toLocaleDateString()}
               </span>
             </div>
           )}
         </div>
-        <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-          allCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+        <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+          allCompleted ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-amber-50 text-amber-700 ring-amber-200'
         }`}>
           {allCompleted ? 'Ready to Close' : 'Pending Items'}
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Checklist Items */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
             { key: 'incomeEntryVerified', label: 'Income Entry Verified', description: 'Service charges & fees' },
             { key: 'expenseEntryVerified', label: 'Expense Entry Verified', description: 'All expenses approved' },
@@ -142,36 +146,48 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
             { key: 'cashReconciled', label: 'Cash Reconciled', description: 'Cash matches count' },
             { key: 'walletBalancesVerified', label: 'Wallets Verified', description: 'Digital wallets checked' }
           ].map((item) => (
-            <div key={item.key} className="flex items-start space-x-2 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div
+              key={item.key}
+              className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${
+                checklist[item.key] ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
               <button
+                type="button"
+                role="checkbox"
+                aria-checked={!!checklist[item.key]}
+                aria-label={item.label}
                 onClick={() => handleChecklistToggle(item.key)}
-                className={`mt-1 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center ${
+                className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border transition-colors ${
                   checklist[item.key]
-                    ? 'bg-emerald-500 border-emerald-500'
-                    : 'border-gray-300'
-                }`}
+                    ? 'border-emerald-500 bg-emerald-500'
+                    : 'border-slate-300 bg-white'
+                } ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
               >
-                {checklist[item.key] && <FiCheckIcon className="h-2 w-2 text-white" />}
+                {checklist[item.key] && <FiCheckIcon className="h-3 w-3 text-white" />}
               </button>
-              <div className="flex-1 min-w-0">
-                <label className="font-medium text-gray-900 text-sm cursor-pointer truncate" onClick={() => handleChecklistToggle(item.key)}>
+              <div className="min-w-0 flex-1">
+                <label
+                  className={`block truncate text-sm font-medium text-slate-900 ${readOnly ? '' : 'cursor-pointer'}`}
+                  onClick={() => handleChecklistToggle(item.key)}
+                >
                   {item.label}
                 </label>
-                <p className="text-xs text-gray-600 truncate">{item.description}</p>
+                <p className="truncate text-xs text-slate-500">{item.description}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* Cash Reconciliation */}
-        <div className="pt-4 border-t border-gray-200">
-          <h4 className="font-medium text-gray-900 text-sm mb-3 flex items-center">
-            <FiDollarSign className="h-3 w-3 mr-2 text-emerald-600" />
+        <div className="border-t border-slate-200 pt-5">
+          <h4 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+            <FiDollarSign className="mr-2 h-3.5 w-3.5 text-emerald-600" />
             Cash Reconciliation
           </h4>
-          <div className="grid gap-3 grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
                 Calculated Cash
               </label>
               <input
@@ -179,12 +195,12 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
                 value={closingCash}
                 onChange={(e) => setClosingCash(e.target.value)}
                 disabled={readOnly}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                className={inputCls}
                 placeholder="₹0.00"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
                 Actual Count
               </label>
               <input
@@ -192,17 +208,17 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
                 value={actualCashCount}
                 onChange={(e) => setActualCashCount(e.target.value)}
                 disabled={readOnly}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                className={inputCls}
                 placeholder="₹0.00"
               />
             </div>
           </div>
           {closingCash && actualCashCount && (
             <div className="mt-2">
-              <span className={`text-xs font-medium ${
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
                 Math.abs(parseFloat(closingCash) - parseFloat(actualCashCount)) <= 100
-                  ? 'text-emerald-600'
-                  : 'text-rose-600'
+                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                  : 'bg-rose-50 text-rose-700 ring-rose-200'
               }`}>
                 Variance: ₹{(parseFloat(closingCash) - parseFloat(actualCashCount)).toFixed(2)}
               </span>
@@ -212,8 +228,8 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-2 flex items-center">
-            <FiMessageSquare className="h-3 w-3 mr-1 text-gray-500" />
+          <label className="mb-1.5 flex items-center text-xs font-medium text-slate-600">
+            <FiMessageSquare className="mr-1 h-3 w-3 text-slate-400" />
             Notes & Observations
           </label>
           <textarea
@@ -221,7 +237,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
             onChange={(e) => setNotes(e.target.value)}
             disabled={readOnly}
             rows="2"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            className={inputCls}
             placeholder="Enter any notes or observations..."
           />
         </div>
@@ -232,12 +248,12 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
           <button
             onClick={handleCompleteAccounting}
             disabled={!allCompleted}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            className={`rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors ${
               allCompleted
                 ? existingData
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  ? 'bg-navy-700 text-white hover:bg-navy-800'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'cursor-not-allowed bg-slate-100 text-slate-400 shadow-none'
             }`}
           >
             {existingData ? 'Update Nightly Accounting' : 'Complete Nightly Accounting'}
@@ -328,23 +344,23 @@ const calculateTotals = () => {
   ];
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-gray-900 text-sm flex items-center">
-            <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
+          <h3 className="flex items-center text-sm font-bold text-slate-900">
+            <FiBarChart2 className="mr-2 h-4 w-4 text-navy-700" />
             Daily Summary
           </h3>
-          <p className="text-xs text-gray-600">Date: {summaryData?.date || '-'}</p>
+          <p className="mt-0.5 text-xs text-slate-500">Date: {summaryData?.date || '-'}</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex gap-2">
           {editing ? (
             <>
               <button
                 onClick={handleSave}
-                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-1 text-sm"
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
               >
-                <FiSave className="h-3 w-3" />
+                <FiSave className="h-3.5 w-3.5" />
                 <span>Save</span>
               </button>
               <button
@@ -357,18 +373,18 @@ const calculateTotals = () => {
                   });
                   setEditing(false);
                 }}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1 text-sm"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               >
-                <FiX className="h-3 w-3" />
+                <FiX className="h-3.5 w-3.5" />
                 <span>Cancel</span>
               </button>
             </>
           ) : !readOnly ? (
             <button
               onClick={() => setEditing(true)}
-              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-1 text-sm"
+              className="flex items-center gap-1.5 rounded-xl bg-navy-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-800"
             >
-              <FiEdit className="h-3 w-3" />
+              <FiEdit className="h-3.5 w-3.5" />
               <span>Edit Summary</span>
             </button>
           ) : null}
@@ -376,90 +392,90 @@ const calculateTotals = () => {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid gap-3 mb-4 grid-cols-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-xs text-blue-700 mb-1">Total Inflow</p>
-          <p className="font-bold text-blue-900 text-sm">
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <p className="mb-1 text-xs font-medium text-blue-700">Total Inflow</p>
+          <p className="text-base font-bold text-blue-900">
             ₹{totals.totalInflow.toLocaleString()}
           </p>
         </div>
 
-        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
-          <p className="text-xs text-rose-700 mb-1">Total Outflow</p>
-          <p className="font-bold text-rose-900 text-sm">
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <p className="mb-1 text-xs font-medium text-rose-700">Total Outflow</p>
+          <p className="text-base font-bold text-rose-900">
             ₹{totals.totalOutflow.toLocaleString()}
           </p>
         </div>
 
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-          <p className="text-xs text-emerald-700 mb-1">Closing Balance</p>
-          <p className="font-bold text-emerald-900 text-sm">
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="mb-1 text-xs font-medium text-emerald-700">Closing Balance</p>
+          <p className="text-base font-bold text-emerald-900">
             ₹{totals.closingBalance.toLocaleString()}
           </p>
         </div>
 
-        <div className={`border rounded-lg p-3 ${
+        <div className={`rounded-xl border p-3 ${
           Math.abs(totals.variance) <= 100
-            ? 'bg-emerald-50 border-emerald-200'
-            : 'bg-rose-50 border-rose-200'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+            : 'border-rose-200 bg-rose-50 text-rose-900'
         }`}>
-          <p className="text-xs mb-1">Cash Variance</p>
-          <p className="font-bold text-sm">
+          <p className="mb-1 text-xs font-medium">Cash Variance</p>
+          <p className="text-base font-bold">
             ₹{totals.variance.toFixed(2)}
           </p>
         </div>
       </div>
 
       {/* Summary Table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-full">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full min-w-[480px]">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Item
               </th>
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Type
               </th>
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Category
               </th>
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Amount (₹)
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {fields.map((field) => (
-              <tr key={field.key} className="hover:bg-gray-50 transition-colors">
-                <td className="py-2 px-3">
-                  <span className="font-medium text-gray-900 text-xs">{field.label}</span>
+              <tr key={field.key} className="transition-colors hover:bg-slate-50">
+                <td className="px-3 py-2.5">
+                  <span className="text-xs font-medium text-slate-900">{field.label}</span>
                 </td>
-                <td className="py-2 px-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                    field.type === 'cash' ? 'bg-blue-100 text-blue-800' :
-                    field.type === 'digital' ? 'bg-purple-100 text-purple-800' :
-                    field.type === 'bank' ? 'bg-indigo-100 text-indigo-800' :
-                    'bg-amber-100 text-amber-800'
+                <td className="px-3 py-2.5">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    field.type === 'cash' ? 'bg-blue-50 text-blue-700' :
+                    field.type === 'digital' ? 'bg-purple-50 text-purple-700' :
+                    field.type === 'bank' ? 'bg-slate-100 text-navy-700' :
+                    'bg-amber-50 text-amber-700'
                   }`}>
-                    {field.type === 'cash' && <FiDollarSign className="h-2 w-2 mr-1" />}
-                    {field.type === 'digital' && <FiSmartphone className="h-2 w-2 mr-1" />}
-                    {field.type === 'bank' && <FiCreditCard className="h-2 w-2 mr-1" />}
+                    {field.type === 'cash' && <FiDollarSign className="mr-1 h-2.5 w-2.5" />}
+                    {field.type === 'digital' && <FiSmartphone className="mr-1 h-2.5 w-2.5" />}
+                    {field.type === 'bank' && <FiCreditCard className="mr-1 h-2.5 w-2.5" />}
                     {field.type}
                   </span>
                 </td>
-                <td className="py-2 px-3">
+                <td className="px-3 py-2.5">
                   <span className={`inline-flex items-center text-xs ${
                     field.category === 'inflow' ? 'text-emerald-600' :
                     field.category === 'outflow' ? 'text-rose-600' :
-                    'text-gray-600'
+                    'text-slate-500'
                   }`}>
-                    {field.category === 'inflow' && <FiTrendingUp className="h-2 w-2 mr-1" />}
-                    {field.category === 'outflow' && <FiTrendingDown className="h-2 w-2 mr-1" />}
+                    {field.category === 'inflow' && <FiTrendingUp className="mr-1 h-2.5 w-2.5" />}
+                    {field.category === 'outflow' && <FiTrendingDown className="mr-1 h-2.5 w-2.5" />}
                     {field.category}
                   </span>
                 </td>
-                <td className="py-2 px-3">
+                <td className="px-3 py-2.5 text-right">
                   {editing && field.key === 'actualCashInHand' ? (
                     <input
                       type="number"
@@ -473,10 +489,10 @@ const calculateTotals = () => {
                           }
                         }))
                       }
-                      className="w-28 px-2 py-1 border border-gray-300 rounded text-right text-xs"
+                      className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-xs focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                     />
                   ) : (
-                    <span className="font-medium text-xs text-gray-800">
+                    <span className="text-xs font-semibold text-slate-800">
                       ₹{(field.key === 'actualCashInHand' ? formData.manual.actualCashInHand : formData.derived[field.key])?.toLocaleString() || '0'}
                     </span>
                   )}

@@ -34,19 +34,27 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 
 /* =========================
+   Shared style tokens (UI only)
+========================= */
+const fieldCls =
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500';
+const cardCls = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+const thCls = 'px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-slate-500';
+
+/* =========================
    Transaction Stats Card
 ========================= */
 const TransactionStatCard = ({ title, value, icon: Icon, color, subtitle, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 p-3"
+    className={`${cardCls} p-4 transition-shadow hover:shadow-md`}
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className="mb-1 truncate text-xl font-bold text-slate-900">{value}</p>
         <div className="flex items-center">
-          <p className="text-gray-500 text-xs">{subtitle}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
           {trend && (
             <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {trend > 0 ? <FiTrendingUp className="mr-1 h-2 w-2" /> : <FiTrendingDown className="mr-1 h-2 w-2" />}
@@ -55,8 +63,8 @@ const TransactionStatCard = ({ title, value, icon: Icon, color, subtitle, trend 
           )}
         </div>
       </div>
-      <div className={`rounded-lg ${color} p-2`}>
-        <Icon className="text-white h-4 w-4" />
+      <div className={`shrink-0 rounded-xl ${color} p-2.5`}>
+        <Icon className="h-4 w-4 text-white" />
       </div>
     </div>
   </motion.div>
@@ -266,43 +274,161 @@ const TransactionsSection = ({
     return FiTag;
   };
 
+  // UI helpers for the expanded row (same data and toggle as before)
+  const renderDetails = (transaction) => (
+    <div className="rounded-xl border border-slate-200 bg-white p-3">
+      <div className="mb-3 flex items-center justify-between">
+        <h4 className="text-xs font-bold text-slate-900">Transaction Details</h4>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">ID:</span>
+          <span className="font-mono text-xs text-slate-700">{transaction.id}</span>
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-2 gap-3">
+        <div>
+          <p className="mb-1 text-xs text-slate-500">Transaction Type</p>
+          <p className="text-xs font-medium text-slate-900">
+            {transaction.transactionType === 'credit' ? 'Credit (Incoming)' : 'Debit (Outgoing)'}
+          </p>
+        </div>
+        <div>
+          <p className="mb-1 text-xs text-slate-500">Payment Method</p>
+          <div className="flex items-center">
+            <div className="mr-2 rounded bg-slate-100 p-1">
+              <FiCreditCard className="h-3 w-3 text-slate-600" />
+            </div>
+            <p className="text-xs font-medium text-slate-900">{transaction.paymentMethod || '—'}</p>
+          </div>
+        </div>
+        {transaction.walletId && (
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Wallet</p>
+            <p className="text-xs font-medium text-slate-900">{transaction.walletName || transaction.walletId}</p>
+          </div>
+        )}
+        <div>
+          <p className="mb-1 text-xs text-slate-500">Category</p>
+          <p className="text-xs font-medium text-slate-900">{transaction.category || '—'}</p>
+        </div>
+      </div>
+
+      {/* Staff and Customer Info */}
+      {(transaction.staffName || transaction.customerName) && (
+        <div className="border-t border-slate-200 pt-3">
+          <h5 className="mb-2 text-xs font-semibold text-slate-700">Involved Parties</h5>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            {transaction.staffName && (
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100">
+                  <FiBriefcase className="h-3 w-3 text-emerald-600" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-900">Staff</p>
+                  <p className="text-xs text-slate-700">{transaction.staffName}</p>
+                </div>
+              </div>
+            )}
+            {transaction.customerName && (
+              <div className="flex items-center gap-2">
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100">
+                  <FiUser className="h-3 w-3 text-navy-700" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-slate-900">Customer</p>
+                  <p className="text-xs text-slate-700">{transaction.customerName}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Description */}
+      {transaction.description && (
+        <div className="mt-3 border-t border-slate-200 pt-3">
+          <h5 className="mb-2 text-xs font-semibold text-slate-700">Description</h5>
+          <p className="text-xs text-slate-700">{transaction.description}</p>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderRowActions = (transaction, isExpanded) => (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => toggleRow(transaction.id)}
+        className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+        title="View details"
+        aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+        aria-expanded={isExpanded}
+      >
+        {isExpanded ? (
+          <FiMinus className="h-4 w-4" />
+        ) : (
+          <FiPlus className="h-4 w-4" />
+        )}
+      </button>
+      <button
+        onClick={() => setSelectedTransaction(transaction)}
+        className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-navy-700"
+        title="View full details"
+        aria-label="View full details"
+      >
+        <FiEye className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
+  const statusBadge = (transaction) => (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(transaction.status)}`}>
+      {transaction.status === 'Completed' && <FiCheckCircle className="mr-1 h-2.5 w-2.5" />}
+      {transaction.status === 'Pending' && <FiClock className="mr-1 h-2.5 w-2.5" />}
+      {transaction.status === 'Failed' && <FiXCircle className="mr-1 h-2.5 w-2.5" />}
+      {transaction.status || '—'}
+    </span>
+  );
+
   return (
     <div className="space-y-4">
       {/* Search and Filter Bar */}
-      <div className="grid grid-cols-8 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
-        <div className="col-span-2">
+      <div className={`${cardCls} grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 lg:grid-cols-4 2xl:grid-cols-8`}>
+        <div className="sm:col-span-2">
           <div className="relative">
-            <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Search transactions, customer, staff..."
-              className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+              aria-label="Search transactions"
+              className={`${fieldCls} pl-10`}
             />
           </div>
         </div>
         
         {/* Date From Filter */}
         <div className="relative">
-          <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <FiCalendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="date"
             value={dateFilter?.fromDate || ''}
             onChange={(e) => handleDateFilterChange('fromDate', e.target.value)}
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            aria-label="From date"
+            className={`${fieldCls} pl-10`}
             placeholder="From Date"
           />
         </div>
         
         {/* Date To Filter */}
         <div className="relative">
-          <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+          <FiCalendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="date"
             value={dateFilter?.toDate || ''}
             onChange={(e) => handleDateFilterChange('toDate', e.target.value)}
-            className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            aria-label="To date"
+            className={`${fieldCls} pl-10`}
             placeholder="To Date"
           />
         </div>
@@ -310,7 +436,8 @@ const TransactionsSection = ({
         <select
           value={activeFilters.status}
           onChange={(e) => handleFilterChange('status', e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          aria-label="Status filter"
+          className={fieldCls}
         >
           <option value="">All Status</option>
           <option value="Completed">Completed</option>
@@ -321,7 +448,8 @@ const TransactionsSection = ({
         <select
           value={activeFilters.paymentMethod}
           onChange={(e) => handleFilterChange('paymentMethod', e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          aria-label="Payment method filter"
+          className={fieldCls}
         >
           <option value="">All Payment Methods</option>
           <option value="Cash">Cash</option>
@@ -334,7 +462,8 @@ const TransactionsSection = ({
         <select
           value={activeFilters.staffId}
           onChange={(e) => handleFilterChange('staffId', e.target.value)}
-          className="border border-gray-300 rounded px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+          aria-label="Staff filter"
+          className={fieldCls}
         >
           <option value="">All Staff</option>
           {staffList.map(staff => (
@@ -348,36 +477,36 @@ const TransactionsSection = ({
         <div className="flex gap-2">
           <button
             onClick={handleResetFilters}
-            className="flex items-center gap-1 px-3 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
+            className="flex flex-1 items-center justify-center gap-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
           >
             <FiRefreshCw className="h-4 w-4" />
             Reset
           </button>
-          <button className="flex items-center gap-1 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+          <button className="flex flex-1 items-center justify-center gap-1 rounded-xl bg-navy-700 px-3 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-800">
             <FiDownload className="h-4 w-4" />
             Export
           </button>
         </div>
       </div>
 
-      {/* Two-Column Layout */}
-      <div className="grid grid-cols-3 gap-4">
+      {/* Two-Column Layout (table first on small screens) */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         {/* Left Column - Metrics */}
-        <div className="col-span-1 space-y-4">
+        <div className="order-2 space-y-4 xl:order-1 xl:col-span-1">
           {/* Total Transactions Card */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 bg-indigo-100 rounded-lg">
-                  <FiDatabase className="h-4 w-4 text-indigo-600" />
+          <div className={`${cardCls} p-4`}>
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="rounded-xl bg-slate-100 p-2">
+                  <FiDatabase className="h-4 w-4 text-navy-700" />
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Total Transactions</p>
-                  <p className="font-bold text-gray-900 text-lg">{totalTransactions}</p>
+                  <p className="text-xs text-slate-500">Total Transactions</p>
+                  <p className="text-lg font-bold text-slate-900">{totalTransactions}</p>
                 </div>
               </div>
               <div className="text-right">
-                <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-indigo-50 text-indigo-700">
+                <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-navy-700">
                   ₹{totalAmount.toLocaleString()}
                 </span>
               </div>
@@ -385,8 +514,8 @@ const TransactionsSection = ({
             <div className="space-y-2">
               {Object.entries(statusBreakdown).map(([status, data]) => (
                 <div key={status} className="flex items-center justify-between text-xs">
-                  <span className="text-gray-600">{status}</span>
-                  <span className="font-medium text-gray-900">
+                  <span className="text-slate-600">{status}</span>
+                  <span className="font-medium text-slate-900">
                     {data.count} (₹{data.amount.toLocaleString()})
                   </span>
                 </div>
@@ -394,31 +523,31 @@ const TransactionsSection = ({
             </div>
           </div>
 
-          {/* Category Breakdown - REPLACED Payment Methods */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-              <FiTag className="h-4 w-4 mr-2 text-purple-600" />
+          {/* Category Breakdown */}
+          <div className={`${cardCls} p-4`}>
+            <h3 className="mb-3 flex items-center text-sm font-bold text-slate-900">
+              <FiTag className="mr-2 h-4 w-4 text-purple-600" />
               Category Breakdown
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {sortedCategories.map(([category, data]) => {
                 const CategoryIcon = getCategoryIcon(category);
                 const colorClass = getCategoryColor(category);
                 
                 return (
-                  <div key={category} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                    <div className="flex items-center space-x-2">
-                      <div className={`p-1 rounded ${colorClass}`}>
+                  <div key={category} className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-slate-50">
+                    <div className="flex items-center gap-2">
+                      <div className={`rounded-lg p-1.5 ${colorClass}`}>
                         <CategoryIcon className="h-3 w-3" />
                       </div>
-                      <div className="max-w-[120px]">
-                        <p className="text-xs font-medium text-gray-700 truncate">{category}</p>
-                        <p className="text-xs text-gray-500">{data.count} transactions</p>
+                      <div className="max-w-[140px]">
+                        <p className="truncate text-xs font-medium text-slate-700">{category}</p>
+                        <p className="text-xs text-slate-500">{data.count} transactions</p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs font-bold text-gray-900">₹{data.amount.toLocaleString()}</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs font-bold text-slate-900">₹{data.amount.toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">
                         Avg: ₹{data.count > 0 ? (data.amount / data.count).toFixed(0) : 0}
                       </p>
                     </div>
@@ -427,39 +556,39 @@ const TransactionsSection = ({
               })}
               
               {sortedCategories.length === 0 && (
-                <div className="text-center py-3">
-                  <p className="text-xs text-gray-500">No categories found</p>
+                <div className="py-3 text-center">
+                  <p className="text-xs text-slate-500">No categories found</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Top Staff */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-              <FiUsers className="h-4 w-4 mr-2 text-amber-600" />
+          <div className={`${cardCls} p-4`}>
+            <h3 className="mb-3 flex items-center text-sm font-bold text-slate-900">
+              <FiUsers className="mr-2 h-4 w-4 text-amber-600" />
               Top Staff by Transactions
             </h3>
-            <div className="space-y-2">
+            <div className="space-y-1">
               {topStaff.map((staff, index) => (
-                <div key={staff.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                  <div className="flex items-center space-x-2">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                <div key={staff.name} className="flex items-center justify-between rounded-lg p-2 transition-colors hover:bg-slate-50">
+                  <div className="flex items-center gap-2">
+                    <div className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold ${
                       index === 0 ? 'bg-amber-100 text-amber-600' :
                       index === 1 ? 'bg-emerald-100 text-emerald-600' :
                       index === 2 ? 'bg-blue-100 text-blue-600' :
-                      'bg-gray-100 text-gray-600'
+                      'bg-slate-100 text-slate-600'
                     }`}>
                       {staff.name.charAt(0)}
                     </div>
                     <div>
-                      <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">{staff.name}</p>
-                      <p className="text-xs text-gray-500">{staff.count} transactions</p>
+                      <p className="max-w-[110px] truncate text-xs font-medium text-slate-900">{staff.name}</p>
+                      <p className="text-xs text-slate-500">{staff.count} transactions</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs font-bold text-gray-900">₹{staff.amount.toLocaleString()}</p>
-                    <p className="text-xs text-gray-500">Avg: ₹{staff.count > 0 ? (staff.amount / staff.count).toFixed(0) : 0}</p>
+                    <p className="text-xs font-bold text-slate-900">₹{staff.amount.toLocaleString()}</p>
+                    <p className="text-xs text-slate-500">Avg: ₹{staff.count > 0 ? (staff.amount / staff.count).toFixed(0) : 0}</p>
                   </div>
                 </div>
               ))}
@@ -467,55 +596,56 @@ const TransactionsSection = ({
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-              <FiFilter className="h-4 w-4 mr-2 text-blue-600" />
+          <div className={`${cardCls} p-4`}>
+            <h3 className="mb-3 flex items-center text-sm font-bold text-slate-900">
+              <FiFilter className="mr-2 h-4 w-4 text-blue-600" />
               Quick Actions
             </h3>
-            <div className="space-y-2">
-              <button className="w-full flex items-center justify-between p-2 hover:bg-blue-50 rounded transition-colors">
-                <div className="flex items-center space-x-2">
+            <div className="space-y-1">
+              <button className="flex w-full items-center justify-between rounded-lg p-2 transition-colors hover:bg-blue-50">
+                <div className="flex items-center gap-2">
                   <FiEye className="h-4 w-4 text-blue-600" />
-                  <span className="text-xs font-medium text-gray-900">View All Pending</span>
+                  <span className="text-xs font-medium text-slate-900">View All Pending</span>
                 </div>
-                <FiChevronRight className="h-3 w-3 text-gray-400" />
+                <FiChevronRight className="h-3 w-3 text-slate-400" />
               </button>
-              <button className="w-full flex items-center justify-between p-2 hover:bg-emerald-50 rounded transition-colors">
-                <div className="flex items-center space-x-2">
+              <button className="flex w-full items-center justify-between rounded-lg p-2 transition-colors hover:bg-emerald-50">
+                <div className="flex items-center gap-2">
                   <FiCheckCircle className="h-4 w-4 text-emerald-600" />
-                  <span className="text-xs font-medium text-gray-900">Today's Completed</span>
+                  <span className="text-xs font-medium text-slate-900">Today's Completed</span>
                 </div>
-                <FiChevronRight className="h-3 w-3 text-gray-400" />
+                <FiChevronRight className="h-3 w-3 text-slate-400" />
               </button>
-              <button className="w-full flex items-center justify-between p-2 hover:bg-rose-50 rounded transition-colors">
-                <div className="flex items-center space-x-2">
+              <button className="flex w-full items-center justify-between rounded-lg p-2 transition-colors hover:bg-rose-50">
+                <div className="flex items-center gap-2">
                   <FiAlertCircle className="h-4 w-4 text-rose-600" />
-                  <span className="text-xs font-medium text-gray-900">Failed Transactions</span>
+                  <span className="text-xs font-medium text-slate-900">Failed Transactions</span>
                 </div>
-                <FiChevronRight className="h-3 w-3 text-gray-400" />
+                <FiChevronRight className="h-3 w-3 text-slate-400" />
               </button>
             </div>
           </div>
         </div>
 
         {/* Right Column - Transaction Table */}
-        <div className="col-span-2">
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                  <FiFileText className="h-4 w-4 mr-2 text-gray-600" />
+        <div className="order-1 min-w-0 xl:order-2 xl:col-span-2">
+          <div className={`${cardCls} overflow-hidden`}>
+            <div className="border-b border-slate-200 bg-slate-50/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="flex items-center text-sm font-bold text-slate-900">
+                  <FiFileText className="mr-2 h-4 w-4 text-slate-500" />
                   Transaction History
                 </h3>
-                <div className="flex items-center space-x-3">
-                  <span className="text-xs text-gray-600">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs text-slate-600">
                     {filteredTransactions.length} of {totalTransactions} transactions
                   </span>
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center gap-2">
                     <select
                       value={sortBy}
                       onChange={(e) => setSortBy(e.target.value)}
-                      className="border border-gray-300 rounded px-2 py-1 text-xs focus:ring-1 focus:ring-indigo-500"
+                      aria-label="Sort by"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                     >
                       <option value="date">Date</option>
                       <option value="amount">Amount</option>
@@ -523,7 +653,7 @@ const TransactionsSection = ({
                     </select>
                     <button
                       onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                      className="border border-gray-300 rounded px-2 py-1 text-xs hover:bg-gray-100"
+                      className="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs transition-colors hover:bg-slate-100"
                     >
                       {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
                     </button>
@@ -531,28 +661,69 @@ const TransactionsSection = ({
                 </div>
               </div>
             </div>
+
+            {/* Mobile cards */}
+            <div className="max-h-[600px] divide-y divide-slate-100 overflow-y-auto md:hidden">
+              {sortedTransactions.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-8 text-xs text-slate-500">
+                  <FiSearch className="mb-2 h-8 w-8 text-slate-300" />
+                  No transactions found matching your filters
+                </div>
+              )}
+              {sortedTransactions.map((transaction) => {
+                const isExpanded = expandedRow === transaction.id;
+                return (
+                  <div key={transaction.id} className={`p-4 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-slate-900">{transaction.description || 'Transaction'}</p>
+                        <p className="text-xs text-slate-500">{transaction.date || '—'} · {transaction.time || '—'}</p>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <p className={`text-sm font-bold ${transaction.transactionType === 'debit' ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {transaction.transactionType === 'debit' ? '-' : '+'}₹{transaction.amount?.toLocaleString() || '0'}
+                        </p>
+                        <p className="text-xs text-slate-500">{transaction.paymentMethod || '—'}</p>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(transaction.category)}`}>
+                        {transaction.category || '—'}
+                      </span>
+                      {statusBadge(transaction)}
+                    </div>
+                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+                      <span className="truncate">{transaction.staffName || '—'}{transaction.customerName ? ` · ${transaction.customerName}` : ''}</span>
+                      {renderRowActions(transaction, isExpanded)}
+                    </div>
+                    {isExpanded && <div className="mt-3">{renderDetails(transaction)}</div>}
+                  </div>
+                );
+              })}
+            </div>
             
-            <div className="overflow-x-auto max-h-[500px]">
-              <table className="w-full min-w-full">
-                <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
+            {/* Desktop table */}
+            <div className="hidden max-h-[500px] overflow-auto md:block">
+              <table className="w-full min-w-[860px]">
+                <thead className="sticky top-0 z-10 border-b border-slate-200 bg-slate-50">
                   <tr>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date & Time</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
+                    <th className={thCls}>Date & Time</th>
+                    <th className={thCls}>Description</th>
+                    <th className={thCls}>Staff</th>
+                    <th className={thCls}>Customer</th>
+                    <th className={thCls}>Category</th>
+                    <th className={thCls}>Amount</th>
+                    <th className={thCls}>Status</th>
+                    <th className={thCls}></th>
                   </tr>
                 </thead>
 
                 <tbody>
                   {sortedTransactions.length === 0 && (
                     <tr>
-                      <td colSpan="8" className="text-center py-6 text-gray-500 text-xs">
+                      <td colSpan="8" className="py-8 text-center text-xs text-slate-500">
                         <div className="flex flex-col items-center justify-center">
-                          <FiSearch className="h-8 w-8 text-gray-300 mb-2" />
+                          <FiSearch className="mb-2 h-8 w-8 text-slate-300" />
                           No transactions found matching your filters
                         </div>
                       </td>
@@ -565,194 +736,95 @@ const TransactionsSection = ({
                     return (
                       <React.Fragment key={transaction.id}>
                         <tr
-                          className={`hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
+                          className={`border-b border-slate-100 transition-colors hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}
                         >
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3">
                             <div className="flex flex-col">
-                              <span className="text-xs font-medium text-gray-900">
+                              <span className="whitespace-nowrap text-xs font-medium text-slate-900">
                                 {transaction.date || '—'}
                               </span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-slate-500">
                                 {transaction.time || '—'}
                               </span>
                             </div>
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3">
                             <div className="flex items-center">
-                              <div className="p-1 bg-gray-100 rounded mr-2">
-                                <FiFileText className="h-3 w-3 text-gray-600" />
+                              <div className="mr-2 rounded bg-slate-100 p-1">
+                                <FiFileText className="h-3 w-3 text-slate-600" />
                               </div>
-                              <span className="text-xs text-gray-900 truncate max-w-[150px]">
+                              <span className="max-w-[150px] truncate text-xs text-slate-900">
                                 {transaction.description || 'Transaction'}
                               </span>
                             </div>
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3">
                             {transaction.staffName ? (
                               <div className="flex items-center">
-                                <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center mr-2">
+                                <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-100">
                                   <FiBriefcase className="h-3 w-3 text-emerald-600" />
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="text-xs font-medium text-gray-900">
+                                  <span className="text-xs font-medium text-slate-900">
                                     {transaction.staffName}
                                   </span>
-                                  <span className="text-xs text-gray-500">
+                                  <span className="text-xs text-slate-500">
                                     Staff
                                   </span>
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-xs text-gray-500">—</span>
+                              <span className="text-xs text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3">
                             {transaction.customerName ? (
                               <div className="flex items-center">
-                                <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2">
-                                  <FiUser className="h-3 w-3 text-indigo-600" />
+                                <div className="mr-2 flex h-6 w-6 items-center justify-center rounded-full bg-slate-100">
+                                  <FiUser className="h-3 w-3 text-navy-700" />
                                 </div>
                                 <div className="flex flex-col">
-                                  <span className="text-xs font-medium text-gray-900 truncate max-w-[120px]">
+                                  <span className="max-w-[120px] truncate text-xs font-medium text-slate-900">
                                     {transaction.customerName}
                                   </span>
-                                  <span className="text-xs text-gray-500">
+                                  <span className="text-xs text-slate-500">
                                     Customer
                                   </span>
                                 </div>
                               </div>
                             ) : (
-                              <span className="text-xs text-gray-500">—</span>
+                              <span className="text-xs text-slate-500">—</span>
                             )}
                           </td>
-                          <td className="py-3 px-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getCategoryColor(transaction.category)}`}>
+                          <td className="px-3 py-3">
+                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${getCategoryColor(transaction.category)}`}>
                               {transaction.category || '—'}
                             </span>
                           </td>
-                          <td className="py-3 px-3">
+                          <td className="px-3 py-3">
                             <div className="flex flex-col">
                               <span className={`text-xs font-bold ${
                                 transaction.transactionType === 'debit' ? 'text-rose-600' : 'text-emerald-600'
                               }`}>
                                 {transaction.transactionType === 'debit' ? '-' : '+'}₹{transaction.amount?.toLocaleString() || '0'}
                               </span>
-                              <span className="text-xs text-gray-500">
+                              <span className="text-xs text-slate-500">
                                 {transaction.paymentMethod || '—'}
                               </span>
                             </div>
                           </td>
-                          <td className="py-3 px-3">
-                            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(transaction.status)}`}>
-                              {transaction.status === 'Completed' && <FiCheckCircle className="h-2 w-2 mr-1" />}
-                              {transaction.status === 'Pending' && <FiClock className="h-2 w-2 mr-1" />}
-                              {transaction.status === 'Failed' && <FiXCircle className="h-2 w-2 mr-1" />}
-                              {transaction.status || '—'}
-                            </span>
+                          <td className="px-3 py-3">
+                            {statusBadge(transaction)}
                           </td>
-                          <td className="py-3 px-3">
-                            <div className="flex items-center space-x-2">
-                              <button
-                                onClick={() => toggleRow(transaction.id)}
-                                className="text-gray-500 hover:text-gray-700"
-                                title="View details"
-                              >
-                                {isExpanded ? (
-                                  <FiMinus className="h-4 w-4" />
-                                ) : (
-                                  <FiPlus className="h-4 w-4" />
-                                )}
-                              </button>
-                              <button
-                                onClick={() => setSelectedTransaction(transaction)}
-                                className="text-gray-500 hover:text-indigo-600"
-                                title="View full details"
-                              >
-                                <FiEye className="h-4 w-4" />
-                              </button>
-                            </div>
+                          <td className="px-3 py-3">
+                            {renderRowActions(transaction, isExpanded)}
                           </td>
                         </tr>
                         
                         {isExpanded && (
-                          <tr className="bg-blue-50">
+                          <tr className="bg-slate-50">
                             <td colSpan="8" className="px-3 py-3">
-                              <div className="bg-white rounded-lg border border-gray-200 p-3">
-                                <div className="flex items-center justify-between mb-3">
-                                  <h4 className="text-xs font-bold text-gray-900">Transaction Details</h4>
-                                  <div className="flex items-center space-x-2">
-                                    <span className="text-xs text-gray-600">ID:</span>
-                                    <span className="text-xs font-mono text-gray-700">{transaction.id}</span>
-                                  </div>
-                                </div>
-                                
-                                <div className="grid grid-cols-2 gap-3 mb-3">
-                                  <div>
-                                    <p className="text-xs text-gray-500 mb-1">Transaction Type</p>
-                                    <p className="text-xs font-medium text-gray-900">
-                                      {transaction.transactionType === 'credit' ? 'Credit (Incoming)' : 'Debit (Outgoing)'}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <p className="text-xs text-gray-500 mb-1">Payment Method</p>
-                                    <div className="flex items-center">
-                                      <div className="p-1 bg-gray-100 rounded mr-2">
-                                        <FiCreditCard className="h-3 w-3 text-gray-600" />
-                                      </div>
-                                      <p className="text-xs font-medium text-gray-900">{transaction.paymentMethod || '—'}</p>
-                                    </div>
-                                  </div>
-                                  {transaction.walletId && (
-                                    <div>
-                                      <p className="text-xs text-gray-500 mb-1">Wallet</p>
-                                      <p className="text-xs font-medium text-gray-900">{transaction.walletName || transaction.walletId}</p>
-                                    </div>
-                                  )}
-                                  <div>
-                                    <p className="text-xs text-gray-500 mb-1">Category</p>
-                                    <p className="text-xs font-medium text-gray-900">{transaction.category || '—'}</p>
-                                  </div>
-                                </div>
-                                
-                                {/* Staff and Customer Info */}
-                                {(transaction.staffName || transaction.customerName) && (
-                                  <div className="border-t border-gray-200 pt-3">
-                                    <h5 className="text-xs font-semibold text-gray-700 mb-2">Involved Parties</h5>
-                                    <div className="grid grid-cols-2 gap-3">
-                                      {transaction.staffName && (
-                                        <div className="flex items-center space-x-2">
-                                          <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-                                            <FiBriefcase className="h-3 w-3 text-emerald-600" />
-                                          </div>
-                                          <div>
-                                            <p className="text-xs font-medium text-gray-900">Staff</p>
-                                            <p className="text-xs text-gray-700">{transaction.staffName}</p>
-                                          </div>
-                                        </div>
-                                      )}
-                                      {transaction.customerName && (
-                                        <div className="flex items-center space-x-2">
-                                          <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                            <FiUser className="h-3 w-3 text-indigo-600" />
-                                          </div>
-                                          <div>
-                                            <p className="text-xs font-medium text-gray-900">Customer</p>
-                                            <p className="text-xs text-gray-700">{transaction.customerName}</p>
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Description */}
-                                {transaction.description && (
-                                  <div className="mt-3 pt-3 border-t border-gray-200">
-                                    <h5 className="text-xs font-semibold text-gray-700 mb-2">Description</h5>
-                                    <p className="text-xs text-gray-700">{transaction.description}</p>
-                                  </div>
-                                )}
-                              </div>
+                              {renderDetails(transaction)}
                             </td>
                           </tr>
                         )}
@@ -765,49 +837,49 @@ const TransactionsSection = ({
 
             {/* Summary Footer */}
             {sortedTransactions.length > 0 && (
-              <div className="border-t border-gray-200 bg-gray-50 p-3">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center space-x-4">
+              <div className="border-t border-slate-200 bg-slate-50 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                     <div>
-                      <span className="text-gray-600">Showing:</span>
-                      <span className="font-bold text-gray-900 ml-1">
+                      <span className="text-slate-600">Showing:</span>
+                      <span className="ml-1 font-bold text-slate-900">
                         {sortedTransactions.length} items on this page
                       </span>
                     </div>
                     <div>
-                      <span className="text-gray-600">Page Total:</span>
-                      <span className="font-bold text-emerald-600 ml-1">
+                      <span className="text-slate-600">Page Total:</span>
+                      <span className="ml-1 font-bold text-emerald-600">
                         ₹{totalAmount.toLocaleString()}
                       </span>
                     </div>
                   </div>
                   
-                  {/* 🆕 NEW PAGINATION CONTROLS */}
+                  {/* Pagination controls */}
                   {onPageChange && (
-                    <div className="flex items-center space-x-3">
+                    <div className="flex items-center gap-3">
                       <button
                         onClick={() => onPageChange(currentPage - 1)}
                         disabled={currentPage <= 1}
-                        className={`px-3 py-1.5 border rounded flex items-center transition-colors ${
+                        className={`flex items-center rounded-lg border px-3 py-1.5 transition-colors ${
                           currentPage <= 1 
-                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' 
-                            : 'border-gray-300 text-gray-700 hover:bg-white hover:text-indigo-600'
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' 
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:text-navy-700'
                         }`}
                       >
                         Previous
                       </button>
                       
-                      <span className="text-gray-600 font-medium">
+                      <span className="font-medium text-slate-600">
                         Page {currentPage} of {totalPages}
                       </span>
                       
                       <button
                         onClick={() => onPageChange(currentPage + 1)}
                         disabled={currentPage >= totalPages}
-                        className={`px-3 py-1.5 border rounded flex items-center transition-colors ${
+                        className={`flex items-center rounded-lg border px-3 py-1.5 transition-colors ${
                           currentPage >= totalPages 
-                            ? 'border-gray-200 text-gray-400 bg-gray-50 cursor-not-allowed' 
-                            : 'border-gray-300 text-gray-700 hover:bg-white hover:text-indigo-600'
+                            ? 'cursor-not-allowed border-slate-200 bg-slate-50 text-slate-400' 
+                            : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-100 hover:text-navy-700'
                         }`}
                       >
                         Next

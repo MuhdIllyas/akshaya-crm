@@ -20,19 +20,25 @@ const toLocalISO = (d) =>
 const formatINR = (value) =>
   Number(value || 0).toLocaleString("en-IN");
 
-// Compact StatCard Component (same as WalletsSection)
+// Shared style tokens (UI only)
+const fieldCls =
+  'rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500';
+const cardCls = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
+const targetBar = (p) => (p >= 100 ? 'bg-emerald-500' : p >= 50 ? 'bg-amber-400' : 'bg-rose-400');
+
+// Compact StatCard Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer p-3"
+    className={`${cardCls} p-4 transition-shadow hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
     onClick={onClick}
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className="mb-1 truncate text-xl font-bold text-slate-900">{value}</p>
         <div className="flex items-center">
-          <p className="text-gray-500 text-xs">{subtitle}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
           {trend && (
             <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {trend > 0 ? <FiTrendingUp className="mr-1" /> : <FiTrendingDown className="mr-1" />}
@@ -41,8 +47,8 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
           )}
         </div>
       </div>
-      <div className={`rounded-lg ${color} p-2`}>
-        <Icon className="text-white h-4 w-4" />
+      <div className={`shrink-0 rounded-xl ${color} p-2.5`}>
+        <Icon className="h-4 w-4 text-white" />
       </div>
     </div>
   </motion.div>
@@ -77,7 +83,7 @@ const InfoTooltip = ({ content, placement = "top", children }) => {
       onMouseLeave={() => setIsVisible(false)}
       onClick={(e) => e.stopPropagation()}
     >
-      {children || <FiEye className="h-3 w-3 text-gray-400 cursor-pointer hover:text-gray-600" />}
+      {children || <FiEye className="h-3 w-3 text-slate-400 cursor-pointer hover:text-slate-600" />}
       
       <AnimatePresence>
         {isVisible && (
@@ -92,10 +98,10 @@ const InfoTooltip = ({ content, placement = "top", children }) => {
               transform: 'translateX(-50%)',
             }}
           >
-            <div className="relative bg-gray-900 text-white text-xs rounded-lg p-3 shadow-xl">
+            <div className="relative bg-slate-900 text-white text-xs rounded-xl p-3 shadow-xl">
               {content}
               <div 
-                className={`absolute w-3 h-3 bg-gray-900 transform rotate-45 ${placement === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2' : '-top-1.5 left-1/2 -translate-x-1/2'}`}
+                className={`absolute w-3 h-3 bg-slate-900 transform rotate-45 ${placement === 'top' ? '-bottom-1.5 left-1/2 -translate-x-1/2' : '-top-1.5 left-1/2 -translate-x-1/2'}`}
               />
             </div>
           </motion.div>
@@ -112,21 +118,21 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
   return (
     <motion.div
       whileHover={{ y: -2 }}
-      className={`bg-white rounded-lg border hover:shadow-md transition-all duration-200 cursor-pointer p-3 relative hover:z-30 ${
-        isSelected ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200'
+      className={`relative cursor-pointer rounded-2xl border p-4 shadow-sm transition-shadow hover:z-30 hover:shadow-md ${
+        isSelected ? 'border-navy-500 bg-slate-50 ring-2 ring-navy-500/20' : 'border-slate-200 bg-white'
       }`}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center space-x-2">
-          <div className="relative">
-            <div className="bg-indigo-500 rounded-lg flex items-center justify-center w-8 h-8">
-              <FiUser className="text-white h-4 w-4" />
+      <div className="mb-3 flex items-start justify-between">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className="relative shrink-0">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-navy-700">
+              <FiUser className="h-4 w-4 text-white" />
             </div>
             {rank <= 3 && (
-              <div className={`absolute -top-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+              <div className={`absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold text-white ${
                 rank === 1 ? 'bg-amber-500' : 
-                rank === 2 ? 'bg-gray-500' : 
+                rank === 2 ? 'bg-slate-500' : 
                 'bg-orange-600'
               }`}>
                 {rank}
@@ -134,42 +140,40 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
             )}
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-gray-900 text-xs truncate">{staff.name}</h3>
-            <p className="text-gray-500 text-xs">{staff.role}</p>
+            <h3 className="truncate text-sm font-semibold text-slate-900">{staff.name}</h3>
+            <p className="text-xs text-slate-500">{staff.role}</p>
           </div>
         </div>
-        <FiChevronRight className="h-4 w-4 text-gray-400" />
+        <FiChevronRight className="h-4 w-4 shrink-0 text-slate-400" />
       </div>
 
       {/* Revenue */}
-      <div className="mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-gray-600 text-xs">Revenue</span>
-          <span className="font-bold text-emerald-700 text-sm">₹{formatINR(staff.revenueCollected)}</span>
-        </div>
+      <div className="mb-3 flex items-center justify-between">
+        <span className="text-xs text-slate-600">Revenue</span>
+        <span className="text-sm font-bold text-emerald-700">₹{formatINR(staff.revenueCollected)}</span>
       </div>
 
       {/* Performance Score */}
-      <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-bold mb-2 ${
-        staff.collectionRate >= 90 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-        staff.collectionRate >= 70 ? 'bg-amber-50 text-amber-700 border-amber-200' :
-        'bg-rose-50 text-rose-700 border-rose-200'
+      <div className={`mb-3 inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-bold ${
+        staff.collectionRate >= 90 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' :
+        staff.collectionRate >= 70 ? 'border-amber-200 bg-amber-50 text-amber-700' :
+        'border-rose-200 bg-rose-50 text-rose-700'
       }`}>
         {staff.collectionRate}% Collection Rate
       </div>
 
       {/* Key Metrics */}
-      <div className="grid grid-cols-3 gap-2 mb-2">
-        <div className="text-center p-2 bg-gray-50 rounded">
-          <div className="text-xs text-gray-600 mb-1">Services</div>
-          <div className="font-semibold text-gray-900 text-sm">{staff.servicesCompleted}</div>
+      <div className="mb-3 grid grid-cols-3 gap-2">
+        <div className="rounded-xl bg-slate-50 p-2 text-center">
+          <div className="mb-1 text-xs text-slate-500">Services</div>
+          <div className="text-sm font-semibold text-slate-900">{staff.servicesCompleted}</div>
         </div>
-        <div className="text-center p-2 bg-gray-50 rounded">
-          <div className="text-xs text-gray-600 mb-1">Avg Tx</div>
-          <div className="font-semibold text-gray-900 text-sm">₹{formatINR(staff.avgTransaction)}</div>
+        <div className="rounded-xl bg-slate-50 p-2 text-center">
+          <div className="mb-1 text-xs text-slate-500">Avg Tx</div>
+          <div className="truncate text-sm font-semibold text-slate-900">₹{formatINR(staff.avgTransaction)}</div>
         </div>
-        <div className="text-center p-2 bg-gray-50 rounded">
-          <div className="flex items-center justify-center space-x-1 text-xs text-gray-600 mb-1">
+        <div className="rounded-xl bg-slate-50 p-2 text-center">
+          <div className="mb-1 flex items-center justify-center gap-1 text-xs text-slate-500">
             <span>Incentive</span>
             <InfoTooltip
               placement="top"
@@ -183,24 +187,24 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
                     <p>• <b>30%</b> Revenue efficiency (₹ / day)</p>
                     <p>• <b>20%</b> Consistency (active days)</p>
                   </div>
-                  <p className="text-gray-300 text-xs mt-1">
+                  <p className="mt-1 text-xs text-slate-300">
                     Based on completed services & received payments
                   </p>
                 </div>
               }
             />
           </div>
-          <div className="font-semibold text-gray-900 text-sm">{staff.incentiveScore}%</div>
+          <div className="text-sm font-semibold text-slate-900">{staff.incentiveScore}%</div>
         </div>
       </div>
 
       {/* Collection Progress */}
       <div className="space-y-1.5">
         <div className="flex justify-between text-xs">
-          <span className="text-gray-500">Collected</span>
-          <span className="text-gray-500">Expected</span>
+          <span className="text-slate-500">Collected</span>
+          <span className="text-slate-500">Expected</span>
         </div>
-        <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
           <div 
             className={`h-full rounded-full ${
               collectionProgress >= 90 ? 'bg-emerald-500' :
@@ -217,36 +221,36 @@ const StaffPerformanceCard = ({ staff, rank, onClick, isSelected = false }) => {
 
       {/* Target Progress */}
       {staff.monthlyTarget > 0 && (
-        <div className="pt-2 border-t border-gray-100 mt-2">
-          <div className="flex justify-between text-xs mb-1">
-            <span className="text-gray-500 flex items-center"><FiTarget className="h-3 w-3 mr-1" />Target</span>
-            <span className={`font-semibold ${staff.targetPercent >= 100 ? "text-emerald-600" : "text-gray-700"}`}>
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          <div className="mb-1 flex justify-between text-xs">
+            <span className="flex items-center text-slate-500"><FiTarget className="mr-1 h-3 w-3" />Target</span>
+            <span className={`font-semibold ${staff.targetPercent >= 100 ? "text-emerald-600" : "text-slate-700"}`}>
               {staff.targetPercent.toFixed(0)}%
             </span>
           </div>
-          <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div className={`h-full ${staff.targetPercent >= 100 ? "bg-emerald-500" : staff.targetPercent >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+            <div className={`h-full ${targetBar(staff.targetPercent)}`}
                 style={{ width: `${Math.min(staff.targetPercent, 100)}%` }} />
           </div>
-          <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(staff.targetAchieved)} / ₹{formatINR(staff.monthlyTarget)}</p>
+          <p className="mt-0.5 text-[11px] text-slate-400">₹{formatINR(staff.targetAchieved)} / ₹{formatINR(staff.monthlyTarget)}</p>
         </div>
       )}
       
       {staff.pendingAmount > 0 && (
-        <div className="flex items-center justify-between text-xs text-rose-600 pt-2 border-t border-gray-100 mt-2">
+        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-rose-600">
           <span>Pending</span>
           <span className="font-medium">₹{formatINR(staff.pendingAmount)}</span>
         </div>
       )}
 
-      {/* Add Ratings Info */}
+      {/* Ratings Info */}
       {staff.totalReviews > 0 && (
-        <div className="flex items-center justify-between text-xs border-t border-gray-100 pt-2 mt-2">
+        <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
           <div className="flex items-center text-yellow-600">
-            <FiStar className="h-3 w-3 mr-1 fill-yellow-400 text-yellow-400" />
+            <FiStar className="mr-1 h-3 w-3 fill-yellow-400 text-yellow-400" />
             <span className="font-medium">{staff.avgStaffRating.toFixed(1)}</span>
           </div>
-          <span className="text-gray-500">{staff.totalReviews} {staff.totalReviews === 1 ? 'review' : 'reviews'}</span>
+          <span className="text-slate-500">{staff.totalReviews} {staff.totalReviews === 1 ? 'review' : 'reviews'}</span>
         </div>
       )}
     </motion.div>
@@ -269,13 +273,13 @@ const StaffTargetTab = ({ staffId }) => {
     })();
   }, [staffId]);
 
-  if (!rows) return <p className="text-xs text-gray-400">Loading…</p>;
-  if (rows.length === 0) return <p className="text-xs text-gray-400">No target history yet</p>;
+  if (!rows) return <p className="text-xs text-slate-400">Loading…</p>;
+  if (rows.length === 0) return <p className="text-xs text-slate-400">No target history yet</p>;
 
   return (
-    <div className="border border-gray-200 rounded-lg p-4">
-      <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-        <FiTarget className="h-3 w-3 mr-2 text-indigo-600" /> Target History (+10% Growth)
+    <div className="rounded-2xl border border-slate-200 p-4">
+      <h3 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+        <FiTarget className="mr-2 h-3.5 w-3.5 text-navy-700" /> Target History (+10% Growth)
       </h3>
       <div className="space-y-3">
         {rows.map((r) => {
@@ -284,19 +288,19 @@ const StaffTargetTab = ({ staffId }) => {
           const hasTarget = Number(r.target_amount) > 0;
           return (
             <div key={r.month}>
-              <div className="flex justify-between text-xs mb-1">
-                <span className="font-medium text-gray-700">
+              <div className="mb-1 flex justify-between text-xs">
+                <span className="font-medium text-slate-700">
                   {new Date(r.month).toLocaleString("en-IN", { month: "short", year: "numeric" })}
                 </span>
-                <span className={!hasTarget ? "text-gray-400" : open ? "text-blue-600" : pct >= 100 ? "text-emerald-600" : "text-rose-600"}>
+                <span className={!hasTarget ? "text-slate-400" : open ? "text-blue-600" : pct >= 100 ? "text-emerald-600" : "text-rose-600"}>
                   {!hasTarget ? "No target" : open ? `In progress · ${pct.toFixed(0)}%` : pct >= 100 ? `✓ Achieved · ${pct.toFixed(0)}%` : `✗ Missed · ${pct.toFixed(0)}%`}
                 </span>
               </div>
-              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className={`h-full ${pct >= 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-400" : "bg-rose-400"}`}
+              <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className={`h-full ${targetBar(pct)}`}
                      style={{ width: `${Math.min(pct, 100)}%` }} />
               </div>
-              <p className="text-[11px] text-gray-400 mt-0.5">₹{formatINR(r.achieved_amount)} / ₹{formatINR(r.target_amount)}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">₹{formatINR(r.achieved_amount)} / ₹{formatINR(r.target_amount)}</p>
             </div>
           );
         })}
@@ -323,66 +327,75 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
-        className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40"
+        className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm"
       />
       
       <motion.div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${staff.name} details`}
         initial={{ x: '100%' }}
         animate={{ x: 0 }}
         exit={{ x: '100%' }}
         transition={{ type: 'spring', damping: 25, stiffness: 300 }}
-        className="fixed top-0 right-0 h-full bg-white shadow-lg z-50 flex flex-col w-full max-w-sm"
+        className="fixed right-0 top-0 z-50 flex h-full w-full max-w-sm flex-col bg-white shadow-2xl"
       >
         {/* Header */}
-        <div className="border-b border-gray-200">
+        <div className="border-b border-slate-200">
           <div className="flex items-center justify-between p-4">
-            <div className="flex items-center space-x-2">
+            <div className="flex items-center gap-2">
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                aria-label="Back"
+                className="rounded-lg p-2 transition-colors hover:bg-slate-100"
               >
-                <FiArrowLeft className="h-4 w-4 text-gray-600" />
+                <FiArrowLeft className="h-4 w-4 text-slate-600" />
               </button>
               <div>
-                <h2 className="text-base font-bold text-gray-900">{staff.name}</h2>
-                <p className="text-xs text-gray-600">{staff.role}</p>
+                <h2 className="text-base font-bold text-slate-900">{staff.name}</h2>
+                <p className="text-xs text-slate-500">{staff.role}</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              aria-label="Close"
+              className="rounded-lg p-2 transition-colors hover:bg-slate-100"
             >
-              <FiX className="h-4 w-4 text-gray-600" />
+              <FiX className="h-4 w-4 text-slate-600" />
             </button>
           </div>
 
           {/* Tabs */}
-          <div className="flex px-4 border-b border-gray-200">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center px-3 py-2 border-b-2 text-xs font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                <tab.icon className="h-3 w-3 mr-1" />
-                {tab.label}
-              </button>
-            ))}
+          <div className="px-4 pb-3">
+            <div role="tablist" className="flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex flex-1 items-center justify-center rounded-lg px-2 py-1.5 text-xs font-medium transition-colors ${
+                    activeTab === tab.id
+                      ? 'bg-navy-700 text-white'
+                      : 'text-slate-600 hover:bg-slate-100'
+                  }`}
+                >
+                  <tab.icon className="mr-1 h-3 w-3" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          <div className="p-4 space-y-4">
-            {/* Performance Score - Fixed tooltip positioning */}
-            <div className="bg-white border border-gray-200 rounded-lg p-4 relative">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-1 min-w-0 mr-2">
-                  <div className="flex items-center space-x-2 mb-1">
-                    <h3 className="font-semibold text-gray-900 text-sm truncate">
+          <div className="space-y-4 p-4">
+            {/* Performance Score */}
+            <div className="relative rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 flex items-start justify-between">
+                <div className="mr-2 min-w-0 flex-1">
+                  <div className="mb-1 flex items-center gap-2">
+                    <h3 className="truncate text-sm font-semibold text-slate-900">
                       Incentive Readiness
                     </h3>
                     <div className="relative">
@@ -398,7 +411,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                               <p>• <b>30%</b> Revenue efficiency (₹ / day)</p>
                               <p>• <b>20%</b> Consistency (active days)</p>
                             </div>
-                            <p className="text-gray-300 text-xs mt-1">
+                            <p className="mt-1 text-xs text-slate-300">
                               Based only on completed services & received payments
                             </p>
                           </div>
@@ -406,16 +419,16 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                       />
                     </div>
                   </div>
-                  <p className="text-gray-500 text-xs truncate">
+                  <p className="truncate text-xs text-slate-500">
                     Performance-based incentive eligibility
                   </p>
                 </div>
-                <div className={`inline-flex flex-col px-3 py-2 border rounded-lg shrink-0 ${
+                <div className={`inline-flex shrink-0 flex-col rounded-xl border px-3 py-2 ${
                   staff.incentiveScore >= 80 ? 'border-emerald-200 bg-emerald-50 text-emerald-800' :
                   staff.incentiveScore >= 60 ? 'border-amber-200 bg-amber-50 text-amber-800' :
                   'border-rose-200 bg-rose-50 text-rose-800'
                 }`}>
-                  <span className="font-bold text-lg">{staff.incentiveScore}%</span>
+                  <span className="text-lg font-bold">{staff.incentiveScore}%</span>
                   <span className="text-xs">
                     {staff.incentiveScore >= 80 ? 'Excellent' :
                      staff.incentiveScore >= 60 ? 'Good' : 'Needs Improvement'}
@@ -423,7 +436,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 </div>
               </div>
               
-              <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+              <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
                 <div
                   className={`h-full rounded-full ${
                     staff.incentiveScore >= 80 ? 'bg-emerald-500' :
@@ -436,32 +449,32 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
 
             {/* Revenue Details */}
             <div className="space-y-3">
-              <h3 className="font-semibold text-gray-900 text-sm">Revenue Details</h3>
+              <h3 className="text-sm font-semibold text-slate-900">Revenue Details</h3>
               <div className="grid grid-cols-2 gap-3">
-                <div className="border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center mb-1">
-                    <FiDollarSign className="h-3 w-3 text-blue-600 mr-1" />
-                    <span className="text-xs font-medium text-gray-700">Total Revenue</span>
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <div className="mb-1 flex items-center">
+                    <FiDollarSign className="mr-1 h-3 w-3 text-blue-600" />
+                    <span className="text-xs font-medium text-slate-600">Total Revenue</span>
                   </div>
-                  <div className="font-bold text-gray-900 text-sm">₹{formatINR(staff.revenueCollected)}</div>
+                  <div className="text-sm font-bold text-slate-900">₹{formatINR(staff.revenueCollected)}</div>
                 </div>
-                <div className="border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center mb-1">
-                    <FiBriefcase className="h-3 w-3 text-purple-600 mr-1" />
-                    <span className="text-xs font-medium text-gray-700">Service Charge</span>
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <div className="mb-1 flex items-center">
+                    <FiBriefcase className="mr-1 h-3 w-3 text-purple-600" />
+                    <span className="text-xs font-medium text-slate-600">Service Charge</span>
                   </div>
-                  <div className="font-bold text-gray-900 text-sm">₹{formatINR(staff.serviceCharge)}</div>
+                  <div className="text-sm font-bold text-slate-900">₹{formatINR(staff.serviceCharge)}</div>
                 </div>
               </div>
             </div>
 
             {/* Collection Stats */}
-            <div className="border border-gray-200 rounded-lg p-4">
-              <h3 className="font-semibold text-gray-900 text-sm mb-3">Collection Stats</h3>
+            <div className="rounded-2xl border border-slate-200 p-4">
+              <h3 className="mb-3 text-sm font-semibold text-slate-900">Collection Stats</h3>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-xs">Collection Rate</span>
-                  <span className={`font-bold text-xs ${
+                  <span className="text-xs text-slate-600">Collection Rate</span>
+                  <span className={`text-xs font-bold ${
                     staff.collectionRate >= 90 ? 'text-emerald-600' :
                     staff.collectionRate >= 70 ? 'text-amber-600' : 'text-rose-600'
                   }`}>
@@ -469,28 +482,28 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-xs">Avg. Transaction</span>
-                  <span className="font-bold text-gray-900 text-xs">₹{formatINR(staff.avgTransaction)}</span>
+                  <span className="text-xs text-slate-600">Avg. Transaction</span>
+                  <span className="text-xs font-bold text-slate-900">₹{formatINR(staff.avgTransaction)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-gray-600 text-xs">Services Completed</span>
-                  <span className="font-bold text-gray-900 text-xs">{staff.servicesCompleted}</span>
+                  <span className="text-xs text-slate-600">Services Completed</span>
+                  <span className="text-xs font-bold text-slate-900">{staff.servicesCompleted}</span>
                 </div>
               </div>
             </div>
 
             {/* Ratings Section */}
             {(activeTab === 'performance' || activeTab === 'efficiency') && staff.totalReviews > 0 && (
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                  <FiStar className="h-3 w-3 mr-2 text-yellow-500" />
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <h3 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+                  <FiStar className="mr-2 h-3.5 w-3.5 text-yellow-500" />
                   Customer Ratings
                 </h3>
                 
-                <div className="flex items-center justify-between mb-3">
+                <div className="mb-3 flex items-center justify-between">
                   <div>
                     <div className="flex items-center">
-                      <span className="text-2xl font-bold text-gray-900 mr-2">{staff.avgStaffRating.toFixed(1)}</span>
+                      <span className="mr-2 text-2xl font-bold text-slate-900">{staff.avgStaffRating.toFixed(1)}</span>
                       <div className="flex">
                         {[1,2,3,4,5].map(star => (
                           <FiStar
@@ -498,13 +511,13 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                             className={`h-4 w-4 ${
                               star <= Math.round(staff.avgStaffRating)
                                 ? 'fill-yellow-400 text-yellow-400'
-                                : 'text-gray-300'
+                                : 'text-slate-300'
                             }`}
                           />
                         ))}
                       </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1">Based on {staff.totalReviews} reviews</p>
+                    <p className="mt-1 text-xs text-slate-500">Based on {staff.totalReviews} reviews</p>
                   </div>
                 </div>
                 
@@ -519,16 +532,16 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                       
                       return (
                         <div key={rating} className="flex items-center text-xs">
-                          <span className="w-8 text-gray-600">{rating}★</span>
-                          <div className="flex-1 mx-2">
-                            <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <span className="w-8 text-slate-600">{rating}★</span>
+                          <div className="mx-2 flex-1">
+                            <div className="h-1.5 w-full rounded-full bg-slate-200">
                               <div
-                                className="bg-yellow-400 h-1.5 rounded-full"
+                                className="h-1.5 rounded-full bg-yellow-400"
                                 style={{ width: `${percentage}%` }}
                               />
                             </div>
                           </div>
-                          <span className="w-8 text-right text-gray-500">
+                          <span className="w-8 text-right text-slate-500">
                             {Math.round(percentage)}%
                           </span>
                         </div>
@@ -541,16 +554,16 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
 
             {/* Category Strength */}
             {activeTab === 'categories' && (
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 text-sm mb-3">Category-wise Strength</h3>
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <h3 className="mb-3 text-sm font-semibold text-slate-900">Category-wise Strength</h3>
                 {loadingCategories ? (
                   <div className="flex items-center justify-center py-4">
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
+                    <div className="h-4 w-4 animate-spin rounded-full border-b-2 border-navy-700"></div>
                   </div>
                 ) : categoryStrength.length === 0 ? (
-                  <p className="text-sm text-gray-500">No data for this period</p>
+                  <p className="text-sm text-slate-500">No data for this period</p>
                 ) : (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {categoryStrength.map((c) => {
                       const totalRevenue = categoryStrength.reduce(
                         (sum, x) => sum + Number(x.revenue),
@@ -564,23 +577,23 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
 
                       return (
                         <div key={c.service_id}>
-                          <div className="flex justify-between text-xs mb-1">
-                            <span className="font-medium text-gray-700">
+                          <div className="mb-1 flex justify-between gap-2 text-xs">
+                            <span className="font-medium text-slate-700">
                               {c.service_name}
                             </span>
-                            <span className="text-gray-500">
+                            <span className="shrink-0 text-slate-500">
                               ₹{Number(c.revenue).toLocaleString("en-IN")}
                             </span>
                           </div>
 
-                          <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div className="h-1.5 w-full rounded-full bg-slate-200">
                             <div
-                              className="bg-indigo-600 h-1.5 rounded-full"
+                              className="h-1.5 rounded-full bg-navy-700"
                               style={{ width: `${percent}%` }}
                             />
                           </div>
 
-                          <div className="text-xs text-gray-500 mt-1">
+                          <div className="mt-1 text-xs text-slate-500">
                             {c.applications} apps • Profit ₹
                             {Number(c.profit).toLocaleString("en-IN")}
                           </div>
@@ -594,30 +607,30 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
 
             {/* Efficiency Metrics */}
             {activeTab === 'efficiency' && (
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                  <FiActivity className="h-3 w-3 mr-2 text-green-600" />
+              <div className="rounded-2xl border border-slate-200 p-4">
+                <h3 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+                  <FiActivity className="mr-2 h-3.5 w-3.5 text-green-600" />
                   Efficiency Metrics
                 </h3>
 
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="bg-green-50 rounded p-2 border border-green-200">
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="rounded-xl border border-green-200 bg-green-50 p-2">
                     <p className="text-xs text-green-700">Active Days</p>
-                    <p className="font-bold text-green-900 text-sm">
+                    <p className="text-sm font-bold text-green-900">
                       {staff.activeDays}
                     </p>
                   </div>
 
-                  <div className="bg-blue-50 rounded p-2 border border-blue-200">
+                  <div className="rounded-xl border border-blue-200 bg-blue-50 p-2">
                     <p className="text-xs text-blue-700">Revenue / Day</p>
-                    <p className="font-bold text-blue-900 text-sm">
+                    <p className="truncate text-sm font-bold text-blue-900">
                       ₹{formatINR(staff.revenuePerDay)}
                     </p>
                   </div>
 
-                  <div className="bg-amber-50 rounded p-2 border border-amber-200">
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-2">
                     <p className="text-xs text-amber-700">Profit / Day</p>
-                    <p className="font-bold text-amber-900 text-sm">
+                    <p className="truncate text-sm font-bold text-amber-900">
                       ₹{formatINR(staff.profitPerDay)}
                     </p>
                   </div>
@@ -739,11 +752,12 @@ const StaffPerformanceSection = ({
       <div className="relative">
         <button
           onClick={() => (isDatePickerOpen ? setIsDatePickerOpen(false) : openDatePicker())}
-          className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+          aria-expanded={isDatePickerOpen}
+          className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
         >
-          <FiCalendar className="h-4 w-4 mr-2 text-gray-500" />
+          <FiCalendar className="mr-2 h-4 w-4 text-slate-400" />
           {fromDate && toDate ? `${fromDate} to ${toDate}` : 'Select Date Range'}
-          <FiChevronRight className="h-4 w-4 ml-2 text-gray-500 transform rotate-90" />
+          <FiChevronRight className="ml-2 h-4 w-4 rotate-90 transform text-slate-400" />
         </button>
 
         <AnimatePresence>
@@ -754,62 +768,62 @@ const StaffPerformanceSection = ({
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 10 }}
-                className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-80"
+                className="absolute left-0 top-full z-50 mt-2 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border border-slate-200 bg-white shadow-xl sm:left-auto sm:right-0"
               >
                 <div className="p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h4 className="font-medium text-gray-900 text-sm">Date Range</h4>
-                    <button onClick={() => setIsDatePickerOpen(false)} className="text-gray-400 hover:text-gray-600">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h4 className="text-sm font-semibold text-slate-900">Date Range</h4>
+                    <button onClick={() => setIsDatePickerOpen(false)} aria-label="Close date picker" className="text-slate-400 hover:text-slate-600">
                       <FiX className="h-4 w-4" />
                     </button>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 mb-2">
+                  <div className="mb-2 grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">From</label>
+                      <label className="mb-1 block text-xs font-medium text-slate-600">From</label>
                       <input
                         type="date"
                         value={draftFrom}
                         max={draftTo || todayStr}
                         onChange={(e) => setDraftFrom(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        className={`${fieldCls} w-full`}
                       />
                     </div>
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">To</label>
+                      <label className="mb-1 block text-xs font-medium text-slate-600">To</label>
                       <input
                         type="date"
                         value={draftTo}
                         min={draftFrom || undefined}
                         max={todayStr}
                         onChange={(e) => setDraftTo(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
+                        className={`${fieldCls} w-full`}
                       />
                     </div>
                   </div>
 
                   {draftFrom && draftTo && draftFrom > draftTo && (
-                    <p className="text-xs text-rose-600 mb-2">"From" must be on or before "To"</p>
+                    <p className="mb-2 text-xs text-rose-600">"From" must be on or before "To"</p>
                   )}
 
-                  <div className="flex justify-end gap-2 mb-4">
+                  <div className="mb-4 flex justify-end gap-2">
                     <button
                       onClick={() => setIsDatePickerOpen(false)}
-                      className="px-3 py-1.5 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
                     >
                       Cancel
                     </button>
                     <button
                       onClick={applyDraft}
                       disabled={draftInvalid}
-                      className="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                      className="rounded-xl bg-navy-700 px-3 py-1.5 text-sm font-semibold text-white hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       Apply
                     </button>
                   </div>
 
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-gray-700">Quick Select</p>
+                    <p className="text-xs font-medium text-slate-600">Quick Select</p>
                     <div className="space-y-2">
                       {quickRanges.map((range) => (
                         <button
@@ -820,7 +834,7 @@ const StaffPerformanceSection = ({
                             setToDate(dates.to);
                             setIsDatePickerOpen(false);
                           }}
-                          className="w-full px-3 py-2 text-left text-sm border border-gray-200 rounded-md hover:bg-gray-50 transition-colors"
+                          className="w-full rounded-xl border border-slate-200 px-3 py-2 text-left text-sm transition-colors hover:bg-slate-50"
                         >
                           {range.label}
                         </button>
@@ -1159,15 +1173,15 @@ const StaffPerformanceSection = ({
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
       return (
-        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-sm">
-          <p className="font-semibold text-gray-900 text-sm mb-2">{label}</p>
+        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-md">
+          <p className="mb-2 text-sm font-semibold text-slate-900">{label}</p>
           {payload.map((item, index) => (
-            <div key={index} className="flex items-center justify-between mb-1">
+            <div key={index} className="mb-1 flex items-center justify-between gap-4">
               <div className="flex items-center">
-                <div className="w-2 h-2 rounded-full mr-2" style={{ backgroundColor: item.color }}></div>
-                <span className="text-gray-600 text-xs">{item.name}</span>
+                <div className="mr-2 h-2 w-2 rounded-full" style={{ backgroundColor: item.color }}></div>
+                <span className="text-xs text-slate-600">{item.name}</span>
               </div>
-              <span className="font-bold text-gray-900 text-xs">
+              <span className="text-xs font-bold text-slate-900">
                 {item.name.includes('Revenue') || item.name.includes('Transaction') ? `₹${formatINR(item.value)}` : item.value}
               </span>
             </div>
@@ -1184,69 +1198,77 @@ const StaffPerformanceSection = ({
     <>
       <div className="mb-6">
         {/* Header Section */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 flex items-center">
-              <FiUserCheck className="h-5 w-5 mr-2 text-indigo-600" />
+            <h2 className="flex items-center text-lg font-bold text-slate-900">
+              <FiUserCheck className="mr-2 h-5 w-5 text-navy-700" />
               Staff Performance
             </h2>
-            <p className="text-gray-600 text-sm mt-1">Revenue collection and performance metrics</p>
+            <p className="mt-1 text-sm text-slate-500">Revenue collection and performance metrics</p>
           </div>
-          <button
-            onClick={() => {
-              if (staffMode === 'permanent') loadStaffPerformance(fromDate, toDate);
-              else loadTraineePerformance(fromDate, toDate);
-            }}
-            className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-          >
-            <FiRefreshCw className={`h-4 w-4 mr-2 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
-            Refresh
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                if (staffMode === 'permanent') loadStaffPerformance(fromDate, toDate);
+                else loadTraineePerformance(fromDate, toDate);
+              }}
+              className="flex items-center rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            >
+              <FiRefreshCw className={`mr-2 h-4 w-4 ${loading || loadingTrainee ? "animate-spin" : ""}`} />
+              Refresh
+            </button>
 
-          <button
-            onClick={() => setShowTargets((v) => !v)}
-            className={`flex items-center px-3 py-2 border rounded-lg text-sm font-medium transition-colors ${
-              showTargets ? "bg-indigo-600 text-white border-indigo-600" : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
-            }`}
-          >
-            <FiTarget className="h-4 w-4 mr-2" /> Targets
-          </button>
+            <button
+              onClick={() => setShowTargets((v) => !v)}
+              aria-pressed={showTargets}
+              className={`flex items-center rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                showTargets ? "border-navy-700 bg-navy-700 text-white" : "border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              }`}
+            >
+              <FiTarget className="mr-2 h-4 w-4" /> Targets
+            </button>
+          </div>
         </div>
 
         {/* Staff Type Toggle */}
         <div className="mb-4">
-          <div className="inline-flex bg-gray-100 rounded-lg p-1">
+          <div role="tablist" className="inline-flex gap-1 rounded-xl border border-slate-200 bg-white p-1">
             <button
+              role="tab"
+              aria-selected={staffMode === 'permanent'}
               onClick={() => setStaffMode('permanent')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 staffMode === 'permanent'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-navy-700 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <FiUser className="h-4 w-4 mr-2 inline" />
+              <FiUser className="mr-2 inline h-4 w-4" />
               Permanent Staff
             </button>
             <button
+              role="tab"
+              aria-selected={staffMode === 'trainee'}
               onClick={() => setStaffMode('trainee')}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 staffMode === 'trainee'
-                  ? 'bg-white text-indigo-600 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900'
+                  ? 'bg-navy-700 text-white'
+                  : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
-              <FiUsers className="h-4 w-4 mr-2 inline" />
+              <FiUsers className="mr-2 inline h-4 w-4" />
               Trainees ({traineePerformance.length})
             </button>
           </div>
         </div>
 
         {/* Controls */}
-        <div className="flex flex-wrap gap-3 mb-4 items-end">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           {renderDateRangePicker()}
           
           <select
-            className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
+            className={fieldCls}
+            aria-label="Time period"
             value={timePeriod}
             onChange={(e) => setTimePeriod(e.target.value)}
           >
@@ -1255,41 +1277,41 @@ const StaffPerformanceSection = ({
             <option value="yearly">This Year</option>
           </select>
           
-          <div className="flex items-center space-x-3">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 h-3 w-3 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search staff..."
-                className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-transparent"
-            >
-              <option value="revenue">Sort by Revenue</option>
-              <option value="rate">Sort by Collection Rate</option>
-              <option value="incentive">Sort by Incentive</option>
-              <option value="services">Sort by Services</option>
-              <option value="name">Sort by Name</option>
-            </select>
+          <div className="relative w-full sm:w-auto">
+            <FiSearch className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search staff..."
+              aria-label="Search staff"
+              className={`${fieldCls} w-full pl-9 sm:w-56`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
           </div>
+          
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            aria-label="Sort staff"
+            className={fieldCls}
+          >
+            <option value="revenue">Sort by Revenue</option>
+            <option value="rate">Sort by Collection Rate</option>
+            <option value="incentive">Sort by Incentive</option>
+            <option value="services">Sort by Services</option>
+            <option value="name">Sort by Name</option>
+          </select>
         </div>
 
         {/* Summary Stats */}
         {summaryStats && (
-          <div className="grid gap-3 mb-4 grid-cols-2 md:grid-cols-4">
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard
               title="Total Revenue"
               value={`₹${formatINR(summaryStats.totalRevenue)}`}
               subtitle="All staff combined"
               icon={FiDollarSign}
-              color="bg-indigo-600"
+              color="bg-navy-700"
               trend={8.5}
             />
             <StatCard
@@ -1321,7 +1343,7 @@ const StaffPerformanceSection = ({
 
         {/* Review Stats Cards - Only show for non-superadmin and permanent staff mode */}
         {!isSuperAdmin && staffMode === 'permanent' && reviewSummary && (
-          <div className="grid gap-3 mb-4 grid-cols-3">
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <StatCard
               title="Total Reviews"
               value={reviewSummary.total_reviews || 0}
@@ -1341,113 +1363,113 @@ const StaffPerformanceSection = ({
               value={reviewSummary.avg_staff_rating ? Number(reviewSummary.avg_staff_rating).toFixed(1) : '0.0'}
               subtitle="Out of 5"
               icon={FiUserCheck}
-              color="bg-indigo-600"
+              color="bg-navy-700"
             />
           </div>
         )}
 
         {/* Charts Section */}
         {showCharts && filteredAndSortedStaff.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 mb-6">
+          <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
             {/* Revenue vs Services */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
-              <div className="flex items-center justify-between mb-4">
+            <div className={`${cardCls} p-4`}>
+              <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Revenue vs Services</h3>
-                  <p className="text-gray-500 text-xs">Top performers</p>
+                  <h3 className="text-sm font-semibold text-slate-900">Revenue vs Services</h3>
+                  <p className="text-xs text-slate-500">Top performers</p>
                 </div>
-                <FiBarChart2 className="h-4 w-4 text-indigo-600" />
+                <FiBarChart2 className="h-4 w-4 text-navy-700" />
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={filteredAndSortedStaff.slice(0, 6)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                     tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
                   />
                   <YAxis 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                     tickFormatter={(value) => `₹${value/1000}k`}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="revenueCollected" name="Revenue" fill="#6366F1" radius={[2, 2, 0, 0]} />
-                  <Bar dataKey="servicesCompleted" name="Services" fill="#10B981" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="revenueCollected" name="Revenue" fill="#1e3a5f" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="servicesCompleted" name="Services" fill="#10B981" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             {/* Collection Performance */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
-              <div className="flex items-center justify-between mb-4">
+            <div className={`${cardCls} p-4`}>
+              <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Collection Performance</h3>
-                  <p className="text-gray-500 text-xs">Rate vs Incentive</p>
+                  <h3 className="text-sm font-semibold text-slate-900">Collection Performance</h3>
+                  <p className="text-xs text-slate-500">Rate vs Incentive</p>
                 </div>
-                <FiTrendingUp className="h-4 w-4 text-indigo-600" />
+                <FiTrendingUp className="h-4 w-4 text-navy-700" />
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <LineChart data={filteredAndSortedStaff.slice(0, 6)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                     tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
                   />
                   <YAxis 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                     tickFormatter={(value) => `${value}%`}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey="collectionRate" name="Collection Rate" stroke="#6366F1" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="collectionRate" name="Collection Rate" stroke="#1e3a5f" strokeWidth={2} dot={{ r: 3 }} />
                   <Line type="monotone" dataKey="incentiveScore" name="Incentive Score" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
 
             {/* Avg Transaction Size */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
-              <div className="flex items-center justify-between mb-4">
+            <div className={`${cardCls} p-4`}>
+              <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Avg. Transaction Size</h3>
-                  <p className="text-gray-500 text-xs">Ticket size comparison</p>
+                  <h3 className="text-sm font-semibold text-slate-900">Avg. Transaction Size</h3>
+                  <p className="text-xs text-slate-500">Ticket size comparison</p>
                 </div>
-                <FiDollarSign className="h-4 w-4 text-indigo-600" />
+                <FiDollarSign className="h-4 w-4 text-navy-700" />
               </div>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={filteredAndSortedStaff.slice(0, 6)}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#eef2f7" vertical={false} />
                   <XAxis 
                     dataKey="name" 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                     tickFormatter={(value) => value.length > 8 ? `${value.substring(0, 6)}...` : value}
                   />
                   <YAxis 
-                    tick={{ fontSize: 11 }}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
                     tickFormatter={(value) => `₹${value/1000}k`}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Bar dataKey="avgTransaction" name="Avg. Transaction" fill="#F59E0B" radius={[2, 2, 0, 0]} />
+                  <Bar dataKey="avgTransaction" name="Avg. Transaction" fill="#F59E0B" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
             {/* Rating Distribution */}
-            <div className="bg-white rounded-lg border border-gray-200 p-4 lg:col-span-1">
-              <div className="flex items-center justify-between mb-4">
+            <div className={`${cardCls} p-4`}>
+              <div className="mb-4 flex items-center justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">Rating Distribution</h3>
-                  <p className="text-gray-500 text-xs">Staff performance ratings</p>
+                  <h3 className="text-sm font-semibold text-slate-900">Rating Distribution</h3>
+                  <p className="text-xs text-slate-500">Staff performance ratings</p>
                 </div>
                 <FiStar className="h-4 w-4 text-yellow-500" />
               </div>
               
               {loadingReviews ? (
-                <div className="flex items-center justify-center h-[200px]">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600"></div>
+                <div className="flex h-[200px] items-center justify-center">
+                  <div className="h-6 w-6 animate-spin rounded-full border-b-2 border-navy-700"></div>
                 </div>
               ) : ratingDistribution.length === 0 ? (
-                <div className="flex items-center justify-center h-[200px] text-gray-500 text-sm">
+                <div className="flex h-[200px] items-center justify-center text-sm text-slate-500">
                   No rating data available
                 </div>
               ) : (
@@ -1462,11 +1484,11 @@ const StaffPerformanceSection = ({
                       <div key={rating} className="space-y-1">
                         <div className="flex items-center justify-between text-xs">
                           <div className="flex items-center">
-                            <span className="font-medium text-gray-700">{rating} ★</span>
+                            <span className="font-medium text-slate-700">{rating} ★</span>
                           </div>
-                          <span className="text-gray-500">{count} reviews</span>
+                          <span className="text-slate-500">{count} reviews</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div className="h-2 w-full rounded-full bg-slate-200">
                           <div
                             className={`h-2 rounded-full ${
                               rating >= 4 ? 'bg-emerald-500' :
@@ -1491,50 +1513,50 @@ const StaffPerformanceSection = ({
           </>
         )}
 
-        {/* ========== NEW: Revenue Breakdown Quick View Table ========== */}
+        {/* Revenue Breakdown Quick View Table */}
         {revenueBreakdownData.length > 0 && (
-          <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
-            <h3 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-              <FiDollarSign className="h-4 w-4 mr-2 text-indigo-600" />
+          <div className={`${cardCls} mb-6 p-4 sm:p-5`}>
+            <h3 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+              <FiDollarSign className="mr-2 h-4 w-4 text-navy-700" />
               Quick View: Revenue Breakdown
             </h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[560px] text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 px-3 font-medium text-gray-600">Staff Name</th>
-                    <th className="text-left py-2 px-3 font-medium text-gray-600">Type</th>
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Total Revenue</th>
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Dept. Charges</th>
-                    <th className="text-right py-2 px-3 font-medium text-gray-600">Service Charges (Profit)</th>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Staff Name</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Total Revenue</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Dept. Charges</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Service Charges (Profit)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {revenueBreakdownData.map((staff, idx) => {
                     const deptCharge = staff.revenueCollected - staff.serviceCharge;
                     return (
-                      <tr key={staff.id} className={idx % 2 === 0 ? 'bg-gray-50' : ''}>
-                        <td className="py-2 px-3 font-medium text-gray-900">{staff.name}</td>
-                        <td className="py-2 px-3">
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                            staff.type === 'Permanent' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'
+                      <tr key={staff.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-slate-50/60' : ''}`}>
+                        <td className="px-3 py-2.5 font-medium text-slate-900">{staff.name}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            staff.type === 'Permanent' ? 'bg-slate-100 text-navy-700' : 'bg-amber-100 text-amber-700'
                           }`}>
                             {staff.type}
                           </span>
                         </td>
-                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(staff.revenueCollected)}</td>
-                        <td className="py-2 px-3 text-right font-mono">₹{formatINR(deptCharge)}</td>
-                        <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(staff.serviceCharge)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono">₹{formatINR(staff.revenueCollected)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono">₹{formatINR(deptCharge)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-emerald-600">₹{formatINR(staff.serviceCharge)}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t-2 border-gray-300 font-semibold bg-gray-100">
-                    <td className="py-2 px-3 text-gray-900" colSpan={2}>Grand Total</td>
-                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalRevenue)}</td>
-                    <td className="py-2 px-3 text-right font-mono">₹{formatINR(revenueGrandTotal.totalDeptCharge)}</td>
-                    <td className="py-2 px-3 text-right font-mono text-emerald-600">₹{formatINR(revenueGrandTotal.totalServiceCharge)}</td>
+                  <tr className="border-t-2 border-slate-300 bg-slate-100 font-semibold">
+                    <td className="px-3 py-2.5 text-slate-900" colSpan={2}>Grand Total</td>
+                    <td className="px-3 py-2.5 text-right font-mono">₹{formatINR(revenueGrandTotal.totalRevenue)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">₹{formatINR(revenueGrandTotal.totalDeptCharge)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-emerald-600">₹{formatINR(revenueGrandTotal.totalServiceCharge)}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -1544,11 +1566,11 @@ const StaffPerformanceSection = ({
 
         {/* Staff Performance Grid */}
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-gray-900 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-slate-900">
               {staffMode === 'permanent' ? 'Permanent Staff' : 'Trainee'} Performance {filteredAndSortedStaff.length > 0 && `(${filteredAndSortedStaff.length})`}
             </h3>
-            <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600">
               Showing {staffMode === 'permanent' ? 'top performers' : 'all trainees'} by {sortBy}
             </span>
           </div>
@@ -1556,21 +1578,21 @@ const StaffPerformanceSection = ({
           {isLoading && (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mx-auto mb-2"></div>
-                <p className="text-gray-600 text-sm">Loading {staffMode === 'permanent' ? 'staff' : 'trainee'} performance…</p>
+                <div className="mx-auto mb-2 h-6 w-6 animate-spin rounded-full border-b-2 border-navy-700"></div>
+                <p className="text-sm text-slate-600">Loading {staffMode === 'permanent' ? 'staff' : 'trainee'} performance…</p>
               </div>
             </div>
           )}
 
           {!isLoading && filteredAndSortedStaff.length === 0 && (
-            <div className="text-center py-8 border border-gray-200 rounded-lg bg-white">
-              <FiUser className="h-10 w-10 mx-auto mb-3 text-gray-300" />
-              <p className="text-gray-600 text-sm mb-1">No {staffMode === 'permanent' ? 'staff' : 'trainees'} found</p>
-              <p className="text-gray-500 text-xs">Try adjusting your filters or search criteria</p>
+            <div className={`${cardCls} py-8 text-center`}>
+              <FiUser className="mx-auto mb-3 h-10 w-10 text-slate-300" />
+              <p className="mb-1 text-sm text-slate-600">No {staffMode === 'permanent' ? 'staff' : 'trainees'} found</p>
+              <p className="text-xs text-slate-500">Try adjusting your filters or search criteria</p>
             </div>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
             {filteredAndSortedStaff.map((staff, index) => (
               <StaffPerformanceCard
                 key={staff.id}
