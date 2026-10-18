@@ -1,3 +1,5 @@
+//superadmin - and admin have separate service logs
+//src/[admin|superadmin]/pages/[Superadmin/admin]ServiceLogs.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   FiSearch, FiDownload, FiEye, FiMessageSquare, FiClock, FiUser, FiDollarSign,
