@@ -1675,54 +1675,111 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date, centreId, isSup
     'Cash in Hand': FiDollarSign,
   };
 
+  const sideCardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const sideTitleCls = 'mb-3 flex items-center text-sm font-bold text-slate-900';
+  const thCls = 'px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500';
+  const actionBtnCls = 'flex w-full items-center justify-between rounded-xl p-2 text-left transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-navy-500/30';
+
+  const typeTone = (t) => (
+    t === 'cash' ? 'bg-emerald-500' :
+    t === 'bank' ? 'bg-navy-700' :
+    t === 'digital' ? 'bg-slate-500' :
+    'bg-navy-500'
+  );
+  const typePill = (t) => (
+    t === 'cash' ? 'bg-emerald-100 text-emerald-700' :
+    t === 'bank' ? 'bg-slate-100 text-navy-700' :
+    'bg-slate-200 text-slate-700'
+  );
+  const statusPill = (wallet) => (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+      wallet.isReconciled ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+    }`}>
+      {wallet.isReconciled ? (
+        <>
+          <FiCheck className="mr-1 h-2 w-2" />
+          Reconciled
+        </>
+      ) : (
+        <>
+          <FiAlertCircle className="mr-1 h-2 w-2" />
+          Pending
+        </>
+      )}
+    </span>
+  );
+  const actualInput = (wallet) => (
+    <div className="relative">
+      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-500">₹</span>
+      <input
+        type="number"
+        value={wallet.displayActual}
+        onChange={e => handleBalanceChange(String(wallet.id), e.target.value)}
+        disabled={readOnly}
+        aria-label={`Actual balance for ${wallet.name}`}
+        className="w-full rounded-xl border border-slate-300 bg-white py-1.5 pl-6 pr-2 text-sm text-slate-900 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500 md:w-32"
+        placeholder="Actual"
+      />
+    </div>
+  );
+  const reconcileLabel = isReconciling ? (
+    <>
+      <FiRefreshCw className="h-4 w-4 animate-spin" />
+      <span>Reconciling...</span>
+    </>
+  ) : (
+    <>
+      <FiCheckCircle className="h-4 w-4" />
+      <span>Reconcile All Wallets</span>
+    </>
+  );
+
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Left Column - Reconciliation Stats */}
-      <div className="col-span-1 space-y-4">
+      <div className="order-2 space-y-4 lg:order-1 lg:col-span-1">
         {/* Reconciliation Summary */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <FiCheckCircle className="h-4 w-4 text-indigo-600" />
+        <div className={`${sideCardCls} transition-shadow hover:shadow-md`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-slate-100 p-2">
+                <FiCheckCircle className="h-4 w-4 text-navy-700" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Reconciliation Status</p>
-                <p className="font-bold text-gray-900 text-lg">
+                <p className="text-xs text-slate-500">Reconciliation Status</p>
+                <p className="text-lg font-bold text-slate-900">
                   {reconciledWallets}/{wallets.length} Wallets
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                reconciledWallets === wallets.length ? 'bg-emerald-50 text-emerald-700' : 'bg-yellow-50 text-yellow-700'
-              }`}>
-                {reconciledWallets === wallets.length ? 'All Synced' : 'Pending'}
-              </span>
-            </div>
+            <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium ${
+              reconciledWallets === wallets.length ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+            }`}>
+              {reconciledWallets === wallets.length ? 'All Synced' : 'Pending'}
+            </span>
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Total Variance</span>
+              <span className="text-slate-600">Total Variance</span>
               <span className={`font-bold ${totalVariance === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                 ₹{totalVariance.toFixed(2)}
               </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Wallets Pending</span>
+              <span className="text-slate-600">Wallets Pending</span>
               <span className="font-bold text-rose-600">{wallets.length - reconciledWallets}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Last Reconciled</span>
-              <span className="font-medium text-gray-900">Today</span>
+              <span className="text-slate-600">Last Reconciled</span>
+              <span className="font-medium text-slate-900">Today</span>
             </div>
           </div>
         </div>
 
         {/* Wallet Types Distribution */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiPieChart className="h-4 w-4 mr-2 text-purple-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiPieChart className="mr-2 h-4 w-4 text-navy-700" />
             Wallet Types
           </h3>
           <div className="space-y-2">
@@ -1730,28 +1787,27 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date, centreId, isSup
               const type = w.wallet_type || w.type || 'unknown';
               acc[type] = (acc[type] || 0) + 1;
               return acc;
-            }, {})).map(([type, count], index) => (
-              <div key={type} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`p-1 rounded ${
+            }, {})).map(([type, count]) => (
+              <div key={type} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex items-center gap-2">
+                  <div className={`rounded-lg p-1 ${
                     type === 'cash' ? 'bg-emerald-100 text-emerald-600' :
-                    type === 'bank' ? 'bg-blue-100 text-blue-600' :
-                    type === 'digital' ? 'bg-purple-100 text-purple-600' :
-                    'bg-gray-100 text-gray-600'
+                    type === 'bank' ? 'bg-slate-100 text-navy-700' :
+                    'bg-slate-200 text-slate-700'
                   }`}>
                     {type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
                      type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
                      <FiSmartphone className="h-3 w-3" />}
                   </div>
-                  <span className="text-xs font-medium text-gray-700 capitalize">{type}</span>
+                  <span className="text-xs font-medium capitalize text-slate-700">{type}</span>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">{count} wallets</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs font-bold text-slate-900">{count} wallets</p>
+                  <p className="text-xs text-slate-500">
                     ₹{wallets
                       .filter(w => (w.wallet_type || w.type) === type)
                       .reduce((sum, w) => sum + (w.book_balance || 0), 0)
-                      .toLocaleString()} 
+                      .toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -1760,161 +1816,182 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date, centreId, isSup
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiRefreshCw className="h-4 w-4 mr-2 text-blue-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiRefreshCw className="mr-2 h-4 w-4 text-navy-700" />
             Quick Actions
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-1">
             <button
+              type="button"
               onClick={() => onRefreshWallets(date)}
-              className="w-full flex items-center justify-between p-2 hover:bg-blue-50 rounded transition-colors"
+              className={actionBtnCls}
             >
-              <div className="flex items-center space-x-2">
-                <FiRefreshCw className="h-4 w-4 text-blue-600" />
-                <span className="text-xs font-medium text-gray-900">Refresh Balances</span>
+              <div className="flex items-center gap-2">
+                <FiRefreshCw className="h-4 w-4 text-navy-700" />
+                <span className="text-xs font-medium text-slate-900">Refresh Balances</span>
               </div>
-              <FiChevronRight className="h-3 w-3 text-gray-400" />
+              <FiChevronRight className="h-3 w-3 text-slate-400" />
             </button>
-            
+
             {!readOnly && (
             <button
+              type="button"
               onClick={handleReconcileWallets}
               disabled={isReconciling}
-              className={`w-full flex items-center justify-between p-2 rounded transition-colors ${
-                isReconciling 
-                  ? 'bg-gray-100 cursor-not-allowed' 
-                  : 'hover:bg-emerald-50'
-              }`}
+              className={`${actionBtnCls} ${isReconciling ? 'cursor-not-allowed bg-slate-100' : ''}`}
             >
-              <div className="flex items-center space-x-2">
-                <FiCheckCircle className={`h-4 w-4 ${
-                  isReconciling ? 'text-gray-400' : 'text-emerald-600'
-                }`} />
-                <span className={`text-xs font-medium ${
-                  isReconciling ? 'text-gray-400' : 'text-gray-900'
-                }`}>
+              <div className="flex items-center gap-2">
+                <FiCheckCircle className={`h-4 w-4 ${isReconciling ? 'text-slate-400' : 'text-emerald-600'}`} />
+                <span className={`text-xs font-medium ${isReconciling ? 'text-slate-400' : 'text-slate-900'}`}>
                   {isReconciling ? 'Reconciling...' : 'Reconcile All Wallets'}
                 </span>
               </div>
-              {!isReconciling && <FiChevronRight className="h-3 w-3 text-gray-400" />}
+              {!isReconciling && <FiChevronRight className="h-3 w-3 text-slate-400" />}
             </button>
             )}
-            
-            <button className="w-full flex items-center justify-between p-2 hover:bg-amber-50 rounded transition-colors">
-              <div className="flex items-center space-x-2">
+
+            <button type="button" className={actionBtnCls}>
+              <div className="flex items-center gap-2">
                 <FiAlertTriangle className="h-4 w-4 text-amber-600" />
-                <span className="text-xs font-medium text-gray-900">View Discrepancies</span>
+                <span className="text-xs font-medium text-slate-900">View Discrepancies</span>
               </div>
-              <FiChevronRight className="h-3 w-3 text-gray-400" />
+              <FiChevronRight className="h-3 w-3 text-slate-400" />
             </button>
           </div>
         </div>
       </div>
 
-      {/* Right Column - Wallet Reconciliation Table */}
-      <div className="col-span-2">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                <FiSmartphone className="h-4 w-4 mr-2 text-indigo-600" />
+      {/* Right Column - Wallet Reconciliation */}
+      <div className="order-1 min-w-0 lg:order-2 lg:col-span-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center text-sm font-bold text-slate-900">
+                <FiSmartphone className="mr-2 h-4 w-4 text-navy-700" />
                 Wallet Reconciliation
               </h3>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-600">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600">
                   {wallets.length} wallets to reconcile
                 </span>
                 <button
+                  type="button"
                   onClick={() => onRefreshWallets(date)}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors"
+                  aria-label="Refresh balances"
+                  className="rounded-lg p-1.5 text-slate-600 transition-colors hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                 >
-                  <FiRefreshCw className="h-3 w-3 text-gray-600" />
+                  <FiRefreshCw className="h-3 w-3" />
                 </button>
               </div>
             </div>
           </div>
-          
-          <div className="overflow-x-auto">
+
+          {processedWallets.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-xs text-slate-500">
+              <FiSmartphone className="mb-2 h-8 w-8 text-slate-300" />
+              No wallets to reconcile
+            </div>
+          )}
+
+          {/* Mobile cards */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {processedWallets.map((wallet) => {
+              const walletType = wallet.wallet_type || wallet.type || 'unknown';
+              const WalletIcon = walletIcons[wallet.name] || walletIcons[walletType] || FiSmartphone;
+
+              return (
+                <div key={`m-${wallet.id}`} className="space-y-3 p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${typeTone(walletType)}`}>
+                        <WalletIcon className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{wallet.name}</p>
+                        <p className="text-xs capitalize text-slate-500">{walletType}</p>
+                      </div>
+                    </div>
+                    {statusPill(wallet)}
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="mb-1 text-xs text-slate-500">Book Balance</p>
+                      <p className="text-sm font-bold text-slate-900">₹{Number(wallet.displayBook).toLocaleString('en-IN')}</p>
+                    </div>
+                    <div>
+                      <p className="mb-1 text-xs text-slate-500">Actual Balance</p>
+                      {actualInput(wallet)}
+                    </div>
+                  </div>
+                  <div className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs ${
+                    wallet.isReconciled ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                  }`}>
+                    <span>{wallet.isReconciled ? 'Within Limit' : 'Review Needed'}</span>
+                    <span className="font-bold">{wallet.variance >= 0 ? '+' : ''}₹{wallet.variance.toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          {processedWallets.length > 0 && (
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
+              <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wallet</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Book Balance</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actual Balance</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variance</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className={thCls}>Wallet</th>
+                  <th className={thCls}>Type</th>
+                  <th className={thCls}>Book Balance</th>
+                  <th className={thCls}>Actual Balance</th>
+                  <th className={thCls}>Variance</th>
+                  <th className={thCls}>Status</th>
                 </tr>
               </thead>
 
-              <tbody>
-                {processedWallets.map((wallet, index) => {
+              <tbody className="divide-y divide-slate-100">
+                {processedWallets.map((wallet) => {
                   const walletType = wallet.wallet_type || wallet.type || 'unknown';
                   const WalletIcon = walletIcons[wallet.name] || walletIcons[walletType] || FiSmartphone;
-                  
+
                   return (
-                    <tr key={wallet.id} className="hover:bg-gray-50">
-                      <td className="py-3 px-3">
+                    <tr key={wallet.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-3">
                         <div className="flex items-center">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-2 ${
-                            walletType === 'cash' ? 'bg-emerald-500' :
-                            walletType === 'bank' ? 'bg-blue-500' :
-                            walletType === 'digital' ? 'bg-purple-500' :
-                            'bg-indigo-500'
-                          }`}>
+                          <div className={`mr-2 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${typeTone(walletType)}`}>
                             <WalletIcon className="h-4 w-4 text-white" />
                           </div>
                           <div>
-                            <p className="text-xs font-medium text-gray-900">{wallet.name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{walletType}</p>
+                            <p className="text-xs font-medium text-slate-900">{wallet.name}</p>
+                            <p className="text-xs capitalize text-slate-500">{walletType}</p>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          walletType === 'cash' ? 'bg-emerald-100 text-emerald-700' :
-                          walletType === 'bank' ? 'bg-blue-100 text-blue-700' :
-                          'bg-purple-100 text-purple-700'
-                        }`}>
+                      <td className="px-3 py-3">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${typePill(walletType)}`}>
                           {walletType}
                         </span>
                       </td>
-                      <td className="py-3 px-3">
-                        <div className="text-left">
-                          <p className="text-xs font-bold text-gray-900">
-                            ₹{Number(wallet.displayBook).toLocaleString('en-IN')}
-                          </p>
-                          <p className="text-xs text-gray-500 flex items-center">
-                            <FiBook className="h-2 w-2 mr-1" />
-                            Ledger
-                          </p>
-                        </div>
+                      <td className="px-3 py-3">
+                        <p className="text-xs font-bold text-slate-900">
+                          ₹{Number(wallet.displayBook).toLocaleString('en-IN')}
+                        </p>
+                        <p className="flex items-center text-xs text-slate-500">
+                          <FiBook className="mr-1 h-2 w-2" />
+                          Ledger
+                        </p>
                       </td>
-                      <td className="py-3 px-3">
-                        <div>
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">₹</span>
-                            <input
-                              type="number"
-                              value={wallet.displayActual}
-                              onChange={e => handleBalanceChange(String(wallet.id), e.target.value)}
-                              disabled={readOnly}
-                              className="pl-6 pr-2 py-1 border border-gray-300 rounded text-sm w-32 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                              placeholder="Actual"
-                            />
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1 flex items-center">
-                            <FiSmartphone className="h-2 w-2 mr-1" />
-                            Physical/Digital
-                          </p>
-                        </div>
+                      <td className="px-3 py-3">
+                        {actualInput(wallet)}
+                        <p className="mt-1 flex items-center text-xs text-slate-500">
+                          <FiSmartphone className="mr-1 h-2 w-2" />
+                          Physical/Digital
+                        </p>
                       </td>
-                      <td className="py-3 px-3">
-                        <div className={`text-center ${
-                          wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'
-                        }`}>
-                          <p className={`text-xs font-bold ${wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      <td className="px-3 py-3">
+                        <div className={`text-center ${wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          <p className="text-xs font-bold">
                             {wallet.variance >= 0 ? '+' : ''}₹{wallet.variance.toFixed(2)}
                           </p>
                           <p className="text-xs">
@@ -1922,60 +1999,34 @@ const WalletReconciliation = ({ wallets, onRefreshWallets, date, centreId, isSup
                           </p>
                         </div>
                       </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          wallet.isReconciled 
-                            ? 'bg-emerald-50 text-emerald-700' 
-                            : 'bg-rose-50 text-rose-700'
-                        }`}>
-                          {wallet.isReconciled ? (
-                            <>
-                              <FiCheck className="h-2 w-2 mr-1" />
-                              Reconciled
-                            </>
-                          ) : (
-                            <>
-                              <FiAlertCircle className="h-2 w-2 mr-1" />
-                              Pending
-                            </>
-                          )}
-                        </span>
-                      </td>
+                      <td className="px-3 py-3">{statusPill(wallet)}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Action Bar */}
           {!readOnly && (
-          <div className="border-t border-gray-200 bg-gray-50 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-xs text-gray-600">
-                <FiInfo className="h-3 w-3" />
+          <div className="border-t border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-2 text-xs text-slate-600">
+                <FiInfo className="h-3 w-3 shrink-0" />
                 <span>Enter actual balances and click Reconcile to sync all wallets</span>
               </div>
               <button
+                type="button"
                 onClick={handleReconcileWallets}
                 disabled={isReconciling}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium ${
+                className={`flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium ${
                   isReconciling
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    ? 'cursor-not-allowed bg-slate-300 text-slate-500'
+                    : 'bg-navy-700 text-white hover:bg-navy-800'
                 }`}
               >
-                {isReconciling ? (
-                  <>
-                    <FiRefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Reconciling...</span>
-                  </>
-                ) : (
-                  <>
-                    <FiCheckCircle className="h-4 w-4" />
-                    <span>Reconcile All Wallets</span>
-                  </>
-                )}
+                {reconcileLabel}
               </button>
             </div>
           </div>
