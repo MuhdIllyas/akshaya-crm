@@ -238,8 +238,22 @@ const StatusDonut = ({ stats }) => {
   );
 };
 
-const StaffWorkload = ({ services }) => {
-  const rows = useMemo(() => {
+const PanelHeader = ({ title, caption, showAll, total, canExpand, onToggle, loading }) => (
+  <div className="flex items-start justify-between gap-3">
+    <div>
+      <h3 className="text-sm font-semibold text-slate-800">{title}</h3>
+      <p className="text-xs text-slate-400">{caption}{loading ? ' · loading…' : ''}</p>
+    </div>
+    {(total > 6 || canExpand || showAll) && (
+      <button type="button" onClick={onToggle} className="shrink-0 text-xs font-medium text-navy-700 hover:text-navy-800">
+        {showAll ? 'Show top 6' : 'Show all'}
+      </button>
+    )}
+  </div>
+);
+
+const StaffWorkload = ({ services, caption, showAll, canExpand, onToggle, loading }) => {
+  const all = useMemo(() => {
     const m = {};
     services.forEach((s) => {
       const k = s.staffName || 'Unassigned';
@@ -249,53 +263,60 @@ const StaffWorkload = ({ services }) => {
       else if (s.status === 'In Progress') m[k].active += 1;
       else if (s.status === 'Pending') m[k].pending += 1;
     });
-    return Object.values(m).sort((a, b) => b.total - a.total).slice(0, 6);
+    return Object.values(m).sort((a, b) => b.total - a.total || a.name.localeCompare(b.name));
   }, [services]);
-  const max = Math.max(1, ...rows.map((r) => r.total));
+  const rows = showAll ? all : all.slice(0, 6);
+  const max = Math.max(1, ...all.map((r) => r.total));
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-slate-800">Staff workload</h3>
-      <p className="text-xs text-slate-400">On this page</p>
-      {rows.length === 0 ? (
+      <PanelHeader title="Staff workload" caption={caption} showAll={showAll} total={all.length} canExpand={canExpand} onToggle={onToggle} loading={loading} />
+      {all.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">No data</p>
       ) : (
-        <ul className="mt-4 space-y-2.5">
-          {rows.map((r) => (
-            <li key={r.name} className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_1.75rem] items-center gap-x-3">
-              <span className="truncate text-sm text-slate-700" title={r.name}>{r.name}</span>
-              <div className="h-2.5 overflow-hidden rounded-full bg-slate-100" title={`${r.done} done · ${r.active} in progress · ${r.pending} pending`}>
-                <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${(r.total / max) * 100}%` }}>
-                  <div className="bg-emerald-500" style={{ width: `${(r.done / r.total) * 100}%` }} />
-                  <div className="bg-sky-400" style={{ width: `${(r.active / r.total) * 100}%` }} />
-                  <div className="bg-amber-400" style={{ width: `${(r.pending / r.total) * 100}%` }} />
+        <>
+          <ul className={`mt-4 space-y-2.5 ${showAll ? 'max-h-80 overflow-y-auto pr-1' : ''}`}>
+            {rows.map((r) => (
+              <li key={r.name} className="grid grid-cols-[minmax(0,7rem)_minmax(0,1fr)_2.75rem] items-center gap-x-3">
+                <span className="truncate text-sm text-slate-700" title={r.name}>{r.name}</span>
+                <div className="h-2.5 overflow-hidden rounded-full bg-slate-100" title={`${r.done} done · ${r.active} in progress · ${r.pending} pending`}>
+                  <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${(r.total / max) * 100}%` }}>
+                    <div className="bg-emerald-500" style={{ width: `${(r.done / r.total) * 100}%` }} />
+                    <div className="bg-sky-400" style={{ width: `${(r.active / r.total) * 100}%` }} />
+                    <div className="bg-amber-400" style={{ width: `${(r.pending / r.total) * 100}%` }} />
+                  </div>
                 </div>
-              </div>
-              <span className="text-right text-sm font-semibold tabular-nums text-slate-700">{r.total}</span>
-            </li>
-          ))}
-        </ul>
+                <span className="text-right text-sm font-semibold tabular-nums text-slate-700">{r.total}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-[11px] text-slate-500">
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-emerald-500" />Done</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-400" />In progress</span>
+            <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-400" />Pending</span>
+          </div>
+        </>
       )}
     </div>
   );
 };
 
-const TopServices = ({ services }) => {
-  const rows = useMemo(() => {
+const TopServices = ({ services, caption, showAll, canExpand, onToggle, loading }) => {
+  const all = useMemo(() => {
     const m = {};
     services.forEach((s) => { const k = s.serviceType || 'Unknown'; m[k] = (m[k] || 0) + 1; });
-    return Object.entries(m).sort(([, a], [, b]) => b - a).slice(0, 6);
+    return Object.entries(m).sort(([an, a], [bn, b]) => b - a || an.localeCompare(bn));
   }, [services]);
-  const max = Math.max(1, ...rows.map(([, n]) => n));
+  const rows = showAll ? all : all.slice(0, 6);
+  const max = Math.max(1, ...all.map(([, n]) => n));
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-5">
-      <h3 className="text-sm font-semibold text-slate-800">Top services</h3>
-      <p className="text-xs text-slate-400">On this page</p>
-      {rows.length === 0 ? (
+      <PanelHeader title="Services" caption={caption} showAll={showAll} total={all.length} canExpand={canExpand} onToggle={onToggle} loading={loading} />
+      {all.length === 0 ? (
         <p className="py-8 text-center text-sm text-slate-400">No data</p>
       ) : (
-        <ul className="mt-4 space-y-2.5">
+        <ul className={`mt-4 space-y-2.5 ${showAll ? 'max-h-80 overflow-y-auto pr-1' : ''}`}>
           {rows.map(([name, n]) => (
-            <li key={name} className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_1.75rem] items-center gap-x-3">
+            <li key={name} className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_2.75rem] items-center gap-x-3">
               <span className="truncate text-sm text-slate-700" title={name}>{name}</span>
               <ProgressBar pct={(n / max) * 100} h="h-2.5" />
               <span className="text-right text-sm font-semibold tabular-nums text-slate-700">{n}</span>
@@ -750,6 +771,10 @@ const SuperAdminServiceLogs = () => {
   const [showInsights, setShowInsights] = useState(true);
   const [showMore, setShowMore] = useState(false);
   const [exporting, setExporting] = useState(false);
+  const [insightAll, setInsightAll] = useState(false);
+  const [allRows, setAllRows] = useState(null);
+  const [allLoading, setAllLoading] = useState(false);
+  const allReq = useRef(0);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -947,6 +972,35 @@ const SuperAdminServiceLogs = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, debouncedSearch, statusFilter, priorityFilter, staffFilter, serviceTypeFilter, subcategoryFilter, dateRange, customStartDate, customEndDate, centreFilter, reviewedFilter]);
 
+  // 'Show all' in the insight panels covers every record matching the filters, not just this page.
+  const filterKey = JSON.stringify(buildParams(1, 0));
+  useEffect(() => {
+    if (!insightAll || !showInsights || totalRecords <= services.length) return;
+    const req = ++allReq.current;
+    setAllLoading(true);
+    (async () => {
+      try {
+        const res = await getTrackingEntries(buildParams(1, Math.min(totalRecords, 5000)));
+        if (req !== allReq.current) return;
+        const data = Array.isArray(res?.data) ? res.data : Array.isArray(res) ? res : [];
+        setAllRows(transformBackendData(data, centresRef.current));
+      } catch (err) {
+        console.error('Could not load all records for insights:', err);
+        if (req === allReq.current) { setAllRows(null); toast.error('Could not load all records. Showing this page only.'); }
+      } finally {
+        if (req === allReq.current) setAllLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insightAll, showInsights, filterKey, totalRecords]);
+
+  useEffect(() => { setAllRows(null); }, [filterKey]);
+
+  const insightData = insightAll && allRows && totalRecords > services.length ? allRows : services;
+  const insightCaption = insightAll && allRows && totalRecords > services.length
+    ? `All ${allRows.length}${allRows.length < totalRecords ? ` of ${totalRecords}` : ''} matching records`
+    : totalRecords > services.length ? `This page (${services.length} of ${totalRecords})` : `All ${services.length} matching records`;
+
   const sortedServices = useMemo(() => {
     const get = SORTERS[sortBy] || SORTERS.date;
     const dir = sortOrder === 'asc' ? 1 : -1;
@@ -962,6 +1016,7 @@ const SuperAdminServiceLogs = () => {
     try {
       await updateTrackingStatus(serviceId, reverseStatusMap[newStatus]);
       setServices((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: newStatus } : s)));
+      setAllRows((prev) => (prev ? prev.map((s) => (s.id === serviceId ? { ...s, status: newStatus } : s)) : prev));
       setSelectedService((prev) => (prev && prev.id === serviceId ? { ...prev, status: newStatus } : prev));
       toast.success(`Status updated to ${newStatus}`);
     } catch (error) {
@@ -1089,8 +1144,8 @@ const SuperAdminServiceLogs = () => {
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                 <div className="mb-6 grid grid-cols-1 gap-4 lg:grid-cols-3">
                   <StatusDonut stats={globalStats} />
-                  <StaffWorkload services={services} />
-                  <TopServices services={services} />
+                  <StaffWorkload services={insightData} caption={insightCaption} showAll={insightAll} canExpand={totalRecords > services.length} onToggle={() => setInsightAll((v) => !v)} loading={allLoading} />
+                  <TopServices services={insightData} caption={insightCaption} showAll={insightAll} canExpand={totalRecords > services.length} onToggle={() => setInsightAll((v) => !v)} loading={allLoading} />
                 </div>
               </motion.div>
             )}
@@ -1151,7 +1206,7 @@ const SuperAdminServiceLogs = () => {
                       <option value="high">High</option>
                     </select>
                     <select className={inputCls} value={reviewedFilter} onChange={(e) => setReviewedFilter(e.target.value)} aria-label="Reviews">
-                      <option value="all">Not Reviewed</option>
+                      <option value="all">All records</option>
                       <option value="reviewed">Reviewed only</option>
                     </select>
                   </>
