@@ -89,6 +89,18 @@ const DEFAULT_FILTERS = {
 
 const LIMIT = 50;
 
+// APIs return lists in different shapes: [..], {data:[..]}, {data:{staff:[..]}}, {centres:[..]} ...
+const toList = (res) => {
+  const d = res && res.data !== undefined && !Array.isArray(res) ? res.data : res;
+  if (Array.isArray(d)) return d;
+  if (d && typeof d === 'object') {
+    if (Array.isArray(d.data)) return d.data;
+    const first = Object.values(d).find((v) => Array.isArray(v));
+    if (first) return first;
+  }
+  return [];
+};
+
 const inputCls =
   'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder-slate-400 transition focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40 disabled:bg-slate-50 disabled:text-slate-400';
 
@@ -808,6 +820,8 @@ const SuperAdminServiceLogs = () => {
         updatedAt,
         estimatedDelivery: estimated,
         centreId: t.centre_id || null,
+        staffIdRaw: t.assigned_to || null,
+        categoryIdRaw: t.category_id || null,
         centreName: centre ? centre.name : t.centre_name || t.centreName || t.centre?.name || 'Unknown centre',
         workSource: t.work_source || (t.customer_service_id ? 'online' : 'offline'),
         serviceRating: t.service_rating,
@@ -839,22 +853,21 @@ const SuperAdminServiceLogs = () => {
     };
   };
 
-  // dropdown data, loaded once
+  // dropdown data, loaded once. Each list loads on its own so one failure does not empty the others.
   useEffect(() => {
     (async () => {
-      try {
-        const [staffRes, catRes, centreRes] = await Promise.all([
-          getStaff(),
-          getCategories(),
-          axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }).then((r) => r.data).catch(() => []),
-        ]);
-        setStaffList(Array.isArray(staffRes?.data) ? staffRes.data : Array.isArray(staffRes) ? staffRes : []);
-        setCategoriesList(Array.isArray(catRes?.data) ? catRes.data : Array.isArray(catRes) ? catRes : []);
-        const centreList = Array.isArray(centreRes) ? centreRes : Array.isArray(centreRes?.centres) ? centreRes.centres : Array.isArray(centreRes?.data) ? centreRes.data : [];
-        setCentres(centreList);
-      } catch (e) {
-        console.error('Error loading dropdown data', e);
-      }
+      const token = localStorage.getItem('token');
+      const jobs = [
+        ['staff', () => getStaff(), setStaffList],
+        ['categories', () => getCategories(), setCategoriesList],
+        ['centres', () => axios.get(`${import.meta.env.VITE_API_URL}/api/centres`, { headers: { Authorization: `Bearer ${token}` } }), setCentres],
+      ];
+      const results = await Promise.allSettled(jobs.map(([, fn]) => fn()));
+      results.forEach((r, i) => {
+        const [name, , setter] = jobs[i];
+        if (r.status === 'fulfilled') setter(toList(r.value));
+        else console.error(`SuperadminServiceLogs: could not load ${name} for the filters:`, r.reason);
+      });
     })();
   }, []);
 
@@ -871,7 +884,28 @@ const SuperAdminServiceLogs = () => {
     return categoriesList.find((c) => String(c.id) === String(serviceTypeFilter))?.subcategories || [];
   }, [serviceTypeFilter, categoriesList]);
 
-  const sortedCentres = useMemo(() => [...centres].sort((a, b) => a.name.localeCompare(b.name)), [centres]);
+  // If a list could not be loaded, fall back to what the rows on screen contain so the filters are never empty.
+  const sortedCentres = useMemo(() => {
+    let list = centres;
+    if (list.length === 0) {
+      const m = new Map();
+      services.forEach((s) => { if (s.centreId && !m.has(String(s.centreId))) m.set(String(s.centreId), { id: s.centreId, name: s.centreName }); });
+      list = [...m.values()];
+    }
+    return [...list].sort((a, b) => String(a.name).localeCompare(String(b.name)));
+  }, [centres, services]);
+  const staffOptions = useMemo(() => {
+    if (staffList.length > 0) return staffList;
+    const m = new Map();
+    services.forEach((s) => { if (s.staffIdRaw && !m.has(String(s.staffIdRaw))) m.set(String(s.staffIdRaw), { id: s.staffIdRaw, name: s.staffName }); });
+    return [...m.values()];
+  }, [staffList, services]);
+  const categoryOptions = useMemo(() => {
+    if (categoriesList.length > 0) return categoriesList;
+    const m = new Map();
+    services.forEach((s) => { if (s.categoryIdRaw && !m.has(String(s.categoryIdRaw))) m.set(String(s.categoryIdRaw), { id: s.categoryIdRaw, name: s.serviceType, subcategories: [] }); });
+    return [...m.values()];
+  }, [categoriesList, services]);
 
   const loadData = async () => {
     const req = ++reqRef.current;
@@ -1082,7 +1116,7 @@ const SuperAdminServiceLogs = () => {
               </select>
               <select className={`${inputCls} lg:col-span-2`} value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)} aria-label="Staff">
                 <option value="all">All staff</option>
-                {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {staffOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <div className="flex items-center gap-2 lg:col-span-1 lg:justify-end">
                 <button
@@ -1104,7 +1138,7 @@ const SuperAdminServiceLogs = () => {
                   <>
                     <select className={inputCls} value={serviceTypeFilter} onChange={(e) => setServiceTypeFilter(e.target.value)} aria-label="Service type">
                       <option value="all">All service types</option>
-                      {categoriesList.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                      {categoryOptions.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                     </select>
                     <select className={inputCls} value={subcategoryFilter} onChange={(e) => setSubcategoryFilter(e.target.value)} disabled={serviceTypeFilter === 'all'} aria-label="Subcategory">
                       <option value="all">{serviceTypeFilter === 'all' ? 'Select a service first' : 'All subcategories'}</option>
