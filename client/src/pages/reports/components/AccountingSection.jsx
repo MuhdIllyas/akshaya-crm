@@ -638,100 +638,245 @@ const IncomeViewComponent = ({ transactions = [] }) => {
 
   const trend = 12.5;
 
+  const rowCalc = (row) => {
+    const displayAmount = Number(row.received_amount || 0);
+    const totalBilled = Number(row.service_charges || 0) + Number(row.department_charges || 0);
+    let receivedServiceCharge = 0;
+    let receivedDepartmentCharge = 0;
+
+    if (totalBilled > 0 && displayAmount > 0) {
+      const paymentRatio = displayAmount / totalBilled;
+      receivedServiceCharge = Number(row.service_charges || 0) * paymentRatio;
+      receivedDepartmentCharge = Number(row.department_charges || 0) * paymentRatio;
+    } else if (displayAmount > 0 && totalBilled === 0) {
+      receivedServiceCharge = displayAmount;
+    }
+    return { displayAmount, totalBilled, receivedServiceCharge, receivedDepartmentCharge };
+  };
+
+  const fmtDate = (v) => (v ? new Date(v).toLocaleDateString() : '—');
+  const fmtTime = (v) => (v ? new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—');
+
+  const renderDetails = (row) => {
+    const { displayAmount, totalBilled, receivedServiceCharge, receivedDepartmentCharge } = rowCalc(row);
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h4 className="text-xs font-bold text-slate-900">Transaction Details</h4>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">ID:</span>
+            <span className="font-mono text-xs text-slate-700">{row.service_entry_id}</span>
+          </div>
+        </div>
+
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Service Charge (Received)</p>
+            <p className="text-xs font-medium text-slate-900">₹{Math.round(receivedServiceCharge).toLocaleString()}</p>
+            <p className="text-xs text-slate-500">(Billed: ₹{Number(row.service_charges || 0).toLocaleString()})</p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Department Charge (Received)</p>
+            <p className="text-xs font-medium text-slate-900">₹{Math.round(receivedDepartmentCharge).toLocaleString()}</p>
+            <p className="text-xs text-slate-500">(Billed: ₹{Number(row.department_charges || 0).toLocaleString()})</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-xs text-slate-500">Total from Customer</p>
+            <p className="text-xs font-bold text-emerald-600">₹{displayAmount.toLocaleString()}</p>
+            <p className="text-xs text-slate-500">
+              {totalBilled > 0 ? (
+                <>
+                  {((displayAmount / totalBilled) * 100).toFixed(1)}% of total billed
+                  (₹{totalBilled.toLocaleString()})
+                </>
+              ) : (
+                'Full payment'
+              )}
+            </p>
+          </div>
+        </div>
+
+        {row.wallet_breakdown && Array.isArray(row.wallet_breakdown) && row.wallet_breakdown.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-2 text-xs font-medium text-slate-700">Wallet Transactions</p>
+            <div className="space-y-1">
+              {row.wallet_breakdown.map((w, i) => {
+                const isCustomerPayment =
+                  (Number(w.amount) === displayAmount) ||
+                  (Number(w.amount) === Number(row.service_charges || 0));
+
+                return (
+                  <div
+                    key={`${row.service_entry_id}-${w.wallet}-${i}`}
+                    className={`flex flex-wrap items-center justify-between gap-2 rounded-lg p-2 text-xs ${
+                      isCustomerPayment ? 'border border-emerald-100 bg-emerald-50' : 'bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-slate-900">{w.wallet || 'Unknown'}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-xs ${
+                        isCustomerPayment
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {isCustomerPayment ? 'Customer Payment' : 'Internal Transfer'}
+                      </span>
+                      {w.received_at && (
+                        <span className="text-xs text-slate-500">
+                          {new Date(w.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`font-semibold ${isCustomerPayment ? 'text-emerald-600' : 'text-navy-700'}`}>
+                      ₹{Number(w.amount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3 border-t border-slate-200 pt-3">
+          <div className="flex flex-col gap-1 text-xs sm:flex-row sm:justify-between">
+            <span className="text-slate-500">Note:</span>
+            <span className="text-slate-700">
+              Customer paid ₹{displayAmount.toLocaleString()} total
+              ({receivedServiceCharge > 0 ? `₹${Math.round(receivedServiceCharge).toLocaleString()} service` : ''}
+              {receivedDepartmentCharge > 0 ? ` + ₹${Math.round(receivedDepartmentCharge).toLocaleString()} department` : ''})
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderToggle = (row, isExpanded) => (
+    <button
+      type="button"
+      onClick={() => toggleRow(row.service_entry_id)}
+      aria-label={isExpanded ? 'Hide transaction details' : 'Show transaction details'}
+      aria-expanded={isExpanded}
+      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
+    >
+      {isExpanded ? <FiMinus className="h-4 w-4" /> : <FiPlus className="h-4 w-4" />}
+    </button>
+  );
+
+  const renderStatus = (row) => (
+    <>
+      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        <FiCheck className="mr-1 h-2 w-2" />
+        Completed
+      </span>
+      {row.was_pending && (
+        <div className="mt-1">
+          <span className="flex w-fit items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+            <FiRotateCcw className="mr-1 h-2 w-2" />
+            Was Pending
+          </span>
+        </div>
+      )}
+    </>
+  );
+
+  const sideCardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const sideTitleCls = 'mb-3 flex items-center text-sm font-bold text-slate-900';
+  const emptyCls = 'py-2 text-center text-xs text-slate-500';
+  const thCls = 'px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500';
+
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Left Column - Key Metrics */}
-      <div className="col-span-1 space-y-4">
+      <div className="order-2 space-y-4 lg:order-1 lg:col-span-1">
         {/* Total Collected Card */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-emerald-100 rounded-lg">
+        <div className={`${sideCardCls} transition-shadow hover:shadow-md`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-emerald-100 p-2">
                 <FiDollarSign className="h-4 w-4 text-emerald-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Total Collected</p>
-                <p className="font-bold text-gray-900 text-lg">₹{totalCollected.toLocaleString()}</p>
+                <p className="text-xs text-slate-500">Total Collected</p>
+                <p className="text-lg font-bold text-slate-900">₹{totalCollected.toLocaleString()}</p>
               </div>
             </div>
-            <div className="text-right">
-              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
-                <FiTrendingUp className="h-2 w-2 mr-1" />
-                +{trend}%
-              </span>
-            </div>
+            <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+              <FiTrendingUp className="mr-1 h-2 w-2" />
+              +{trend}%
+            </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-600">Service Charges (Received)</span>
-            <span className="font-medium">₹{totalServiceCharge.toLocaleString()}</span>
+            <span className="text-slate-600">Service Charges (Received)</span>
+            <span className="font-medium text-slate-900">₹{totalServiceCharge.toLocaleString()}</span>
           </div>
-          <div className="flex items-center justify-between text-xs mt-1">
-            <span className="text-gray-600">Department Charges (Debitted)</span>
-            <span className="font-medium">₹{totalDepartmentFee.toLocaleString()}</span>
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-slate-600">Department Charges (Debitted)</span>
+            <span className="font-medium text-slate-900">₹{totalDepartmentFee.toLocaleString()}</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-gray-100">
+          <div className="mt-2 border-t border-slate-100 pt-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Net Customer Payment</span>
+              <span className="text-slate-600">Net Customer Payment</span>
               <span className="font-bold text-emerald-600">₹{totalCollected.toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Wallet Summary */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiDatabase className="h-4 w-4 mr-2 text-blue-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiDatabase className="mr-2 h-4 w-4 text-navy-700" />
             Wallet Activity
           </h3>
           <div className="space-y-2">
             {Object.values(walletTotals).map((wallet, index) => (
-              <div key={wallet.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    index === 0 ? 'bg-blue-500' : 
-                    index === 1 ? 'bg-purple-500' : 
-                    index === 2 ? 'bg-emerald-500' : 'bg-gray-300'
+              <div key={wallet.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${
+                    index === 0 ? 'bg-navy-500' :
+                    index === 1 ? 'bg-slate-500' :
+                    index === 2 ? 'bg-emerald-500' : 'bg-slate-300'
                   }`} />
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{wallet.name}</span>
+                  <span className="truncate text-xs font-medium text-slate-700">{wallet.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{wallet.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{wallet.count} txn</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{wallet.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{wallet.count} txn</p>
                 </div>
               </div>
             ))}
             {Object.keys(walletTotals).length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No wallet activity</p>
+              <p className={emptyCls}>No wallet activity</p>
             )}
           </div>
         </div>
 
         {/* Top Performing Staff */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiUsers className="h-4 w-4 mr-2 text-indigo-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiUsers className="mr-2 h-4 w-4 text-navy-700" />
             Top Performing Staff
           </h3>
           <div className="space-y-2">
             {topStaff.map((staff, index) => (
-              <div key={staff.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                    index === 1 ? 'bg-gray-100 text-gray-700' :
-                    index === 2 ? 'bg-amber-100 text-amber-700' :
-                    'bg-blue-50 text-blue-600'
+              <div key={staff.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0 ? 'bg-amber-100 text-amber-700' :
+                    index === 1 ? 'bg-slate-200 text-slate-700' :
+                    index === 2 ? 'bg-orange-100 text-orange-700' :
+                    'bg-slate-100 text-navy-700'
                   }`}>
                     {index + 1}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-900">{staff.name}</p>
-                    <p className="text-xs text-gray-500">{staff.count} services</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-900">{staff.name}</p>
+                    <p className="text-xs text-slate-500">{staff.count} services</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{Math.round(staff.total).toLocaleString()}</p>
-                  <div className="text-xs text-gray-500">
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{Math.round(staff.total).toLocaleString()}</p>
+                  <div className="text-xs text-slate-500">
                     <span>S: ₹{Math.round(staff.serviceCharge).toLocaleString()}</span>
                     {staff.departmentFee > 0 && (
                       <span className="ml-1">D: ₹{Math.round(staff.departmentFee).toLocaleString()}</span>
@@ -741,295 +886,194 @@ const IncomeViewComponent = ({ transactions = [] }) => {
               </div>
             ))}
             {topStaff.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No staff data available</p>
+              <p className={emptyCls}>No staff data available</p>
             )}
           </div>
         </div>
 
         {/* Payment Method Distribution */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiCreditCard className="h-4 w-4 mr-2 text-purple-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiCreditCard className="mr-2 h-4 w-4 text-navy-700" />
             Wallet Distribution
           </h3>
           <div className="space-y-2">
-            {Object.values(paymentMethods).map((method, index) => (
-              <div key={method.name} className="flex items-center justify-between p-2">
-                <div className="flex items-center space-x-2">
-                  <div className={`p-1 rounded ${
+            {Object.values(paymentMethods).map((method) => (
+              <div key={method.name} className="flex items-center justify-between gap-2 p-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`shrink-0 rounded-lg p-1 ${
                     method.name.toLowerCase().includes('cash') ? 'bg-emerald-100 text-emerald-600' :
-                    method.name.toLowerCase().includes('counter') ? 'bg-blue-100 text-blue-600' :
-                    method.name.toLowerCase().includes('bank') ? 'bg-purple-100 text-purple-600' :
-                    'bg-gray-100 text-gray-600'
+                    method.name.toLowerCase().includes('counter') ? 'bg-slate-100 text-navy-700' :
+                    method.name.toLowerCase().includes('bank') ? 'bg-slate-200 text-slate-700' :
+                    'bg-slate-100 text-slate-600'
                   }`}>
                     {method.name.toLowerCase().includes('cash') ? <FiDollarSign className="h-3 w-3" /> :
                      method.name.toLowerCase().includes('counter') ? <FiCreditCard className="h-3 w-3" /> :
                      method.name.toLowerCase().includes('bank') ? <FiDatabase className="h-3 w-3" /> :
                      <FiCreditCard className="h-3 w-3" />}
                   </div>
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[80px]">{method.name}</span>
+                  <span className="truncate text-xs font-medium text-slate-700">{method.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{method.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{method.count} txn</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{method.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{method.count} txn</p>
                 </div>
               </div>
             ))}
             {Object.keys(paymentMethods).length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No wallet data</p>
+              <p className={emptyCls}>No wallet data</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Right Column - Transaction Table */}
-      <div className="col-span-2">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                <FiFileText className="h-4 w-4 mr-2 text-gray-600" />
+      {/* Right Column - Transactions */}
+      <div className="order-1 min-w-0 lg:order-2 lg:col-span-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center text-sm font-bold text-slate-900">
+                <FiFileText className="mr-2 h-4 w-4 text-navy-700" />
                 Income Transactions (Corrected View)
               </h3>
-              <span className="text-xs text-gray-600">
+              <span className="text-xs text-slate-600">
                 {rows.length} transactions • ₹{totalCollected.toLocaleString()} total
               </span>
             </div>
           </div>
-          
-          <div className="overflow-x-auto max-h-[500px]">
-            <table className="w-full min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-                <tr>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                </tr>
-              </thead>
 
-              <tbody>
-                {rows.length === 0 && (
+          {rows.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-xs text-slate-500">
+              <FiFileText className="mb-2 h-8 w-8 text-slate-300" />
+              No income data for this date
+            </div>
+          )}
+
+          {/* Mobile cards */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {rows.map((row, index) => {
+              const rowKey = row.service_entry_id != null
+                ? `se-${row.service_entry_id}`
+                : `income-fallback-${index}`;
+              const isExpanded = expandedRow === row.service_entry_id;
+              const { displayAmount, receivedServiceCharge, receivedDepartmentCharge } = rowCalc(row);
+
+              return (
+                <div key={`m-${rowKey}`} className={`p-4 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{row.customer_name || '—'}</p>
+                      <p className="truncate text-xs text-slate-600">{row.service_name || '—'}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {fmtDate(row.received_at)} · {fmtTime(row.received_at)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-bold text-slate-900">₹{displayAmount.toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">Service: ₹{Math.round(receivedServiceCharge).toLocaleString()}</p>
+                      {receivedDepartmentCharge > 0 && (
+                        <p className="text-xs text-slate-500">Dept: ₹{Math.round(receivedDepartmentCharge).toLocaleString()}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="flex items-center text-xs text-slate-600">
+                        <FiBriefcase className="mr-1 h-3 w-3 text-slate-400" />
+                        {row.staff_name || '—'}
+                      </span>
+                      {renderStatus(row)}
+                    </div>
+                    {renderToggle(row, isExpanded)}
+                  </div>
+                  {isExpanded && <div className="mt-3">{renderDetails(row)}</div>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          {rows.length > 0 && (
+            <div className="hidden max-h-[500px] overflow-auto md:block">
+              <table className="w-full min-w-full">
+                <thead className="sticky top-0 border-b border-slate-200 bg-slate-50">
                   <tr>
-                    <td colSpan="7" className="text-center py-6 text-gray-500 text-xs">
-                      <div className="flex flex-col items-center justify-center">
-                        <FiFileText className="h-8 w-8 text-gray-300 mb-2" />
-                        No income data for this date
-                      </div>
-                    </td>
+                    <th className={thCls}>Date</th>
+                    <th className={thCls}>Customer</th>
+                    <th className={thCls}>Service</th>
+                    <th className={thCls}>Staff</th>
+                    <th className={thCls}>Amount</th>
+                    <th className={thCls}>Status</th>
+                    <th className={thCls}><span className="sr-only">Details</span></th>
                   </tr>
-                )}
+                </thead>
 
-                {rows.map((row, index) => {
-                  const rowKey = row.service_entry_id != null
-                    ? `se-${row.service_entry_id}`
-                    : `income-fallback-${index}`;
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map((row, index) => {
+                    const rowKey = row.service_entry_id != null
+                      ? `se-${row.service_entry_id}`
+                      : `income-fallback-${index}`;
 
-                  const isExpanded = expandedRow === row.service_entry_id;
-                  const transactionAnalysis = analyzeTransaction(row);
-                  
-                  const displayAmount = Number(row.received_amount || 0);
-                  
-                  const totalBilled = Number(row.service_charges || 0) + Number(row.department_charges || 0);
-                  let receivedServiceCharge = 0;
-                  let receivedDepartmentCharge = 0;
-                  
-                  if (totalBilled > 0 && displayAmount > 0) {
-                    const paymentRatio = displayAmount / totalBilled;
-                    receivedServiceCharge = Number(row.service_charges || 0) * paymentRatio;
-                    receivedDepartmentCharge = Number(row.department_charges || 0) * paymentRatio;
-                  } else if (displayAmount > 0 && totalBilled === 0) {
-                    receivedServiceCharge = displayAmount;
-                  }
+                    const isExpanded = expandedRow === row.service_entry_id;
+                    const { displayAmount, receivedServiceCharge, receivedDepartmentCharge } = rowCalc(row);
 
-                  return (
-                    <React.Fragment key={rowKey}>
-                      <tr
-                        className={`hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
-                      >
-                        <td className="py-3 px-3">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium text-gray-900">
-                              {row.received_at ? new Date(row.received_at).toLocaleDateString() : '—'}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {row.received_at ? new Date(row.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center">
-                            <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2">
-                              <FiUser className="h-3 w-3 text-indigo-600" />
+                    return (
+                      <React.Fragment key={rowKey}>
+                        <tr className={`hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium text-slate-900">{fmtDate(row.received_at)}</span>
+                              <span className="text-xs text-slate-500">{fmtTime(row.received_at)}</span>
                             </div>
-                            <span className="text-xs font-medium text-gray-900 truncate max-w-[120px]">
-                              {row.customer_name || '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="text-xs text-gray-900">{row.service_name || '—'}</span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center">
-                            <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center mr-2">
-                              <FiBriefcase className="h-3 w-3 text-emerald-600" />
-                            </div>
-                            <span className="text-xs font-medium text-gray-900">
-                              {row.staff_name || '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-gray-900">
-                              ₹{displayAmount.toLocaleString()}
-                            </span>
-                            <div className="flex items-center text-xs text-gray-500">
-                              <span className="mr-2">Service: ₹{Math.round(receivedServiceCharge).toLocaleString()}</span>
-                              {receivedDepartmentCharge > 0 && (
-                                <span>Dept: ₹{Math.round(receivedDepartmentCharge).toLocaleString()}</span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                            <FiCheck className="h-2 w-2 mr-1" />
-                            Completed
-                          </span>
-                          {row.was_pending && (
-                            <div className="mt-1">
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center">
-                                <FiRotateCcw className="h-2 w-2 mr-1" />
-                                Was Pending
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center">
+                              <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                                <FiUser className="h-3 w-3 text-navy-700" />
+                              </div>
+                              <span className="max-w-[140px] truncate text-xs font-medium text-slate-900">
+                                {row.customer_name || '—'}
                               </span>
                             </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-3">
-                          <button
-                            onClick={() => toggleRow(row.service_entry_id)}
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            {isExpanded ? (
-                              <FiMinus className="h-4 w-4" />
-                            ) : (
-                              <FiPlus className="h-4 w-4" />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                      
-                      {isExpanded && (
-                        <tr className="bg-blue-50">
-                          <td colSpan="7" className="px-3 py-3">
-                            <div className="bg-white rounded-lg border border-gray-200 p-3">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-xs font-bold text-gray-900">Transaction Details</h4>
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-xs text-gray-600">ID:</span>
-                                  <span className="text-xs font-mono text-gray-700">{row.service_entry_id}</span>
-                                </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="text-xs text-slate-900">{row.service_name || '—'}</span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center">
+                              <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                                <FiBriefcase className="h-3 w-3 text-emerald-600" />
                               </div>
-                              
-                              <div className="grid grid-cols-2 gap-3 mb-3">
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Service Charge (Received)</p>
-                                  <p className="text-xs font-medium text-gray-900">₹{Math.round(receivedServiceCharge).toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">
-                                    (Billed: ₹{Number(row.service_charges || 0).toLocaleString()})
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Department Charge (Received)</p>
-                                  <p className="text-xs font-medium text-gray-900">₹{Math.round(receivedDepartmentCharge).toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">
-                                    (Billed: ₹{Number(row.department_charges || 0).toLocaleString()})
-                                  </p>
-                                </div>
-                                <div className="col-span-2">
-                                  <p className="text-xs text-gray-500 mb-1">Total from Customer</p>
-                                  <p className="text-xs font-bold text-emerald-600">₹{displayAmount.toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {totalBilled > 0 ? (
-                                      <>
-                                        {((displayAmount / totalBilled) * 100).toFixed(1)}% of total billed 
-                                        (₹{totalBilled.toLocaleString()})
-                                      </>
-                                    ) : (
-                                      'Full payment'
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              {row.wallet_breakdown && Array.isArray(row.wallet_breakdown) && row.wallet_breakdown.length > 0 && (
-                                <div className="mt-3">
-                                  <p className="text-xs font-medium text-gray-700 mb-2">Wallet Transactions</p>
-                                  <div className="space-y-1">
-                                    {row.wallet_breakdown.map((w, i) => {
-                                      const isCustomerPayment = 
-                                        (Number(w.amount) === displayAmount) || 
-                                        (Number(w.amount) === Number(row.service_charges || 0));
-                                      
-                                      return (
-                                        <div
-                                          key={`${row.service_entry_id}-${w.wallet}-${i}`}
-                                          className={`flex justify-between items-center text-xs p-2 rounded ${
-                                            isCustomerPayment ? 'bg-emerald-50 border border-emerald-100' : 'bg-gray-50'
-                                          }`}
-                                        >
-                                          <div className="flex items-center space-x-2">
-                                            <span className="font-medium">{w.wallet || 'Unknown'}</span>
-                                            <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                                              isCustomerPayment 
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : 'bg-blue-100 text-blue-700'
-                                            }`}>
-                                              {isCustomerPayment ? 'Customer Payment' : 'Internal Transfer'}
-                                            </span>
-                                            {w.received_at && (
-                                              <span className="text-gray-500 text-xs">
-                                                {new Date(w.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className={`font-semibold ${
-                                            isCustomerPayment ? 'text-emerald-600' : 'text-blue-600'
-                                          }`}>
-                                            ₹{Number(w.amount || 0).toLocaleString()}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-gray-600">Note:</span>
-                                  <span className="text-gray-700">
-                                    Customer paid ₹{displayAmount.toLocaleString()} total 
-                                    ({receivedServiceCharge > 0 ? `₹${Math.round(receivedServiceCharge).toLocaleString()} service` : ''}
-                                    {receivedDepartmentCharge > 0 ? ` + ₹${Math.round(receivedDepartmentCharge).toLocaleString()} department` : ''})
-                                  </span>
-                                </div>
+                              <span className="text-xs font-medium text-slate-900">{row.staff_name || '—'}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-900">₹{displayAmount.toLocaleString()}</span>
+                              <div className="flex items-center text-xs text-slate-500">
+                                <span className="mr-2">Service: ₹{Math.round(receivedServiceCharge).toLocaleString()}</span>
+                                {receivedDepartmentCharge > 0 && (
+                                  <span>Dept: ₹{Math.round(receivedDepartmentCharge).toLocaleString()}</span>
+                                )}
                               </div>
                             </div>
                           </td>
+                          <td className="px-3 py-3">{renderStatus(row)}</td>
+                          <td className="px-3 py-3">{renderToggle(row, isExpanded)}</td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                        {isExpanded && (
+                          <tr className="bg-slate-50">
+                            <td colSpan="7" className="px-3 py-3">{renderDetails(row)}</td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1103,15 +1147,60 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
   
   const dailyTrend = 8.2;
 
+  const sideCardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const sideTitleCls = 'mb-3 flex items-center text-sm font-bold text-slate-900';
+  const emptyCls = 'py-2 text-center text-xs text-slate-500';
+  const thCls = 'px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500';
+
+  const walletIcon = (type) => (
+    type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
+    type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
+    <FiSmartphone className="h-3 w-3" />
+  );
+  const walletTone = (type) => (
+    type === 'cash' ? 'bg-emerald-100 text-emerald-600' :
+    type === 'bank' ? 'bg-slate-100 text-navy-700' :
+    'bg-slate-200 text-slate-700'
+  );
+  const typeBadge = (isCredit) => (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+      isCredit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+    }`}>
+      {isCredit ? (
+        <>
+          <FiTrendingUp className="mr-1 h-2 w-2" />
+          Credit
+        </>
+      ) : (
+        <>
+          <FiTrendingDown className="mr-1 h-2 w-2" />
+          Debit
+        </>
+      )}
+    </span>
+  );
+  const statusBadge = (
+    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+      <FiCheckCircle className="mr-1 h-2 w-2" />
+      Processed
+    </span>
+  );
+  const rowKeyDown = (e, tx) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onLedgerRowClick(tx);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Left Column - Key Metrics */}
-      <div className="col-span-1 space-y-4">
+      <div className="order-2 space-y-4 lg:order-1 lg:col-span-1">
         {/* Net Balance Card */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className={`p-2 rounded-lg ${netBalance >= 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+        <div className={`${sideCardCls} transition-shadow hover:shadow-md`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className={`rounded-xl p-2 ${netBalance >= 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
                 {netBalance >= 0 ? (
                   <FiTrendingUp className="h-4 w-4 text-emerald-600" />
                 ) : (
@@ -1119,65 +1208,61 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
                 )}
               </div>
               <div>
-                <p className="text-xs text-gray-500">Net Balance</p>
-                <p className={`font-bold text-lg ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <p className="text-xs text-slate-500">Net Balance</p>
+                <p className={`text-lg font-bold ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                   ₹{Math.abs(netBalance).toLocaleString()}
                   {netBalance >= 0 ? ' (Credit)' : ' (Debit)'}
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                dailyTrend >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-              }`}>
-                {dailyTrend >= 0 ? (
-                  <FiTrendingUp className="h-2 w-2 mr-1" />
-                ) : (
-                  <FiTrendingDown className="h-2 w-2 mr-1" />
-                )}
-                {Math.abs(dailyTrend)}%
-              </span>
-            </div>
+            <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium ${
+              dailyTrend >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+            }`}>
+              {dailyTrend >= 0 ? (
+                <FiTrendingUp className="mr-1 h-2 w-2" />
+              ) : (
+                <FiTrendingDown className="mr-1 h-2 w-2" />
+              )}
+              {Math.abs(dailyTrend)}%
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-gray-600 mb-1">Total Credits</p>
-              <p className="font-semibold text-emerald-600 text-sm">₹{totalCredits.toLocaleString()}</p>
+              <p className="mb-1 text-xs text-slate-600">Total Credits</p>
+              <p className="text-sm font-semibold text-emerald-600">₹{totalCredits.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-600 mb-1">Total Debits</p>
-              <p className="font-semibold text-rose-600 text-sm">₹{totalDebits.toLocaleString()}</p>
+              <p className="mb-1 text-xs text-slate-600">Total Debits</p>
+              <p className="text-sm font-semibold text-rose-600">₹{totalDebits.toLocaleString()}</p>
             </div>
           </div>
         </div>
 
         {/* Top Wallets by Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiCreditCard className="h-4 w-4 mr-2 text-indigo-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiCreditCard className="mr-2 h-4 w-4 text-navy-700" />
             Top Wallets
           </h3>
           <div className="space-y-2">
             {topWallets.map((wallet, index) => (
-              <div key={wallet.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? 'bg-indigo-100 text-indigo-600' :
-                    index === 1 ? 'bg-purple-100 text-purple-600' :
-                    index === 2 ? 'bg-blue-100 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
+              <div key={wallet.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0 ? 'bg-navy-700 text-white' :
+                    index === 1 ? 'bg-navy-500 text-white' :
+                    index === 2 ? 'bg-slate-300 text-slate-700' :
+                    'bg-slate-100 text-slate-600'
                   }`}>
-                    {wallet.type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
-                     wallet.type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
-                     <FiSmartphone className="h-3 w-3" />}
+                    {walletIcon(wallet.type)}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">{wallet.name}</p>
-                    <p className="text-xs text-gray-500">{wallet.type}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-900">{wallet.name}</p>
+                    <p className="text-xs text-slate-500">{wallet.type}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">{wallet.count} txns</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">{wallet.count} txns</p>
                   <p className={`text-xs ${wallet.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {wallet.net >= 0 ? '+' : '-'}₹{Math.abs(wallet.net).toLocaleString()}
                   </p>
@@ -1185,263 +1270,280 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
               </div>
             ))}
             {topWallets.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No wallet data</p>
+              <p className={emptyCls}>No wallet data</p>
             )}
           </div>
         </div>
 
         {/* Category Breakdown */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiTag className="h-4 w-4 mr-2 text-purple-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiTag className="mr-2 h-4 w-4 text-navy-700" />
             Category Breakdown
           </h3>
           <div className="space-y-2">
-            {topCategories.map((category, index) => (
-              <div key={category.name} className="flex items-center justify-between p-2">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${
+            {topCategories.map((category) => (
+              <div key={category.name} className="flex items-center justify-between gap-2 p-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${
                     category.name.includes('Service') ? 'bg-emerald-500' :
                     category.name.includes('Expense') ? 'bg-rose-500' :
-                    category.name.includes('Salary') ? 'bg-blue-500' :
-                    category.name.includes('Transfer') ? 'bg-indigo-500' :
-                    'bg-gray-400'
+                    category.name.includes('Salary') ? 'bg-navy-500' :
+                    category.name.includes('Transfer') ? 'bg-navy-700' :
+                    'bg-slate-400'
                   }`} />
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[80px]">
-                    {category.name}
-                  </span>
+                  <span className="truncate text-xs font-medium text-slate-700">{category.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{category.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{category.count} txns</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{category.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{category.count} txns</p>
                 </div>
               </div>
             ))}
             {topCategories.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No category data</p>
+              <p className={emptyCls}>No category data</p>
             )}
           </div>
         </div>
 
         {/* Staff Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiUsers className="h-4 w-4 mr-2 text-amber-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiUsers className="mr-2 h-4 w-4 text-navy-700" />
             Staff Activity
           </h3>
           <div className="space-y-2">
             {topStaff.map((staff, index) => (
-              <div key={staff.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? 'bg-amber-100 text-amber-600' :
-                    index === 1 ? 'bg-emerald-100 text-emerald-600' :
-                    index === 2 ? 'bg-blue-100 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
+              <div key={staff.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0 ? 'bg-amber-100 text-amber-700' :
+                    index === 1 ? 'bg-emerald-100 text-emerald-700' :
+                    index === 2 ? 'bg-slate-200 text-slate-700' :
+                    'bg-slate-100 text-slate-600'
                   }`}>
                     {staff.name.charAt(0)}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">{staff.name}</p>
-                    <p className="text-xs text-gray-500">Transactions: {staff.count}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-900">{staff.name}</p>
+                    <p className="text-xs text-slate-500">Transactions: {staff.count}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{staff.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">Avg: ₹{(staff.total / staff.count).toFixed(0)}</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{staff.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">Avg: ₹{(staff.total / staff.count).toFixed(0)}</p>
                 </div>
               </div>
             ))}
             {topStaff.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No staff activity</p>
+              <p className={emptyCls}>No staff activity</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Right Column - Ledger Table */}
-      <div className="col-span-2">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                <FiBook className="h-4 w-4 mr-2 text-gray-600" />
+      {/* Right Column - Ledger */}
+      <div className="order-1 min-w-0 lg:order-2 lg:col-span-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center text-sm font-bold text-slate-900">
+                <FiBook className="mr-2 h-4 w-4 text-navy-700" />
                 Ledger Transactions (Corrected View)
               </h3>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-600">
-                  {ledger.length} transactions
-                </span>
-                <span className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600">{ledger.length} transactions</span>
+                <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
                   Net: ₹{netBalance.toLocaleString()}
                 </span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-1 flex items-center">
-              <FiInfo className="h-3 w-3 mr-1" />
+            <p className="mt-1 flex items-center text-xs text-slate-500">
+              <FiInfo className="mr-1 h-3 w-3" />
               Showing corrected transactions only (reversals hidden)
             </p>
           </div>
-          
-          <div className="overflow-x-auto max-h-[500px]">
-            <table className="w-full min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-                <tr>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wallet</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service/Staff</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
 
-              <tbody>
-                {ledger.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="text-center py-6 text-gray-500 text-xs">
-                      <div className="flex flex-col items-center justify-center">
-                        <FiBook className="h-8 w-8 text-gray-300 mb-2" />
-                        No ledger transactions found
+          {ledger.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-xs text-slate-500">
+              <FiBook className="mb-2 h-8 w-8 text-slate-300" />
+              No ledger transactions found
+            </div>
+          )}
+
+          {/* Mobile cards */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {ledger.map((tx, index) => {
+              const isCredit = tx.type === 'credit';
+              const transactionDate = new Date(tx.created_at);
+              const rowKey = `ledger-${tx.id || index}`;
+
+              return (
+                <div
+                  key={`m-${rowKey}`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => rowKeyDown(e, tx)}
+                  className="cursor-pointer p-4 transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                  onClick={() => onLedgerRowClick(tx)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${walletTone(tx.wallet_type)}`}>
+                        {walletIcon(tx.wallet_type)}
                       </div>
-                    </td>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{tx.wallet_name}</p>
+                        <p className="text-xs capitalize text-slate-500">{tx.wallet_type}</p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={`text-sm font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {isCredit ? '+' : '-'}₹{Number(tx.amount || 0).toLocaleString()}
+                      </p>
+                      {tx.balance_after && (
+                        <p className="text-xs text-slate-500">Balance: ₹{Number(tx.balance_after).toLocaleString()}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {typeBadge(isCredit)}
+                    {statusBadge}
+                    <span className="text-xs font-medium text-slate-700">{tx.category}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                    <span className="flex min-w-0 items-center truncate">
+                      <FiUser className="mr-1 h-3 w-3 shrink-0 text-slate-400" />
+                      <span className="truncate">
+                        {tx.staff_name || 'System'}
+                        {tx.customer_name ? ` · ${tx.customer_name}` : ''}
+                      </span>
+                    </span>
+                    <span className="shrink-0">
+                      {transactionDate.toLocaleDateString()} {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {tx.service_name && (
+                    <p className="mt-1 truncate text-xs text-slate-500">{tx.service_name}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          {ledger.length > 0 && (
+            <div className="hidden max-h-[500px] overflow-auto md:block">
+              <table className="w-full min-w-full">
+                <thead className="sticky top-0 border-b border-slate-200 bg-slate-50">
+                  <tr>
+                    <th className={thCls}>Date</th>
+                    <th className={thCls}>Wallet</th>
+                    <th className={thCls}>Type</th>
+                    <th className={thCls}>Amount</th>
+                    <th className={thCls}>Category</th>
+                    <th className={thCls}>Service/Staff</th>
+                    <th className={thCls}>Status</th>
                   </tr>
-                )}
+                </thead>
 
-                {ledger.map((tx, index) => {
-                  const isCredit = tx.type === 'credit';
-                  const transactionDate = new Date(tx.created_at);
-                  const rowKey = `ledger-${tx.id || index}`;
-                  const isReversal = tx.is_reversal;
+                <tbody className="divide-y divide-slate-100">
+                  {ledger.map((tx, index) => {
+                    const isCredit = tx.type === 'credit';
+                    const transactionDate = new Date(tx.created_at);
+                    const rowKey = `ledger-${tx.id || index}`;
 
-                  return (
-                    <tr
-                      key={rowKey}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => onLedgerRowClick(tx)}
-                    >
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium text-gray-900">
-                            {transactionDate.toLocaleDateString()}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 ${
-                            tx.wallet_type === 'cash' ? 'bg-emerald-100 text-emerald-600' :
-                            tx.wallet_type === 'bank' ? 'bg-blue-100 text-blue-600' :
-                            'bg-purple-100 text-purple-600'
-                          }`}>
-                            {tx.wallet_type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
-                             tx.wallet_type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
-                             <FiSmartphone className="h-3 w-3" />}
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-900">{tx.wallet_name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{tx.wallet_type}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          isCredit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                        }`}>
-                          {isCredit ? (
-                            <>
-                              <FiTrendingUp className="h-2 w-2 mr-1" />
-                              Credit
-                            </>
-                          ) : (
-                            <>
-                              <FiTrendingDown className="h-2 w-2 mr-1" />
-                              Debit
-                            </>
-                          )}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col">
-                          <span className={`text-xs font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {isCredit ? '+' : '-'}₹{Number(tx.amount || 0).toLocaleString()}
-                          </span>
-                          {tx.balance_after && (
-                            <span className="text-xs text-gray-500">
-                              Balance: ₹{Number(tx.balance_after).toLocaleString()}
+                    return (
+                      <tr
+                        key={rowKey}
+                        tabIndex={0}
+                        onKeyDown={(e) => rowKeyDown(e, tx)}
+                        className="cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                        onClick={() => onLedgerRowClick(tx)}
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-900">{transactionDate.toLocaleDateString()}</span>
+                            <span className="text-xs text-slate-500">
+                              {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium text-gray-900">{tx.category}</span>
-                          {tx.service_name && (
-                            <span className="text-xs text-gray-500 truncate max-w-[120px]">
-                              {tx.service_name}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center">
-                          <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2">
-                            <FiUser className="h-3 w-3 text-indigo-600" />
                           </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-900">
-                              {tx.staff_name || 'System'}
-                            </p>
-                            {tx.customer_name && (
-                              <p className="text-xs text-gray-500 truncate max-w-[100px]">
-                                {tx.customer_name}
-                              </p>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center">
+                            <div className={`mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${walletTone(tx.wallet_type)}`}>
+                              {walletIcon(tx.wallet_type)}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-900">{tx.wallet_name}</p>
+                              <p className="text-xs capitalize text-slate-500">{tx.wallet_type}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">{typeBadge(isCredit)}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className={`text-xs font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {isCredit ? '+' : '-'}₹{Number(tx.amount || 0).toLocaleString()}
+                            </span>
+                            {tx.balance_after && (
+                              <span className="text-xs text-slate-500">
+                                Balance: ₹{Number(tx.balance_after).toLocaleString()}
+                              </span>
                             )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                          <FiCheckCircle className="h-2 w-2 mr-1" />
-                          Processed
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-900">{tx.category}</span>
+                            {tx.service_name && (
+                              <span className="max-w-[140px] truncate text-xs text-slate-500">{tx.service_name}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center">
+                            <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                              <FiUser className="h-3 w-3 text-navy-700" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-900">{tx.staff_name || 'System'}</p>
+                              {tx.customer_name && (
+                                <p className="max-w-[120px] truncate text-xs text-slate-500">{tx.customer_name}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">{statusBadge}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Summary Footer */}
           {ledger.length > 0 && (
-            <div className="border-t border-gray-200 bg-gray-50 p-3">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-4">
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <div>
-                    <span className="text-gray-600">Total Credits:</span>
-                    <span className="font-bold text-emerald-600 ml-1">₹{totalCredits.toLocaleString()}</span>
+                    <span className="text-slate-600">Total Credits:</span>
+                    <span className="ml-1 font-bold text-emerald-600">₹{totalCredits.toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600">Total Debits:</span>
-                    <span className="font-bold text-rose-600 ml-1">₹{totalDebits.toLocaleString()}</span>
+                    <span className="text-slate-600">Total Debits:</span>
+                    <span className="ml-1 font-bold text-rose-600">₹{totalDebits.toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600">Net Balance:</span>
-                    <span className={`font-bold ml-1 ${
-                      netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
+                    <span className="text-slate-600">Net Balance:</span>
+                    <span className={`ml-1 font-bold ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {netBalance >= 0 ? '+' : '-'}₹{Math.abs(netBalance).toLocaleString()}
                     </span>
                   </div>
                 </div>
-                <div className="text-gray-600">
-                  Showing {ledger.length} transactions
-                </div>
+                <div className="text-slate-600">Showing {ledger.length} transactions</div>
               </div>
             </div>
           )}
