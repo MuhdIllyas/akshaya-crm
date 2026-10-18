@@ -388,7 +388,7 @@ const CampaignTokenManagementStaff = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex items-center gap-3">
           <div className="rounded-xl bg-navy-700 p-3 text-white shadow-sm"><FiAward className="h-6 w-6" /></div>

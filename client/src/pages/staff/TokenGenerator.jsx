@@ -299,7 +299,7 @@ const TokenGenerator = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-5 flex items-center gap-3">
           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-navy-800 text-white">

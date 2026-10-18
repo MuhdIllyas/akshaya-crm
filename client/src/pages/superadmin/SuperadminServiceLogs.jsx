@@ -1089,7 +1089,7 @@ const SuperAdminServiceLogs = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-7xl animate-pulse space-y-4">
+        <div className="w-full animate-pulse space-y-4">
           <div className="h-10 w-72 rounded-lg bg-white" />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="h-20 rounded-xl bg-white" />)}</div>
           <div className="h-24 rounded-2xl bg-white" />
@@ -1102,7 +1102,7 @@ const SuperAdminServiceLogs = () => {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-7xl">
+        <div className="w-full">
           {/* Header */}
           <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

@@ -445,7 +445,7 @@ const ExpenseEntry = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-        <div className="mx-auto max-w-7xl animate-pulse space-y-4">
+        <div className="w-full animate-pulse space-y-4">
           <div className="h-10 w-80 rounded-lg bg-white" />
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{[0, 1, 2, 3].map((i) => <div key={i} className="h-24 rounded-xl bg-white" />)}</div>
           <div className="h-28 rounded-2xl bg-white" />
@@ -457,7 +457,7 @@ const ExpenseEntry = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl">
+      <div className="w-full">
         {/* Header */}
         <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
