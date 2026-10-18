@@ -1198,7 +1198,7 @@ const ServiceLogs = () => {
                       <option value="high">High</option>
                     </select>
                     <select className={inputCls} value={reviewedFilter} onChange={(e) => setReviewedFilter(e.target.value)} aria-label="Reviews">
-                      <option value="all">All records</option>
+                      <option value="all">Not Reviewed</option>
                       <option value="reviewed">Reviewed only</option>
                     </select>
                   </>
