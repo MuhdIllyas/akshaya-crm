@@ -15,6 +15,21 @@ const IST = "Asia/Kolkata";
 const OVERDUE_DAYS = 7;
 const PAGE_SIZE = 50;
 
+// quick date ranges (IST) applied to the service date
+const PRESETS = [
+  { id: "today", label: "Today" },
+  { id: "month", label: "This month" },
+  { id: "year", label: "This year" },
+  { id: "all", label: "All time" },
+];
+const presetRange = (id) => {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: IST });
+  if (id === "today") return { from: today, to: today };
+  if (id === "month") return { from: `${today.slice(0, 8)}01`, to: today };
+  if (id === "year") return { from: `${today.slice(0, 4)}-01-01`, to: today };
+  return { from: "", to: "" };
+};
+
 // 'YYYY-MM-DD' in IST for any date value (a plain date string is used as it is)
 const ymd = (v) => {
   if (!v) return "";
@@ -441,8 +456,8 @@ const PendingPayments = () => {
   const [loadError, setLoadError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(() => presetRange("today").from);
+  const [toDate, setToDate] = useState(() => presetRange("today").to);
   const [shown, setShown] = useState(PAGE_SIZE);
 
   const [detailPayment, setDetailPayment] = useState(null);
@@ -487,7 +502,8 @@ const PendingPayments = () => {
     return () => { cancelled = true; };
   }, [receivePayment?.id]);
 
-  const filteredPayments = useMemo(() => {
+  // search + date range (the status tabs are applied on top of this)
+  const scopedPayments = useMemo(() => {
     let list = pendingPayments;
     const q = searchQuery.trim().toLowerCase();
     if (q) {
@@ -508,11 +524,16 @@ const PendingPayments = () => {
         return true;
       });
     }
+    return list;
+  }, [pendingPayments, searchQuery, fromDate, toDate]);
+
+  const filteredPayments = useMemo(() => {
+    let list = scopedPayments;
     if (filter === "overdue") list = list.filter((p) => isOverdue(p.createdAt));
     else if (filter === "pending") list = list.filter((p) => p.paid === 0);
     else if (filter === "partially_paid") list = list.filter((p) => p.paid > 0 && p.due > 0);
     return [...list].sort((a, b) => b.due - a.due);
-  }, [pendingPayments, searchQuery, filter, fromDate, toDate]);
+  }, [scopedPayments, filter]);
 
   useEffect(() => { setShown(PAGE_SIZE); }, [searchQuery, filter, fromDate, toDate, pendingPayments]);
 
@@ -534,15 +555,18 @@ const PendingPayments = () => {
   const tabCounts = useMemo(() => {
     if (mode === "history") return {};
     return {
-      all: pendingPayments.length,
-      overdue: pendingPayments.filter((p) => isOverdue(p.createdAt)).length,
-      pending: pendingPayments.filter((p) => p.paid === 0).length,
-      partially_paid: pendingPayments.filter((p) => p.paid > 0 && p.due > 0).length,
+      all: scopedPayments.length,
+      overdue: scopedPayments.filter((p) => isOverdue(p.createdAt)).length,
+      pending: scopedPayments.filter((p) => p.paid === 0).length,
+      partially_paid: scopedPayments.filter((p) => p.paid > 0 && p.due > 0).length,
     };
-  }, [pendingPayments, mode]);
+  }, [scopedPayments, mode]);
 
-  const filtersActive = Boolean(searchQuery || fromDate || toDate || (filter !== "all" && filter !== "history"));
-  const clearFilters = () => { setSearchQuery(""); setFromDate(""); setToDate(""); if (filter !== "history") setFilter("all"); };
+  const activePreset = PRESETS.find((r) => { const x = presetRange(r.id); return x.from === fromDate && x.to === toDate; })?.id || "custom";
+  const applyPreset = (id) => { const r = presetRange(id); setFromDate(r.from); setToDate(r.to); };
+  // "active" = anything other than the default view (today, all statuses, no search)
+  const filtersActive = Boolean(searchQuery || activePreset !== "today" || (filter !== "all" && filter !== "history"));
+  const clearFilters = () => { setSearchQuery(""); applyPreset("today"); if (filter !== "history") setFilter("all"); };
 
   const visible = filteredPayments.slice(0, shown);
 
@@ -692,10 +716,21 @@ const PendingPayments = () => {
               );
             })}
           </div>
-          <p className={`mb-6 h-4 text-xs text-slate-400 ${filtersActive ? "" : "invisible"}`}>Figures follow the filters below.</p>
+          <p className="mb-6 text-xs text-slate-400">Figures reflect the date range and filters below.</p>
 
           {/* Filters */}
           <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+            <div className="mb-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Quick date range">
+              {PRESETS.map((r) => (
+                <button
+                  key={r.id} type="button" onClick={() => applyPreset(r.id)} aria-pressed={activePreset === r.id}
+                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${activePreset === r.id ? "border-navy-700 bg-navy-700 text-white" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}
+                >
+                  {r.label}
+                </button>
+              ))}
+              {activePreset === "custom" && <span className="px-1 text-xs text-slate-400">Custom range</span>}
+            </div>
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div className="relative lg:w-96">
                 <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -717,7 +752,7 @@ const PendingPayments = () => {
                 </div>
                 {filtersActive && (
                   <button type="button" onClick={clearFilters} className="inline-flex items-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium text-navy-700 hover:bg-slate-100">
-                    <FiX className="h-4 w-4" /> Clear
+                    <FiX className="h-4 w-4" /> Reset
                   </button>
                 )}
               </div>
@@ -753,9 +788,12 @@ const PendingPayments = () => {
               <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
                 <FiFileText className="mb-3 h-12 w-12 text-slate-300" />
                 <p className="text-base font-medium text-slate-600">
-                  {filtersActive ? "No matching payments found" : mode === "history" ? "No cleared payments yet" : "No pending payments"}
+                  {filtersActive || activePreset !== "all" ? `No ${mode === "history" ? "cleared" : "pending"} payments${activePreset === "today" ? " for today" : " in this range"}` : mode === "history" ? "No cleared payments yet" : "No pending payments"}
                 </p>
-                {filtersActive && <button type="button" onClick={clearFilters} className="mt-2 text-sm font-medium text-navy-700 hover:underline">Clear filters</button>}
+                {activePreset !== "all" && (
+                  <button type="button" onClick={() => applyPreset("all")} className="mt-2 text-sm font-medium text-navy-700 hover:underline">Show all time</button>
+                )}
+                {filtersActive && <button type="button" onClick={clearFilters} className="mt-1 text-sm font-medium text-slate-500 hover:underline">Reset filters</button>}
               </div>
             ) : (
               <>
@@ -856,7 +894,7 @@ const PendingPayments = () => {
                 <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
                   <p className="text-sm text-slate-600">
                     Showing <span className="font-medium">{visible.length}</span> of <span className="font-medium">{filteredPayments.length}</span>
-                    {filteredPayments.length !== pendingPayments.length && <> (filtered from {pendingPayments.length})</>}
+                    {filteredPayments.length !== pendingPayments.length && <> (of {pendingPayments.length} total)</>}
                     <span className="mx-2 text-slate-300">·</span>
                     Total due <span className="font-bold tabular-nums text-rose-600">{formatCurrency(stats.totalDue)}</span>
                   </p>
