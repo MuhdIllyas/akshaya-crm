@@ -1,8 +1,6 @@
-//superadmin - and admin have separate service logs
-//src/[admin|superadmin]/pages/[Superadmin/admin]ServiceLogs.jsx
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
-  FiSearch, FiDownload, FiEye, FiMessageSquare, FiClock, FiUser, FiDollarSign,
+  FiSearch, FiDownload, FiMessageSquare, FiClock, FiUser, FiDollarSign,
   FiCheckCircle, FiAlertCircle, FiRefreshCw, FiFileText, FiTrendingUp,
   FiBarChart2, FiCalendar, FiShoppingBag, FiX, FiStar, FiList, FiGrid, FiUsers,
   FiUserCheck, FiSliders, FiCopy, FiMapPin, FiChevronLeft, FiChevronRight,
@@ -302,39 +300,34 @@ const TopServices = ({ services }) => {
 // ==========================================
 const ServiceRow = ({ service, onOpen }) => (
   <tr onClick={() => onOpen(service)} className="cursor-pointer transition-colors hover:bg-slate-50/80">
-    <td className="px-4 py-3">
-      <p className="max-w-[170px] truncate text-sm font-medium text-slate-900" title={service.customerName}>{service.customerName}</p>
+    <td className="px-3 py-3">
+      <p className="max-w-[150px] truncate text-sm font-medium text-slate-900" title={service.customerName}>{service.customerName}</p>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
         <span className="max-w-[110px] truncate font-mono text-xs text-slate-400" title={service.applicationNumber}>{service.applicationNumber}</span>
         <SourceTag source={service.workSource} />
         <Rating value={service.serviceRating} />
       </div>
     </td>
-    <td className="px-4 py-3">
-      <p className="max-w-[160px] truncate text-sm text-slate-800" title={service.serviceType}>{service.serviceType}</p>
-      <p className="max-w-[160px] truncate text-xs text-slate-400" title={service.subcategoryName}>{service.subcategoryName}</p>
+    <td className="px-3 py-3">
+      <p className="max-w-[130px] truncate text-sm text-slate-800" title={service.serviceType}>{service.serviceType}</p>
+      <p className="max-w-[130px] truncate text-xs text-slate-400" title={service.subcategoryName}>{service.subcategoryName}</p>
     </td>
-    <td className="px-4 py-3"><p className="max-w-[120px] truncate text-sm text-slate-700" title={service.centreName}>{service.centreName}</p></td>
-    <td className="px-4 py-3"><p className="max-w-[120px] truncate text-sm text-slate-700" title={service.staffName}>{service.staffName}</p></td>
-    <td className="whitespace-nowrap px-4 py-3">
+    <td className="px-3 py-3"><p className="max-w-[120px] truncate text-sm text-slate-700" title={service.centreName}>{service.centreName}</p></td>
+    <td className="px-3 py-3"><p className="max-w-[120px] truncate text-sm text-slate-700" title={service.staffName}>{service.staffName}</p></td>
+    <td className="whitespace-nowrap px-3 py-3">
       <p className="text-sm text-slate-700">{formatYmd(service.date)}</p>
       <p className="text-xs text-slate-400">{service.time}</p>
     </td>
-    <td className="px-4 py-3">
+    <td className="px-3 py-3">
       <StatusChip status={service.status} />
       <div className="mt-1"><PriorityLabel priority={service.priority} /></div>
     </td>
-    <td className="whitespace-nowrap px-4 py-3 text-sm tabular-nums text-slate-700">{service.cost > 0 ? money(service.cost) : <span className="text-slate-300">-</span>}</td>
-    <td className="px-4 py-3">
-      <div className="flex w-24 items-center gap-2">
+    <td className="whitespace-nowrap px-3 py-3 text-sm tabular-nums text-slate-700">{service.cost > 0 ? money(service.cost) : <span className="text-slate-300">-</span>}</td>
+    <td className="px-3 py-3">
+      <div className="flex w-20 items-center gap-1.5">
         <ProgressBar pct={service.progress} />
         <span className="w-8 text-right text-xs tabular-nums text-slate-500">{service.progress}%</span>
       </div>
-    </td>
-    <td className="px-4 py-3">
-      <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(service); }} aria-label={`View ${service.customerName}`} className="rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-navy-700">
-        <FiEye className="h-4 w-4" />
-      </button>
     </td>
   </tr>
 );
@@ -787,8 +780,8 @@ const SuperAdminServiceLogs = () => {
       const updatedAt = t.updated_at || t.created_at || new Date().toISOString();
       const status = statusMap[t.status] || 'Pending';
       const stepProgress = { Submitted: 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
-      const progress = t.progress || (['completed', 'paid'].includes(t.status) ? 100 : stepProgress[t.current_step] || 25);
-      const centre = centresData.find((c) => c.id === t.centre_id);
+      const progress = ['completed', 'paid'].includes(t.status) ? 100 : t.progress || stepProgress[t.current_step] || 25;
+      const centre = centresData.find((c) => String(c.id) === String(t.centre_id));
       const estimated = t.estimated_delivery && !isNaN(new Date(t.estimated_delivery)) ? new Date(t.estimated_delivery).toISOString() : 'Not set';
 
       return {
@@ -815,7 +808,7 @@ const SuperAdminServiceLogs = () => {
         updatedAt,
         estimatedDelivery: estimated,
         centreId: t.centre_id || null,
-        centreName: centre ? centre.name : t.centre_name || 'Unknown centre',
+        centreName: centre ? centre.name : t.centre_name || t.centreName || t.centre?.name || 'Unknown centre',
         workSource: t.work_source || (t.customer_service_id ? 'online' : 'offline'),
         serviceRating: t.service_rating,
         staffRating: t.staff_rating,
@@ -857,7 +850,8 @@ const SuperAdminServiceLogs = () => {
         ]);
         setStaffList(Array.isArray(staffRes?.data) ? staffRes.data : Array.isArray(staffRes) ? staffRes : []);
         setCategoriesList(Array.isArray(catRes?.data) ? catRes.data : Array.isArray(catRes) ? catRes : []);
-        setCentres(Array.isArray(centreRes) ? centreRes : []);
+        const centreList = Array.isArray(centreRes) ? centreRes : Array.isArray(centreRes?.centres) ? centreRes.centres : Array.isArray(centreRes?.data) ? centreRes.data : [];
+        setCentres(centreList);
       } catch (e) {
         console.error('Error loading dropdown data', e);
       }
@@ -923,8 +917,8 @@ const SuperAdminServiceLogs = () => {
     const get = SORTERS[sortBy] || SORTERS.date;
     const dir = sortOrder === 'asc' ? 1 : -1;
     // centres may finish loading after the first page of rows, so resolve names here
-    const nameById = new Map(centres.map((c) => [c.id, c.name]));
-    return services.map((s) => (nameById.has(s.centreId) ? { ...s, centreName: nameById.get(s.centreId) } : s)).sort((a, b) => {
+    const nameById = new Map(centres.map((c) => [String(c.id), c.name]));
+    return services.map((s) => (nameById.has(String(s.centreId)) ? { ...s, centreName: nameById.get(String(s.centreId)) } : s)).sort((a, b) => {
       const x = get(a); const y = get(b);
       return x < y ? -dir : x > y ? dir : 0;
     });
@@ -1193,7 +1187,7 @@ const SuperAdminServiceLogs = () => {
                     <table className="w-full">
                       <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                         <tr>
-                          {['Customer', 'Service', 'Centre', 'Staff', 'Logged', 'Status', 'Cost', 'Progress', ''].map((h) => <th key={h || 'a'} className="whitespace-nowrap px-4 py-3">{h}</th>)}
+                          {['Customer', 'Service', 'Centre', 'Staff', 'Logged', 'Status', 'Cost', 'Progress'].map((h) => <th key={h} className="whitespace-nowrap px-3 py-3">{h}</th>)}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
