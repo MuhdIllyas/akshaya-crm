@@ -426,79 +426,93 @@ router.post('/transactions', async (req, res) => {
 });
 
 // Transfer between wallets - unchanged
+const httpError = (status, message) => Object.assign(new Error(message), { status });
+ 
 router.post('/transfer', async (req, res) => {
-  const { from_wallet_id, to_wallet_id, amount, description, staff_id, category } = req.body;
-  if (!from_wallet_id || !to_wallet_id || !amount || !staff_id) {
-    return res.status(400).json({ error: 'from_wallet_id, to_wallet_id, amount, and staff_id are required' });
+  const fromId = Number(req.body.from_wallet_id);
+  const toId = Number(req.body.to_wallet_id);
+  const amount = Number(req.body.amount);
+  const description = (req.body.description || '').trim();
+  const staffId = req.user.id;
+ 
+  if (!Number.isInteger(fromId) || !Number.isInteger(toId)) {
+    return res.status(400).json({ error: 'from_wallet_id and to_wallet_id are required' });
   }
-  if (from_wallet_id === to_wallet_id) {
-    return res.status(400).json({ error: 'Source and destination wallets cannot be the same' });
-  }
-  if (amount <= 0) {
-    return res.status(400).json({ error: 'Amount must be positive' });
-  }
+  if (fromId === toId) return res.status(400).json({ error: 'Source and destination wallets cannot be the same' });
+  if (!(amount > 0)) return res.status(400).json({ error: 'Amount must be positive' });
+ 
   const client = await req.db.connect();
   try {
     await client.query('BEGIN');
-    const fromWalletResult = await client.query(
-      'SELECT w.*, c.name AS centre_name FROM wallets w LEFT JOIN centres c ON w.centre_id = c.id WHERE w.id = $1',
-      [from_wallet_id]
+ 
+    // Lock both wallets in id order (prevents deadlocks between opposite transfers)
+    const locked = await client.query(
+      `SELECT w.*, c.name AS centre_name
+         FROM wallets w
+         LEFT JOIN centres c ON c.id = w.centre_id
+        WHERE w.id = ANY($1::int[])
+        ORDER BY w.id
+        FOR UPDATE OF w`,
+      [[fromId, toId]]
     );
-    const toWalletResult = await client.query(
-      'SELECT w.*, c.name AS centre_name FROM wallets w LEFT JOIN centres c ON w.centre_id = c.id WHERE w.id = $1',
-      [to_wallet_id]
+    const fromWallet = locked.rows.find((r) => r.id === fromId);
+    const toWallet = locked.rows.find((r) => r.id === toId);
+ 
+    if (!fromWallet) throw httpError(404, 'Source wallet not found');
+    if (!toWallet) throw httpError(404, 'Destination wallet not found');
+    if (fromWallet.centre_id !== toWallet.centre_id) {
+      throw httpError(400, 'Both wallets must belong to the same centre');
+    }
+    if (req.user.role !== 'superadmin' && fromWallet.centre_id !== req.user.centre_id) {
+      throw httpError(403, 'You do not have access to these wallets');
+    }
+    if (Number(fromWallet.balance) < amount) throw httpError(400, 'Insufficient balance in source wallet');
+ 
+    const debit = await client.query(
+      `INSERT INTO wallet_transactions
+         (wallet_id, staff_id, type, amount, description, category, reference_type, created_at)
+       VALUES ($1, $2, 'debit', $3, $4, 'Transfer', 'transfer', NOW())
+       RETURNING *`,
+      [fromId, staffId, amount, description || `Transfer to ${toWallet.name}`]
     );
-    if (fromWalletResult.rows.length === 0) throw new Error('Source wallet not found');
-    if (toWalletResult.rows.length === 0) throw new Error('Destination wallet not found');
-    const fromWallet = fromWalletResult.rows[0];
-    const toWallet = toWalletResult.rows[0];
-    if (fromWallet.balance < amount) throw new Error('Insufficient balance in source wallet');
-    const staffResult = await client.query('SELECT id FROM staff WHERE id = $1', [staff_id]);
-    if (staffResult.rows.length === 0) throw new Error('Staff not found');
-    const debitTransaction = await client.query(
-      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
-       VALUES ($1, $2, 'debit', $3, $4, $5, NOW()) RETURNING *`,
-      [from_wallet_id, staff_id, amount, description || `Transfer to ${toWallet.name} (${toWallet.centre_name || 'Unknown Centre'})`, category || 'Transfer']
+    const credit = await client.query(
+      `INSERT INTO wallet_transactions
+         (wallet_id, staff_id, type, amount, description, category, reference_type, reference_id, created_at)
+       VALUES ($1, $2, 'credit', $3, $4, 'Transfer', 'transfer', $5, NOW())
+       RETURNING *`,
+      [toId, staffId, amount, description || `Transfer from ${fromWallet.name}`, debit.rows[0].id]
     );
-    const creditTransaction = await client.query(
-      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
-       VALUES ($1, $2, 'credit', $3, $4, $5, NOW()) RETURNING *`,
-      [to_wallet_id, staff_id, amount, description || `Transfer from ${fromWallet.name} (${fromWallet.centre_name || 'Unknown Centre'})`, category || 'Transfer']
-    );
-    await client.query(`UPDATE wallets SET balance = balance - $1 WHERE id = $2`, [amount, from_wallet_id]);
-    await client.query(`UPDATE wallets SET balance = balance + $1 WHERE id = $2`, [amount, to_wallet_id]);
-    const auditDetails = description || `Transferred ${amount} from ${fromWallet.name} (${fromWallet.centre_name || 'Unknown Centre'}) to ${toWallet.name} (${toWallet.centre_name || 'Unknown Centre'})`;
+    // link the debit back to its credit so either side can find the other
+    await client.query(`UPDATE wallet_transactions SET reference_id = $1 WHERE id = $2`, [credit.rows[0].id, debit.rows[0].id]);
+ 
+    await client.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [amount, fromId]);
+    await client.query(`UPDATE wallets SET balance = balance + $1, updated_at = NOW() WHERE id = $2`, [amount, toId]);
+ 
+    const details = `Transferred ₹${amount} from ${fromWallet.name} to ${toWallet.name}${description ? `: ${description}` : ''}`;
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())`,
-      ['Wallet Transfer', req.user.username, auditDetails, fromWallet.centre_id]
+       VALUES ('Wallet Transfer', $1, $2, $3, NOW())`,
+      [req.user.username, details, fromWallet.centre_id]
     );
-    await logActivity({
+ 
+    await client.query('COMMIT');
+ 
+    // after COMMIT: logActivity uses its own connection, a failure here must not undo the transfer
+    logActivity({
       centre_id: fromWallet.centre_id,
       related_type: 'transfer',
-      related_id: debitTransaction.rows[0].id,
+      related_id: debit.rows[0].id,
       action: 'Wallet Transfer',
-      description: `Transferred ₹${amount} from ${fromWallet.name} to ${toWallet.name}${description ? `: ${description}` : ''}`,
-      performed_by: staff_id,
-      performed_by_role: req.user.role
-    });
-    await client.query('COMMIT');
-    res.status(201).json({
-      debit_transaction: debitTransaction.rows[0],
-      credit_transaction: creditTransaction.rows[0]
-    });
+      description: details,
+      performed_by: staffId,
+      performed_by_role: req.user.role,
+    }).catch((e) => console.error('Non-fatal: transfer activity log failed', e));
+ 
+    res.status(201).json({ debit_transaction: debit.rows[0], credit_transaction: credit.rows[0] });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Error processing transfer:', err);
-    if (err.message === 'Source wallet not found' || err.message === 'Destination wallet not found') {
-      res.status(404).json({ error: err.message });
-    } else if (err.message === 'Insufficient balance in source wallet') {
-      res.status(400).json({ error: err.message });
-    } else if (err.message === 'Staff not found') {
-      res.status(404).json({ error: err.message });
-    } else {
-      res.status(500).json({ error: 'Failed to process transfer' });
-    }
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Failed to process transfer' });
   } finally {
     client.release();
   }

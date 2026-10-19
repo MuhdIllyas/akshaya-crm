@@ -522,175 +522,116 @@ router.put("/:id/reject", async (req, res) => {
 /* ======================================================
    CORRECTION ENDPOINT – FULLY HARDENED
 ====================================================== */
+const httpErr = (status, message) => Object.assign(new Error(message), { status });
+ 
 router.put("/:id/correct", async (req, res) => {
+  const amount = Number(req.body.amount);
+  const walletId = Number(req.body.wallet_id);
+  const reason = req.body.reason;
+  const expenseId = req.params.id;
+ 
+  if (!(amount > 0) || !Number.isInteger(walletId)) {
+    return res.status(400).json({ error: "Amount and wallet required" });
+  }
+ 
   const client = await req.db.connect();
   try {
-    const { amount, wallet_id, reason } = req.body;
-    const expenseId = req.params.id;
-
-    if (!amount || !wallet_id) {
-      return res.status(400).json({ error: "Amount and wallet required" });
-    }
-
     await client.query("BEGIN");
-
+ 
     const expRes = await client.query(
-      `SELECT * FROM expenses WHERE id = $1 AND is_reversal = FALSE FOR UPDATE`,
+      `SELECT * FROM expenses WHERE id = $1 AND COALESCE(is_reversal, FALSE) = FALSE FOR UPDATE`,
       [expenseId]
     );
-    if (expRes.rows.length === 0) {
-      throw new Error("Expense not found or already reversed");
-    }
+    if (expRes.rows.length === 0) throw httpErr(404, "Expense not found or already reversed");
     const original = expRes.rows[0];
-
-    const isOwner = original.staff_id === req.user.id;
+ 
+    const isSuperAdmin = req.user.role === "superadmin";
     const isAdmin = ["admin", "superadmin"].includes(req.user.role);
-    if (!isOwner && !isAdmin) {
-      throw new Error("Access denied");
-    }
-
+    const isOwner = original.staff_id === req.user.id;
+ 
+    if (!isSuperAdmin && Number(original.centre_id) !== Number(req.user.centre_id)) throw httpErr(403, "Access denied");
+    if (!isOwner && !isAdmin) throw httpErr(403, "Access denied");
+ 
     if (original.status === "pending") {
-      throw new Error("Cannot correct a pending expense. Delete or reject it first.");
+      throw httpErr(400, "Cannot correct a pending expense. Approve, reject or delete it first.");
     }
-
+    if (original.status === "rejected") {
+      throw httpErr(400, "A rejected expense was never debited, so it can't be corrected. Add a new expense instead.");
+    }
+    if (!["approved", "auto_approved"].includes(original.status)) {
+      throw httpErr(400, `Cannot correct an expense with status "${original.status}"`);
+    }
+ 
     const groupId = original.correction_group_id || crypto.randomUUID();
-
+ 
     const countRes = await client.query(
-      `SELECT COUNT(*) FROM expenses WHERE correction_group_id = $1 AND is_reversal = FALSE`,
+      `SELECT COUNT(*)::int AS n FROM expenses WHERE correction_group_id = $1 AND COALESCE(is_reversal, FALSE) = FALSE`,
       [groupId]
     );
-    const activeCorrections = Number(countRes.rows[0].count);
-    if (activeCorrections >= 3 && req.user.role === "staff") {
-      throw new Error("Maximum correction limit reached. Please contact an admin.");
+    if (countRes.rows[0].n >= 3 && req.user.role === "staff") {
+      throw httpErr(400, "Maximum correction limit reached. Please contact an admin.");
     }
-
-    const walletCheck = await client.query(
-      `SELECT id, balance FROM wallets WHERE id = $1 AND centre_id = $2`,
-      [wallet_id, original.centre_id]
+ 
+    // lock old + new wallet (same centre as the expense)
+    const walletIds = [...new Set([Number(original.wallet_id), walletId])];
+    const wRes = await client.query(
+      `SELECT id, balance FROM wallets WHERE id = ANY($1::int[]) AND centre_id = $2 ORDER BY id FOR UPDATE`,
+      [walletIds, original.centre_id]
     );
-    if (walletCheck.rows.length === 0) {
-      throw new Error("Wallet not found or does not belong to your centre");
-    }
-    if (Number(walletCheck.rows[0].balance) < Number(amount)) {
-      throw new Error("Insufficient wallet balance for corrected expense");
-    }
-
-    // 🔁 STEP 1: Reverse old wallet debit (credit back)
+    const newWallet = wRes.rows.find((w) => w.id === walletId);
+    if (!newWallet) throw httpErr(400, "Wallet not found or does not belong to this centre");
+ 
+    const available =
+      Number(newWallet.balance) + (walletId === Number(original.wallet_id) ? Number(original.amount) : 0);
+    if (available < amount) throw httpErr(400, "Insufficient wallet balance for corrected expense");
+ 
+    // STEP 1: credit back the original debit
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id,
-        staff_id,
-        type,
-        amount,
-        description,
-        category,
-        team_id,
-        is_reversal,
-        correction_group_id,
-        reference_id,
-        reference_type,
-        created_at
-      )
-      VALUES (
-        $1,$2,'credit',$3,$4,'Expense',
-        $5,TRUE,$6,$7,'expense',NOW()
-      )`,
-      [
-        original.wallet_id,
-        req.user.id,
-        original.amount,
-        `Expense correction reversal: ${original.category} (Original ID: ${expenseId})`,
-        original.team_id,
-        groupId,
-        expenseId
-      ]
+         wallet_id, staff_id, type, amount, description, category, team_id,
+         is_reversal, correction_group_id, reference_id, reference_type, created_at)
+       VALUES ($1,$2,'credit',$3,$4,'Expense',$5,TRUE,$6,$7,'expense',NOW())`,
+      [original.wallet_id, req.user.id, original.amount,
+       `Expense correction reversal: ${original.category} (Original ID: ${expenseId})`,
+       original.team_id, groupId, expenseId]
     );
-    await client.query(
-      `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
-      [original.amount, original.wallet_id]
-    );
-
-    // 🔥 STEP 2: Mark original as reversed
-    await client.query(
-      `UPDATE expenses SET is_reversal = TRUE WHERE id = $1`,
-      [expenseId]
-    );
-
-    // 🔥 STEP 3: Create corrected expense (auto‑approved)
+    await client.query(`UPDATE wallets SET balance = balance + $1 WHERE id = $2`, [original.amount, original.wallet_id]);
+ 
+    // STEP 2: mark original as reversed
+    await client.query(`UPDATE expenses SET is_reversal = TRUE WHERE id = $1`, [expenseId]);
+ 
+    // STEP 3: corrected expense
     const newExp = await client.query(
       `INSERT INTO expenses (
-         centre_id, staff_id,team_id, category, category_id, amount,
+         centre_id, staff_id, team_id, category, category_id, amount,
          description, remarks, wallet_id, payment_method,
          receipt_number, expense_date, status,
-         correction_group_id, original_expense_id, is_reversal,
-         submitted_at
-       )
-       VALUES (
-         $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'auto_approved',
-         $13,$14,FALSE,NOW()
-       )
+         correction_group_id, original_expense_id, is_reversal, submitted_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'auto_approved',$13,$14,FALSE,NOW())
        RETURNING *`,
-      [
-        original.centre_id,
-        original.staff_id,
-        original.team_id,
-        original.category,
-        original.category_id,
-        amount,
-        original.description,
-        reason || original.remarks,
-        wallet_id,
-        original.payment_method,
-        original.receipt_number,
-        original.expense_date,
-        groupId,
-        expenseId
-      ]
+      [original.centre_id, original.staff_id, original.team_id, original.category, original.category_id,
+       amount, original.description, reason || original.remarks, walletId, original.payment_method,
+       original.receipt_number, original.expense_date, groupId, expenseId]
     );
-
-    // 🔁 STEP 4: Debit the new wallet
+ 
+    // STEP 4: debit the new wallet
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id,
-        staff_id,
-        type,
-        amount,
-        description,
-        category,
-        team_id,
-        correction_group_id,
-        reference_id,
-        reference_type,
-        created_at
-      )
-      VALUES (
-        $1,$2,'debit',$3,$4,'Expense',
-        $5,$6,$7,'expense',NOW()
-      )`,
-      [
-        wallet_id,
-        req.user.id,
-        amount,
-        `Corrected expense: ${original.category} (Original ID: ${expenseId})`,
-        original.team_id,
-        groupId,
-        newExp.rows[0].id
-      ]
+         wallet_id, staff_id, type, amount, description, category, team_id,
+         correction_group_id, reference_id, reference_type, created_at)
+       VALUES ($1,$2,'debit',$3,$4,'Expense',$5,$6,$7,'expense',NOW())`,
+      [walletId, req.user.id, amount,
+       `Corrected expense: ${original.category} (Original ID: ${expenseId})`,
+       original.team_id, groupId, newExp.rows[0].id]
     );
-    await client.query(
-      `UPDATE wallets SET balance = balance - $1 WHERE id = $2`,
-      [amount, wallet_id]
-    );
-
+    await client.query(`UPDATE wallets SET balance = balance - $1 WHERE id = $2`, [amount, walletId]);
+ 
     await client.query("COMMIT");
-    res.json({
-      message: "Expense corrected successfully",
-      data: newExp.rows[0]
-    });
+    res.json({ message: "Expense corrected successfully", data: newExp.rows[0] });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Expense correction error:", err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }

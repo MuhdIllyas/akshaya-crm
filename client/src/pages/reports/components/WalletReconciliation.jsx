@@ -394,6 +394,9 @@ const WalletReconciliation = ({
       );
     }
     if (readOnly) return null;
+    // Expense wallet entries are always posted at NOW(), so a back-dated booking would land
+    // in today's ledger, not the reconciliation date. Settling is therefore today-only.
+    if (!isToday) return <span className="text-xs text-slate-400">Today only</span>;
     const short = w.remaining < 0;
     return (
       <button
@@ -502,7 +505,7 @@ const WalletReconciliation = ({
             )}
           </div>
           {!readOnly && !isToday && (
-            <p className="mt-2 text-xs text-slate-500">Transfers are posted with today's date, so they're only available when today's date is selected.</p>
+            <p className="mt-2 text-xs text-slate-500">Bookings and transfers post to today's ledger, so they're only available for today's reconciliation. Past dates can be viewed and saved only.</p>
           )}
         </div>
       </div>

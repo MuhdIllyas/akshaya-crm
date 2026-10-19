@@ -1695,7 +1695,7 @@ const ExpenseManagement = ({
             <span className={`whitespace-nowrap text-sm font-semibold ${tone === 'rose' ? 'text-rose-700' : 'text-emerald-700'}`}>
               {formatCurrency(expense.amount)}
             </span>
-            {onCorrect && (
+            {onCorrect && tone !== 'rose' && (
               <button
                 type="button"
                 onClick={() => openCorrection(expense)}
