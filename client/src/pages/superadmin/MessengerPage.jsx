@@ -65,6 +65,7 @@ import SchedulesView from "@/components/automations/SchedulesView";
 import ServiceLinkChip from "@/components/automations/ServiceLinkChip";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
+import { todayIST, addDays } from "@/utils/dates";
 
 // ============== NEW CHAT MODAL (Grouped by Centre) ==============
 const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
@@ -1930,7 +1931,7 @@ const MessengerPage = ({ user }) => {
   const openAddEventModal = () => {
     setEditingEvent(null);
     setEventForm({
-      date: new Date().toISOString().split('T')[0],
+      date: todayIST(),
       type: "working",
       description: "",
       centre_id: currentUser.role === "superadmin" ? "" : currentUser.centreId

@@ -68,7 +68,7 @@ const AdminReports = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTransaction, setSelectedTransaction] = useState(null);
   const [dateFilter, setDateFilter] = useState(() => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     return { fromDate: today, toDate: today };
   });
   const [transactionPage, setTransactionPage] = useState(1);
@@ -209,8 +209,8 @@ const AdminReports = () => {
     setTransactionPage(1);
     
     // Reset date to today
-    const today = new Date().toISOString().split('T')[0];
-    setDateFilter({ fromDate: today, toDate: today });
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      setDateFilter({ fromDate: today, toDate: today });
   };
 
   // Handle accounting data updates

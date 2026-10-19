@@ -20,6 +20,8 @@ import WalletReconciliation from './WalletReconciliation';
 
 // Today's date in IST (YYYY-MM-DD)
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const istNowTime = () =>
+  new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }); // "HH:MM:SS" in IST
 
 // Shared style tokens (UI only)
 const inputCls =
@@ -2097,20 +2099,10 @@ const AccountingSection = ({
       e.preventDefault();
       if (readOnly) return;
       try {
-        const [year, month, day] = miscIncomeForm.date.split('-');
-        const now = new Date();
-        const submissionDate = new Date(
-          year, 
-          month - 1,
-          day, 
-          now.getHours(), 
-          now.getMinutes(), 
-          now.getSeconds()
-        );
-
+        // chosen date + current time, both in IST (the browser's clock zone no longer matters)
         const payload = {
           ...miscIncomeForm,
-          date: submissionDate.toISOString() 
+          date: `${miscIncomeForm.date}T${istNowTime()}+05:30`
         };
 
         const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/misc-income`, {

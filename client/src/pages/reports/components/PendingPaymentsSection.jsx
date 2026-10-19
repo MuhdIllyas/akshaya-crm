@@ -34,6 +34,7 @@ import {
 } from 'react-icons/fi';
 import { getPendingPayments, getPendingPaymentsHistory, receiveServicePayment, getWallets } from '@/services/serviceService';
 import { toast } from "react-toastify";
+import { istDayStart, addDays } from "@/utils/dates.js";
 
 // Shared style tokens (UI only)
 const fieldCls =
@@ -474,16 +475,12 @@ const PendingPaymentsSection = ({
 
     if (activeFromDate || activeToDate) {
       filtered = filtered.filter(payment => {
+        // IST day bounds. new Date("2026-10-19") is 05:30 IST, which hid entries made
+        // between midnight and 05:30 on the from-day.
         const paymentDate = new Date(payment.createdAt);
-        const from = activeFromDate ? new Date(activeFromDate) : null;
-        const to = activeToDate ? new Date(activeToDate) : null;
         let include = true;
-        if (from) include = include && paymentDate >= from;
-        if (to) {
-          const toEndOfDay = new Date(to);
-          toEndOfDay.setHours(23, 59, 59, 999);
-          include = include && paymentDate <= toEndOfDay;
-        }
+        if (activeFromDate) include = include && paymentDate >= istDayStart(activeFromDate);
+        if (activeToDate) include = include && paymentDate < istDayStart(addDays(activeToDate, 1));
         return include;
       });
     }
@@ -522,6 +519,7 @@ const PendingPaymentsSection = ({
         <FiEye className="h-4 w-4" />
       </button>
 
+      {!readOnly && (
       <button
         onClick={() => {
           setSelectedPayment(payment);
@@ -534,7 +532,9 @@ const PendingPaymentsSection = ({
       >
         <FiCreditCard className="h-4 w-4" />
       </button>
+      )}
 
+      {!readOnly && (
       <button
         onClick={() => handleSendReminder(payment)}
         disabled={sendingWhatsappId === payment.id}
@@ -548,7 +548,8 @@ const PendingPaymentsSection = ({
           <FiMessageSquare className="h-4 w-4" />
         )}
       </button>
-      {isOverdue(payment.createdAt) && (
+      )}
+      {!readOnly && isOverdue(payment.createdAt) && (
         <button
           onClick={() => {}}
           className="rounded-lg p-2 text-rose-600 transition-colors hover:bg-rose-50"
@@ -960,7 +961,7 @@ const PendingPaymentsSection = ({
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h4 className="mb-4 text-sm font-semibold text-slate-900">Top Due Amounts</h4>
           <div className="space-y-1">
-            {payments
+            {[...payments] /* copy: .sort() on the state array re-ordered the main list */
               .sort((a, b) => b.due - a.due)
               .slice(0, 3)
               .map(payment => (
@@ -981,10 +982,12 @@ const PendingPaymentsSection = ({
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h4 className="mb-4 text-sm font-semibold text-slate-900">Quick Actions</h4>
           <div className="space-y-2">
+            {!readOnly && (
             <button className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-sm transition-colors hover:bg-slate-50">
               <span className="text-slate-700">Send Bulk Reminders</span>
               <FiMail className="h-4 w-4 text-blue-600" />
             </button>
+            )}
             <button className="flex w-full items-center justify-between rounded-xl border border-slate-200 p-3 text-sm transition-colors hover:bg-slate-50">
               <span className="text-slate-700">Generate Report</span>
               <FiFileText className="h-4 w-4 text-purple-600" />

@@ -32,6 +32,7 @@ import {
   FiTag // Added for category icon
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import { istDayStart, addDays } from "@/utils/dates";
 
 /* =========================
    Shared style tokens (UI only)
@@ -162,19 +163,13 @@ const TransactionsSection = ({
     if (activeFilters.transactionType && tx.category !== activeFilters.transactionType) return false;
     if (activeFilters.staffId && tx.staffName !== activeFilters.staffId) return false;
     
-    // Apply date filter
+    // IST day bounds (new Date("2026-10-20") is 05:30 IST, which hid early-morning entries)
     if (dateFilter?.fromDate && tx.date) {
-      const txDate = new Date(tx.date);
-      const fromDate = new Date(dateFilter.fromDate);
-      if (txDate < fromDate) return false;
-    }
-    
+      if (new Date(tx.date) < istDayStart(dateFilter.fromDate)) return false;
+     }
+       
     if (dateFilter?.toDate && tx.date) {
-      const txDate = new Date(tx.date);
-      const toDate = new Date(dateFilter.toDate);
-      // Add one day to include the entire toDate
-      toDate.setDate(toDate.getDate() + 1);
-      if (txDate >= toDate) return false;
+      if (new Date(tx.date) >= istDayStart(addDays(dateFilter.toDate, 1))) return false;
     }
     
     if (searchTerm) {

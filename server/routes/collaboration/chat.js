@@ -556,6 +556,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
       // Since we don't care about historical JSON data, we just pass the live data straight through.
       // If it's a regular message, live_task_data will naturally be null based on our SQL query.
       time: new Date(m.created_at).toLocaleTimeString([], {
+        timeZone: 'Asia/Kolkata',
         hour: "2-digit",
         minute: "2-digit"
       }),

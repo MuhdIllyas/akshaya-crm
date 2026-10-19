@@ -26,6 +26,7 @@ import {
 import useEvents from "../hooks/useEvents";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import { todayIST, addDays } from "@/utils/dates";
 
 // ----------------------------------------------------------------------
 //  Tooltip Card
@@ -304,10 +305,9 @@ function AgendaView({
 
   const grouped = useMemo(() => {
     const today = new Date();
-    const todayStr = today.toISOString().slice(0, 10);
+    const todayStr = todayIST();
     const tomorrow = new Date();
-    tomorrow.setDate(today.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().slice(0, 10);
+    const tomorrowStr = addDays(todayStr, 1);
 
     const overdue = [],
       todayItems = [],

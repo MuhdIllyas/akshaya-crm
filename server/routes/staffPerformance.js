@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import pool from '../db.js';
 import { logActivity } from '../utils/activityLogger.js';
 import { ensureTargets, refreshActive } from '../utils/staffTargets.js';
+import { todayIST, addDays } from '../utils/dates.js';
 
 const router = express.Router();
 
@@ -78,8 +79,10 @@ router.get('/dashboard', async (req, res) => {
     const { from, to, period = 'monthly' } = req.query;
     
     // Set date range based on period
-    let startDate, endDate = new Date().toISOString().split('T')[0];
-    const now = new Date();
+    // IST dates (the server clock is UTC, so the old code was a day behind until 05:30)
+    const today = todayIST();
+    const [ty, tm] = today.split('-').map(Number);
+    let startDate, endDate = today;
     
     if (from && to) {
       startDate = from;
@@ -87,21 +90,16 @@ router.get('/dashboard', async (req, res) => {
     } else if (period === 'today') {
       startDate = endDate;
     } else if (period === 'week') {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(now.getDate() - 7);
-      startDate = weekAgo.toISOString().split('T')[0];
+      startDate = addDays(today, -7);
     } else if (period === 'month') {
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+      startDate = `${today.slice(0, 7)}-01`;
     } else if (period === 'quarter') {
-      const quarter = Math.floor(now.getMonth() / 3) * 3;
-      startDate = new Date(now.getFullYear(), quarter, 1).toISOString().split('T')[0];
+      startDate = `${ty}-${String(Math.floor((tm - 1) / 3) * 3 + 1).padStart(2, '0')}-01`;
     } else if (period === 'year') {
-      startDate = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
+      startDate = `${ty}-01-01`;
     } else {
       // Default to last 30 days
-      const monthAgo = new Date(now);
-      monthAgo.setDate(now.getDate() - 30);
-      startDate = monthAgo.toISOString().split('T')[0];
+      startDate = addDays(today, -30);
     }
     
     // 1️⃣ Get staff basic info
@@ -585,33 +583,30 @@ router.get('/compare', async (req, res) => {
     const { period = 'month' } = req.query;
     
     // Get current period dates
-    const now = new Date();
-    let currentStart, currentEnd = now.toISOString().split('T')[0];
+    // IST dates; ymdUTC rolls months/years over (month 0 = December of the year before)
+    const today = todayIST();
+    const [ty, tm] = today.split('-').map(Number);
+    const ymdUTC = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10);
+    let currentStart, currentEnd = today;
     let previousStart, previousEnd;
     
     if (period === 'week') {
-      const weekAgo = new Date(now);
-      weekAgo.setDate(now.getDate() - 7);
-      currentStart = weekAgo.toISOString().split('T')[0];
-      const twoWeeksAgo = new Date(now);
-      twoWeeksAgo.setDate(now.getDate() - 14);
-      previousStart = twoWeeksAgo.toISOString().split('T')[0];
-      previousEnd = weekAgo.toISOString().split('T')[0];
+      currentStart = addDays(today, -7);
+      previousStart = addDays(today, -14);
+      previousEnd = addDays(today, -7);
     } else if (period === 'month') {
-      currentStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
-      const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      previousStart = prevMonth.toISOString().split('T')[0];
-      previousEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().split('T')[0];
+      currentStart = ymdUTC(ty, tm, 1);
+      previousStart = ymdUTC(ty, tm - 1, 1);
+      previousEnd = ymdUTC(ty, tm, 0);
     } else if (period === 'quarter') {
-      const quarter = Math.floor(now.getMonth() / 3) * 3;
-      currentStart = new Date(now.getFullYear(), quarter, 1).toISOString().split('T')[0];
-      const prevQuarterStart = new Date(now.getFullYear(), quarter - 3, 1);
-      previousStart = prevQuarterStart.toISOString().split('T')[0];
-      previousEnd = new Date(now.getFullYear(), quarter, 0).toISOString().split('T')[0];
+      const q = Math.floor((tm - 1) / 3) * 3 + 1; // first month of this quarter
+      currentStart = ymdUTC(ty, q, 1);
+      previousStart = ymdUTC(ty, q - 3, 1);
+      previousEnd = ymdUTC(ty, q, 0);
     } else {
-      currentStart = new Date(now.getFullYear(), 0, 1).toISOString().split('T')[0];
-      previousStart = new Date(now.getFullYear() - 1, 0, 1).toISOString().split('T')[0];
-      previousEnd = new Date(now.getFullYear() - 1, 11, 31).toISOString().split('T')[0];
+      currentStart = `${ty}-01-01`;
+      previousStart = `${ty - 1}-01-01`;
+      previousEnd = `${ty - 1}-12-31`;
     }
     
     // Get current period performance
@@ -1229,8 +1224,8 @@ router.get('/service-breakdown', async (req, res) => {
     const staffId = req.user.id;
     const { from, to } = req.query;
     
-    let startDate = from || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    let endDate = to || new Date().toISOString().split('T')[0];
+    let startDate = from || addDays(todayIST(), -30);
+    let endDate = to || todayIST();
     
     const breakdownQuery = `
       SELECT 
@@ -1296,7 +1291,7 @@ router.get('/daily-log', async (req, res) => {
   try {
     const staffId = req.user.id;
     const { date } = req.query;
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = date || todayIST();
     
     // Get services for the day
     const servicesQuery = `
@@ -1354,7 +1349,7 @@ router.get('/daily-log', async (req, res) => {
         attendance: attendance.rows[0] || null,
         services: services.rows.map(row => ({
           id: row.id,
-          time: row.created_at ? new Date(row.created_at).toLocaleTimeString() : null,
+          time: row.created_at ? new Date(row.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' }) : null,
           customer_name: row.customer_name,
           customer_phone: row.customer_phone,
           service_name: row.service_name,
@@ -1685,8 +1680,8 @@ router.get('/workspace-init', authenticateToken, async (req, res) => {
     const todayAchieved = parseFloat(targetRow.today_service_charge) || 0;
     
     // Calculate daily target based on days in the current month
-    const today = new Date();
-    const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+    const [tYear, tMonth] = todayIST().split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(tYear, tMonth, 0)).getUTCDate(); // days in the current IST month
     const dailyTarget = monthlyTarget > 0 ? Math.round(monthlyTarget / daysInMonth) : 0;
     const progressPercentage = monthlyTarget > 0 ? (currentAchieved / monthlyTarget) * 100 : 0;
 

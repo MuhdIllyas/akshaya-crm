@@ -20,6 +20,8 @@ import { jsPDF } from "jspdf";
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify'; 
+import { todayIST, addDays } from "@/utils/dates";
+
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
     <motion.div
@@ -1009,7 +1011,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
     const topVolumeCompareCentre = svcCompareChartData.length > 0 ? svcCompareChartData[0] : null;
 
     // ✅ Check if the report includes "Today" - bcz today wallet daily balances will close on tmrw 12.05 am
-    const todayStr = new Date().toISOString().split('T')[0];
+    const todayStr = todayIST();
     const includesToday = previewData?.metadata?.toDate === todayStr;
 
     // ✅ Smart Trend Calculator
@@ -3917,7 +3919,7 @@ const ReportsSection = () => {
         // 1. Update the UI instantly
         const newExport = {
             name: fileName,
-            date: new Date().toISOString().slice(0, 10),
+            date: todayIST(),
             size: 'Local Export' // Browsers don't give exact byte sizes easily before saving
         };
         setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);
@@ -4181,7 +4183,7 @@ const ReportsSection = () => {
                 // Add to recent exports UI
                 const newExport = {
                     name: filename,
-                    date: new Date().toISOString().slice(0, 10),
+                    date: todayIST(),
                     size: `${(blob.size / (1024 * 1024)).toFixed(2)} MB`,
                 };
                 setRecentExports(prev => [newExport, ...prev.slice(0, 9)]);

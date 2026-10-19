@@ -17,10 +17,8 @@ const formatYMD = (date) => {
   if (!date) return null;
   const d = new Date(date);
   if (isNaN(d.getTime())) return null;
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // India date, whatever zone the server clock is in
+  return d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 };
 
 // Format service tracking status for activity history
@@ -210,7 +208,8 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
     const publicToken = publicTokenFromCaller || trackingResult.rows[0]?.public_token || null;
 
     const formattedPhone = entry.phone.startsWith('+91') ? entry.phone : `+91${entry.phone.replace(/^\+91/, '')}`;
-    const submissionDate = entry.created_at ? new Date(entry.created_at).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN');
+    const IST = { timeZone: 'Asia/Kolkata' };
+    const submissionDate = new Date(entry.created_at || Date.now()).toLocaleDateString('en-IN', IST);
 
     // Determine application number
     let appNum;
@@ -233,7 +232,7 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
     const totalEstimatedDays = parseInt(stepsResult.rows[0]?.total_estimated_days) || 0;
     const estimatedDeliveryDate = new Date(entry.created_at || new Date());
     estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + totalEstimatedDays);
-    const deliDate = estimatedDeliveryDate.toLocaleDateString('en-IN');
+    const deliDate = estimatedDeliveryDate.toLocaleDateString('en-IN', IST);
 
     // Format status for display
     let displayStatus = 'Submitted';

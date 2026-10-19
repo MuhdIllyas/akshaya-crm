@@ -231,7 +231,7 @@ io.on("connection", (socket) => {
           ...savedMessage,
           sender_name: "SMS Gateway", 
           isCurrentUser: false,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
         });
 
         // Bump the conversation to the top of the sidebar for everyone in the centre

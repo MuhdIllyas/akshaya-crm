@@ -4,6 +4,15 @@ import { authMiddleware } from './staff.js';
 import { logActivity } from "../utils/activityLogger.js";
 import { notificationTemplates } from '../utils/notificationTemplates.js';
 import notificationService from '../utils/notificationService.js'; 
+import { todayIST, addDays } from '../utils/dates.js';
+
+// A Postgres DATE arrives as local midnight of whatever zone Node runs in, so its local
+// parts are the stored day. (toISOString() would shift it a day back if Node ever ran in IST.)
+const pgDateToYMD = (v) => {
+  if (typeof v === 'string') return v.slice(0, 10);
+  const d = new Date(v);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const router = express.Router();
 
@@ -815,8 +824,9 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
       
       const attStatus = leave.leave_duration === 'half' ? 'half-day' : 'absent';
 
-      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
+      // Walk the leave days as "YYYY-MM-DD" strings (no clock zone involved)
+      const lastDay = pgDateToYMD(leave.to_date);
+      for (let dateStr = pgDateToYMD(leave.from_date); dateStr <= lastDay; dateStr = addDays(dateStr, 1)) {
         
         const existingAtt = await client.query(
           `SELECT id FROM attendance WHERE staff_id = $1 AND date = $2`,
@@ -847,7 +857,7 @@ router.put('/leaves/:id', authMiddleware(['admin', 'superadmin']), async (req, r
         related_type: 'leave',
         related_id: leave.id,
         action: status === 'approved' ? 'Leave Approved' : 'Leave Rejected',
-        description: `${status === 'approved' ? 'Approved' : 'Rejected'} leave request for ${leave.staff_name} (${leave.type}) from ${new Date(leave.from_date).toLocaleDateString()} to ${new Date(leave.to_date).toLocaleDateString()}`,
+        description: `${status === 'approved' ? 'Approved' : 'Rejected'} leave request for ${leave.staff_name} (${leave.type}) from ${new Date(leave.from_date).toLocaleDateString('en-IN')} to ${new Date(leave.to_date).toLocaleDateString('en-IN')}`,
         performed_by: req.user.id,
         performed_by_role: req.user.role
       });
@@ -1527,7 +1537,7 @@ router.post('/calendar', authMiddleware(['admin', 'superadmin']), async (req, re
       related_type: 'calendar',
       related_id: result.rows[0].id,
       action: 'Calendar Event Created',
-      description: `Created ${type} event for ${new Date(date).toLocaleDateString()}${description ? `: ${description}` : ''}`,
+      description: `Created ${type} event for ${new Date(date).toLocaleDateString('en-IN')}${description ? `: ${description}` : ''}`,
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
@@ -1581,7 +1591,7 @@ router.put('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (req,
       related_type: 'calendar',
       related_id: id,
       action: 'Calendar Event Updated',
-      description: `Updated ${type} event for ${new Date(date).toLocaleDateString()}`,
+      description: `Updated ${type} event for ${new Date(date).toLocaleDateString('en-IN')}${description ? `: ${description}` : ''}`,
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
@@ -1637,7 +1647,7 @@ router.delete('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (r
         related_type: 'calendar',
         related_id: id,
         action: 'Calendar Event Deleted',
-        description: `Deleted ${event.type} event for ${new Date(event.date).toLocaleDateString()}`,
+        description: `Deleted ${event.type} event for ${new Date(event.date).toLocaleDateString('en-IN')}`,
         performed_by: req.user.id,
         performed_by_role: req.user.role
       });
@@ -1662,7 +1672,7 @@ router.delete('/calendar/:id', authMiddleware(['admin', 'superadmin']), async (r
 router.get("/schedule/:id", authMiddleware(["admin", "superadmin", "staff"]), async (req, res) => {
   const { id } = req.params;
   const { date } = req.query;
-  const targetDate = date || new Date().toISOString().split("T")[0];
+  const targetDate = date || todayIST();
 
   const client = await pool.connect();
   try {
@@ -1722,7 +1732,7 @@ router.get("/schedule/:id", authMiddleware(["admin", "superadmin", "staff"]), as
 const getWorkingDaysCount = async (client, staffId, month) => {
   const [year, mon] = month.split('-');
   const first = `${year}-${mon}-01`;
-  const last  = new Date(year, mon, 0).toISOString().slice(0,10);
+  const last  = new Date(Date.UTC(Number(year), Number(mon), 0)).toISOString().slice(0,10); // last day of the month
 
   const cal = await client.query(`
     SELECT COUNT(*) as cnt
@@ -1806,7 +1816,7 @@ const checkCenterExists = async (client, centerId) => {
 // GET /api/salary/centers - Get all centers (superadmin only)
 router.get('/centers', authMiddleware(['superadmin']), async (req, res) => {
   const { month } = req.query;
-  const targetMonth = month || new Date().toISOString().slice(0, 7);
+  const targetMonth = month || todayIST().slice(0, 7);
   const client = await pool.connect();
 
   try {
@@ -2043,7 +2053,7 @@ router.get('/centers/:centerId/calendar', authMiddleware(['superadmin']), async 
 // GET /api/salary/super-admin/stats - Get overall statistics (superadmin only)
 router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res) => {
   const { month } = req.query;
-  const targetMonth = month || new Date().toISOString().slice(0, 7);
+  const targetMonth = month || todayIST().slice(0, 7);
   const client = await pool.connect();
 
   try {
@@ -2064,7 +2074,7 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
       [targetMonth]
     );
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayIST();
     const todayAttendanceResult = await client.query(
       `SELECT 
         COUNT(DISTINCT a.staff_id) as present_today,
@@ -2105,7 +2115,7 @@ router.get('/super-admin/stats', authMiddleware(['superadmin']), async (req, res
 // GET /api/salary/super-admin/centers-summary - Get center-wise summary (superadmin only)
 router.get('/super-admin/centers-summary', authMiddleware(['superadmin']), async (req, res) => {
   const { month } = req.query;
-  const targetMonth = month || new Date().toISOString().slice(0, 7);
+  const targetMonth = month || todayIST().slice(0, 7);
   const client = await pool.connect();
 
   try {
@@ -2230,8 +2240,9 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
       
       const attStatus = leave.leave_duration === 'half' ? 'half-day' : 'absent';
 
-      for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
-        const dateStr = d.toISOString().split('T')[0];
+      // Walk the leave days as "YYYY-MM-DD" strings (no clock zone involved)
+      const lastDay = pgDateToYMD(leave.to_date);
+      for (let dateStr = pgDateToYMD(leave.from_date); dateStr <= lastDay; dateStr = addDays(dateStr, 1)) {
         
         const existingAtt = await client.query(
           `SELECT id FROM attendance WHERE staff_id = $1 AND date = $2`,
@@ -2262,7 +2273,7 @@ router.put('/centers/:centerId/leaves/:id', authMiddleware(['superadmin']), asyn
         related_type: 'leave',
         related_id: id,
         action: status === 'approved' ? 'Leave Approved' : 'Leave Rejected',
-        description: `Superadmin ${status === 'approved' ? 'approved' : 'rejected'} leave request for ${leave.staff_name} (${leave.type}) from ${new Date(leave.from_date).toLocaleDateString()} to ${new Date(leave.to_date).toLocaleDateString()}`,
+        description: `Superadmin ${status === 'approved' ? 'approved' : 'rejected'} leave request for ${leave.staff_name} (${leave.type}) from ${new Date(leave.from_date).toLocaleDateString('en-IN')} to ${new Date(leave.to_date).toLocaleDateString('en-IN')}`,
         performed_by: req.user.id,
         performed_by_role: req.user.role
       });
@@ -2469,7 +2480,7 @@ router.put('/records/:id/override-net-pay', authMiddleware(['admin', 'superadmin
 router.get('/my-planner-config', authMiddleware(['staff']), async (req, res) => {
   const client = await pool.connect();
   try {
-    const targetMonth = req.query.month || new Date().toISOString().slice(0, 7);
+    const targetMonth = req.query.month || todayIST().slice(0, 7);
     const [year, monthNum] = targetMonth.split('-');
     
     // 1. Get their active configuration

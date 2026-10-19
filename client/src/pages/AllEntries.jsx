@@ -83,9 +83,10 @@ const AllEntries = () => {
     const fetchEntries = async () => {
       try {
         setLoading(true);
-        // Format dates as YYYY-MM-DD for the backend
-        const formattedStart = filters.startDate ? filters.startDate.toISOString().split('T')[0] : null;
-        const formattedEnd = filters.endDate ? filters.endDate.toISOString().split('T')[0] : null;
+        // Format dates as YYYY-MM-DD for the backend, using the picked calendar day.
+        // (The date picker gives local midnight; toISOString() turned that into the previous day in India.)
+        const formattedStart = filters.startDate ? filters.startDate.toLocaleDateString('en-CA') : null;
+        const formattedEnd = filters.endDate ? filters.endDate.toLocaleDateString('en-CA') : null;
         
         // Pass false for 'today' since we are sending explicit dates now
         const entriesResponse = await getServiceEntries(false, null, null, formattedStart, formattedEnd);

@@ -24,6 +24,8 @@ const authHeaders = () => ({
   Authorization: `Bearer ${localStorage.getItem('token')}`,
 });
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const istNowTime = () =>
+  new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }); // "HH:MM:SS" in IST
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
 const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 const signed = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${inr(Math.abs(v))}`;
@@ -256,10 +258,7 @@ const WalletReconciliation = ({
           }),
         });
       } else {
-        // Same as the "Add Misc Income" modal: reconciliation date + current time
-        const [y, m, d] = date.split('-');
-        const now = new Date();
-        const when = new Date(y, m - 1, d, now.getHours(), now.getMinutes(), now.getSeconds());
+        // Same as the "Add Misc Income" modal: reconciliation date + current time, in IST
         res = await fetch(`${API}/api/accounting/misc-income`, {
           method: 'POST',
           headers: authHeaders(),
@@ -267,7 +266,7 @@ const WalletReconciliation = ({
             amount,
             wallet_id: Number(w.id),
             description: adjust.description.trim(),
-            date: when.toISOString(),
+            date: `${date}T${istNowTime()}+05:30`,
           }),
         });
       }
@@ -688,6 +687,12 @@ const WalletReconciliation = ({
                 ? `An expense in category "${SHORTAGE_CATEGORY.name}" will be debited from ${adjust.wallet.name}, dated ${date}. No approval needed.`
                 : `A misc income will be credited to ${adjust.wallet.name}, dated ${date}.`}
             </div>
+            <p className="flex items-start gap-1.5 text-xs text-slate-500">
+              <FiInfo className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {adjust.kind === 'shortage'
+                ? 'If this is a forgotten expense or a payment entered in the wrong wallet, add the real expense or transfer instead. Booking both counts the money twice.'
+                : 'If this is an unrecorded service payment or money entered in the wrong wallet, record that instead. Booking both counts it twice.'}
+            </p>
             <div>
               <label htmlFor="adj-amount" className={labelCls}>Amount (₹) *</label>
               <input id="adj-amount" type="number" min="0" step="0.01" className={inputCls}

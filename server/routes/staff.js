@@ -16,6 +16,9 @@ const toDateOnly = (v) => {
   return m ? m[1] : null;
 };
 
+// Today's date in IST as "YYYY-MM-DD" (toISOString() gives the UTC date, which is yesterday before 05:30 IST)
+const todayIST = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+
 // ==============================================
 // Middleware (case‑insensitive role check)
 // ==============================================
@@ -240,7 +243,7 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
         created_at`,
       [
         username, name, role, department || null, email, phone || null, status || "Active",
-        joinDate || new Date().toISOString(), 
+        toDateOnly(joinDate) || todayIST(), 
         photoUrl, // <-- CHANGED: Using our new photoUrl variable here
         employeeId || null,
         employmentType || null, reportsTo || null, salary || null, toDateOnly(dateOfBirth ?? req.body.dob),
@@ -265,7 +268,7 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
       0,           // Default revenue target (Admin can adjust later)
       0,           // Default TA
       0,           // Default FA
-      joinDate || new Date().toISOString().split('T')[0], // Starts on their join date
+      toDateOnly(joinDate) || todayIST(), // Starts on their join date
       req.user.id  // The admin creating the user
     ]);
     // ==========================================
@@ -593,7 +596,7 @@ router.get("/schedule/:id", authMiddleware(["admin", "superadmin"]), async (req,
        FROM staff_schedules
        WHERE staff_id = $1 AND effective_from <= $2 AND (effective_to IS NULL OR effective_to >= $2)
        ORDER BY effective_from DESC LIMIT 1`,
-      [id, date || new Date().toISOString().split("T")[0]]
+      [id, toDateOnly(date) || todayIST()]
     );
     res.json(result.rows[0] || {});
   } catch (err) {
@@ -672,7 +675,7 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
         created_at`,
       [
         username, name, role, department || null, email, phone || null, status || "Active",
-        toDateOnly(joinDate) || new Date().toISOString().slice(0, 10),
+        toDateOnly(joinDate) || todayIST(),
         photoUrl, // <-- CHANGED: Using our new photoUrl variable here
         employeeId || null,
         employmentType || null, reportsTo || null, salary || null, finalDob,

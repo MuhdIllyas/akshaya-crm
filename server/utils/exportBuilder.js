@@ -1,5 +1,6 @@
 import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
+const IST = { timeZone: 'Asia/Kolkata'};
 
 // ==========================================
 // EXCEL GENERATOR
@@ -23,7 +24,7 @@ export const buildExcel = async (reportData, reportIds) => {
       
       // Metadata
       sheet.getCell('A3').value = 'Date Generated:';
-      sheet.getCell('B3').value = new Date(metadata.generatedAt).toLocaleDateString();
+      sheet.getCell('B3').value = new Date(metadata.generatedAt).toLocaleDateString('en-IN', IST);
       sheet.getCell('A4').value = 'Period:';
       sheet.getCell('B4').value = `${metadata.fromDate} to ${metadata.toDate}`;
 
@@ -144,7 +145,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.ledger.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleString('en-IN'), 
+          new Date(row.date).toLocaleString('en-IN', IST), 
           row.wallet, 
           row.type.toUpperCase(), 
           row.category, 
@@ -180,7 +181,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.pendingCollections.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleDateString('en-IN'), 
+          new Date(row.date).toLocaleDateString('en-IN', IST), 
           row.customer_name, 
           row.phone, 
           row.service_name, 
@@ -218,7 +219,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.attendanceReport.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleDateString('en-IN'), 
+          new Date(row.date).toLocaleDateString('en-IN', IST), 
           row.staff_name, 
           row.status.toUpperCase(), 
           row.check_in, 
@@ -359,7 +360,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.reviewReport.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleDateString('en-IN'), 
+          new Date(row.date).toLocaleDateString('en-IN', IST), 
           row.customer_name, 
           row.phone,
           row.service_name,
@@ -397,12 +398,12 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.leaveReport.forEach(row => {
         sheet.addRow([
-          new Date(row.applied_date).toLocaleDateString('en-IN'), 
+          new Date(row.applied_date).toLocaleDateString('en-IN', IST), 
           row.staff_name, 
           row.role.toUpperCase(),
           row.leave_type,
-          new Date(row.from_date).toLocaleDateString('en-IN'),
-          new Date(row.to_date).toLocaleDateString('en-IN'),
+          new Date(row.from_date).toLocaleDateString('en-IN', IST),
+          new Date(row.to_date).toLocaleDateString('en-IN', IST),
           row.days_taken,
           row.status.toUpperCase(),
           row.reason
@@ -467,7 +468,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.pendingServices.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleDateString('en-IN'), 
+          new Date(row.date).toLocaleDateString('en-IN', IST), 
           row.token_id,
           row.customer_name, 
           row.phone,
@@ -504,8 +505,8 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.completedServicesReport.forEach(row => {
         sheet.addRow([
-          new Date(row.application_date).toLocaleDateString('en-IN'), 
-          new Date(row.completion_date).toLocaleDateString('en-IN'), 
+          new Date(row.application_date).toLocaleDateString('en-IN', IST), 
+          new Date(row.completion_date).toLocaleDateString('en-IN', IST), 
           row.customer_name, 
           row.service_name,
           row.assigned_staff,
@@ -647,7 +648,7 @@ export const buildExcel = async (reportData, reportIds) => {
           row.customer_name, 
           row.phone,
           row.is_registered ? 'Portal Registered' : 'Walk-in',
-          new Date(row.first_visit).toLocaleDateString('en-IN'),
+          new Date(row.first_visit).toLocaleDateString('en-IN', IST),
           row.total_spent
         ]);
       });
@@ -684,8 +685,8 @@ export const buildExcel = async (reportData, reportIds) => {
           row.is_registered ? 'Portal Registered' : 'Walk-in',
           row.lifetime_visits,
           row.lifetime_spent,
-          new Date(row.first_visit).toLocaleDateString('en-IN'),
-          new Date(row.latest_visit).toLocaleDateString('en-IN')
+          new Date(row.first_visit).toLocaleDateString('en-IN', IST),
+          new Date(row.latest_visit).toLocaleDateString('en-IN', IST)
         ]);
       });
       
@@ -717,7 +718,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.customerActivity.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleString('en-IN'), 
+          new Date(row.date).toLocaleString('en-IN', IST), 
           row.token_id,
           row.customer_name,
           row.phone,
@@ -755,7 +756,7 @@ export const buildExcel = async (reportData, reportIds) => {
       // Data
       data.customerFeedback.forEach(row => {
         sheet.addRow([
-          new Date(row.date).toLocaleDateString('en-IN'), 
+          new Date(row.date).toLocaleDateString('en-IN', IST), 
           row.customer_name,
           row.phone,
           row.service_name,
@@ -901,7 +902,7 @@ export const buildPDF = (reportData, reportIds) => {
       // Header
       doc.fontSize(20).text('Akshaya CRM Business Report', { align: 'center' });
       doc.moveDown();
-      doc.fontSize(10).text(`Generated: ${new Date(metadata.generatedAt).toLocaleString()}`);
+      doc.fontSize(10).text(`Generated: ${new Date(metadata.generatedAt).toLocaleString('en-IN', IST)}`);
       doc.text(`Period: ${metadata.fromDate} to ${metadata.toDate}`);
       doc.moveDown(2);
 
@@ -965,7 +966,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.ledger.slice(0, 100).forEach(row => { 
-          const dateStr = new Date(row.date).toLocaleString('en-IN');
+          const dateStr = new Date(row.date).toLocaleString('en-IN', IST);
           doc.text(`${dateStr} | ${row.wallet} | ${row.type.toUpperCase()} | ${row.category} | Rs. ${row.amount}`);
         });
         doc.moveDown(2);
@@ -1000,7 +1001,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.attendanceReport.slice(0, 100).forEach(row => { 
-          const dateStr = new Date(row.date).toLocaleDateString('en-IN');
+          const dateStr = new Date(row.date).toLocaleDateString('en-IN', IST);
           doc.text(`${dateStr} | ${row.staff_name} | ${row.status.toUpperCase()} | In: ${row.check_in} | Late: ${row.late_minutes}m`);
         });
         doc.moveDown(2);
@@ -1049,7 +1050,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.reviewReport.forEach(row => { 
-          doc.text(`[${new Date(row.date).toLocaleDateString('en-IN')}] ${row.customer_name}: ${row.service_rating} Stars - "${row.review_text}" (Staff: ${row.staff_name})`);
+          doc.text(`[${new Date(row.date).toLocaleDateString('en-IN', IST)}] ${row.customer_name}: ${row.service_rating} Stars - "${row.review_text}" (Staff: ${row.staff_name})`);
           doc.moveDown(0.5);
         });
         doc.moveDown(2);
@@ -1062,8 +1063,8 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.leaveReport.forEach(row => { 
-          const from = new Date(row.from_date).toLocaleDateString('en-IN');
-          const to = new Date(row.to_date).toLocaleDateString('en-IN');
+          const from = new Date(row.from_date).toLocaleDateString('en-IN', IST);
+          const to = new Date(row.to_date).toLocaleDateString('en-IN', IST);
           doc.text(`${row.staff_name} | ${row.leave_type} (${row.days_taken} Days: ${from} to ${to}) | Status: ${row.status.toUpperCase()}`);
         });
         doc.moveDown(2);
@@ -1088,7 +1089,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.pendingServices.forEach(row => { 
-          doc.text(`[${new Date(row.date).toLocaleDateString('en-IN')}] ${row.customer_name} | ${row.service_name} | Pending: ${row.days_pending} Days | Staff: ${row.assigned_staff}`);
+          doc.text(`[${new Date(row.date).toLocaleDateString('en-IN', IST)}] ${row.customer_name} | ${row.service_name} | Pending: ${row.days_pending} Days | Staff: ${row.assigned_staff}`);
         });
         doc.moveDown(2);
       }
@@ -1100,7 +1101,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.completedServicesReport.forEach(row => { 
-          doc.text(`[${new Date(row.completion_date).toLocaleDateString('en-IN')}] ${row.customer_name} | ${row.service_name} | TAT: ${row.days_taken} Days | Staff: ${row.assigned_staff}`);
+          doc.text(`[${new Date(row.completion_date).toLocaleDateString('en-IN', IST)}] ${row.customer_name} | ${row.service_name} | TAT: ${row.days_taken} Days | Staff: ${row.assigned_staff}`);
         });
         doc.moveDown(2);
       }
@@ -1158,7 +1159,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.newCustomers.forEach(row => { 
-          const first = new Date(row.first_visit).toLocaleDateString('en-IN');
+          const first = new Date(row.first_visit).toLocaleDateString('en-IN', IST);
           const type = row.is_registered ? '(Registered)' : '(Walk-in)';
           doc.text(`${row.customer_name} ${type} | Phone: ${row.phone} | First Visit: ${first} | Spent: Rs. ${row.total_spent}`);
         });
@@ -1172,8 +1173,8 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.repeatCustomers.forEach(row => { 
-          const first = new Date(row.first_visit).toLocaleDateString('en-IN');
-          const latest = new Date(row.latest_visit).toLocaleDateString('en-IN');
+          const first = new Date(row.first_visit).toLocaleDateString('en-IN', IST);
+          const latest = new Date(row.latest_visit).toLocaleDateString('en-IN', IST);
           doc.text(`${row.customer_name} (${row.phone}) | Visits: ${row.lifetime_visits} | Spent: Rs. ${row.lifetime_spent} | Active: ${first} to ${latest}`);
         });
         doc.moveDown(2);
@@ -1186,7 +1187,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.customerActivity.forEach(row => { 
-          const dateStr = new Date(row.date).toLocaleString('en-IN');
+          const dateStr = new Date(row.date).toLocaleString('en-IN', IST);
           doc.text(`[${dateStr}] ${row.customer_name} (${row.phone}) | ${row.service_name} | Status: ${row.status.toUpperCase()} | Rs. ${row.amount}`);
         });
         doc.moveDown(2);
@@ -1199,7 +1200,7 @@ export const buildPDF = (reportData, reportIds) => {
         
         doc.fontSize(9).fillColor('black');
         data.customerFeedback.forEach(row => { 
-          const dateStr = new Date(row.date).toLocaleDateString('en-IN');
+          const dateStr = new Date(row.date).toLocaleDateString('en-IN', IST);
           doc.text(`[${dateStr}] ${row.customer_name}: ${row.service_rating} Stars - "${row.review_text}"`);
           doc.moveDown(0.5);
         });

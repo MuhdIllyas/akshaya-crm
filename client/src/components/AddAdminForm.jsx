@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
+import { todayIST, addDays } from "@/utils/dates";
 
 const AddAdminForm = ({ onAdd, onClose, centreId }) => {
   const [formData, setFormData] = useState({
@@ -10,7 +11,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
     phone: "",
     department: "",
     status: "Active",
-    joinDate: new Date().toISOString().split("T")[0],
+    joinDate: todayIST(),
     photo: null,
     employeeId: "",
     employmentType: "",

@@ -1,34 +1,23 @@
 // analyticsService.js
 import pool from "../../db.js";
+import { todayIST , addDays, toYMD } from "../../utils/dates.js";
 
 // ==========================================
 // UTILS
 // ==========================================
 
 const getDateContext = () => {
-  const dateObj = new Date();
-  const today = dateObj.toISOString().split('T')[0];
-  const currentYear = dateObj.getFullYear();
+  const today = todayIST();
   const currentMonthStr = today.substring(0, 7);
-  const firstDayOfMonth = `${currentMonthStr}-01`;
-  
-  const yesterdayDate = new Date(dateObj);
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = yesterdayDate.toISOString().split('T')[0];
-  
-  const sevenDaysAgoDate = new Date(dateObj);
-  sevenDaysAgoDate.setDate(sevenDaysAgoDate.getDate() - 6);
-  const sevenDaysAgo = sevenDaysAgoDate.toISOString().split('T')[0];
-
-  return { 
-    today, 
-    yesterday, 
-    sevenDaysAgo, 
-    currentYear, 
-    currentMonthStr, 
-    firstDayOfMonth,
-    fromDate: today, 
-    toDate: today    
+  return {
+    today,
+    yesterday: addDays(today, -1),
+    sevenDaysAgo: addDays(today, -6),
+    currentYear: Number(today.slice(0, 4)),
+    currentMonthStr,
+    firstDayOfMonth: `${currentMonthStr}-01`,
+    fromDate: today,
+    toDate: today,
   };
 };
 
@@ -2130,7 +2119,7 @@ const buildDashboardLists = (analytics) => ({
   wallets: analytics.wallets,
   recentTransactions: analytics.activity.transactions.map(t => ({
     ...t,
-    localTime: new Date(t.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+    localTime: new Date(t.created_at).toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
   }))
 });
 
@@ -2233,40 +2222,30 @@ export const getReportData = async (params) => {
   const { reportIds, targetCentreId, staffId, period, fromDate, toDate } = params;
   const client = await pool.connect();
   
-  // ✅ FIX: Smart Date Calculator
-  // 1. Establish the "To" Date (Default to today if missing/invalid)
-  let end = new Date();
-  if (toDate && !isNaN(new Date(toDate).getTime())) {
-    end = new Date(toDate);
-  }
-  const finalToDate = end.toISOString().split('T')[0];
-
-  // 2. Establish the "From" Date based on the 'period' string
-  let start = new Date(end);
-  if (fromDate && !isNaN(new Date(fromDate).getTime())) {
-    start = new Date(fromDate);
-  } else {
-    // If no custom date was provided, calculate it using the period dropdown!
-    switch(period) {
-      case 'weekly':
-        start.setDate(end.getDate() - 6); // Last 7 days
+  let finalToDate = toYMD(toDate) || todayIST();
+  let finalFromDate = toYMD(fromDate);
+ 
+  if (!finalFromDate) {
+    const [y, m] = finalToDate.split("-").map(Number);
+    switch (period) {
+      case "weekly":
+        finalFromDate = addDays(finalToDate, -6); // last 7 days
         break;
-      case 'monthly':
-        start.setDate(1); // 1st day of the current month
+      case "monthly":
+        finalFromDate = `${finalToDate.slice(0, 7)}-01`;
         break;
-      case 'quarterly':
-        start.setMonth(Math.floor(end.getMonth() / 3) * 3, 1); // 1st day of current quarter
+      case "quarterly":
+        finalFromDate = `${y}-${String(Math.floor((m - 1) / 3) * 3 + 1).padStart(2, "0")}-01`;
         break;
-      case 'yearly':
-        start.setMonth(0, 1); // Jan 1st of current year
+      case "yearly":
+        finalFromDate = `${y}-01-01`;
         break;
-      case 'daily':
+      case "daily":
       default:
-        // Keep it the same as the end date (Today)
-        break;
+        finalFromDate = finalToDate;
     }
   }
-  const finalFromDate = start.toISOString().split('T')[0];
+  if (finalFromDate > finalToDate) [finalFromDate, finalToDate] = [finalToDate, finalFromDate];
 
   // Create a unified payload object to return
   const compiledReport = {
@@ -2282,23 +2261,15 @@ export const getReportData = async (params) => {
 
   try {
     // 3. Build the 'dates' context object for the V3 Fetchers
-    const baseDateObj = new Date(finalToDate);
-    
-    const yesterdayObj = new Date(baseDateObj);
-    yesterdayObj.setDate(yesterdayObj.getDate() - 1);
-    
-    const sevenDaysAgoObj = new Date(baseDateObj);
-    sevenDaysAgoObj.setDate(sevenDaysAgoObj.getDate() - 6);
-
     const reportDates = {
-      today: finalToDate, 
-      fromDate: finalFromDate,  // <--- The V3 Engine will now use this!
-      toDate: finalToDate,      // <--- The V3 Engine will now use this!
-      yesterday: yesterdayObj.toISOString().split('T')[0],
-      sevenDaysAgo: sevenDaysAgoObj.toISOString().split('T')[0],
-      currentYear: baseDateObj.getFullYear(),
+      today: finalToDate,
+      fromDate: finalFromDate,
+      toDate: finalToDate,
+      yesterday: addDays(finalToDate, -1),
+      sevenDaysAgo: addDays(finalToDate, -6),
+      currentYear: Number(finalToDate.slice(0, 4)),
       currentMonthStr: finalToDate.substring(0, 7),
-      firstDayOfMonth: `${finalToDate.substring(0, 7)}-01`
+      firstDayOfMonth: `${finalToDate.substring(0, 7)}-01`,
     };
 
     // 2. Map over requested reports and reuse V3 Fetchers

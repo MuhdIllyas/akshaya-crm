@@ -7,6 +7,7 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
+import { todayIST, istParts } from '../utils/dateUtils.js';
 
 const router = express.Router();
 
@@ -3468,7 +3469,7 @@ const generateTokenId = async (db, centreId) => {
     [centreId]
   );
   const count = parseInt(result.rows[0].count) + 1;
-  return `TKN-${centreId}-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${count.toString().padStart(2, '0')}`;
+    return `TKN-${centreId}-${todayIST().replace(/-/g, '')}-${count.toString().padStart(2, '0')}`;
 };
 
 // Generate campaign-specific token ID
@@ -4856,7 +4857,7 @@ router.post("/pending-payments/:id/send-whatsapp",
           serviceName: entry.service_name,
           subcategoryName: entry.subcategory_name,
           pendingAmount,
-          dueDate: new Date().toLocaleDateString("en-IN"),
+          dueDate: new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }),
           phone: entry.phone,
           centreId: access.centre_id
         });

@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { todayIST, addDays } from "../../utils/dates.js";
 
 const router = express.Router();
 
@@ -654,7 +655,7 @@ router.get('/wallet-book-balances', async (req, res) => {
     let centreId = req.user.centre_id;
     if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
     
-    const targetDate = date || new Date().toISOString().split('T')[0];
+    const targetDate = date || todayIST();
 
     const result = await client.query(`
       SELECT

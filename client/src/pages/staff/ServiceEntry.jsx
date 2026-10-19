@@ -37,6 +37,7 @@ import AutomationBuilder from '@/components/automations/AutomationBuilder';
 import ScheduledActionsPanel from '@/components/automations/ScheduledActionsPanel';
 import { validateDraft, toApiAction } from '@/utils/automations/automationUtils';
 import { getPresets , createAutomations } from '@/services/automationService';
+import { todayIST, addDays } from "@/utils/dates";
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -1059,8 +1060,7 @@ const ServiceEntry = () => {
           svc.requiresWallet = cat.requires_wallet || false;
           svc.hasExpiry = cat.has_expiry || false;
           if (cat.has_expiry && !svc.expiryDate) {
-            const exp = new Date(); exp.setDate(exp.getDate() + 90);
-            svc.expiryDate = exp.toISOString().split('T')[0];
+            svc.expiryDate = addDays(todayIST(), 90);
           } else if (!cat.has_expiry) svc.expiryDate = '';
           
           if (cat.subcategories && cat.subcategories.length > 0) {
@@ -1239,7 +1239,7 @@ const ServiceEntry = () => {
         createTask: svc.createTask,
         taskTitle: svc.taskTitle,
         taskAssignee: svc.taskAssignee ? parseInt(svc.taskAssignee) : null,
-        taskDueDate: svc.taskDueDate ? new Date(svc.taskDueDate).toISOString().split('T')[0] : null,
+        taskDueDate: svc.taskDueDate ? new Date(svc.taskDueDate).toLocaleDateString('en-CA') : null,
       })),
       payments: formData.payments.map(p => ({
         wallet: parseInt(p.wallet),
@@ -1393,7 +1393,7 @@ const ServiceEntry = () => {
                       const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
                       await api.post('/add', {
                         title: svcFormData.taskTitle.trim(), description: svcFormData.initialNote.trim(), assigned_to: parseInt(svcFormData.taskAssignee),
-                        due_date: svcFormData.taskDueDate ? new Date(svcFormData.taskDueDate).toISOString().split('T')[0] : null,
+                        due_date: svcFormData.taskDueDate ? new Date(svcFormData.taskDueDate).toLocaleDateString('en-CA') : null,
                         priority: 'medium', related_service_entry_id: serviceEntryId, note_id: savedNoteId
                       }, { baseURL: taskBaseUrl });
                     }

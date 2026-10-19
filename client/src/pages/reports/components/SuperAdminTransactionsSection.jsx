@@ -24,7 +24,7 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
         alert('Filters reset');
       };
     const [dateFilter, setDateFilter] = useState(() => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         return { fromDate: today, toDate: today };
       });
 

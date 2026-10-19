@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import StaffPerformanceSection from "./StaffPerformanceSection";
+import { todayIST, monthStartIST, quarterStartIST, yearStartIST } from "@/utils/dates";
 
 const SuperAdminStaffSection = ({ centreId }) => {
   const [showCharts, setShowCharts] = useState(true);
@@ -17,19 +18,12 @@ const SuperAdminStaffSection = ({ centreId }) => {
         const token = localStorage.getItem("token");
         
         // Calculate dates based on timePeriod (similar to StaffPerformanceSection)
-        const now = new Date();
-        const to = now.toISOString().slice(0, 10);
-        
-        let from;
-        if (timePeriod === "monthly") {
-          from = new Date(now.getFullYear(), now.getMonth(), 1);
-        } else if (timePeriod === "quarterly") {
-          const q = Math.floor(now.getMonth() / 3) * 3;
-          from = new Date(now.getFullYear(), q, 1);
-        } else {
-          from = new Date(now.getFullYear(), 0, 1);
-        }
-        const fromDate = from.toISOString().slice(0, 10);
+        // IST dates (toISOString turned "1 Oct 00:00 IST" into 30 Sep)
+        const to = todayIST();
+        const fromDate =
+          timePeriod === "monthly" ? monthStartIST()
+          : timePeriod === "quarterly" ? quarterStartIST()
+          : yearStartIST();
         
         const params = new URLSearchParams({ 
           centreId,

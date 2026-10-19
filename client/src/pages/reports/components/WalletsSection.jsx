@@ -23,6 +23,7 @@ import {
   CartesianGrid,
   ComposedChart
 } from "recharts";
+import { todayIST, addDays, ymdIST, weekStartYMD, monthStartIST } from "@/utils/dates";
 
 // Shared style tokens (UI only)
 const fieldCls =
@@ -520,8 +521,8 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
 
   const [selectedWallet, setSelectedWallet] = useState(null);
   const [dateRange, setDateRange] = useState({
-    start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-    end: new Date().toISOString().split('T')[0]
+    start: addDays(todayIST(), -7),
+    end: todayIST()
   });
   const [rawData, setRawData] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
@@ -593,14 +594,12 @@ const fetchDailyBalances = async (walletId, start, end, centreId) => {
     
     data.forEach(item => {
       let periodKey;
-      const date = new Date(item.date);
+      const ymd = ymdIST(item.date); // the real IST day of this row
       
       if (viewMode === 'weekly') {
-        const weekStart = new Date(date);
-        weekStart.setDate(date.getDate() - date.getDay());
-        periodKey = weekStart.toISOString().split('T')[0]; // YYYY-MM-DD format
+        periodKey = weekStartYMD(ymd); // YYYY-MM-DD of the Sunday
       } else if (viewMode === 'monthly') {
-        periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        periodKey = ymd.slice(0, 7);
       }
       
       if (!grouped[periodKey]) {
@@ -1023,7 +1022,7 @@ const WalletsSection = ({
     totalCashInHand: 0,
     totalDigitalBalance: 0,
   });
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const [dateRange, setDateRange] = useState({
     start: today,
     end: today,
@@ -1099,7 +1098,7 @@ const handleManualDailyClose = async () => {
 
 const loadWalletSummary = async () => {
   try {
-    const today = new Date().toISOString().split("T")[0];
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     const data = await fetchWalletSummary(dateRange.start, dateRange.end, centreId);
 
     // Build wallets
@@ -1214,10 +1213,8 @@ const loadWalletSummary = async () => {
             </button>
             <button
               onClick={() => {
-                const firstDay = new Date();
-                firstDay.setDate(1);
                 setDateRange({
-                  start: firstDay.toISOString().split("T")[0],
+                  start: monthStartIST(),
                   end: today,
                 });
               }}

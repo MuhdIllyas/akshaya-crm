@@ -4,7 +4,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { FiTarget, FiRefreshCw, FiCheckCircle, FiChevronDown, FiChevronUp } from "react-icons/fi";
 
 const formatINR = (v) => Number(v || 0).toLocaleString("en-IN");
-const thisMonth = () => new Date().toISOString().slice(0, 7); // YYYY-MM
+const thisMonth = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
 
 const authFetch = async (path, params = {}) => {
   const token = localStorage.getItem("token");

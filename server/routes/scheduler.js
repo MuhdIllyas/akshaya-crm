@@ -40,7 +40,7 @@ cron.schedule("10 0 * * *", async () => {
     const result = await pool.query(`
       DELETE FROM tokens
       WHERE type = 'normal'
-      AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+        AND created_at < date_trunc('day', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'
     `);
 
     console.log(`[CRON] Deleted ${result.rowCount} old normal tokens (cleared queue for the new day)`);
