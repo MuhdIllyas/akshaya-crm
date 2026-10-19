@@ -2149,23 +2149,69 @@ const ExpenseManagement = ({
     return acc;
   }, {});
 
+  const cardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const labelCls = 'mb-1 block text-sm font-medium text-slate-700';
+  const dotSep = <span className="text-xs text-slate-400">•</span>;
+
+  const renderHistoryList = (list, tone) => (
+    <div className="max-h-60 space-y-2 overflow-y-auto">
+      {list.map((expense) => (
+        <div
+          key={expense.id}
+          className={`flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
+            tone === 'rose' ? 'border-rose-100 bg-rose-50' : 'border-emerald-100 bg-emerald-50'
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-900">
+              {expense.description || expense.category}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+              <span>{expense.date}</span>
+              {dotSep}
+              <span>{expense.staff_name || 'Staff'}</span>
+              {dotSep}
+              <span>{expense.wallet_name || 'Wallet'}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className={`whitespace-nowrap text-sm font-semibold ${tone === 'rose' ? 'text-rose-700' : 'text-emerald-700'}`}>
+              {formatCurrency(expense.amount)}
+            </span>
+            {onCorrect && (
+              <button
+                type="button"
+                onClick={() => openCorrection(expense)}
+                title="Correct this expense"
+                aria-label="Correct this expense"
+                className="rounded-lg bg-white p-1.5 text-navy-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
+              >
+                <FiRefreshCw className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Pending Approvals */}
       {pendingExpenses.length > 0 && (
-        <div className="bg-white rounded-lg border border-yellow-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <FiAlertTriangle className="h-4 w-4 text-yellow-600" />
+        <div className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-amber-100 p-2">
+                <FiAlertTriangle className="h-4 w-4 text-amber-600" />
               </div>
               <div>
-                <h4 className="font-bold text-gray-900 text-sm">Pending Approvals</h4>
-                <p className="text-xs text-yellow-600 font-medium">{pendingExpenses.length} items require action</p>
+                <h4 className="text-sm font-bold text-slate-900">Pending Approvals</h4>
+                <p className="text-xs font-medium text-amber-600">{pendingExpenses.length} items require action</p>
               </div>
             </div>
-            <span className="text-xs text-yellow-600 font-medium flex items-center">
-              <FiClock className="h-3 w-3 mr-1" />
+            <span className="flex items-center text-xs font-medium text-amber-600">
+              <FiClock className="mr-1 h-3 w-3" />
               Requires Action
             </span>
           </div>
@@ -2179,52 +2225,54 @@ const ExpenseManagement = ({
                   key={expense.id}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200"
+                  className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className="p-1 bg-white rounded border border-yellow-200">
-                        {category && React.createElement(category.icon, { className: "h-3 w-3 text-yellow-600" })}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 rounded-lg border border-amber-200 bg-white p-1">
+                        {category && React.createElement(category.icon, { className: "h-3 w-3 text-amber-600" })}
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{expense.description}</p>
-                        <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                          <span className="text-xs text-gray-600 flex items-center">
-                            <PaymentIcon className="h-2 w-2 mr-1" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">{expense.description}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                          <span className="flex items-center text-xs text-slate-600">
+                            <PaymentIcon className="mr-1 h-2 w-2" />
                             {expense.paymentMethod}
                           </span>
-                          <span className="text-xs text-gray-600">•</span>
-                          <span className="text-xs text-gray-600">by {expense.staff_name || 'Staff'}</span>
-                          <span className="text-xs text-gray-600">•</span>
-                          <span className="text-xs text-gray-600">{expense.date}</span>
+                          {dotSep}
+                          <span className="text-xs text-slate-600">by {expense.staff_name || 'Staff'}</span>
+                          {dotSep}
+                          <span className="text-xs text-slate-600">{expense.date}</span>
                         </div>
                       </div>
                     </div>
                     {expense.notes && (
-                      <p className="text-xs text-gray-600 mt-1 flex items-start">
-                        <FiMessageSquare className="h-2 w-2 mr-1 mt-0.5 flex-shrink-0" />
+                      <p className="mt-1 flex items-start text-xs text-slate-600">
+                        <FiMessageSquare className="mr-1 mt-0.5 h-2 w-2 shrink-0" />
                         {expense.notes}
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-col items-end space-y-1 ml-2">
-                    <p className="font-bold text-gray-900 text-sm">
+                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start sm:gap-1">
+                    <p className="text-sm font-bold text-slate-900">
                       ₹{Number(expense.amount || 0).toLocaleString('en-IN', {
                         minimumFractionDigits: 2
                       })}
                     </p>
                     {!readOnly && (
-                    <div className="flex space-x-1">
+                    <div className="flex gap-1">
                       <button
+                        type="button"
                         onClick={() => onApprove(expense.id)}
-                        className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-xs flex items-center space-x-1"
+                        className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                       >
                         <FiCheck className="h-2 w-2" />
                         <span>Approve</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => onReject(expense.id)}
-                        className="px-2 py-1 bg-rose-600 text-white rounded hover:bg-rose-700 text-xs flex items-center space-x-1"
+                        className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
                       >
                         <FiX className="h-2 w-2" />
                         <span>Reject</span>
@@ -2244,154 +2292,80 @@ const ExpenseManagement = ({
         <div className="space-y-2">
           {/* Approved / Auto‑Approved */}
           {approvedExpenses.length > 0 && (
-            <div className="bg-white rounded-lg border border-emerald-200 p-4">
-              <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                <FiCheckCircle className="h-4 w-4 mr-2 text-emerald-600" />
+            <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+              <h4 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+                <FiCheckCircle className="mr-2 h-4 w-4 text-emerald-600" />
                 Approved / Auto‑Approved ({approvedExpenses.length})
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {approvedExpenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-3 rounded-lg border border-emerald-100 bg-emerald-50 flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {expense.description || expense.category}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <span>{expense.date}</span>
-                        <span>•</span>
-                        <span>{expense.staff_name || 'Staff'}</span>
-                        <span>•</span>
-                        <span>{expense.wallet_name || 'Wallet'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-emerald-700 text-sm whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      {onCorrect && (
-                        <button
-                          onClick={() => openCorrection(expense)}
-                          className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                          title="Correct this expense"
-                        >
-                          <FiRefreshCw className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderHistoryList(approvedExpenses, 'emerald')}
             </div>
           )}
 
           {/* Rejected */}
           {rejectedExpenses.length > 0 && (
-            <div className="bg-white rounded-lg border border-rose-200 p-4">
-              <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                <FiXCircle className="h-4 w-4 mr-2 text-rose-600" />
+            <div className="rounded-2xl border border-rose-200 bg-white p-4 shadow-sm">
+              <h4 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+                <FiXCircle className="mr-2 h-4 w-4 text-rose-600" />
                 Rejected ({rejectedExpenses.length})
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {rejectedExpenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-3 rounded-lg border border-rose-100 bg-rose-50 flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {expense.description || expense.category}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <span>{expense.date}</span>
-                        <span>•</span>
-                        <span>{expense.staff_name || 'Staff'}</span>
-                        <span>•</span>
-                        <span>{expense.wallet_name || 'Wallet'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-rose-700 text-sm whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      {onCorrect && (
-                        <button
-                          onClick={() => openCorrection(expense)}
-                          className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                          title="Correct this expense"
-                        >
-                          <FiRefreshCw className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderHistoryList(rejectedExpenses, 'rose')}
             </div>
           )}
         </div>
       )}
 
       {/* Expense Summary Cards */}
-      <div className="grid gap-3 grid-cols-3">
-        <div className="bg-white rounded-lg border border-emerald-200 p-3 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <h5 className="font-medium text-gray-900 text-xs flex items-center">
-              <FiCheckCircle className="h-3 w-3 mr-1 text-emerald-600" />
-              Approved
-            </h5>
-          </div>
-          <p className="font-bold text-emerald-600 text-sm">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+          <h5 className="mb-1 flex items-center text-xs font-medium text-slate-900">
+            <FiCheckCircle className="mr-1 h-3 w-3 text-emerald-600" />
+            Approved
+          </h5>
+          <p className="text-sm font-bold text-emerald-600">
             {formatCurrency(
               expenses
                 .filter(e => e.status === 'approved' || e.status === 'auto_approved')
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             )}
           </p>
-          <p className="text-xs text-gray-600 mt-0.5 flex items-center">
-            <FiPackage className="h-2 w-2 mr-1" />
+          <p className="mt-0.5 flex items-center text-xs text-slate-600">
+            <FiPackage className="mr-1 h-2 w-2" />
             {expenses.filter(e => e.status === 'approved' || e.status === 'auto_approved').length} items
           </p>
         </div>
 
-        <div className="bg-white rounded-lg border border-yellow-200 p-3 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <h5 className="font-medium text-gray-900 text-xs flex items-center">
-              <FiClock className="h-3 w-3 mr-1 text-yellow-600" />
-              Pending
-            </h5>
-          </div>
-          <p className="font-bold text-yellow-600 text-sm">
+        <div className="rounded-2xl border border-amber-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+          <h5 className="mb-1 flex items-center text-xs font-medium text-slate-900">
+            <FiClock className="mr-1 h-3 w-3 text-amber-600" />
+            Pending
+          </h5>
+          <p className="text-sm font-bold text-amber-600">
             {formatCurrency(
               expenses
                 .filter(e => e.status === 'pending')
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             )}
           </p>
-          <p className="text-xs text-gray-600 mt-0.5 flex items-center">
-            <FiAlertCircle className="h-2 w-2 mr-1" />
+          <p className="mt-0.5 flex items-center text-xs text-slate-600">
+            <FiAlertCircle className="mr-1 h-2 w-2" />
             {expenses.filter(e => e.status === 'pending').length} items
           </p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <h5 className="font-medium text-gray-900 text-xs flex items-center">
-              <FiDollarSign className="h-3 w-3 mr-1 text-gray-600" />
-              Total
-            </h5>
-          </div>
-          <p className="font-bold text-gray-900 text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+          <h5 className="mb-1 flex items-center text-xs font-medium text-slate-900">
+            <FiDollarSign className="mr-1 h-3 w-3 text-navy-700" />
+            Total
+          </h5>
+          <p className="text-sm font-bold text-slate-900">
             {formatCurrency(
               expenses
                 .filter(e => e.status !== 'rejected')
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             )}
           </p>
-          <p className="text-xs text-gray-600 mt-0.5 flex items-center">
-            <FiDatabase className="h-2 w-2 mr-1" />
+          <p className="mt-0.5 flex items-center text-xs text-slate-600">
+            <FiDatabase className="mr-1 h-2 w-2" />
             {expenses.length} items
           </p>
         </div>
@@ -2401,10 +2375,11 @@ const ExpenseManagement = ({
       {allowAdd && !showAddForm && onAddClick && (
         <div className="flex justify-center">
           <motion.button
+            type="button"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={onAddClick}
-            className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all text-sm"
+            className="flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
           >
             <FiPlusCircle className="h-4 w-4" />
             <span className="font-medium">Add New Expense</span>
@@ -2419,33 +2394,37 @@ const ExpenseManagement = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Correct expense"
           >
             <motion.div
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200"
+              className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
             >
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Correct Expense</h2>
-                <p className="text-sm text-gray-500 mt-1">
+              <div className="border-b border-slate-200 p-6">
+                <h2 className="text-lg font-bold text-slate-900">Correct Expense</h2>
+                <p className="mt-1 text-sm text-slate-500">
                   Original: {correctingExpense.description} – {formatCurrency(correctingExpense.amount)} on {correctingExpense.expense_date || correctingExpense.date}
                 </p>
               </div>
-              <form onSubmit={handleCorrectionSubmit} className="p-6 space-y-4">
+              <form onSubmit={handleCorrectionSubmit} className="space-y-4 p-6">
                 {/* New Amount */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="correction-amount" className={labelCls}>
                     New Amount (₹) *
                   </label>
                   <input
+                    id="correction-amount"
                     type="number"
                     value={correctionForm.amount}
                     onChange={(e) =>
                       setCorrectionForm((prev) => ({ ...prev, amount: e.target.value }))
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputCls}
                     required
                     min="0"
                     step="0.01"
@@ -2455,20 +2434,18 @@ const ExpenseManagement = ({
                 {/* New Wallet */}
                 {wallets.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      New Wallet *
-                    </label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                    <span className={labelCls}>New Wallet *</span>
+                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1" role="radiogroup" aria-label="New wallet">
                       {wallets.map((wallet) => (
                         <label
                           key={wallet.id}
-                          className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border-2 p-3 transition-colors focus-within:ring-2 focus-within:ring-navy-500/40 ${
                             correctionForm.wallet_id === wallet.id.toString()
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                              ? 'border-navy-500 bg-slate-50'
+                              : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
                             <input
                               type="radio"
                               name="correction_wallet"
@@ -2484,12 +2461,12 @@ const ExpenseManagement = ({
                               required
                             />
                             <span className="text-xl">{getWalletMeta(wallet).icon}</span>
-                            <div>
-                              <p className="font-medium text-gray-900 text-sm">{wallet.name}</p>
-                              <p className="text-xs text-gray-500">{getWalletMeta(wallet).label}</p>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">{wallet.name}</p>
+                              <p className="text-xs text-slate-500">{getWalletMeta(wallet).label}</p>
                             </div>
                           </div>
-                          <span className="text-sm font-semibold text-gray-700">
+                          <span className="shrink-0 text-sm font-semibold text-slate-700">
                             {formatCurrency(walletBalances[wallet.id] ?? 0)}
                           </span>
                         </label>
@@ -2500,31 +2477,32 @@ const ExpenseManagement = ({
 
                 {/* Reason */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="correction-reason" className={labelCls}>
                     Reason for Correction
                   </label>
                   <textarea
+                    id="correction-reason"
                     value={correctionForm.reason}
                     onChange={(e) =>
                       setCorrectionForm((prev) => ({ ...prev, reason: e.target.value }))
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputCls}
                     rows="3"
                     placeholder="Explain why you are correcting this expense..."
                   />
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                   <button
                     type="button"
                     onClick={() => setShowCorrectModal(false)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2"
+                    className="flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
                     <FiRefreshCw className="h-4 w-4" />
                     Submit Correction
@@ -3410,33 +3388,38 @@ const handleExportExcel = () => {
     }
   };
 
+  const ledgerFieldCls = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30';
+
   return (
     <div className="space-y-4">
       {/* Accounting Dashboard Header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-        <div className="flex items-center justify-between">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
-              <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
+            <h2 className="mb-1 flex items-center text-lg font-bold text-slate-900">
+              <FiFileText className="mr-2 h-5 w-5 text-navy-700" />
               Accounting Center
             </h2>
-            <p className="text-gray-600 text-xs">Daily financial management and reconciliation</p>
+            <p className="text-xs text-slate-600">Daily financial management and reconciliation</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="relative">
-              <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <FiCalendar className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                aria-label="Accounting date"
+                className="rounded-xl border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
               />
             </div>
             <button
+              type="button"
               onClick={handleRefreshAllData}
               disabled={loading}
-              className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl bg-slate-100 p-2.5 text-navy-700 transition-colors hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               title="Refresh all data"
+              aria-label="Refresh all data"
             >
               <FiRefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -3444,7 +3427,7 @@ const handleExportExcel = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-5 gap-3 mt-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Today's Revenue"
             value={`₹${totalRevenue.toLocaleString()}`}
@@ -3457,52 +3440,55 @@ const handleExportExcel = () => {
             value={`₹${todayProfit.toLocaleString()}`}
             subtitle="Service charges minus expenses"
             icon={FiTrendingUp}
-            color="bg-indigo-600"
+            color="bg-navy-700"
           />
           <StatCard
             title="Pending Approvals"
             value={pendingApprovals}
             subtitle="Requires action"
             icon={FiAlertCircle}
-            color="bg-yellow-600"
+            color="bg-amber-600"
           />
           <StatCard
             title="Cash in Hand"
             value={`₹${calculateCashInHand().toLocaleString()}`}
             subtitle="Physical cash wallets"
             icon={FiDollarSign}
-            color="bg-amber-600"
+            color="bg-navy-500"
           />
           <StatCard
             title="Total Wallet Balance"
             value={`₹${calculateTotalWalletBalance().toLocaleString()}`}
             subtitle="All wallets combined"
             icon={FiSmartphone}
-            color="bg-purple-600"
+            color="bg-slate-600"
           />
         </div>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 flex items-center justify-center">
-          <FiRefreshCw className="animate-spin h-6 w-6 text-indigo-600" />
-          <span className="ml-2 text-gray-600">Loading accounting data...</span>
+        <div role="status" className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <FiRefreshCw className="h-6 w-6 animate-spin text-navy-700" />
+          <span className="ml-2 text-slate-600">Loading accounting data...</span>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="border-b border-gray-200 bg-gray-50">
-            <div className="flex overflow-x-auto px-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50">
+            <div className="flex overflow-x-auto px-2" role="tablist" aria-label="Accounting sections">
               {accountingTabs.map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeAccountingTab === tab.id;
                 return (
                   <button
                     key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
                     onClick={() => setActiveAccountingTab(tab.id)}
-                    className={`flex items-center space-x-2 px-4 py-3 font-medium whitespace-nowrap border-b-2 transition-colors text-sm ${
+                    className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500/40 ${
                       isActive
-                        ? 'border-indigo-500 text-indigo-600 bg-white'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        ? 'border-navy-700 bg-white text-navy-700'
+                        : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -3535,15 +3521,16 @@ const handleExportExcel = () => {
             {/* Income View */}
             {activeAccountingTab === 'income' && (
               <>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-sm font-semibold text-gray-900 flex items-center">
-                    <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center text-sm font-semibold text-slate-900">
+                    <FiTrendingUp className="mr-2 h-4 w-4 text-emerald-600" />
                     Income & Collections
                   </h2>
                   {!readOnly && (
                   <button
+                    type="button"
                     onClick={() => setShowMiscIncomeModal(true)}
-                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center space-x-1 text-sm shadow-sm"
+                    className="flex items-center gap-1 rounded-xl bg-navy-700 px-3 py-1.5 text-sm text-white shadow-sm hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
                     <FiPlusCircle className="h-4 w-4" />
                     <span>Add Misc Income</span>
@@ -3559,14 +3546,15 @@ const handleExportExcel = () => {
             {/* Ledger View */}
             {activeAccountingTab === 'ledger' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-6 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <input
                     type="date"
                     value={ledgerFilters.from || date}
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, from: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="From date"
+                    className={ledgerFieldCls}
                     placeholder="From date"
                   />
 
@@ -3576,7 +3564,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, to: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="To date"
+                    className={ledgerFieldCls}
                     placeholder="To date"
                   />
 
@@ -3585,7 +3574,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, staff_id: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Staff"
+                    className={ledgerFieldCls}
                   >
                     <option value="">All Staff</option>
                       {staff?.map(s => (
@@ -3600,7 +3590,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, wallet_id: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Wallet"
+                    className={ledgerFieldCls}
                   >
                     <option value="">All Wallets</option>
                       {derivedWallets?.map(w => (
@@ -3613,7 +3604,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, category: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Category"
+                    className={ledgerFieldCls}
                   >
                     <option value="">All Categories</option>
                     <option value="Service Payment">Service Payment</option>
@@ -3625,6 +3617,7 @@ const handleExportExcel = () => {
                   </select>
 
                   <button
+                    type="button"
                     onClick={() => {
                       setLedgerFilters({
                         from: date,
@@ -3634,9 +3627,9 @@ const handleExportExcel = () => {
                         category: ''
                       });
                     }}
-                    className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 flex items-center justify-center"
+                    className="flex items-center justify-center rounded-xl bg-navy-700 px-3 py-1.5 text-sm text-white hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
-                    <FiRefreshCw className="h-3 w-3 mr-1" />
+                    <FiRefreshCw className="mr-1 h-3 w-3" />
                     Reset to Current Filter
                   </button>
                 </div>
@@ -3651,16 +3644,17 @@ const handleExportExcel = () => {
             {/* Expenses */}
             {activeAccountingTab === 'expenses' && (
               <>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-sm font-semibold text-gray-900 flex items-center">
-                    <FiTrendingDown className="h-4 w-4 mr-2 text-indigo-600" />
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center text-sm font-semibold text-slate-900">
+                    <FiTrendingDown className="mr-2 h-4 w-4 text-navy-700" />
                     Expenses
                   </h2>
 
                   {!readOnly && (
                   <button
+                    type="button"
                     onClick={() => setShowAdminExpenseModal(true)}
-                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-1 text-sm"
+                    className="flex items-center gap-1 rounded-xl bg-navy-700 px-3 py-1.5 text-sm text-white shadow-sm hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
                     <FiPlusCircle className="h-4 w-4" />
                     <span>Add Expense</span>
@@ -3696,18 +3690,18 @@ const handleExportExcel = () => {
             {/* Reports */}
             {activeAccountingTab === 'reports' && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                      <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
+                    <h2 className="flex items-center text-lg font-bold text-slate-900">
+                      <FiFileText className="mr-2 h-5 w-5 text-navy-700" />
                       Financial Reports & Analytics
                     </h2>
-                    <p className="text-gray-600 text-sm mt-1">Comprehensive financial insights and analysis</p>
+                    <p className="mt-1 text-sm text-slate-600">Comprehensive financial insights and analysis</p>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-600">Period:</span>
-                      <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600">Period:</span>
+                      <select aria-label="Report period" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30">
                         <option>Today</option>
                         <option>This Week</option>
                         <option>This Month</option>
@@ -3716,9 +3710,10 @@ const handleExportExcel = () => {
                         <option>Custom Range</option>
                       </select>
                     </div>
-                    <button 
+                    <button
+                      type="button"
                       onClick={handleExportExcel}
-                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                      className="flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2 text-sm text-white transition-colors hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                     >
                       <FiDownload className="h-4 w-4" />
                       <span>Export Report</span>
@@ -3727,80 +3722,80 @@ const handleExportExcel = () => {
                 </div>
 
                 {/* Key Performance Indicators */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-emerald-100 rounded-lg">
+                      <div className="p-2 bg-emerald-100 rounded-xl">
                         <FiTrendingUp className="h-5 w-5 text-emerald-600" />
                       </div>
                       <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">+12.5%</span>
                     </div>
-                    <p className="text-sm text-gray-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{totalRevenue.toLocaleString()}</p>
-                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Total Revenue</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{totalRevenue.toLocaleString()}</p>
+                    <div className="mt-2 flex items-center text-xs text-slate-500">
                       <span>Services: {(accountingData.income?.rows?.length || 0)}</span>
-                      <div className="w-1 h-1 mx-2 bg-gray-300 rounded-full"></div>
+                      <div className="w-1 h-1 mx-2 bg-slate-300 rounded-full"></div>
                       <span>Avg: ₹{(totalRevenue/(accountingData.income?.rows?.length || 1)).toFixed(2)}</span>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-rose-100 rounded-lg">
+                      <div className="p-2 bg-rose-100 rounded-xl">
                         <FiTrendingDown className="h-5 w-5 text-rose-600" />
                       </div>
                       <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">-8.2%</span>
                     </div>
-                    <p className="text-sm text-gray-600">Total Expenses</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{todayExpenses.toLocaleString()}</p>
-                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Total Expenses</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{todayExpenses.toLocaleString()}</p>
+                    <div className="mt-2 flex items-center text-xs text-slate-500">
                       <span>Approved: {expensesForCurrentDate.filter(e => e.status === 'approved').length}</span>
-                      <div className="w-1 h-1 mx-2 bg-gray-300 rounded-full"></div>
+                      <div className="w-1 h-1 mx-2 bg-slate-300 rounded-full"></div>
                       <span>Pending: {pendingApprovals}</span>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-indigo-100 rounded-lg">
-                        <FiDollarSign className="h-5 w-5 text-indigo-600" />
+                      <div className="p-2 bg-slate-100 rounded-xl">
+                        <FiDollarSign className="h-5 w-5 text-navy-700" />
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-full ${todayProfit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                         {todayProfit >= 0 ? '+' : ''}{totalServiceCharges > 0 ? ((todayProfit/totalServiceCharges)*100).toFixed(1) : '0'}%
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">Net Profit</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{totalServiceCharges.toLocaleString()}</p>
-                    <div className="mt-2 text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Net Profit</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{totalServiceCharges.toLocaleString()}</p>
+                    <div className="mt-2 text-xs text-slate-500">
                       Service Charges • {(accountingData.income?.rows?.length || 0)} services
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <FiActivity className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 bg-slate-100 rounded-xl">
+                        <FiActivity className="h-5 w-5 text-navy-700" />
                       </div>
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Real-time</span>
+                      <span className="text-xs bg-slate-100 text-navy-700 px-2 py-1 rounded-full">Real-time</span>
                     </div>
-                    <p className="text-sm text-gray-600">Cash in Hand</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{calculateCashInHand().toLocaleString()}</p>
-                    <div className="mt-2 text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Cash in Hand</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{calculateCashInHand().toLocaleString()}</p>
+                    <div className="mt-2 text-xs text-slate-500">
                       From {derivedWallets.filter(w => w.type?.toLowerCase() === 'cash').length} cash wallets
                     </div>
                   </div>
                 </div>
 
                 {/* Detailed Reports Grid (collapsed for brevity, same as original) */}
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {/* Income Breakdown */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
                         <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
                         Income Breakdown
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiEye className="h-3 w-3 mr-1" />
                         View Details
                       </button>
@@ -3812,12 +3807,12 @@ const handleExportExcel = () => {
                           <div className="flex items-center space-x-2">
                             <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
                             <div>
-                              <span className="text-xs font-medium text-gray-900">Service Charges (Profit)</span>
-                              <p className="text-xs text-gray-500">Our earnings from services</p>
+                              <span className="text-xs font-medium text-slate-900">Service Charges (Profit)</span>
+                              <p className="text-xs text-slate-500">Our earnings from services</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               ₹{totalServiceCharges.toLocaleString()}
                             </p>
                             <p className="text-xs text-emerald-600 font-medium">
@@ -3830,14 +3825,14 @@ const handleExportExcel = () => {
                         
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
-                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                            <div className="w-3 h-3 rounded-full bg-navy-500"></div>
                             <div>
-                              <span className="text-xs font-medium text-gray-900">Department Charge (Cost)</span>
-                              <p className="text-xs text-gray-500">Payable to departments</p>
+                              <span className="text-xs font-medium text-slate-900">Department Charge (Cost)</span>
+                              <p className="text-xs text-slate-500">Payable to departments</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               ₹{(accountingData.income?.rows?.reduce((sum, row) => {
                                 const received = Number(row.received_amount || 0);
                                 const serviceCharge = Number(row.service_charges || 0);
@@ -3851,7 +3846,7 @@ const handleExportExcel = () => {
                                 return sum;
                               }, 0) || 0).toLocaleString()}
                             </p>
-                            <p className="text-xs text-blue-600">
+                            <p className="text-xs text-navy-700">
                               {totalRevenue > 0 ? 
                                 `${((accountingData.income?.rows?.reduce((sum, row) => {
                                   const received = Number(row.received_amount || 0);
@@ -3872,21 +3867,21 @@ const handleExportExcel = () => {
                       </div>
 
                       <div className="pt-2">
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-emerald-500"
                             style={{ width: `${totalRevenue > 0 ? 
                               (totalServiceCharges/totalRevenue) * 100 : 0}%` }}
                           ></div>
                         </div>
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
                           <span>Our Profit (Service Charges)</span>
                           <span>Cost (Department Charges)</span>
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Top 5 Services by Profit</h4>
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Top 5 Services by Profit</h4>
                         <div className="space-y-2">
                           {(() => {
                             const serviceProfit = accountingData.income?.rows?.reduce((acc, row) => {
@@ -3915,34 +3910,34 @@ const handleExportExcel = () => {
                               .slice(0, 5);
                             
                             if (topServices.length === 0) {
-                              return <p className="text-xs text-gray-500 text-center py-2">No service data</p>;
+                              return <p className="text-xs text-slate-500 text-center py-2">No service data</p>;
                             }
                             
                             const totalProfit = topServices.reduce((sum, s) => sum + s.profit, 0);
                             
                             return topServices.map((service, index) => (
-                              <div key={service.name} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded">
+                              <div key={service.name} className="flex items-center justify-between hover:bg-slate-50 p-2 rounded">
                                 <div className="flex items-center space-x-3">
-                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold ${
-                                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                    index === 1 ? 'bg-gray-100 text-gray-700' :
+                                  <div className={`w-6 h-6 rounded-xl flex items-center justify-center text-xs font-bold ${
+                                    index === 0 ? 'bg-amber-100 text-amber-700' :
+                                    index === 1 ? 'bg-slate-100 text-slate-700' :
                                     index === 2 ? 'bg-amber-100 text-amber-700' :
-                                    'bg-indigo-100 text-indigo-700'
+                                    'bg-slate-100 text-navy-700'
                                   }`}>
                                     {index + 1}
                                   </div>
                                   <div className="max-w-[140px]">
-                                    <span className="text-xs font-medium text-gray-900 truncate block">
+                                    <span className="text-xs font-medium text-slate-900 truncate block">
                                       {service.name}
                                     </span>
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-slate-500">
                                       Total: ₹{service.total.toLocaleString()}
                                     </span>
                                   </div>
                                 </div>
                                 <div className="text-right">
                                   <p className="text-xs font-bold text-emerald-600">₹{Math.round(service.profit).toLocaleString()}</p>
-                                  <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                  <div className="flex items-center space-x-1 text-xs text-slate-500">
                                     <span>Dept: ₹{Math.round(service.department).toLocaleString()}</span>
                                     <span>•</span>
                                     <span>{totalProfit > 0 ? `${((service.profit/totalProfit)*100).toFixed(1)}%` : '0%'}</span>
@@ -3957,21 +3952,21 @@ const handleExportExcel = () => {
                   </div>
 
                   {/* Expense Analysis - same as original, omitted for brevity */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
                         <FiTrendingDown className="h-4 w-4 mr-2 text-rose-600" />
                         Expense Analysis
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiEye className="h-3 w-3 mr-1" />
                         View Details
                       </button>
                     </div>
                     
                     <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
                           <p className="text-xs text-emerald-700 mb-1">Approved</p>
                           <p className="font-bold text-emerald-900 text-sm">
                             ₹{expensesForCurrentDate
@@ -3984,20 +3979,20 @@ const handleExportExcel = () => {
                           </p>
                         </div>
                         
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                          <p className="text-xs text-yellow-700 mb-1">Pending</p>
-                          <p className="font-bold text-yellow-900 text-sm">
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+                          <p className="text-xs text-amber-700 mb-1">Pending</p>
+                          <p className="font-bold text-amber-900 text-sm">
                             ₹{expensesForCurrentDate
                               .filter(e => e.status === 'pending')
                               .reduce((sum, e) => sum + Number(e.amount || 0), 0)
                               .toLocaleString()}
                           </p>
-                          <p className="text-xs text-yellow-600 mt-1">
+                          <p className="text-xs text-amber-600 mt-1">
                             {pendingApprovals} items
                           </p>
                         </div>
                         
-                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-center">
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-center">
                           <p className="text-xs text-rose-700 mb-1">Rejected</p>
                           <p className="font-bold text-rose-900 text-sm">
                             ₹{expensesForCurrentDate
@@ -4012,7 +4007,7 @@ const handleExportExcel = () => {
                       </div>
 
                       <div className="pt-4">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Expense by Category</h4>
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Expense by Category</h4>
                         <div className="space-y-2">
                           {(() => {
                             const categoryTotals = expensesForCurrentDate.reduce((acc, expense) => {
@@ -4029,39 +4024,39 @@ const handleExportExcel = () => {
                               .sort(([,a], [,b]) => b - a);
                             
                             if (sortedCategories.length === 0) {
-                              return <p className="text-xs text-gray-500 text-center py-2">No expense data for this date</p>;
+                              return <p className="text-xs text-slate-500 text-center py-2">No expense data for this date</p>;
                             }
                             
                             return sortedCategories.map(([category, amount]) => (
                               <div key={category} className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <div className="flex items-center space-x-2">
-                                    <span className="font-medium text-gray-700 capitalize">{category}</span>
-                                    <span className="text-gray-400">•</span>
-                                    <span className="text-gray-500">
+                                    <span className="font-medium text-slate-700 capitalize">{category}</span>
+                                    <span className="text-slate-400">•</span>
+                                    <span className="text-slate-500">
                                       {expensesForCurrentDate.filter(e => e.category === category && e.status !== 'rejected').length} items
                                     </span>
                                   </div>
                                   <div className="text-right">
-                                    <span className="font-bold text-gray-900">
+                                    <span className="font-bold text-slate-900">
                                       ₹{amount.toLocaleString()}
                                     </span>
                                     {totalExpenses > 0 && (
-                                      <span className="text-gray-500 ml-1">
+                                      <span className="text-slate-500 ml-1">
                                         ({((amount/totalExpenses)*100).toFixed(1)}%)
                                       </span>
                                     )}
                                   </div>
                                 </div>
-                                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                   <div 
                                     className={`h-full rounded-full ${
-                                      category.includes('Salary') ? 'bg-purple-500' :
-                                      category.includes('Operational') ? 'bg-blue-500' :
+                                      category.includes('Salary') ? 'bg-slate-500' :
+                                      category.includes('Operational') ? 'bg-navy-500' :
                                       category.includes('Office') ? 'bg-emerald-500' :
                                       category.includes('Utility') ? 'bg-amber-500' :
                                       category.includes('Maintenance') ? 'bg-rose-500' :
-                                      'bg-gray-500'
+                                      'bg-slate-500'
                                     }`}
                                     style={{ width: `${totalExpenses > 0 ? (amount/totalExpenses)*100 : 0}%` }}
                                   ></div>
@@ -4072,9 +4067,9 @@ const handleExportExcel = () => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Payment Methods</h4>
-                        <div className="grid grid-cols-3 gap-3">
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Payment Methods</h4>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                           {(() => {
                             const paymentMethods = expensesForCurrentDate.reduce((acc, expense) => {
                               const method = expense.payment_method || 'cash';
@@ -4088,24 +4083,24 @@ const handleExportExcel = () => {
                             const methods = Object.entries(paymentMethods);
                             
                             if (methods.length === 0) {
-                              return <p className="text-xs text-gray-500 col-span-3 text-center py-2">No payment data for this date</p>;
+                              return <p className="text-xs text-slate-500 col-span-full text-center py-2">No payment data for this date</p>;
                             }
                             
                             return methods.map(([method, amount]) => (
-                              <div key={method} className="text-center p-2 border border-gray-200 rounded-lg">
+                              <div key={method} className="text-center p-2 border border-slate-200 rounded-xl">
                                 <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full mb-1 ${
                                   method === 'cash' ? 'bg-emerald-100 text-emerald-600' :
-                                  method === 'bank' ? 'bg-blue-100 text-blue-600' :
-                                  method === 'upi' ? 'bg-purple-100 text-purple-600' :
-                                  'bg-gray-100 text-gray-600'
+                                  method === 'bank' ? 'bg-slate-100 text-navy-700' :
+                                  method === 'upi' ? 'bg-slate-100 text-slate-600' :
+                                  'bg-slate-100 text-slate-600'
                                 }`}>
                                   {method === 'cash' ? <FiDollarSign className="h-4 w-4" /> :
                                   method === 'bank' ? <FiCreditCard className="h-4 w-4" /> :
                                   <FiSmartphone className="h-4 w-4" />}
                                 </div>
-                                <p className="text-xs font-medium text-gray-900 capitalize">{method}</p>
-                                <p className="text-xs font-bold text-gray-800">₹{amount.toLocaleString()}</p>
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs font-medium text-slate-900 capitalize">{method}</p>
+                                <p className="text-xs font-bold text-slate-800">₹{amount.toLocaleString()}</p>
+                                <p className="text-xs text-slate-500">
                                   {expensesForCurrentDate.filter(e => e.payment_method === method && e.status !== 'rejected').length} txn
                                 </p>
                               </div>
@@ -4117,59 +4112,59 @@ const handleExportExcel = () => {
                   </div>
 
                   {/* Performance Metrics - omitted for brevity, same as original */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                        <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
+                        <FiActivity className="h-4 w-4 mr-2 text-navy-700" />
                         Performance Metrics
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiRefreshCw className="h-3 w-3 mr-1" />
                         Refresh
                       </button>
                     </div>
                     
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-indigo-700">Profit Margin</span>
+                            <span className="text-xs font-medium text-navy-700">Profit Margin</span>
                             <span className={`text-xs font-bold ${todayProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {totalRevenue > 0 ? ((todayProfit/totalRevenue)*100).toFixed(1) : '0'}%
                             </span>
                           </div>
-                          <div className="h-1.5 bg-indigo-200 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${todayProfit >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
                               style={{ width: `${Math.min(Math.abs((todayProfit/totalRevenue)*100), 100)}%` }}
                             ></div>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-slate-500 mt-1">
                             Net Profit: ₹{todayProfit.toLocaleString()}
                           </p>
                         </div>
                         
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-blue-700">Expense Ratio</span>
-                            <span className="text-xs font-bold text-blue-600">
+                            <span className="text-xs font-medium text-navy-700">Expense Ratio</span>
+                            <span className="text-xs font-bold text-navy-700">
                               {totalRevenue > 0 ? ((todayExpenses/totalRevenue)*100).toFixed(1) : '0'}%
                             </span>
                           </div>
-                          <div className="h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                             <div 
-                              className="h-full bg-blue-500"
+                              className="h-full bg-navy-500"
                               style={{ width: `${Math.min((todayExpenses/totalRevenue)*100, 100)}%` }}
                             ></div>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-slate-500 mt-1">
                             Expenses: ₹{todayExpenses.toLocaleString()}
                           </p>
                         </div>
                       </div>
 
                       <div className="pt-4">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Top Staff by Service Profit</h4>
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Top Staff by Service Profit</h4>
                         <div className="space-y-2">
                           {(() => {
                             const staffPerformance = accountingData.income?.rows?.reduce((acc, row) => {
@@ -4207,25 +4202,25 @@ const handleExportExcel = () => {
                               .slice(0, 5);
                             
                             if (topStaff.length === 0) {
-                              return <p className="text-xs text-gray-500 text-center py-2">No staff performance data</p>;
+                              return <p className="text-xs text-slate-500 text-center py-2">No staff performance data</p>;
                             }
                             
                             return topStaff.map((staff, index) => (
-                              <div key={staff.name} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded border border-gray-100">
+                              <div key={staff.name} className="flex items-center justify-between hover:bg-slate-50 p-2 rounded border border-slate-100">
                                 <div className="flex items-center space-x-3">
                                   <div className="relative">
-                                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600 border border-indigo-200">
+                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-navy-700 border border-slate-200">
                                       {staff.name.charAt(0)}
                                     </div>
                                     {index === 0 && (
-                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center border border-white">
+                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center border border-white">
                                         <FiStar className="h-2 w-2 text-white" />
                                       </div>
                                     )}
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium text-gray-900 truncate max-w-[120px]">{staff.name}</p>
-                                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                    <p className="text-xs font-medium text-slate-900 truncate max-w-[120px]">{staff.name}</p>
+                                    <div className="flex items-center space-x-1 text-xs text-slate-500">
                                       <span>{staff.count} services</span>
                                       <span>•</span>
                                       <span>Dept: ₹{Math.round(staff.department).toLocaleString()}</span>
@@ -4234,7 +4229,7 @@ const handleExportExcel = () => {
                                 </div>
                                 <div className="text-right">
                                   <p className="text-xs font-bold text-emerald-600">₹{Math.round(staff.profit).toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">Avg: ₹{Math.round(staff.avg).toFixed(0)}</p>
+                                  <p className="text-xs text-slate-500">Avg: ₹{Math.round(staff.avg).toFixed(0)}</p>
                                 </div>
                               </div>
                             ));
@@ -4242,27 +4237,27 @@ const handleExportExcel = () => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Transaction Statistics</h4>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
-                            <p className="text-lg font-bold text-gray-900">{accountingData.income?.rows?.length || 0}</p>
-                            <p className="text-xs text-gray-600">Services</p>
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Transaction Statistics</h4>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
+                            <p className="text-lg font-bold text-slate-900">{accountingData.income?.rows?.length || 0}</p>
+                            <p className="text-xs text-slate-600">Services</p>
                             <p className="text-xs text-emerald-600 font-medium mt-1">
                               Profit: ₹{totalServiceCharges.toLocaleString()}
                             </p>
                           </div>
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
-                            <p className="text-lg font-bold text-gray-900">{expensesForCurrentDate.length}</p>
-                            <p className="text-xs text-gray-600">Expenses</p>
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
+                            <p className="text-lg font-bold text-slate-900">{expensesForCurrentDate.length}</p>
+                            <p className="text-xs text-slate-600">Expenses</p>
                             <p className="text-xs text-rose-600 font-medium mt-1">
                               Cost: ₹{todayExpenses.toLocaleString()}
                             </p>
                           </div>
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
-                            <p className="text-lg font-bold text-gray-900">{accountingData.ledger?.rows?.length || 0}</p>
-                            <p className="text-xs text-gray-600">Ledger Entries</p>
-                            <p className="text-xs text-blue-600 font-medium mt-1">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
+                            <p className="text-lg font-bold text-slate-900">{accountingData.ledger?.rows?.length || 0}</p>
+                            <p className="text-xs text-slate-600">Ledger Entries</p>
+                            <p className="text-xs text-navy-700 font-medium mt-1">
                               Total: ₹{totalRevenue.toLocaleString()}
                             </p>
                           </div>
@@ -4272,21 +4267,21 @@ const handleExportExcel = () => {
                   </div>
 
                   {/* Cash Flow & Wallet Summary - omitted for brevity, same as original */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                        <FiSmartphone className="h-4 w-4 mr-2 text-purple-600" />
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
+                        <FiSmartphone className="h-4 w-4 mr-2 text-slate-600" />
                         Wallet Balances
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiEye className="h-3 w-3 mr-1" />
                         Details
                       </button>
                     </div>
                     
                     <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
                               <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mr-2">
@@ -4305,47 +4300,47 @@ const handleExportExcel = () => {
                           </p>
                         </div>
                         
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
-                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
-                                <FiCreditCard className="h-4 w-4 text-blue-600" />
+                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mr-2">
+                                <FiCreditCard className="h-4 w-4 text-navy-700" />
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-blue-700">Bank Balance</p>
-                                <p className="text-lg font-bold text-blue-900">
+                                <p className="text-xs font-medium text-navy-700">Bank Balance</p>
+                                <p className="text-lg font-bold text-navy-800">
                                   ₹{calculateBankBalance().toLocaleString()}
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <p className="text-xs text-blue-600">
+                          <p className="text-xs text-navy-700">
                             {derivedWallets.filter(w => w.type?.toLowerCase() === 'bank').length} bank accounts
                           </p>
                         </div>
                         
-                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
-                              <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-2">
-                                <FiSmartphone className="h-4 w-4 text-purple-600" />
+                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mr-2">
+                                <FiSmartphone className="h-4 w-4 text-slate-600" />
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-purple-700">Digital Balance</p>
-                                <p className="text-lg font-bold text-purple-900">
+                                <p className="text-xs font-medium text-slate-700">Digital Balance</p>
+                                <p className="text-lg font-bold text-slate-800">
                                   ₹{calculateDigitalBalance().toLocaleString()}
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <p className="text-xs text-purple-600">
+                          <p className="text-xs text-slate-600">
                             {derivedWallets.filter(w => w.type?.toLowerCase() === 'digital').length} digital wallets
                           </p>
                         </div>
                       </div>
 
                       <div className="pt-4">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Wallet Distribution</h4>
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Wallet Distribution</h4>
                         <div className="space-y-2">
                           {derivedWallets.map((wallet, index) => {
                             const isCash = wallet.type?.toLowerCase() === 'cash';
@@ -4353,20 +4348,20 @@ const handleExportExcel = () => {
                             const isDigital = wallet.type?.toLowerCase() === 'digital';
                             
                             return (
-                              <div key={wallet.id} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded border border-gray-100">
+                              <div key={wallet.id} className="flex items-center justify-between hover:bg-slate-50 p-2 rounded border border-slate-100">
                                 <div className="flex items-center space-x-3">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+                                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
                                     isCash ? 'border-emerald-200 bg-emerald-50 text-emerald-600' :
-                                    isBank ? 'border-blue-200 bg-blue-50 text-blue-600' :
-                                    'border-purple-200 bg-purple-50 text-purple-600'
+                                    isBank ? 'border-slate-200 bg-slate-50 text-navy-700' :
+                                    'border-slate-200 bg-slate-50 text-slate-600'
                                   }`}>
                                     {isCash ? <FiDollarSign className="h-4 w-4" /> :
                                     isBank ? <FiCreditCard className="h-4 w-4" /> :
                                     <FiSmartphone className="h-4 w-4" />}
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium text-gray-900 truncate max-w-[120px]">{wallet.name}</p>
-                                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                    <p className="text-xs font-medium text-slate-900 truncate max-w-[120px]">{wallet.name}</p>
+                                    <div className="flex items-center space-x-1 text-xs text-slate-500">
                                       <span className="capitalize">{wallet.type}</span>
                                       <span>•</span>
                                       <span>Book: ₹{(wallet.book_balance || 0).toLocaleString()}</span>
@@ -4374,7 +4369,7 @@ const handleExportExcel = () => {
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-xs font-bold text-gray-900">
+                                  <p className="text-xs font-bold text-slate-900">
                                     ₹{(wallet.currentBalance || 0).toLocaleString()}
                                   </p>
                                   <p className={`text-xs ${Math.abs((wallet.book_balance || 0) - (wallet.currentBalance || 0)) <= 10 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -4387,25 +4382,25 @@ const handleExportExcel = () => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
+                      <div className="pt-4 border-t border-slate-100">
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
                             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-1">
                               <FiCheckCircle className="h-4 w-4 text-emerald-600" />
                             </div>
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               {derivedWallets.filter(w => Math.abs((w.book_balance || 0) - (w.currentBalance || 0)) <= 10).length}
                             </p>
-                            <p className="text-xs text-gray-600">Reconciled Wallets</p>
+                            <p className="text-xs text-slate-600">Reconciled Wallets</p>
                           </div>
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
                             <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-1">
                               <FiAlertCircle className="h-4 w-4 text-rose-600" />
                             </div>
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               {derivedWallets.filter(w => Math.abs((w.book_balance || 0) - (w.currentBalance || 0)) > 10).length}
                             </p>
-                            <p className="text-xs text-gray-600">Pending Reconciliation</p>
+                            <p className="text-xs text-slate-600">Pending Reconciliation</p>
                           </div>
                         </div>
                       </div>
@@ -4413,39 +4408,39 @@ const handleExportExcel = () => {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                  <h3 className="font-bold text-gray-900 text-sm flex items-center mb-3">
-                    <FiMessageSquare className="h-4 w-4 mr-2 text-gray-600" />
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center mb-3">
+                    <FiMessageSquare className="h-4 w-4 mr-2 text-slate-600" />
                     Report Summary & Notes
                   </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-2">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="lg:col-span-2">
                       <textarea
-                        className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                        className="w-full h-32 px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-sm"
                         placeholder="Add your observations, insights, or notes about this financial period..."
                         defaultValue={accountingData.nightlyAccounting?.[date]?.notes || ''}
                       ></textarea>
                       <div className="flex justify-end mt-2">
-                        <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+                        <button className="px-4 py-2 bg-navy-700 text-white rounded-xl hover:bg-navy-700 text-sm">
                           Save Notes
                         </button>
                       </div>
                     </div>
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
-                        <span className="text-gray-600">Report Date:</span>
-                        <span className="font-medium text-gray-900">{date}</span>
+                      <div className="flex items-center justify-between text-sm p-2 border border-slate-200 rounded">
+                        <span className="text-slate-600">Report Date:</span>
+                        <span className="font-medium text-slate-900">{date}</span>
                       </div>
-                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
-                        <span className="text-gray-600">Generated:</span>
-                        <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                      <div className="flex items-center justify-between text-sm p-2 border border-slate-200 rounded">
+                        <span className="text-slate-600">Generated:</span>
+                        <span className="font-medium text-slate-900">{new Date().toLocaleDateString()}</span>
                       </div>
-                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
-                        <span className="text-gray-600">Status:</span>
+                      <div className="flex items-center justify-between text-sm p-2 border border-slate-200 rounded">
+                        <span className="text-slate-600">Status:</span>
                         <span className="font-medium text-emerald-600">Complete</span>
                       </div>
                       <div className="pt-2">
-                        <button className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm">
+                        <button className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 text-sm">
                           <FiDownload className="h-4 w-4" />
                           <span>Generate Full Report (PDF)</span>
                         </button>
@@ -4468,36 +4463,39 @@ const handleExportExcel = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMiscIncomeModal(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add misc income"
             >
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-                <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                    <FiTrendingUp className="mr-2 text-emerald-600 h-5 w-5" />
+              <div className="pointer-events-auto max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+                <div className="flex items-center justify-between rounded-t-2xl border-b border-slate-200 bg-slate-50 p-5">
+                  <h2 className="flex items-center text-lg font-bold text-slate-900">
+                    <FiTrendingUp className="mr-2 h-5 w-5 text-emerald-600" />
                     Add Misc Income / Overage
                   </h2>
-                  <button onClick={() => setShowMiscIncomeModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={() => setShowMiscIncomeModal(false)} aria-label="Close" className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-navy-500/30">
                     <FiX className="h-5 w-5" />
                   </button>
                 </div>
-                <form onSubmit={handleMiscIncomeSubmit} className="p-6 space-y-4">
+                <form onSubmit={handleMiscIncomeSubmit} className="space-y-4 p-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                    <input type="date" value={miscIncomeForm.date} onChange={(e) => setMiscIncomeForm(prev => ({...prev, date: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required />
+                    <label htmlFor="misc-date" className="mb-1 block text-sm font-medium text-slate-700">Date</label>
+                    <input id="misc-date" type="date" value={miscIncomeForm.date} onChange={(e) => setMiscIncomeForm(prev => ({...prev, date: e.target.value}))} className={inputCls} required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-                    <input type="number" min="0" step="0.01" value={miscIncomeForm.amount} onChange={(e) => setMiscIncomeForm(prev => ({...prev, amount: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required placeholder="Enter amount" />
+                    <label htmlFor="misc-amount" className="mb-1 block text-sm font-medium text-slate-700">Amount (₹)</label>
+                    <input id="misc-amount" type="number" min="0" step="0.01" value={miscIncomeForm.amount} onChange={(e) => setMiscIncomeForm(prev => ({...prev, amount: e.target.value}))} className={inputCls} required placeholder="Enter amount" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Wallet to Credit</label>
-                    <select value={miscIncomeForm.wallet_id} onChange={(e) => setMiscIncomeForm(prev => ({...prev, wallet_id: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required>
+                    <label htmlFor="misc-wallet" className="mb-1 block text-sm font-medium text-slate-700">Wallet to Credit</label>
+                    <select id="misc-wallet" value={miscIncomeForm.wallet_id} onChange={(e) => setMiscIncomeForm(prev => ({...prev, wallet_id: e.target.value}))} className={inputCls} required>
                       <option value="">Select a wallet...</option>
                       {derivedWallets.map(w => (
                         <option key={w.id} value={w.id}>{w.name} ({w.wallet_type || w.type})</option>
@@ -4505,12 +4503,12 @@ const handleExportExcel = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description / Reason</label>
-                    <textarea value={miscIncomeForm.description} onChange={(e) => setMiscIncomeForm(prev => ({...prev, description: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required placeholder="e.g., Cash drawer overage for 29/04, Sale of scrap paper, etc." rows="3" />
+                    <label htmlFor="misc-desc" className="mb-1 block text-sm font-medium text-slate-700">Description / Reason</label>
+                    <textarea id="misc-desc" value={miscIncomeForm.description} onChange={(e) => setMiscIncomeForm(prev => ({...prev, description: e.target.value}))} className={inputCls} required placeholder="e.g., Cash drawer overage for 29/04, Sale of scrap paper, etc." rows="3" />
                   </div>
-                  <div className="flex justify-end pt-4 border-t border-gray-100">
-                    <button type="button" onClick={() => setShowMiscIncomeModal(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg mr-3 hover:bg-gray-50 text-sm font-medium transition-colors">Cancel</button>
-                    <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium transition-colors">Record Income</button>
+                  <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                    <button type="button" onClick={() => setShowMiscIncomeModal(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-navy-500/30">Cancel</button>
+                    <button type="submit" className="rounded-xl bg-navy-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40">Record Income</button>
                   </div>
                 </form>
               </div>
@@ -4528,15 +4526,18 @@ const handleExportExcel = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowAdminExpenseModal(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Admin expense entry"
             >
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="pointer-events-auto max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-xl">
                 <AdminExpenseEntry
                   wallets={wallets}
                   categories={[]}
