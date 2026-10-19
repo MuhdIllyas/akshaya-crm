@@ -7,7 +7,7 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
-import { todayIST, istParts } from '../utils/dateUtils.js';
+import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
 
