@@ -21,27 +21,39 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
+/* Who may see / change the centre's accounts.
+   Staff used to be able to read the whole ledger, income, daily summary and
+   all wallet balances, and save reconciliation counts (found in the staging test).
+   'supervisor' is kept because the supervisor dashboard reads the nightly close —
+   remove it if supervisors shouldn't see the accounts. */
+const ACCOUNTING_ROLES = ['admin', 'superadmin', 'supervisor'];
+const requireAccounting = (req, res, next) => {
+  if (!ACCOUNTING_ROLES.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+const isYMD = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
 // ========== DAILY SUMMARY ==========
-router.get('/daily-summary', async (req, res) => {
+router.get('/daily-summary', requireAccounting, async (req, res) => {
+  const { date, centreId: queryCentreId } = req.query;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) {
+    centreId = Number(queryCentreId);
+  }
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  if (!isYMD(date)) {
+    return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
+  }
+
   const client = await req.db.connect();
 
   try {
-    const { date, centreId: queryCentreId } = req.query;
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId) {
-      return res.status(400).json({ error: "centreId is required" });
-    }
-
-    if (!date) {
-      return res.status(400).json({ error: 'date is required' });
-    }
 
     await client.query('BEGIN');
 
@@ -194,12 +206,24 @@ router.get('/daily-summary', async (req, res) => {
 });
 
 // ========== SAVE ACTUAL CASH (DAILY SUMMARY) ==========
-router.post('/daily-summary/actual-cash', async (req, res) => {
+router.post('/daily-summary/actual-cash', requireAccounting, async (req, res) => {
+  const { date } = req.body;
+  const actual_cash = Number(req.body.actual_cash);
+  const centreId = req.user.centre_id;
+  const userId = req.user.id;
+
+  if (!centreId) {
+    return res.status(400).json({ error: 'No centre assigned to this user' });
+  }
+  if (!isYMD(date) || date > todayIST()) {
+    return res.status(400).json({ error: 'A valid date (not in the future) is required' });
+  }
+  if (!Number.isFinite(actual_cash) || actual_cash < 0) {
+    return res.status(400).json({ error: 'Actual cash must be 0 or more' });
+  }
+
   const client = await req.db.connect();
   try {
-    const { date, actual_cash } = req.body;
-    const centreId = req.user.centre_id;
-    const userId = req.user.id;
 
     await client.query(
       `INSERT INTO daily_accounting_closure 
@@ -303,7 +327,7 @@ router.post('/misc-income', async (req, res) => {
 });
 
 // ========== LEDGER (FIXED - COALESCE to prevent NULL collapse) ==========
-router.get('/ledger', async (req, res) => {
+router.get('/ledger', requireAccounting, async (req, res) => {
   const client = await req.db.connect();
 
   try {
@@ -414,7 +438,7 @@ router.get('/ledger', async (req, res) => {
 });
 
 // ========== INCOME REPORT ==========
-router.get('/income', async (req, res) => {
+router.get('/income', requireAccounting, async (req, res) => {
   const client = await req.db.connect();
 
   try {
@@ -563,13 +587,16 @@ router.get('/wallet-balances', async (req, res) => {
     `, [centreId]);
 
     res.json(result.rows);
+  } catch (err) {
+    console.error('Wallet balances error:', err);
+    res.status(500).json({ error: 'Failed to load wallet balances' });
   } finally {
     client.release();
   }
 });
 
 // ========== GET WALLET RECONCILIATIONS ==========
-router.get('/wallet-reconciliations', async (req, res) => {
+router.get('/wallet-reconciliations', requireAccounting, async (req, res) => {
   const { date, centreId: queryCentreId } = req.query;
   const isSuperAdmin = req.user.role === 'superadmin';
  
@@ -655,7 +682,7 @@ router.patch('/wallet-reconciliations/:id/settle', async (req, res) => {
 });
 
 // ========== WALLET RECONCILIATION (SAVE COUNTS) ==========
-router.post('/wallet-reconcile', async (req, res) => {
+router.post('/wallet-reconcile', requireAccounting, async (req, res) => {
   // Superadmin view is read-only
   if (req.user.role === 'superadmin') {
     return res.status(403).json({ error: 'Superadmin access is read-only' });
@@ -737,17 +764,23 @@ router.post('/wallet-reconcile', async (req, res) => {
   }
 });
 
-router.get('/wallet-book-balances', async (req, res) => {
+router.get('/wallet-book-balances', requireAccounting, async (req, res) => {
+  const { centreId: queryCentreId, date } = req.query;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  if (date && !isYMD(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+  const targetDate = date || todayIST();
+
   const client = await req.db.connect();
 
   try {
-    const { centreId: queryCentreId, date } = req.query; 
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-    if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
-    
-    const targetDate = date || todayIST();
 
     const result = await client.query(`
       SELECT
@@ -774,7 +807,7 @@ router.get('/wallet-book-balances', async (req, res) => {
 });
 
 // ========== WALLET LEDGER BALANCES ==========
-router.get('/wallet-ledger-balances', async (req, res) => {
+router.get('/wallet-ledger-balances', requireAccounting, async (req, res) => {
   const client = await req.db.connect();
 
   try {
@@ -815,17 +848,30 @@ router.get('/wallet-ledger-balances', async (req, res) => {
 });
 
 //Accounting Nighty Closing
-router.post('/nightly-close', async (req, res) => {
+router.post('/nightly-close', requireAccounting, async (req, res) => {
+  const centreId = req.user.centre_id;
+  const userId = req.user.id;
+
+  const {
+    date, opening_balance, closing_balance,
+    actual_cash, cash_variance, checklist, notes
+  } = req.body;
+
+  if (!centreId) {
+    return res.status(400).json({ error: 'No centre assigned to this user' });
+  }
+  if (!isYMD(date) || date > todayIST()) {
+    return res.status(400).json({ error: 'A valid date (not in the future) is required' });
+  }
+  for (const [k, v] of Object.entries({ opening_balance, closing_balance, actual_cash, cash_variance })) {
+    if (v !== undefined && v !== null && v !== '' && !Number.isFinite(Number(v))) {
+      return res.status(400).json({ error: `${k} must be a number` });
+    }
+  }
+
   const client = await req.db.connect();
 
   try {
-    const centreId = req.user.centre_id;
-    const userId = req.user.id;
-
-    const {
-      date, opening_balance, closing_balance,
-      actual_cash, cash_variance, checklist, notes
-    } = req.body;
 
     await client.query(
       `
@@ -855,22 +901,24 @@ router.post('/nightly-close', async (req, res) => {
   }
 });
 
-router.get('/nightly-close', async (req, res) => {
+router.get('/nightly-close', requireAccounting, async (req, res) => {
+  const { date, centreId: queryCentreId } = req.query;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) {
+    centreId = Number(queryCentreId);
+  }
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  if (!isYMD(date)) {
+    return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
+  }
+
   const client = await req.db.connect();
 
   try {
-    const { date, centreId: queryCentreId } = req.query;
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId) {
-      return res.status(400).json({ error: "centreId is required" });
-    }
 
     const result = await client.query(
       `
@@ -882,6 +930,9 @@ router.get('/nightly-close', async (req, res) => {
     );
 
     res.json(result.rows[0] || null);
+  } catch (err) {
+    console.error('Nightly close fetch error:', err);
+    res.status(500).json({ error: 'Failed to load nightly close' });
   } finally {
     client.release();
   }

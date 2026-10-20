@@ -48,15 +48,34 @@ const formatCurrency = (amount) => {
   })}`;
 };
 
-// Format date
+// Format date (always in IST, whatever the device's time zone)
 const formatDate = (date) => {
   if (!date) return '—';
-  const d = new Date(date);
+  // a plain "YYYY-MM-DD" is a calendar day — show it as is
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(String(date))
+    ? new Date(`${date}T00:00:00+05:30`)
+    : new Date(date);
+  if (Number.isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
-    year: 'numeric'
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata'
   });
+};
+
+// IST calendar day of a timestamp, "YYYY-MM-DD".
+// (created_at.split('T')[0] is the UTC day: an entry at 01:24 IST opened the previous day's log)
+const istDay = (ts) => {
+  if (!ts) return null;
+  const d = new Date(ts);
+  return Number.isNaN(d.getTime()) ? null : d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+};
+
+// Postgres NUMERIC arrives as a string ("0.02") — .toFixed() on it crashed the page
+const fixed1 = (v) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n.toFixed(1) : '0';
 };
 
 // Format time
@@ -303,7 +322,8 @@ const StaffPerformance = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
-  const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' });
+  const [customDateRange, setCustomDateRange] = useState({ from: '', to: '' }); // what's typed in the boxes
+  const [appliedRange, setAppliedRange] = useState({ from: '', to: '' });       // what "Apply" confirmed
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [activeTab, setActiveTab] = useState('overview');
   const [achievements, setAchievements] = useState(null);
@@ -345,29 +365,33 @@ const StaffPerformance = () => {
   // achievements and service-breakdown are fetched lazily, on demand, only when
   // their own tab is opened (see the useEffect below) — each with its own small
   // loading flag so the rest of the page stays interactive while they load.
+  // Same period / date range for every request on this page.
+  // (The Services tab used to send no period at all, and "compare" ignored the custom range.)
+  const buildPeriodParams = () => {
+    const params = new URLSearchParams();
+    if (period === 'custom' && appliedRange.from && appliedRange.to) {
+      params.append('from', appliedRange.from);
+      params.append('to', appliedRange.to);
+      params.append('period', 'custom');
+    } else {
+      params.append('period', period === 'custom' ? 'month' : period);
+    }
+    return params;
+  };
+
   const fetchPerformance = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      
-      // Build query params
-      let params = new URLSearchParams();
-      
-      if (period === 'custom' && customDateRange.from && customDateRange.to) {
-        params.append('from', customDateRange.from);
-        params.append('to', customDateRange.to);
-        params.append('period', 'custom');
-      } else {
-        params.append('period', period);
-      }
-      
+      const params = buildPeriodParams();
+
       const [dashboardResponse, comparisonResponse] = await Promise.all([
         fetch(
           `${import.meta.env.VITE_API_URL}/api/staffperformance/dashboard?${params.toString()}`,
           { headers: { Authorization: `Bearer ${token}` } }
         ),
         fetch(
-          `${import.meta.env.VITE_API_URL}/api/staffperformance/compare?period=${period}`,
+          `${import.meta.env.VITE_API_URL}/api/staffperformance/compare?${params.toString()}`,
           { headers: { Authorization: `Bearer ${token}` } }
         )
       ]);
@@ -380,6 +404,8 @@ const StaffPerformance = () => {
       if (comparisonResponse.ok) {
         const comparisonResult = await comparisonResponse.json();
         setComparison(comparisonResult.data);
+      } else {
+        setComparison(null); // don't keep showing the previous period's trend
       }
       
       // The date range just changed, so any previously-loaded service
@@ -424,11 +450,7 @@ const StaffPerformance = () => {
     setBreakdownLoading(true);
     try {
       const token = localStorage.getItem('token');
-      let params = new URLSearchParams();
-      if (period === 'custom' && customDateRange.from && customDateRange.to) {
-        params.append('from', customDateRange.from);
-        params.append('to', customDateRange.to);
-      }
+      const params = buildPeriodParams();
       const res = await fetch(
         `${import.meta.env.VITE_API_URL}/api/staffperformance/service-breakdown?${params.toString()}`,
         { headers: { Authorization: `Bearer ${token}` } }
@@ -446,6 +468,7 @@ const StaffPerformance = () => {
   };
   
   const fetchDailyLog = async (date) => {
+    if (!date) return;
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(
@@ -466,11 +489,30 @@ const StaffPerformance = () => {
     }
   };
   
+  // Only refetch when the period changes, or when a custom range is applied.
+  // (Typing into the date boxes used to refetch on every keystroke while the
+  // period was still "This Month" etc.)
   useEffect(() => {
     if (staffInfo?.id) {
       fetchPerformance();
     }
-  }, [period, customDateRange, staffInfo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [period, appliedRange, staffInfo]);
+
+  const applyCustomRange = () => {
+    const { from, to } = customDateRange;
+    if (!from || !to) {
+      toast.error('Choose both a From and a To date');
+      return;
+    }
+    if (from > to) {
+      toast.error('From date must be on or before To date');
+      return;
+    }
+    setPeriod('custom');
+    setAppliedRange({ from, to });
+    setShowDatePicker(false);
+  };
   
   // 🔥 NEW: load each tab's data only when the user actually opens that tab,
   // instead of always fetching all 4 endpoints up front on page load.
@@ -730,7 +772,7 @@ const StaffPerformance = () => {
                               placeholder="To Date"
                             />
                             <button
-                              onClick={() => { setPeriod('custom'); setShowDatePicker(false); }}
+                              onClick={applyCustomRange}
                               className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
                             >
                               Apply
@@ -1003,7 +1045,7 @@ const StaffPerformance = () => {
                         </thead>
                         <tbody>
                           {data.recent_services.slice(0, 10).map((service, idx) => (
-                            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => fetchDailyLog(service.created_at?.split('T')[0])}>
+                            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => fetchDailyLog(istDay(service.created_at))}>
                               <td className="py-2 px-3 text-sm text-gray-600">{formatDate(service.created_at)}</td>
                               <td className="py-2 px-3 text-sm text-gray-900">{service.customer_name}</td>
                               <td className="py-2 px-3 text-sm text-gray-600">{service.service_name}</td>
@@ -1198,7 +1240,7 @@ const StaffPerformance = () => {
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                   <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
                     <p className="text-xs text-gray-500">Collection Rate</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.lifetime_collection_rate?.toFixed(1) || 0}%</p>
+                    <p className="text-lg font-bold text-gray-900">{fixed1(achievements.lifetime?.lifetime_collection_rate)}%</p>
                   </div>
                   <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
                     <p className="text-xs text-gray-500">Weekly Streak</p>
@@ -1334,7 +1376,7 @@ const StaffPerformance = () => {
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <span className="text-gray-600 text-sm">Total Hours Worked</span>
-                        <span className="font-semibold text-gray-900">{attendance.total_hours?.toFixed(1) || 0} hrs</span>
+                        <span className="font-semibold text-gray-900">{fixed1(attendance.total_hours)} hrs</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-gray-600 text-sm">Total Late Minutes</span>
@@ -1347,7 +1389,7 @@ const StaffPerformance = () => {
                       <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                         <span className="text-gray-600 text-sm">Avg Daily Hours</span>
                         <span className="font-semibold text-gray-900">
-                          {attendance.present_days > 0 ? (attendance.total_hours / attendance.present_days).toFixed(1) : 0} hrs
+                          {Number(attendance.present_days) > 0 ? fixed1(Number(attendance.total_hours) / Number(attendance.present_days)) : 0} hrs
                         </span>
                       </div>
                     </div>
@@ -1376,7 +1418,7 @@ const StaffPerformance = () => {
                             <div className="flex items-center space-x-4 text-xs">
                               <span className="text-gray-500">{week.services_count} services</span>
                               <span className="text-gray-500">
-                                Avg: {formatCurrency(week.total_collected / week.services_count)}
+                                Avg: {formatCurrency(Number(week.services_count) > 0 ? Number(week.total_collected) / Number(week.services_count) : 0)}
                               </span>
                             </div>
                             <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
@@ -1448,7 +1490,7 @@ const StaffPerformance = () => {
                         </div>
                         <div>
                           <span className="text-gray-500">Hours Worked:</span>
-                          <span className="ml-2 font-medium">{dailyLog.attendance.hours?.toFixed(1)} hrs</span>
+                          <span className="ml-2 font-medium">{fixed1(dailyLog.attendance.hours)} hrs</span>
                         </div>
                         <div>
                           <span className="text-gray-500">Status:</span>
@@ -1463,7 +1505,7 @@ const StaffPerformance = () => {
                   )}
                   
                   {/* Services */}
-                  {dailyLog.services.length > 0 ? (
+                  {dailyLog.services?.length > 0 ? (
                     <div>
                       <h4 className="font-medium text-gray-900 text-sm mb-3">
                         Services ({dailyLog.services.length})
