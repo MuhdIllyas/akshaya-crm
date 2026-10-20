@@ -77,6 +77,9 @@ const AdminReports = () => {
   const [viewMode, setViewMode] = useState('grid');
   const [sortBy, setSortBy] = useState('date');
   const [sortOrder, setSortOrder] = useState('desc');
+  // A new search / date / sort starts again at page 1 (same render → one request).
+  // Works with plain values and with updater functions (setDateFilter(prev => …)).
+  const resetPage = (setter) => (value) => { setTransactionPage(1); setter(value); };
   // Read the 'tab' from the URL, default to 'overview' if none exists
   const [activeSection, setActiveSection] = useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -146,16 +149,25 @@ const AdminReports = () => {
     if (dateFilter.fromDate) params.append("from", dateFilter.fromDate);
     if (dateFilter.toDate) params.append("to", dateFilter.toDate);
 
+    // Cancel the previous request, so a slow older search can't overwrite a newer one
+    const controller = new AbortController();
+
     fetch(`${import.meta.env.VITE_API_URL}/api/transaction/transactions/?${params.toString()}`, {
      headers: {
       Authorization: `Bearer ${localStorage.getItem("token")}`
-     }
+     },
+     signal: controller.signal
     })
-     .then(res => res.json())
+     .then(res => {
+       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+       return res.json();
+     })
      .then(data => setTransactionsData(data))
-     .catch(err => console.error("Failed to load transactions", err));
-     
-      // 👈 ADDED transactionPage to the dependency array below so it refetches on click
+     .catch(err => {
+       if (err.name !== 'AbortError') console.error("Failed to load transactions", err);
+     });
+
+    return () => controller.abort();
    }, [activeSection, searchTerm, sortBy, sortOrder, dateFilter, transactionPage]);
 
   // Statistics calculation (Mapped directly to V3 Analytics Engine)
@@ -391,20 +403,22 @@ const AdminReports = () => {
                 data={transactionsData}
                 setSelectedTransaction={setSelectedTransaction}
                 searchTerm={searchTerm}
-                setSearchTerm={setSearchTerm}
+                setSearchTerm={resetPage(setSearchTerm)}
                 sortBy={sortBy}
-                setSortBy={setSortBy}
+                setSortBy={resetPage(setSortBy)}
                 sortOrder={sortOrder}
-                setSortOrder={setSortOrder}
+                setSortOrder={resetPage(setSortOrder)}
                 viewMode={viewMode}
                 setViewMode={setViewMode}
                 resetFilters={resetFilters}
                 dateFilter={dateFilter}
-                setDateFilter={setDateFilter}
+                setDateFilter={resetPage(setDateFilter)}
 
                 currentPage={transactionsData?.page || 1}
                 totalPages={transactionsData?.totalPages || 1}
-                onPageChange={(newPage) => setTransactionPage(newPage)}
+                onPageChange={(newPage) =>
+                  setTransactionPage(Math.min(Math.max(1, newPage), transactionsData?.totalPages || 1))
+                }
               />
             )}
           </div>

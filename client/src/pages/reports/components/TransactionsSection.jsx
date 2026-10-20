@@ -32,7 +32,6 @@ import {
   FiTag // Added for category icon
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
-import { istDayStart, addDays } from "@/utils/dates";
 
 /* =========================
    Shared style tokens (UI only)
@@ -156,51 +155,31 @@ const TransactionsSection = ({
     setExpandedRow(prev => prev === transactionId ? null : transactionId);
   };
 
-  // Filter transactions based on active filters and date filter
+  // Date range, search and sort are done by the server (IST days; search also matches
+  // wallet names). Filtering the page again here hid server matches ("1 of 50"), and
+  // re-sorting by the date-only string lost the time order — so only the dropdown
+  // filters below run here, and only on the rows of this page.
   const filteredTransactions = transactions.filter(tx => {
     if (activeFilters.status && tx.status !== activeFilters.status) return false;
     if (activeFilters.paymentMethod && tx.paymentMethod !== activeFilters.paymentMethod) return false;
     if (activeFilters.transactionType && tx.category !== activeFilters.transactionType) return false;
     if (activeFilters.staffId && tx.staffName !== activeFilters.staffId) return false;
-    
-    // IST day bounds (new Date("2026-10-20") is 05:30 IST, which hid early-morning entries)
-    if (dateFilter?.fromDate && tx.date) {
-      if (new Date(tx.date) < istDayStart(dateFilter.fromDate)) return false;
-     }
-       
-    if (dateFilter?.toDate && tx.date) {
-      if (new Date(tx.date) >= istDayStart(addDays(dateFilter.toDate, 1))) return false;
-    }
-    
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      return (
-        (tx.description?.toLowerCase().includes(searchLower)) ||
-        (tx.customerName?.toLowerCase().includes(searchLower)) ||
-        (tx.staffName?.toLowerCase().includes(searchLower)) ||
-        (tx.category?.toLowerCase().includes(searchLower))
-      );
-    }
     return true;
   });
 
-  // Sort transactions
-  const sortedTransactions = [...filteredTransactions].sort((a, b) => {
-    if (sortBy === 'date') {
-      return sortOrder === 'asc' 
-        ? new Date(a.date) - new Date(b.date)
-        : new Date(b.date) - new Date(a.date);
-    }
-    if (sortBy === 'amount') {
-      return sortOrder === 'asc' ? a.amount - b.amount : b.amount - a.amount;
-    }
-    if (sortBy === 'status') {
-      return sortOrder === 'asc' 
-        ? (a.status || '').localeCompare(b.status || '')
-        : (b.status || '').localeCompare(a.status || '');
-    }
-    return 0;
-  });
+  // Keep the server's order (it already applied sort_by / sort_order)
+  const sortedTransactions = filteredTransactions;
+  const serverTotal = data?.total ?? totalTransactions; // all matching rows, not just this page
+
+  // Transfers are one row with both wallets: no +/− sign, show "From → To"
+  const isTransfer = (tx) => tx.transactionType === 'transfer';
+  const txTitle = (tx) =>
+    isTransfer(tx) && (tx.fromWalletName || tx.toWalletName)
+      ? `${tx.fromWalletName || '?'} → ${tx.toWalletName || '?'}`
+      : tx.description || 'Transaction';
+  const amountCls = (tx) =>
+    isTransfer(tx) ? 'text-slate-700' : tx.transactionType === 'debit' ? 'text-rose-600' : 'text-emerald-600';
+  const amountSign = (tx) => (isTransfer(tx) ? '' : tx.transactionType === 'debit' ? '-' : '+');
 
   const handleFilterChange = (filterName, value) => {
     setActiveFilters(prev => ({
@@ -284,7 +263,9 @@ const TransactionsSection = ({
         <div>
           <p className="mb-1 text-xs text-slate-500">Transaction Type</p>
           <p className="text-xs font-medium text-slate-900">
-            {transaction.transactionType === 'credit' ? 'Credit (Incoming)' : 'Debit (Outgoing)'}
+            {isTransfer(transaction)
+              ? 'Transfer between wallets'
+              : transaction.transactionType === 'credit' ? 'Credit (Incoming)' : 'Debit (Outgoing)'}
           </p>
         </div>
         <div>
@@ -296,10 +277,17 @@ const TransactionsSection = ({
             <p className="text-xs font-medium text-slate-900">{transaction.paymentMethod || '—'}</p>
           </div>
         </div>
-        {transaction.walletId && (
+        {isTransfer(transaction) ? (
+          <div>
+            <p className="mb-1 text-xs text-slate-500">From → To</p>
+            <p className="text-xs font-medium text-slate-900">
+              {transaction.fromWalletName || '—'} → {transaction.toWalletName || '—'}
+            </p>
+          </div>
+        ) : (transaction.fromWalletName || transaction.fromWalletId) && (
           <div>
             <p className="mb-1 text-xs text-slate-500">Wallet</p>
-            <p className="text-xs font-medium text-slate-900">{transaction.walletName || transaction.walletId}</p>
+            <p className="text-xs font-medium text-slate-900">{transaction.fromWalletName || transaction.fromWalletId}</p>
           </div>
         )}
         <div>
@@ -633,7 +621,10 @@ const TransactionsSection = ({
                 </h3>
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="text-xs text-slate-600">
-                    {filteredTransactions.length} of {totalTransactions} transactions
+                    {filteredTransactions.length !== totalTransactions
+                      ? `${filteredTransactions.length} of ${totalTransactions} on this page · `
+                      : ''}
+                    {serverTotal} transactions
                   </span>
                   <div className="flex items-center gap-2">
                     <select
@@ -671,12 +662,12 @@ const TransactionsSection = ({
                   <div key={transaction.id} className={`p-4 ${isExpanded ? 'bg-slate-50' : ''}`}>
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-slate-900">{transaction.description || 'Transaction'}</p>
+                        <p className="truncate text-sm font-medium text-slate-900">{txTitle(transaction)}</p>
                         <p className="text-xs text-slate-500">{transaction.date || '—'} · {transaction.time || '—'}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className={`text-sm font-bold ${transaction.transactionType === 'debit' ? 'text-rose-600' : 'text-emerald-600'}`}>
-                          {transaction.transactionType === 'debit' ? '-' : '+'}₹{transaction.amount?.toLocaleString() || '0'}
+                        <p className={`text-sm font-bold ${amountCls(transaction)}`}>
+                          {amountSign(transaction)}₹{transaction.amount?.toLocaleString() || '0'}
                         </p>
                         <p className="text-xs text-slate-500">{transaction.paymentMethod || '—'}</p>
                       </div>
@@ -748,8 +739,8 @@ const TransactionsSection = ({
                               <div className="mr-2 rounded bg-slate-100 p-1">
                                 <FiFileText className="h-3 w-3 text-slate-600" />
                               </div>
-                              <span className="max-w-[150px] truncate text-xs text-slate-900">
-                                {transaction.description || 'Transaction'}
+                              <span className="max-w-[150px] truncate text-xs text-slate-900" title={txTitle(transaction)}>
+                                {txTitle(transaction)}
                               </span>
                             </div>
                           </td>
@@ -798,10 +789,8 @@ const TransactionsSection = ({
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex flex-col">
-                              <span className={`text-xs font-bold ${
-                                transaction.transactionType === 'debit' ? 'text-rose-600' : 'text-emerald-600'
-                              }`}>
-                                {transaction.transactionType === 'debit' ? '-' : '+'}₹{transaction.amount?.toLocaleString() || '0'}
+                              <span className={`text-xs font-bold ${amountCls(transaction)}`}>
+                                {amountSign(transaction)}₹{transaction.amount?.toLocaleString() || '0'}
                               </span>
                               <span className="text-xs text-slate-500">
                                 {transaction.paymentMethod || '—'}

@@ -5,9 +5,15 @@
 //   short in one wallet + excess in another → suggested transfer (fixes a wrong-wallet entry)
 //
 // History vs. live:
-//   - "Variance" = saved actual − saved system balance  → never changes, this is your history
-//   - "To settle" = saved actual − CURRENT system balance → drops to 0 once you book/transfer
-//   So a wallet can't be adjusted twice: once the system balance matches the count, the button disappears.
+//   - "Variance"  = saved actual − saved system balance  → never changes, this is your history
+//   - "To settle" = variance − what was booked FOR this count (settled_amount on the saved row)
+//     Normal sales / expenses after the count don't change it any more — only the shortage /
+//     excess bookings and the suggested correction transfers made from this screen do.
+//   So a wallet can't be adjusted twice: once the bookings cover the variance, the button disappears.
+//
+// Needs (backend): wallet_reconciliations.settled_amount column,
+//   PATCH /api/accounting/wallet-reconciliations/:id/settle,
+//   and GET /api/accounting/wallet-reconciliations returning id + settled_amount.
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -90,7 +96,7 @@ const WalletReconciliation = ({
   readOnly = false,
 }) => {
   const [walletBalances, setWalletBalances] = useState({}); // wallet_id -> typed actual (string)
-  const [savedRows, setSavedRows] = useState({}); // wallet_id -> { actual, book }
+  const [savedRows, setSavedRows] = useState({}); // wallet_id -> { recId, actual, book, settled }
   const [isSaving, setIsSaving] = useState(false);
   const [adjust, setAdjust] = useState(null); // { wallet, kind: 'shortage'|'excess', amount, description }
   const [transfer, setTransfer] = useState(null); // { from, to, amount, description }
@@ -110,8 +116,10 @@ const WalletReconciliation = ({
       (Array.isArray(rows) ? rows : []).forEach((r) => {
         const id = String(r.wallet_id);
         saved[id] = {
+          recId: r.id ?? null,
           actual: Number(r.actual_balance),
           book: r.book_balance !== undefined && r.book_balance !== null ? Number(r.book_balance) : null,
+          settled: Number(r.settled_amount || 0), // booked against this count so far (signed)
         };
         actuals[id] = String(Number(r.actual_balance));
       });
@@ -136,11 +144,19 @@ const WalletReconciliation = ({
         const saved = savedRows[id];
         const entry = walletBalances[id];
         const actual = entry === undefined || entry === '' ? null : Number(entry);
-        const liveBook = round2(w.book_balance ?? 0); // current system balance (moves when you book/transfer)
-        const book = saved?.book ?? liveBook; // system balance at the time of saving (history)
-        const variance = actual === null ? null : round2(actual - book);
+        const liveBook = round2(w.book_balance ?? 0); // current system balance (moves with every transaction)
         const dirty = actual !== null && (!saved || round2(saved.actual) !== round2(actual));
-        const remaining = saved && !dirty ? round2(saved.actual - liveBook) : null;
+        const savedBook = saved && saved.book !== null ? round2(saved.book) : null;
+        // System balance the count is compared with:
+        //  - saved row → the balance at the time of saving (history)
+        //  - re-counting a saved wallet → that balance plus what was already booked for it,
+        //    so a new save doesn't ask you to book the same difference again
+        const book =
+          savedBook === null ? liveBook : dirty ? round2(savedBook + (saved.settled || 0)) : savedBook;
+        const variance = actual === null ? null : round2(actual - book);
+        // still to book = variance − what was booked for this count
+        const remaining =
+          saved && !dirty && savedBook !== null ? round2(saved.actual - savedBook - (saved.settled || 0)) : null;
         const type = w.wallet_type || w.type || 'unknown';
         const status = actual === null ? 'uncounted' : Math.abs(variance) <= RECON_TOLERANCE ? 'reconciled' : 'mismatch';
         const settled = remaining !== null && Math.abs(remaining) < MIN_ADJUST;
@@ -184,8 +200,11 @@ const WalletReconciliation = ({
 
   const handleSave = async () => {
     if (readOnly) return;
-    const counted = processed.filter((w) => w.actual !== null);
-    if (counted.length === 0) return toast.error('Enter the actual balance for at least one wallet');
+    if (processed.every((w) => w.actual === null)) return toast.error('Enter the actual balance for at least one wallet');
+    // Only new or changed counts. Re-saving an unchanged wallet would create a new row with
+    // nothing booked against it, and the page would ask you to book the same difference again.
+    const counted = processed.filter((w) => w.dirty);
+    if (counted.length === 0) return toast.info('Nothing new to save');
     setIsSaving(true);
     try {
       const res = await fetch(`${API}/api/accounting/wallet-reconcile`, {
@@ -214,6 +233,29 @@ const WalletReconciliation = ({
       setIsSaving(false);
     }
   };
+
+  // Record a booking against the saved count. amount = change in the system balance
+  // (+ excess booked / correction in, − shortage booked / correction out).
+  const markSettled = async (wallet, amount) => {
+    const recId = savedRows[String(wallet?.id)]?.recId;
+    if (!recId) throw new Error('missing reconciliation id');
+    const res = await fetch(`${API}/api/accounting/wallet-reconciliations/${recId}/settle`, {
+      method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify({ amount: round2(amount) }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to mark as settled');
+    }
+  };
+
+  // The booking itself went through; only the "settled" mark failed.
+  const warnNotMarked = (names) =>
+    toast.warning(
+      `Booked, but it couldn't be marked against the count for ${names}. Don't book it again — refresh and check the ledger.`,
+      { autoClose: 10000 }
+    );
 
   const openAdjust = (w) => {
     const kind = w.remaining < 0 ? 'shortage' : 'excess';
@@ -274,6 +316,12 @@ const WalletReconciliation = ({
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || 'Failed to post adjustment');
       }
+      try {
+        await markSettled(w, adjust.kind === 'shortage' ? -amount : amount);
+      } catch (e) {
+        console.error(e);
+        warnNotMarked(w.name);
+      }
       toast.success(
         adjust.kind === 'shortage'
           ? `${inr(amount)} shortage booked as expense for ${w.name}`
@@ -296,8 +344,11 @@ const WalletReconciliation = ({
             to: s.to.id,
             amount: String(s.amount),
             description: `Reconciliation correction ${date}: ${s.from.name} → ${s.to.name}`,
+            correction: true, // fixes a wrong-wallet entry → counts against both saved counts
           }
-        : { from: '', to: '', amount: '', description: '' }
+        : // a normal transfer (e.g. cash deposited to bank) moves real money too,
+          // so it doesn't change the variance and isn't marked as settled
+          { from: '', to: '', amount: '', description: '', correction: false }
     );
 
   const submitTransfer = async () => {
@@ -318,6 +369,19 @@ const WalletReconciliation = ({
         category: 'Transfer',
         staff_id: staffId,
       });
+      if (transfer.correction) {
+        const failed = [];
+        for (const [w, change] of [[fromW, -amount], [toW, amount]]) {
+          if (!savedRows[String(w?.id)]) continue; // wallet wasn't counted
+          try {
+            await markSettled(w, change);
+          } catch (e) {
+            console.error(e);
+            failed.push(w?.name);
+          }
+        }
+        if (failed.length) warnNotMarked(failed.join(' and '));
+      }
       toast.success(`${inr(amount)} moved from ${fromW?.name} to ${toW?.name}`);
       setTransfer(null);
       await afterPosting();
@@ -556,7 +620,7 @@ const WalletReconciliation = ({
               </button>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              <b>Variance</b> is what you saved (kept as history). <b>To settle</b> is what is still different from the system after bookings and transfers.
+              <b>Variance</b> is what you saved (kept as history). <b>To settle</b> is the variance minus what you have booked or correction-transferred for this count. Normal sales and expenses after the count don't change it.
             </p>
           </div>
 
@@ -737,7 +801,7 @@ const WalletReconciliation = ({
             <div>
               <label htmlFor="tr-from" className={labelCls}>From *</label>
               <select id="tr-from" className={inputCls} value={transfer.from}
-                onChange={(e) => setTransfer((t) => ({ ...t, from: e.target.value, to: t.to === e.target.value ? '' : t.to }))}>
+                onChange={(e) => setTransfer((t) => ({ ...t, from: e.target.value, to: t.to === e.target.value ? '' : t.to, correction: false }))}>
                 <option value="">Select source wallet</option>
                 {processed.map((w) => <option key={w.id} value={w.id}>{w.name} ({inr(w.liveBook)})</option>)}
               </select>
@@ -745,7 +809,7 @@ const WalletReconciliation = ({
             <div>
               <label htmlFor="tr-to" className={labelCls}>To *</label>
               <select id="tr-to" className={inputCls} value={transfer.to}
-                onChange={(e) => setTransfer((t) => ({ ...t, to: e.target.value }))}>
+                onChange={(e) => setTransfer((t) => ({ ...t, to: e.target.value, correction: false }))}>
                 <option value="">Select destination wallet</option>
                 {processed.filter((w) => w.id !== transfer.from).map((w) => (
                   <option key={w.id} value={w.id}>{w.name} ({inr(w.liveBook)})</option>

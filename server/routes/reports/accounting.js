@@ -223,58 +223,80 @@ router.post('/daily-summary/actual-cash', async (req, res) => {
 
 // ========== ADD MISCELLANEOUS INCOME / OVERAGE ==========
 router.post('/misc-income', async (req, res) => {
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+ 
+  const { wallet_id, description, date } = req.body;
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
+  const walletId = parseInt(wallet_id, 10);
+ 
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Amount must be greater than 0' });
+  }
+  if (amount > 10000000) {
+    return res.status(400).json({ error: 'Amount is too large' });
+  }
+  if (Number.isNaN(walletId)) {
+    return res.status(400).json({ error: 'Wallet ID is required' });
+  }
+ 
+  // Frontend sends "YYYY-MM-DDTHH:MM:SS+05:30" (IST). No date = now.
+  const createdAt = date ? new Date(date) : new Date();
+  if (Number.isNaN(createdAt.getTime())) {
+    return res.status(400).json({ error: 'Invalid date' });
+  }
+  if (createdAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    return res.status(400).json({ error: 'Date cannot be in the future' });
+  }
+ 
   const client = await req.db.connect();
-
   try {
-    const { amount, wallet_id, description, date } = req.body;
-    const staffId = req.user.id;
-    const centreId = req.user.centre_id;
-
-    if (!amount || !wallet_id) {
-      return res.status(400).json({ error: "Amount and Wallet ID are required" });
-    }
-
     await client.query('BEGIN');
-
+ 
+    // lock the wallet row, check it belongs to this centre
     const walletRes = await client.query(
-      `SELECT id FROM wallets WHERE id = $1 AND centre_id = $2`,
-      [wallet_id, centreId]
+      `SELECT id, centre_id FROM wallets WHERE id = $1 FOR UPDATE`,
+      [walletId]
     );
-
     if (walletRes.rows.length === 0) {
-      throw new Error("Invalid wallet for your centre");
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Wallet not found' });
     }
-
+    if (req.user.role !== 'superadmin' && walletRes.rows[0].centre_id !== req.user.centre_id) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Invalid wallet for your centre' });
+    }
+ 
     const groupId = crypto.randomUUID();
-
+ 
     await client.query(
       `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
-      [amount, wallet_id]
+      [amount, walletId]
     );
-
+ 
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id, staff_id, type, amount, description, category, 
+        wallet_id, staff_id, type, amount, description, category,
         correction_group_id, created_at
       )
        VALUES ($1, $2, 'credit', $3, $4, 'Misc Income', $5, $6)`,
       [
-        wallet_id, 
-        staffId, 
-        amount, 
-        description || 'Miscellaneous Income / Cash Overage', 
+        walletId,
+        req.user.id,
+        amount,
+        String(description || '').trim().slice(0, 500) || 'Miscellaneous Income / Cash Overage',
         groupId,
-        date ? new Date(date) : new Date()
+        createdAt,
       ]
     );
-
+ 
     await client.query('COMMIT');
-    res.json({ success: true, message: "Income recorded successfully" });
-
+    res.json({ success: true, message: 'Income recorded successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Misc income error:', err);
-    res.status(500).json({ error: err.message || 'Failed to record income' });
+    res.status(500).json({ error: 'Failed to record income' });
   } finally {
     client.release();
   }
@@ -548,69 +570,140 @@ router.get('/wallet-balances', async (req, res) => {
 
 // ========== GET WALLET RECONCILIATIONS ==========
 router.get('/wallet-reconciliations', async (req, res) => {
+  const { date, centreId: queryCentreId } = req.query;
+  const isSuperAdmin = req.user.role === 'superadmin';
+ 
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) {
+    centreId = Number(queryCentreId);
+  }
+ 
+  if (!centreId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    return res.status(400).json({ error: 'centreId and date (YYYY-MM-DD) are required' });
+  }
+ 
   const client = await req.db.connect();
-
   try {
-    const { date, centreId: queryCentreId } = req.query;
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId || !date) {
-      return res.status(400).json({ error: "centreId and date are required" });
-    }
-
-    const result = await client.query(`
+    // Latest count per wallet for that date (id breaks a tie on the same timestamp)
+    const result = await client.query(
+      `
       SELECT DISTINCT ON (wr.wallet_id)
+        wr.id,
         wr.wallet_id,
-        wr.book_balance, 
-        wr.actual_balance, 
-        wr.variance
+        wr.book_balance,
+        wr.actual_balance,
+        wr.variance,
+        wr.settled_amount,
+        wr.recon_date,
+        wr.reconciled_at
       FROM wallet_reconciliations wr
       JOIN wallets w ON w.id = wr.wallet_id
-      WHERE w.centre_id = $1 
-        AND wr.reconciled_at::date = $2::date
-      ORDER BY wr.wallet_id, wr.reconciled_at DESC
-    `, [centreId, date]);
-
+      WHERE w.centre_id = $1
+        AND wr.recon_date = $2::date
+      ORDER BY wr.wallet_id, wr.reconciled_at DESC, wr.id DESC
+      `,
+      [centreId, date]
+    );
+ 
     res.json(result.rows);
-
   } catch (err) {
-    console.error("Error fetching reconciliations:", err);
+    console.error('Error fetching reconciliations:', err);
     res.status(500).json({ error: 'Failed to fetch wallet reconciliations' });
   } finally {
     client.release();
   }
 });
 
-// ========== WALLET RECONCILIATION ==========
+/* ---------------------------------------------------------------------
+   B. NEW — record a booking against a saved reconciliation count
+   WalletReconciliation.jsx calls this after "Book shortage" (−amount),
+   "Book excess" (+amount) and a suggested correction transfer (− from, + to).
+   "To settle" = variance − settled_amount, so normal sales/expenses after
+   the count no longer change it.
+   --------------------------------------------------------------------- */
+router.patch('/wallet-reconciliations/:id/settle', async (req, res) => {
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+ 
+  const id = parseInt(req.params.id, 10);
+  const amount = Math.round(Number(req.body.amount) * 100) / 100; // signed change in system balance
+  if (Number.isNaN(id) || !Number.isFinite(amount) || amount === 0) {
+    return res.status(400).json({ error: 'id and a non-zero amount are required' });
+  }
+ 
+  const client = await req.db.connect();
+  try {
+    const { rows } = await client.query(
+      `UPDATE wallet_reconciliations r
+       SET settled_amount = r.settled_amount + $1
+       FROM wallets w
+       WHERE r.id = $2
+         AND w.id = r.wallet_id
+         AND ($3 = 'superadmin' OR w.centre_id = $4)
+       RETURNING r.id, r.wallet_id, r.settled_amount`,
+      [amount, id, req.user.role, req.user.centre_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Reconciliation not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Reconciliation settle error:', err);
+    res.status(500).json({ error: 'Failed to update reconciliation' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== WALLET RECONCILIATION (SAVE COUNTS) ==========
 router.post('/wallet-reconcile', async (req, res) => {
   // Superadmin view is read-only
   if (req.user.role === 'superadmin') {
     return res.status(403).json({ error: 'Superadmin access is read-only' });
   }
-
+ 
   const centreId = req.user.centre_id;
   if (!centreId) {
     return res.status(400).json({ error: 'No centre assigned to this user' });
   }
-
-  const { reconciliations } = req.body;
-
+ 
+  const { reconciliations, date } = req.body;
+ 
   if (!Array.isArray(reconciliations) || reconciliations.length === 0) {
     return res.status(400).json({ error: 'reconciliations array is required' });
   }
-
+ 
+  // The day the count is for (the page sends it). Default: today in IST.
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const reconDate = date === undefined || date === null || date === '' ? todayIST : String(date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reconDate)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+  if (reconDate > todayIST) {
+    return res.status(400).json({ error: 'Cannot reconcile a future date' });
+  }
+ 
+  // Validate every row; variance is worked out here, not taken from the browser
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const rows = [];
+  for (const r of reconciliations) {
+    const walletId = parseInt(r.wallet_id, 10);
+    const book = Number(r.book_balance);
+    const actual = Number(r.actual_balance);
+    if (Number.isNaN(walletId) || !Number.isFinite(book) || !Number.isFinite(actual)) {
+      return res.status(400).json({ error: 'Each row needs wallet_id, book_balance and actual_balance as numbers' });
+    }
+    if (Math.abs(actual) > 1e10 || Math.abs(book) > 1e10) {
+      return res.status(400).json({ error: 'Balance is too large' });
+    }
+    rows.push({ walletId, book: round2(book), actual: round2(actual), variance: round2(actual - book) });
+  }
+ 
+  // One row per wallet per save (the last one wins if a wallet is sent twice)
+  const byWallet = new Map(rows.map((r) => [r.walletId, r]));
+  const walletIds = [...byWallet.keys()];
+ 
   const client = await req.db.connect();
-
   try {
-    const userId = req.user.id;
-    const walletIds = [...new Set(reconciliations.map(r => Number(r.wallet_id)))];
-
     // Every wallet must belong to the caller's centre
     const own = await client.query(
       `SELECT COUNT(*)::int AS n FROM wallets WHERE id = ANY($1::int[]) AND centre_id = $2`,
@@ -619,25 +712,24 @@ router.post('/wallet-reconcile', async (req, res) => {
     if (own.rows[0].n !== walletIds.length) {
       return res.status(403).json({ error: 'Invalid wallet for your centre' });
     }
-
+ 
     await client.query('BEGIN');
-
-    for (const r of reconciliations) {
+ 
+    for (const r of byWallet.values()) {
       await client.query(
         `
         INSERT INTO wallet_reconciliations
-          (wallet_id, book_balance, actual_balance, variance, reconciled_by)
-        VALUES ($1, $2, $3, $4, $5)
+          (wallet_id, book_balance, actual_balance, variance, reconciled_by, recon_date)
+        VALUES ($1, $2, $3, $4, $5, $6::date)
         `,
-        [r.wallet_id, r.book_balance, r.actual_balance, r.variance, userId]
+        [r.walletId, r.book, r.actual, r.variance, req.user.id, reconDate]
       );
     }
-
+ 
     await client.query('COMMIT');
-    res.json({ success: true });
-
+    res.json({ success: true, date: reconDate, saved: byWallet.size });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Wallet reconciliation error:', err);
     res.status(500).json({ error: 'Wallet reconciliation failed' });
   } finally {

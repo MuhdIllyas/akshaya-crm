@@ -492,8 +492,10 @@ export const recalculateDayDeviation = async (client, staffId, date) => {
     const startM = timeToMinutes(start_time);
     const endM = timeToMinutes(end_time);
 
-    const lateM = Math.max(0, inM - startM);
-    const extraM = Math.max(0, outM - endM);
+    const shiftM = Math.max(0, endM - startM);
+    const lateM = Math.min(shiftM, Math.max(0, inM - startM));
+    // overtime = worked time after shift end (not after-hours punches with nothing worked)
+    const extraM = Math.max(0, outM - Math.max(endM, inM));
 
     // 4. Reset deviation values for all sessions of the day
     await client.query(
