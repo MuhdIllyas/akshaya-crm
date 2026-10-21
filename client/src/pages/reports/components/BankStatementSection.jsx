@@ -4,7 +4,7 @@
 //   Bank only  → in the bank, nothing in the app (book it, or mark as checked)
 //   App only   → in the app, not in the bank (usually the wrong wallet; mark as checked)
 //   Matched / Checked → done (can be undone)
-// Rules only, no AI. Server: /api/bank-statements (routes/bankStatements.js).
+// Rules only, no AI. Server: /api/bankstatements (routes/bankStatements.js).
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'react-toastify';
 import {
@@ -12,7 +12,7 @@ import {
   FiChevronDown, FiChevronRight, FiRotateCcw, FiInfo, FiCreditCard,
 } from 'react-icons/fi';
 
-const API = `${import.meta.env.VITE_API_URL}/api/bank-statements`;
+const API = `${import.meta.env.VITE_API_URL}/api/bankstatements`;
 const auth = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (ymd) => (ymd ? new Date(`${ymd}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' }) : '—');
