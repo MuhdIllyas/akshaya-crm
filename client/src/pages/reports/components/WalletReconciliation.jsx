@@ -248,6 +248,18 @@ const WalletReconciliation = ({
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || 'Failed to mark as settled');
     }
+    // Update the saved count on screen straight away, so "To settle" drops to Nil
+    // and the Book button disappears (it used to stay until the page was reloaded,
+    // which let the same shortage be booked twice).
+    const data = await res.json().catch(() => null);
+    const id = String(wallet.id);
+    setSavedRows((prev) => {
+      if (!prev[id]) return prev;
+      const settled = data && data.settled_amount !== undefined
+        ? Number(data.settled_amount)
+        : round2((prev[id].settled || 0) + amount);
+      return { ...prev, [id]: { ...prev[id], settled } };
+    });
   };
 
   // The booking itself went through; only the "settled" mark failed.
