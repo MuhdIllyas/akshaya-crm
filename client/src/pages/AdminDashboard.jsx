@@ -316,6 +316,96 @@ const RevenueChart = ({ data, view, height = 280 }) => {
 // ==========================================
 // ADMIN-ONLY PIECES
 // ==========================================
+// Exact rupees (paise kept) for small cash differences — money() rounds to whole rupees
+const inr = (n) => `₹${Math.abs(Number(n || 0)).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
+// ---- Closing status: one rule for the admin and superadmin dashboards ----
+// cash_variance from the nightly close = calculated − counted → POSITIVE = cash SHORT.
+// (Both dashboards used to read it the other way round: a ₹10 shortage showed as "over".)
+// short/excess come from the day's wallet counts (Wallet Recon), *_booked = what was
+// booked for them (Shortage expense / Misc income / correction transfer), open_* = not yet booked.
+const closingNum = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+const walletDiffText = (row, max = 2) => {
+  const diffs = Array.isArray(row?.wallet_diffs) ? row.wallet_diffs : [];
+  if (diffs.length === 0) return "";
+  const parts = diffs.slice(0, max).map((d) => {
+    const v = closingNum(d.variance);
+    return `${d.wallet} ${v < 0 ? "short" : "excess"} ${inr(Math.abs(v))}`;
+  });
+  return parts.join(", ") + (diffs.length > max ? ` +${diffs.length - max} more` : "");
+};
+
+// kind: clean | adjusted | unsettled | variance | incomplete | not_closed
+const getClosingView = (row) => {
+  if (!row || row.status === "not_closed") {
+    return { kind: "not_closed", label: "Not closed", detail: "No closing submitted", text: "text-rose-700", dot: "bg-rose-500", tone: "bad" };
+  }
+  if (row.status === "incomplete") {
+    return {
+      kind: "incomplete",
+      label: "Incomplete",
+      detail: `Cash counted (${inr(row.actual_cash)}), closing not completed`,
+      text: "text-amber-700",
+      dot: "bg-amber-500",
+      tone: "warn",
+    };
+  }
+
+  const cashVar = closingNum(row.cash_variance); // + short, − over
+  const shortBooked = closingNum(row.short_booked);
+  const excessBooked = closingNum(row.excess_booked);
+  const openShort = closingNum(row.open_short);
+  const openExcess = closingNum(row.open_excess);
+  const wallets = walletDiffText(row);
+
+  // 1. The cash count at close didn't match and nobody booked it
+  if (cashVar !== 0) {
+    return {
+      kind: "variance",
+      label: cashVar > 0 ? `Short ${inr(cashVar)}` : `Over ${inr(-cashVar)}`,
+      detail: `Counted ${inr(row.actual_cash)} of ${inr(row.closing_balance)} — not booked`,
+      text: "text-rose-700",
+      dot: "bg-rose-500",
+      tone: "bad",
+    };
+  }
+  // 2. Cash matched, but a wallet count still has an unbooked difference
+  if (openShort > 0 || openExcess > 0) {
+    const open = [openShort ? `${inr(openShort)} short` : null, openExcess ? `${inr(openExcess)} excess` : null].filter(Boolean).join(" · ");
+    return {
+      kind: "unsettled",
+      label: "Unsettled",
+      detail: `Wallet counts: ${open} not booked${wallets ? ` (${wallets})` : ""}`,
+      text: "text-amber-700",
+      dot: "bg-amber-500",
+      tone: "warn",
+    };
+  }
+  // 3. Matched only after booking a shortage / excess — closed, but worth seeing
+  if (shortBooked > 0 || excessBooked > 0) {
+    const booked = [shortBooked ? `${inr(shortBooked)} shortage` : null, excessBooked ? `${inr(excessBooked)} excess` : null].filter(Boolean).join(" + ");
+    return {
+      kind: "adjusted",
+      label: "Adjusted",
+      detail: `Cash ${inr(row.actual_cash)} matched after booking ${booked}${wallets ? ` (${wallets})` : ""}`,
+      text: "text-amber-700",
+      dot: "bg-amber-400",
+      tone: "warn",
+    };
+  }
+  // 4. Clean
+  return {
+    kind: "clean",
+    label: "Closed",
+    detail: `Cash ${inr(row.actual_cash)}, no variance${Number(row.wallets_counted) ? ` · ${row.wallets_counted} wallets counted` : ""}`,
+    text: "text-emerald-700",
+    dot: "bg-emerald-500",
+    tone: "ok",
+  };
+};
+
+
 // ---- Period filter (same options and IST day boundaries as the superadmin dashboard) ----
 const PERIOD_OPTIONS = [
   { value: "today", label: "Today" },
@@ -513,6 +603,7 @@ const AdminDashboard = () => {
   const [trendView, setTrendView] = useState("revenue");
   const [period, setPeriod] = useState("month");
   const [dataPeriod, setDataPeriod] = useState("month"); // period the data on screen belongs to
+  const [closingRow, setClosingRow] = useState(undefined); // yesterday's close + wallet-count differences
   const isMounted = useRef(true);
   const requestId = useRef(0);
 
@@ -530,6 +621,13 @@ const AdminDashboard = () => {
       if (!res.ok) throw new Error("Failed to fetch dashboard data");
       const json = await res.json();
       if (!isMounted.current || myId !== requestId.current) return; // a newer request superseded this one
+      // Yesterday's closing status (same rules as the superadmin closing log). Non-fatal.
+      fetch(`${import.meta.env.VITE_API_URL}/api/accounting/closing-status`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      })
+        .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+        .then((row) => { if (isMounted.current) setClosingRow(row); })
+        .catch(() => { if (isMounted.current) setClosingRow(undefined); });
       setData(json);
       setDataPeriod(period);
       setUpdatedAt(new Date());
@@ -606,13 +704,23 @@ const AdminDashboard = () => {
   ];
 
   // ---- Yesterday's register ----
-  const hasClosing = closing && closing.cash_variance !== undefined && closing.cash_variance !== null;
-  const variance = hasClosing ? Number(closing.cash_variance) : 0;
-  const closingTile = !hasClosing
-    ? { tone: "bad", title: "Yesterday's register not closed", detail: "Verify cash balances and close the day" }
-    : variance === 0
-    ? { tone: "ok", title: "Yesterday's register closed", detail: "Cash matched the ledger exactly" }
-    : { tone: "bad", title: "Cash variance yesterday", detail: `${money(Math.abs(variance))} ${variance < 0 ? "short" : "over"}. Check the accounting logs` };
+  // From /api/accounting/closing-status (falls back to the analytics alert if that fails).
+  // NOTE: cash_variance is calculated − counted, so POSITIVE = short. This tile used to
+  // read it the other way round.
+  const closingSource = closingRow !== undefined
+    ? closingRow
+    : closing
+      ? { status: closing.cash_variance === null || closing.cash_variance === undefined ? "not_closed" : "closed", ...closing }
+      : null;
+  const cv = getClosingView(closingSource);
+  const closingTile = {
+    not_closed: { tone: "bad", title: "Yesterday's register not closed", detail: "Verify cash balances and close the day" },
+    incomplete: { tone: "warn", title: "Yesterday's closing not completed", detail: cv.detail },
+    variance: { tone: "bad", title: `Cash ${cv.label.toLowerCase()} yesterday`, detail: `${cv.detail}. Book it in Wallet Recon` },
+    unsettled: { tone: "warn", title: "Yesterday: wallet differences open", detail: cv.detail },
+    adjusted: { tone: "warn", title: "Yesterday closed with adjustments", detail: cv.detail },
+    clean: { tone: "ok", title: "Yesterday's register closed", detail: "Cash matched the ledger exactly" },
+  }[cv.kind];
 
   const present = Number(stats.presentToday) || 0;
   const staffTotal = Number(stats.totalStaff) || 0;
@@ -655,7 +763,7 @@ const AdminDashboard = () => {
 
       {/* Needs attention */}
       <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <AttentionTile {...closingTile} onClick={to("/dashboard/admin/reports")} />
+        <AttentionTile {...closingTile} onClick={to("/dashboard/admin/reports?tab=accounting")} />
         <AttentionTile
           tone={stats.pendingLeaves > 0 ? "warn" : "ok"}
           title={stats.pendingLeaves > 0 ? `${stats.pendingLeaves} leave ${stats.pendingLeaves === 1 ? "request" : "requests"} waiting` : "No leave requests waiting"}

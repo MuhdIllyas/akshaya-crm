@@ -938,49 +938,97 @@ router.get('/nightly-close', requireAccounting, async (req, res) => {
   }
 });
 
+// ========== CLOSING STATUS (dashboards) ==========
+/* One row per centre for a day: the nightly close + what the wallet counts found.
+   Shortage / excess come live from the saved counts (latest count per wallet for
+   the day): variance = counted − system, settled_amount = what was booked for it
+   (Shortage expense / Misc income / correction transfer). Nothing extra is stored
+   at close time, so a booking made after the close still shows up.
+
+   cash_variance in the close = calculated cash − counted cash
+     → POSITIVE means cash was SHORT, negative means OVER.            */
+const CLOSING_STATUS_SQL = `
+  WITH target AS (
+    SELECT COALESCE($1::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 1) AS day
+  )
+  SELECT
+    c.id   AS centre_id,
+    c.name AS centre_name,
+    t.day::text AS accounting_date,
+    d.opening_balance,
+    d.closing_balance,
+    d.actual_cash,
+    d.cash_variance,
+    d.notes,
+    d.closed_at,
+    s.name AS closed_by_name,
+    CASE
+      WHEN d.centre_id IS NULL THEN 'not_closed'
+      WHEN d.checklist IS NULL THEN 'incomplete'   -- only actual cash was saved
+      ELSE 'closed'
+    END AS status,
+    COALESCE(r.wallets_counted, 0) AS wallets_counted,
+    COALESCE(r.short_total, 0)     AS short_total,
+    COALESCE(r.excess_total, 0)    AS excess_total,
+    COALESCE(r.short_booked, 0)    AS short_booked,
+    COALESCE(r.excess_booked, 0)   AS excess_booked,
+    COALESCE(r.open_short, 0)      AS open_short,
+    COALESCE(r.open_excess, 0)     AS open_excess,
+    COALESCE(r.wallet_diffs, '[]'::json) AS wallet_diffs
+  FROM centres c
+  CROSS JOIN target t
+  LEFT JOIN daily_accounting_closure d
+    ON d.centre_id = c.id AND d.accounting_date = t.day
+  LEFT JOIN staff s ON s.id = d.closed_by
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*)::int AS wallets_counted,
+      SUM(CASE WHEN lr.variance < 0 THEN -lr.variance ELSE 0 END) AS short_total,
+      SUM(CASE WHEN lr.variance > 0 THEN  lr.variance ELSE 0 END) AS excess_total,
+      SUM(CASE WHEN lr.variance < 0 THEN GREATEST(-lr.settled, 0) ELSE 0 END) AS short_booked,
+      SUM(CASE WHEN lr.variance > 0 THEN GREATEST( lr.settled, 0) ELSE 0 END) AS excess_booked,
+      SUM(CASE WHEN lr.variance - lr.settled < 0 THEN -(lr.variance - lr.settled) ELSE 0 END) AS open_short,
+      SUM(CASE WHEN lr.variance - lr.settled > 0 THEN  (lr.variance - lr.settled) ELSE 0 END) AS open_excess,
+      json_agg(
+        json_build_object('wallet', lr.wallet_name, 'type', lr.wallet_type,
+                          'variance', lr.variance, 'settled', lr.settled)
+        ORDER BY lr.variance
+      ) FILTER (WHERE lr.variance <> 0) AS wallet_diffs
+    FROM (
+      SELECT DISTINCT ON (wr.wallet_id)
+        wr.wallet_id, w.name AS wallet_name, w.wallet_type,
+        COALESCE(wr.variance, wr.actual_balance - wr.book_balance)::numeric AS variance,
+        COALESCE(wr.settled_amount, 0)::numeric AS settled
+      FROM wallet_reconciliations wr
+      JOIN wallets w ON w.id = wr.wallet_id
+      WHERE w.centre_id = c.id AND wr.recon_date = t.day
+      ORDER BY wr.wallet_id, wr.reconciled_at DESC, wr.id DESC
+    ) lr
+  ) r ON true
+  WHERE ($2::int IS NULL OR c.id = $2)
+`;
+
+const isYmdOrEmpty = (d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(String(d));
+
 // ========== NIGHTLY CLOSE STATUS - ALL CENTRES (SUPERADMIN DASHBOARD) ==========
 router.get('/nightly-close/all', async (req, res) => {
   if (req.user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Superadmin access required' });
   }
+  const { date } = req.query; // optional, "YYYY-MM-DD" (default: yesterday IST)
+  if (!isYmdOrEmpty(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
 
   const client = await req.db.connect();
-
   try {
-    const { date } = req.query; // optional, "YYYY-MM-DD"
-
     const result = await client.query(
-      `
-      SELECT * FROM (
-        WITH target AS (
-          -- defaults to yesterday in IST
-          SELECT COALESCE($1::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 1) AS day
-        )
-        SELECT
-          c.id   AS centre_id,
-          c.name AS centre_name,
-          t.day::text AS accounting_date,
-          d.actual_cash,
-          d.cash_variance,
-          d.closed_at,
-          s.name AS closed_by_name,
-          CASE
-            WHEN d.centre_id IS NULL THEN 'not_closed'
-            WHEN d.checklist IS NULL THEN 'incomplete'   -- only actual cash was saved
-            ELSE 'closed'
-          END AS status
-        FROM centres c
-        CROSS JOIN target t
-        LEFT JOIN daily_accounting_closure d
-          ON d.centre_id = c.id AND d.accounting_date = t.day
-        LEFT JOIN staff s ON s.id = d.closed_by
-      ) x
-      ORDER BY
-        CASE x.status WHEN 'not_closed' THEN 0 WHEN 'incomplete' THEN 1 ELSE 2 END,
-        ABS(COALESCE(x.cash_variance, 0)) DESC,
-        x.centre_name
-      `,
-      [date || null]
+      `SELECT * FROM (${CLOSING_STATUS_SQL}) x
+       ORDER BY
+         CASE x.status WHEN 'not_closed' THEN 0 WHEN 'incomplete' THEN 1 ELSE 2 END,
+         ABS(COALESCE(x.cash_variance, 0)) DESC,
+         (x.open_short + x.open_excess) DESC,
+         (x.short_total + x.excess_total) DESC,
+         x.centre_name`,
+      [date || null, null]
     );
 
     res.json({
@@ -990,6 +1038,28 @@ router.get('/nightly-close/all', async (req, res) => {
   } catch (err) {
     console.error('Nightly close (all centres) error:', err);
     res.status(500).json({ error: 'Failed to load closing log' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== CLOSING STATUS - ONE CENTRE (ADMIN DASHBOARD) ==========
+// Admin: own centre. Superadmin: ?centreId=. Same row shape as /nightly-close/all.
+router.get('/closing-status', requireAccounting, async (req, res) => {
+  const { date } = req.query;
+  if (!isYmdOrEmpty(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+
+  let centreId = req.user.centre_id;
+  if (req.user.role === 'superadmin' && req.query.centreId) centreId = Number(req.query.centreId);
+  if (!centreId) return res.status(400).json({ error: 'centreId is required' });
+
+  const client = await req.db.connect();
+  try {
+    const { rows } = await client.query(CLOSING_STATUS_SQL, [date || null, centreId]);
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error('Closing status error:', err);
+    res.status(500).json({ error: 'Failed to load closing status' });
   } finally {
     client.release();
   }

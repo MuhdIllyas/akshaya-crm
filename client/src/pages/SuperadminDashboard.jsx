@@ -128,27 +128,89 @@ const shortINR = (v) => {
   return `${s}₹${a}`;
 };
 
+// ---- Closing status: one rule for the admin and superadmin dashboards ----
+// cash_variance from the nightly close = calculated − counted → POSITIVE = cash SHORT.
+// (Both dashboards used to read it the other way round: a ₹10 shortage showed as "over".)
+// short/excess come from the day's wallet counts (Wallet Recon), *_booked = what was
+// booked for them (Shortage expense / Misc income / correction transfer), open_* = not yet booked.
+const closingNum = (v) => Math.round((Number(v) || 0) * 100) / 100;
+
+const walletDiffText = (row, max = 2) => {
+  const diffs = Array.isArray(row?.wallet_diffs) ? row.wallet_diffs : [];
+  if (diffs.length === 0) return "";
+  const parts = diffs.slice(0, max).map((d) => {
+    const v = closingNum(d.variance);
+    return `${d.wallet} ${v < 0 ? "short" : "excess"} ${inr(Math.abs(v))}`;
+  });
+  return parts.join(", ") + (diffs.length > max ? ` +${diffs.length - max} more` : "");
+};
+
+// kind: clean | adjusted | unsettled | variance | incomplete | not_closed
 const getClosingView = (row) => {
-  if (row.status === "not_closed") {
-    return { label: "Not closed", detail: "No closing submitted", text: "text-rose-700", dot: "bg-rose-500" };
+  if (!row || row.status === "not_closed") {
+    return { kind: "not_closed", label: "Not closed", detail: "No closing submitted", text: "text-rose-700", dot: "bg-rose-500", tone: "bad" };
   }
   if (row.status === "incomplete") {
     return {
+      kind: "incomplete",
       label: "Incomplete",
       detail: `Cash counted (${inr(row.actual_cash)}), closing not completed`,
       text: "text-amber-700",
       dot: "bg-amber-500",
+      tone: "warn",
     };
   }
-  const variance = Number(row.cash_variance || 0);
-  if (variance === 0) {
-    return { label: "Closed", detail: `Cash ${inr(row.actual_cash)}, no variance`, text: "text-emerald-700", dot: "bg-emerald-500" };
+
+  const cashVar = closingNum(row.cash_variance); // + short, − over
+  const shortBooked = closingNum(row.short_booked);
+  const excessBooked = closingNum(row.excess_booked);
+  const openShort = closingNum(row.open_short);
+  const openExcess = closingNum(row.open_excess);
+  const wallets = walletDiffText(row);
+
+  // 1. The cash count at close didn't match and nobody booked it
+  if (cashVar !== 0) {
+    return {
+      kind: "variance",
+      label: cashVar > 0 ? `Short ${inr(cashVar)}` : `Over ${inr(-cashVar)}`,
+      detail: `Counted ${inr(row.actual_cash)} of ${inr(row.closing_balance)} — not booked`,
+      text: "text-rose-700",
+      dot: "bg-rose-500",
+      tone: "bad",
+    };
   }
+  // 2. Cash matched, but a wallet count still has an unbooked difference
+  if (openShort > 0 || openExcess > 0) {
+    const open = [openShort ? `${inr(openShort)} short` : null, openExcess ? `${inr(openExcess)} excess` : null].filter(Boolean).join(" · ");
+    return {
+      kind: "unsettled",
+      label: "Unsettled",
+      detail: `Wallet counts: ${open} not booked${wallets ? ` (${wallets})` : ""}`,
+      text: "text-amber-700",
+      dot: "bg-amber-500",
+      tone: "warn",
+    };
+  }
+  // 3. Matched only after booking a shortage / excess — closed, but worth seeing
+  if (shortBooked > 0 || excessBooked > 0) {
+    const booked = [shortBooked ? `${inr(shortBooked)} shortage` : null, excessBooked ? `${inr(excessBooked)} excess` : null].filter(Boolean).join(" + ");
+    return {
+      kind: "adjusted",
+      label: "Adjusted",
+      detail: `Cash ${inr(row.actual_cash)} matched after booking ${booked}${wallets ? ` (${wallets})` : ""}`,
+      text: "text-amber-700",
+      dot: "bg-amber-400",
+      tone: "warn",
+    };
+  }
+  // 4. Clean
   return {
-    label: "Variance",
-    detail: `Cash ${inr(row.actual_cash)}, ${inr(variance)} ${variance < 0 ? "short" : "over"}`,
-    text: "text-rose-700",
-    dot: "bg-rose-500",
+    kind: "clean",
+    label: "Closed",
+    detail: `Cash ${inr(row.actual_cash)}, no variance${Number(row.wallets_counted) ? ` · ${row.wallets_counted} wallets counted` : ""}`,
+    text: "text-emerald-700",
+    dot: "bg-emerald-500",
+    tone: "ok",
   };
 };
 
@@ -976,7 +1038,17 @@ const SuperadminDashboard = () => {
   const selectedCentreName = centreOptions.find((c) => String(c.id) === String(centreId))?.name || "";
   const scoped = centreId !== "all";
   const margin = financials.totals?.margin;
-  const needsLook = closingRows.filter((r) => r.status !== "closed" || Number(r.cash_variance || 0) !== 0).length;
+  const closingViews = closingRows.map((r) => ({ row: r, view: getClosingView(r) }));
+  // "Adjusted" = closed and matched after booking a shortage / excess: fine, but listed
+  const needsLook = closingViews.filter(({ view }) => !["clean", "adjusted"].includes(view.kind)).length;
+  const closingMoney = closingRows.reduce(
+    (a, r) => ({
+      // the same missing cash can show in the wallet count AND the close: take the larger, not both
+      short: a.short + Math.max(Number(r.short_total) || 0, Math.max(Number(r.cash_variance) || 0, 0)),
+      excess: a.excess + Math.max(Number(r.excess_total) || 0, Math.max(-(Number(r.cash_variance) || 0), 0)),
+    }),
+    { short: 0, excess: 0 }
+  );
 
   const walletParts = [
     { label: "Cash", value: walletCash, color: "#2a78d6" },
@@ -1029,11 +1101,14 @@ const SuperadminDashboard = () => {
     : "";
 
   // Closing summary
+  const countKind = (k) => closingViews.filter(({ view }) => view.kind === k).length;
   const closingSummary = {
-    closed: closingRows.filter((r) => r.status === "closed" && Number(r.cash_variance || 0) === 0).length,
-    variance: closingRows.filter((r) => r.status === "closed" && Number(r.cash_variance || 0) !== 0).length,
-    incomplete: closingRows.filter((r) => r.status === "incomplete").length,
-    notClosed: closingRows.filter((r) => r.status === "not_closed").length,
+    closed: countKind("clean"),
+    adjusted: countKind("adjusted"),
+    variance: countKind("variance"),
+    unsettled: countKind("unsettled"),
+    incomplete: countKind("incomplete"),
+    notClosed: countKind("not_closed"),
   };
 
   const btnPrimary =
@@ -1232,7 +1307,10 @@ const SuperadminDashboard = () => {
             hint={
               closingLoading || closingError
                 ? ""
-                : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed`
+                : `${closingRows.filter((r) => r.status === "closed").length} of ${closingRows.length} centres closed` +
+                  (closingMoney.short || closingMoney.excess
+                    ? ` · ${[closingMoney.short ? `${inr(closingMoney.short)} short` : null, closingMoney.excess ? `${inr(closingMoney.excess)} excess` : null].filter(Boolean).join(", ")}`
+                    : "")
             }
             action={
               <input
@@ -1248,11 +1326,13 @@ const SuperadminDashboard = () => {
               !closingLoading && !closingError && closingRows.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {[
-                    { label: "Closed", value: closingSummary.closed, dot: "bg-emerald-500", tone: "text-emerald-700" },
-                    { label: "Variance", value: closingSummary.variance, dot: "bg-rose-500", tone: "text-rose-700" },
+                    { label: "Closed", value: closingSummary.closed, dot: "bg-emerald-500", tone: "text-emerald-700", always: true },
+                    { label: "Adjusted", value: closingSummary.adjusted, dot: "bg-amber-400", tone: "text-amber-700" },
+                    { label: "Unsettled", value: closingSummary.unsettled, dot: "bg-amber-500", tone: "text-amber-700" },
+                    { label: "Short / over", value: closingSummary.variance, dot: "bg-rose-500", tone: "text-rose-700" },
                     { label: "Incomplete", value: closingSummary.incomplete, dot: "bg-amber-500", tone: "text-amber-700" },
-                    { label: "Not closed", value: closingSummary.notClosed, dot: "bg-rose-500", tone: "text-rose-700" },
-                  ].map((c) => (
+                    { label: "Not closed", value: closingSummary.notClosed, dot: "bg-rose-500", tone: "text-rose-700", always: true },
+                  ].filter((c) => c.always || c.value > 0).map((c) => (
                     <span
                       key={c.label}
                       className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
@@ -1279,8 +1359,7 @@ const SuperadminDashboard = () => {
                 <p className="py-6 text-center text-sm text-slate-500">No centres found.</p>
               ) : (
                 <ul className="divide-y divide-slate-100">
-                  {closingRows.map((row) => {
-                    const v = getClosingView(row);
+                  {closingViews.map(({ row, view: v }) => {
                     return (
                       <li key={row.centre_id} className="flex items-start gap-3 py-2.5">
                         <span className={`mt-1.5 h-2 w-2 flex-shrink-0 rounded-full ${v.dot}`} />
@@ -1294,7 +1373,7 @@ const SuperadminDashboard = () => {
                             </p>
                           )}
                         </div>
-                        <span className={`text-xs font-medium ${v.text}`}>{v.label}</span>
+                        <span className={`whitespace-nowrap text-xs font-medium ${v.text}`}>{v.label}</span>
                       </li>
                     );
                   })}
