@@ -17,6 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import AdminExpenseEntry from './AdminExpenseEntry';
 import WalletReconciliation from './WalletReconciliation';
+import BankStatementSection from './BankStatementSection';
 
 // Today's date in IST (YYYY-MM-DD)
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -2686,6 +2687,7 @@ const AccountingSection = ({
     { id: 'ledger', label: 'Ledger', icon: FiBook },
     { id: 'expenses', label: 'Expenses', icon: FiTrendingDown },
     { id: 'wallets', label: 'Wallet Recon', icon: FiSmartphone },
+    { id: 'bank', label: 'Bank Statement', icon: FiCreditCard },
     { id: 'reports', label: 'Reports', icon: FiFileText }
   ];
 
@@ -3459,6 +3461,14 @@ const handleExportExcel = () => {
                 centreId={centreId}
                 isSuperAdmin={isSuperAdmin}
                 readOnly={readOnly}
+              />
+            )}
+
+            {/* Bank statement check (debits of bank wallets vs the app) */}
+            {activeAccountingTab === 'bank' && (
+              <BankStatementSection
+                wallets={derivedWallets}
+                readOnly={readOnly || isSuperAdmin}
               />
             )}
 
