@@ -56,7 +56,9 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
 );
 
 // Nightly Accounting Checklist Component
-const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly = false }) => {
+const inr2 = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+
+const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCash, readOnly = false }) => {
   const [checklist, setChecklist] = useState(
     existingData?.checklist || {
       incomeEntryVerified: false,
@@ -69,8 +71,28 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
   );
 
   const [notes, setNotes] = useState(existingData?.notes || '');
-  const [closingCash, setClosingCash] = useState(existingData?.closingCash?.toString() || '');
+  // Calculated cash comes from the system (cash opening + cash in − cash out ± cash transfers).
+  // Before: the admin had to type it, so a typo here hid a real shortage.
+  // After the day is closed, the saved figure is shown instead.
+  const systemCash = existingData?.closingCash
+    ? existingData.closingCash.toString()
+    : (expectedCash !== undefined && expectedCash !== null ? String(Math.round(Number(expectedCash) * 100) / 100) : '');
+  const closingCash = systemCash;
   const [actualCashCount, setActualCashCount] = useState(existingData?.actualCashCount?.toString() || '');
+
+  // A different date / a reload of the saved close brings its own values
+  useEffect(() => {
+    setChecklist(existingData?.checklist || {
+      incomeEntryVerified: false,
+      expenseEntryVerified: false,
+      bankEntryReconciled: false,
+      dailySummaryCompleted: false,
+      cashReconciled: false,
+      walletBalancesVerified: false
+    });
+    setNotes(existingData?.notes || '');
+    setActualCashCount(existingData?.actualCashCount?.toString() || '');
+  }, [date, existingData]);
 
   const handleChecklistToggle = (key) => {
     if (readOnly) return;
@@ -89,16 +111,21 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
       return;
     }
     
-    if (!closingCash || !actualCashCount) {
-      toast.error('Please enter both calculated cash and actual cash count');
+    if (closingCash === '') {
+      toast.error('Calculated cash is not loaded yet — refresh and try again');
       return;
     }
-    
-    const variance = parseFloat(closingCash) - parseFloat(actualCashCount);
-    
+    if (actualCashCount === '' || !Number.isFinite(parseFloat(actualCashCount)) || parseFloat(actualCashCount) < 0) {
+      toast.error('Enter the actual cash count');
+      return;
+    }
+
+    // + = cash short, − = cash excess
+    const variance = Math.round((parseFloat(closingCash) - parseFloat(actualCashCount)) * 100) / 100;
+
     const payload = {
       date: date,
-      opening_balance: 0,
+      opening_balance: 0, // replaced with the CASH opening by the parent
       closing_balance: parseFloat(closingCash),
       actual_cash: parseFloat(actualCashCount),
       cash_variance: variance,
@@ -191,15 +218,16 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1 block text-xs font-medium text-slate-600">
-                Calculated Cash
+                Calculated Cash <span className="font-normal text-slate-400">(from the system)</span>
               </label>
               <input
                 type="number"
                 value={closingCash}
-                onChange={(e) => setClosingCash(e.target.value)}
-                disabled={readOnly}
+                readOnly
+                disabled
                 className={inputCls}
-                placeholder="₹0.00"
+                placeholder="Loading…"
+                aria-label="Calculated Cash"
               />
             </div>
             <div>
@@ -216,17 +244,25 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
               />
             </div>
           </div>
-          {closingCash && actualCashCount && (
-            <div className="mt-2">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
-                Math.abs(parseFloat(closingCash) - parseFloat(actualCashCount)) <= 100
-                  ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
-                  : 'bg-rose-50 text-rose-700 ring-rose-200'
-              }`}>
-                Variance: ₹{(parseFloat(closingCash) - parseFloat(actualCashCount)).toFixed(2)}
-              </span>
-            </div>
-          )}
+          {closingCash !== '' && actualCashCount !== '' && (() => {
+            const diff = Math.round((parseFloat(closingCash) - parseFloat(actualCashCount)) * 100) / 100;
+            return (
+              <div className="mt-2">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
+                  diff === 0
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    : 'bg-rose-50 text-rose-700 ring-rose-200'
+                }`}>
+                  {diff === 0 ? 'Cash matches ✓' : diff > 0 ? `Cash short ${inr2(diff)}` : `Cash excess ${inr2(-diff)}`}
+                </span>
+                {diff !== 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Book it in Wallet Recon (shortage → expense, excess → misc income) before closing, so the books match the count.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Notes */}
@@ -269,7 +305,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
 };
 
 // Daily Summary Component
-const DailySummaryComponent = ({ summaryData, onUpdate, readOnly = false }) => {
+const DailySummaryComponent = ({ summaryData, onUpdate, countedCash = null, readOnly = false }) => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     derived: summaryData?.derived || {},
@@ -301,7 +337,12 @@ const calculateTotals = () => {
       cashTransferOut = 0
     } = formData.derived || {};
 
-    const actualCashInHand = formData.manual?.actualCashInHand || 0;
+    // The count from the nightly close wins; otherwise the "Actual Cash in Hand" saved here.
+    // null = nobody has counted yet (used to be treated as ₹0 → "variance ₹21,240").
+    const savedManual = Number(formData.manual?.actualCashInHand || 0);
+    const actualCashInHand = countedCash !== null && countedCash !== undefined && countedCash !== ''
+      ? Number(countedCash)
+      : (savedManual > 0 ? savedManual : null);
 
     // Business Inflow/Outflow (strictly revenue and expenses)
     const totalInflow = cashInflow + bankInflow + digitalInflow;
@@ -311,13 +352,14 @@ const calculateTotals = () => {
     // 🔥 Physical Cash Calculation: Opening + Inflow + TransfersIn - Outflow - TransfersOut
     const expectedCash = cashOpening + cashInflow + cashTransferIn - cashOutflow - cashTransferOut;
 
-    // Variance = Expected Physical Cash - Actual Count
-    const variance = expectedCash - actualCashInHand;
+    // Variance = Expected Physical Cash - Actual Count (+ short, − excess)
+    const variance = actualCashInHand === null ? null : Math.round((expectedCash - actualCashInHand) * 100) / 100;
 
     return {
       totalInflow,
       totalOutflow,
       closingBalance,
+      expectedCash,
       variance
     };
   };
@@ -399,33 +441,42 @@ const calculateTotals = () => {
         <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
           <p className="mb-1 text-xs font-medium text-blue-700">Total Inflow</p>
           <p className="text-base font-bold text-blue-900">
-            ₹{totals.totalInflow.toLocaleString()}
+            {inr2(totals.totalInflow)}
           </p>
         </div>
 
         <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
           <p className="mb-1 text-xs font-medium text-rose-700">Total Outflow</p>
           <p className="text-base font-bold text-rose-900">
-            ₹{totals.totalOutflow.toLocaleString()}
+            {inr2(totals.totalOutflow)}
           </p>
         </div>
 
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
           <p className="mb-1 text-xs font-medium text-emerald-700">Closing Balance</p>
           <p className="text-base font-bold text-emerald-900">
-            ₹{totals.closingBalance.toLocaleString()}
+            {inr2(totals.closingBalance)}
           </p>
         </div>
 
         <div className={`rounded-xl border p-3 ${
-          Math.abs(totals.variance) <= 100
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
-            : 'border-rose-200 bg-rose-50 text-rose-900'
+          totals.variance === null
+            ? 'border-slate-200 bg-slate-50 text-slate-700'
+            : totals.variance === 0
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900'
         }`}>
           <p className="mb-1 text-xs font-medium">Cash Variance</p>
           <p className="text-base font-bold">
-            ₹{totals.variance.toFixed(2)}
+            {totals.variance === null
+              ? 'Not counted yet'
+              : totals.variance === 0
+                ? '₹0 ✓'
+                : totals.variance > 0
+                  ? `Short ${inr2(totals.variance)}`
+                  : `Excess ${inr2(-totals.variance)}`}
           </p>
+          <p className="mt-0.5 text-xs opacity-75">Expected cash {inr2(totals.expectedCash)}</p>
         </div>
       </div>
 
@@ -505,6 +556,192 @@ const calculateTotals = () => {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+// Shortages & Excess for the day — shown on Daily Accounting for admin AND superadmin
+// (superadmin opens the same component with isSuperAdmin + centreId, read-only).
+// Sources:
+//   - wallet counts saved in Wallet Recon (latest count per wallet for the date)
+//   - what was booked for them (Shortage expenses / Misc Income), via settled_amount
+//   - the cash count at the nightly close
+const ShortageExcessCard = ({ date, buildQueryString, refreshKey, wallets = [], expenses = [], ledgerRows = [], nightly, onOpenRecon }) => {
+  const [rows, setRows] = useState([]);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconciliations?${buildQueryString({ date })}`,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        );
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (!cancelled) { setRows(Array.isArray(data) ? data : []); setLoadError(false); }
+      } catch (e) {
+        if (!cancelled) { setRows([]); setLoadError(true); }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, refreshKey]);
+
+  const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const nameOf = (id) => wallets.find((w) => String(w.id) === String(id))?.name || `Wallet #${id}`;
+  const typeOf = (id) => (wallets.find((w) => String(w.id) === String(id))?.type || '').toLowerCase();
+
+  // Every counted wallet whose count differed from the system, even by ₹1
+  const diffs = rows
+    .map((r) => {
+      const variance = r2(r.variance ?? (Number(r.actual_balance) - Number(r.book_balance)));
+      const settled = r2(r.settled_amount);
+      return {
+        walletId: r.wallet_id,
+        name: nameOf(r.wallet_id),
+        type: typeOf(r.wallet_id),
+        book: r2(r.book_balance),
+        actual: r2(r.actual_balance),
+        variance,             // − short, + excess
+        settled,              // booked so far (same sign)
+        open: r2(variance - settled),
+      };
+    })
+    .filter((d) => d.variance !== 0)
+    .sort((a, b) => a.variance - b.variance);
+
+  const totalShort = r2(diffs.filter((d) => d.variance < 0).reduce((s, d) => s - d.variance, 0));
+  const totalExcess = r2(diffs.filter((d) => d.variance > 0).reduce((s, d) => s + d.variance, 0));
+  const openShort = r2(diffs.filter((d) => d.open < 0).reduce((s, d) => s - d.open, 0));
+  const openExcess = r2(diffs.filter((d) => d.open > 0).reduce((s, d) => s + d.open, 0));
+
+  const shortageExpenses = expenses.filter((e) => (e.category || '').toLowerCase() === 'shortage' && e.status !== 'rejected');
+  const bookedShortage = r2(shortageExpenses.reduce((s, e) => s + Number(e.amount || 0), 0));
+  const miscIncome = ledgerRows.filter((t) => t.category === 'Misc Income' && t.type === 'credit');
+  const bookedExcess = r2(miscIncome.reduce((s, t) => s + Number(t.amount || 0), 0));
+
+  const closeVariance = nightly?.closingCash && nightly?.actualCashCount
+    ? r2(Number(nightly.closingCash) - Number(nightly.actualCashCount)) // + short, − excess
+    : null;
+
+  const counted = rows.length;
+  const nothingToShow = counted === 0 && closeVariance === null && bookedShortage === 0 && bookedExcess === 0;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center text-sm font-bold text-slate-900">
+            <FiAlertTriangle className="mr-2 h-4 w-4 text-amber-600" />
+            Shortages & Excess
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Date: {date} · {counted > 0 ? `${counted} wallet${counted !== 1 ? 's' : ''} counted` : 'wallets not counted yet'}
+          </p>
+        </div>
+        {onOpenRecon && (
+          <button
+            type="button"
+            onClick={onOpenRecon}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Open Wallet Recon
+          </button>
+        )}
+      </div>
+
+      {loadError && (
+        <p className="mb-3 rounded-xl bg-amber-50 p-2 text-xs text-amber-800">Couldn't load the wallet counts for this date.</p>
+      )}
+
+      {nothingToShow ? (
+        <p className="py-4 text-center text-xs text-slate-500">No counts or shortage / excess entries for this date.</p>
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <p className="mb-1 text-xs font-medium text-rose-700">Total shortage</p>
+              <p className="text-base font-bold text-rose-900">{inr2(totalShort)}</p>
+              <p className="text-xs text-rose-700/80">Booked as expense {inr2(bookedShortage)}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="mb-1 text-xs font-medium text-emerald-700">Total excess</p>
+              <p className="text-base font-bold text-emerald-900">{inr2(totalExcess)}</p>
+              <p className="text-xs text-emerald-700/80">Booked as misc income {inr2(bookedExcess)}</p>
+            </div>
+            <div className={`rounded-xl border p-3 ${openShort || openExcess ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+              <p className="mb-1 text-xs font-medium text-slate-700">Still to settle</p>
+              <p className="text-base font-bold text-slate-900">
+                {openShort || openExcess
+                  ? [openShort ? `Short ${inr2(openShort)}` : null, openExcess ? `Excess ${inr2(openExcess)}` : null].filter(Boolean).join(' · ')
+                  : 'Nil ✓'}
+              </p>
+            </div>
+            <div className={`rounded-xl border p-3 ${closeVariance === null ? 'border-slate-200 bg-slate-50' : closeVariance === 0 ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}>
+              <p className="mb-1 text-xs font-medium text-slate-700">Cash at nightly close</p>
+              <p className="text-base font-bold text-slate-900">
+                {closeVariance === null ? 'Not closed' : closeVariance === 0 ? 'Matched ✓' : closeVariance > 0 ? `Short ${inr2(closeVariance)}` : `Excess ${inr2(-closeVariance)}`}
+              </p>
+              {closeVariance !== null && (
+                <p className="text-xs text-slate-500">Counted {inr2(nightly.actualCashCount)} of {inr2(nightly.closingCash)}</p>
+              )}
+            </div>
+          </div>
+
+          {diffs.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[560px]">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2">Wallet</th>
+                    <th className="px-3 py-2 text-right">System</th>
+                    <th className="px-3 py-2 text-right">Counted</th>
+                    <th className="px-3 py-2 text-right">Difference</th>
+                    <th className="px-3 py-2 text-right">Booked</th>
+                    <th className="px-3 py-2 text-right">Open</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {diffs.map((d) => (
+                    <tr key={d.walletId}>
+                      <td className="px-3 py-2">
+                        <span className="font-medium text-slate-900">{d.name}</span>
+                        {d.type && <span className="ml-1 capitalize text-slate-400">· {d.type}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{inr2(d.book)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{inr2(d.actual)}</td>
+                      <td className={`px-3 py-2 text-right font-bold ${d.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {d.variance < 0 ? `Short ${inr2(-d.variance)}` : `Excess ${inr2(d.variance)}`}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{d.settled ? inr2(Math.abs(d.settled)) : '—'}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${d.open === 0 ? 'text-emerald-600' : 'text-amber-700'}`}>
+                        {d.open === 0 ? 'Settled ✓' : inr2(Math.abs(d.open))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {(shortageExpenses.length > 0 || miscIncome.length > 0) && (
+            <div className="mt-3 space-y-1 text-xs text-slate-600">
+              {shortageExpenses.map((e) => (
+                <p key={`e-${e.id}`}>
+                  <span className="font-medium text-rose-600">−{inr2(e.amount)}</span> Shortage expense · {e.description || e.remarks || ''}
+                </p>
+              ))}
+              {miscIncome.map((t) => (
+                <p key={`m-${t.id}`}>
+                  <span className="font-medium text-emerald-600">+{inr2(t.amount)}</span> Misc income · {t.wallet_name}
+                </p>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
@@ -2626,8 +2863,11 @@ const handleApproveExpense = async (expenseId) => {
   const handleCompleteNightlyAccounting = async (payload) => {
     if (readOnly) return;
     try {
-      const openingBalance = accountingData.dailySummary?.derived?.openingBalance || 0;
-      
+      // The nightly close is a CASH close (bank / digital are checked against statements
+      // and fixed with transfers). Its closing_balance is the calculated cash, so the
+      // opening must be the CASH opening too — it was the total of all wallets.
+      const openingBalance = Number(accountingData.dailySummary?.derived?.cashOpening || 0);
+
       const finalPayload = {
         ...payload,
         opening_balance: openingBalance
@@ -2690,19 +2930,32 @@ const handleApproveExpense = async (expenseId) => {
     const totalBilled = serviceCharge + departmentCharge;
     
     if (totalBilled > 0 && received > 0) {
-      const paymentRatio = received / totalBilled;
+      // capped at 1: an overpaid entry (e.g. after a department-fee correction)
+      // must not count more than its full service charge
+      const paymentRatio = Math.min(1, received / totalBilled);
       return sum + (serviceCharge * paymentRatio);
     } else if (received > 0 && totalBilled === 0) {
       return sum + received;
     }
     return sum;
   }, 0) || 0;
-  
+
   const todayExpenses = expensesForCurrentDate
     .filter(e => e.status === 'approved')
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  
-  const todayProfit = totalServiceCharges - todayExpenses;
+
+  // rounded to paise (the pro-rata above produced values like ₹1,451.982)
+  const todayProfit = Math.round((totalServiceCharges - todayExpenses) * 100) / 100;
+
+  // Cash the system expects at close: cash opening + cash in − cash out ± cash transfers
+  const expectedCashForClose = (() => {
+    const d = accountingData.dailySummary?.derived;
+    if (!d || accountingData.dailySummary?.date !== date) return calculateCashInHand();
+    return Math.round((
+      Number(d.cashOpening || 0) + Number(d.cashInflow || 0) + Number(d.cashTransferIn || 0)
+      - Number(d.cashOutflow || 0) - Number(d.cashTransferOut || 0)
+    ) * 100) / 100;
+  })();
 
   const pendingApprovals = expensesForCurrentDate
     .filter(e => e.status === 'pending').length;
@@ -2939,14 +3192,14 @@ const handleExportExcel = () => {
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Today's Revenue"
-            value={`₹${totalRevenue.toLocaleString()}`}
+            value={`${inr2(totalRevenue)}`}
             subtitle="Total collected amount"
             icon={FiDollarSign}
             color="bg-emerald-600"
           />
           <StatCard
             title="Today's Profit"
-            value={`₹${todayProfit.toLocaleString()}`}
+            value={`${inr2(todayProfit)}`}
             subtitle="Service charges minus expenses"
             icon={FiTrendingUp}
             color="bg-navy-700"
@@ -3016,12 +3269,25 @@ const handleExportExcel = () => {
                   date={date}
                   onComplete={handleCompleteNightlyAccounting}
                   existingData={accountingData.nightlyAccounting?.[date]}
+                  expectedCash={expectedCashForClose}
                   readOnly={readOnly}
                 />
-                
+
+                <ShortageExcessCard
+                  date={date}
+                  buildQueryString={buildQueryString}
+                  refreshKey={`${activeAccountingTab}-${accountingData.nightlyAccounting?.[date]?.timestamp || ''}-${expensesForCurrentDate.length}`}
+                  wallets={derivedWallets}
+                  expenses={expensesForCurrentDate}
+                  ledgerRows={accountingData.ledger?.rows || []}
+                  nightly={accountingData.nightlyAccounting?.[date]}
+                  onOpenRecon={() => setActiveAccountingTab('wallets')}
+                />
+
                 <DailySummaryComponent
                   summaryData={accountingData.dailySummary}
                   onUpdate={handleUpdateDailySummary}
+                  countedCash={accountingData.nightlyAccounting?.[date]?.actualCashCount ?? null}
                   readOnly={readOnly}
                 />
               </div>
@@ -3240,7 +3506,7 @@ const handleExportExcel = () => {
                       <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">+12.5%</span>
                     </div>
                     <p className="text-sm text-slate-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-slate-900">₹{totalRevenue.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-slate-900">{inr2(totalRevenue)}</p>
                     <div className="mt-2 flex items-center text-xs text-slate-500">
                       <span>Services: {(accountingData.income?.rows?.length || 0)}</span>
                       <div className="w-1 h-1 mx-2 bg-slate-300 rounded-full"></div>
@@ -3256,7 +3522,7 @@ const handleExportExcel = () => {
                       <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">-8.2%</span>
                     </div>
                     <p className="text-sm text-slate-600">Total Expenses</p>
-                    <p className="text-2xl font-bold text-slate-900">₹{todayExpenses.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-slate-900">{inr2(todayExpenses)}</p>
                     <div className="mt-2 flex items-center text-xs text-slate-500">
                       <span>Approved: {expensesForCurrentDate.filter(e => e.status === 'approved').length}</span>
                       <div className="w-1 h-1 mx-2 bg-slate-300 rounded-full"></div>
@@ -3274,7 +3540,7 @@ const handleExportExcel = () => {
                       </span>
                     </div>
                     <p className="text-sm text-slate-600">Net Profit</p>
-                    <p className="text-2xl font-bold text-slate-900">₹{totalServiceCharges.toLocaleString()}</p>
+                    <p className="text-2xl font-bold text-slate-900">{inr2(totalServiceCharges)}</p>
                     <div className="mt-2 text-xs text-slate-500">
                       Service Charges • {(accountingData.income?.rows?.length || 0)} services
                     </div>
@@ -3322,7 +3588,7 @@ const handleExportExcel = () => {
                           </div>
                           <div className="text-right">
                             <p className="text-xs font-bold text-slate-900">
-                              ₹{totalServiceCharges.toLocaleString()}
+                              {inr2(totalServiceCharges)}
                             </p>
                             <p className="text-xs text-emerald-600 font-medium">
                               {totalRevenue > 0 ? 
@@ -3649,7 +3915,7 @@ const handleExportExcel = () => {
                             ></div>
                           </div>
                           <p className="text-xs text-slate-500 mt-1">
-                            Net Profit: ₹{todayProfit.toLocaleString()}
+                            Net Profit: {inr2(todayProfit)}
                           </p>
                         </div>
                         
@@ -3667,7 +3933,7 @@ const handleExportExcel = () => {
                             ></div>
                           </div>
                           <p className="text-xs text-slate-500 mt-1">
-                            Expenses: ₹{todayExpenses.toLocaleString()}
+                            Expenses: {inr2(todayExpenses)}
                           </p>
                         </div>
                       </div>
@@ -3753,21 +4019,21 @@ const handleExportExcel = () => {
                             <p className="text-lg font-bold text-slate-900">{accountingData.income?.rows?.length || 0}</p>
                             <p className="text-xs text-slate-600">Services</p>
                             <p className="text-xs text-emerald-600 font-medium mt-1">
-                              Profit: ₹{totalServiceCharges.toLocaleString()}
+                              Profit: {inr2(totalServiceCharges)}
                             </p>
                           </div>
                           <div className="text-center p-3 border border-slate-200 rounded-xl">
                             <p className="text-lg font-bold text-slate-900">{expensesForCurrentDate.length}</p>
                             <p className="text-xs text-slate-600">Expenses</p>
                             <p className="text-xs text-rose-600 font-medium mt-1">
-                              Cost: ₹{todayExpenses.toLocaleString()}
+                              Cost: {inr2(todayExpenses)}
                             </p>
                           </div>
                           <div className="text-center p-3 border border-slate-200 rounded-xl">
                             <p className="text-lg font-bold text-slate-900">{accountingData.ledger?.rows?.length || 0}</p>
                             <p className="text-xs text-slate-600">Ledger Entries</p>
                             <p className="text-xs text-navy-700 font-medium mt-1">
-                              Total: ₹{totalRevenue.toLocaleString()}
+                              Total: {inr2(totalRevenue)}
                             </p>
                           </div>
                         </div>
