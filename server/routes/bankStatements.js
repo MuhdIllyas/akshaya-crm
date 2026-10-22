@@ -71,7 +71,7 @@ const APP_DEBITS_SQL = `
   FROM (
     SELECT DISTINCT ON (COALESCE(NULLIF(wt.correction_group_id::text, ''), wt.id::text))
       wt.id, wt.amount, wt.category, wt.description, wt.reference_id, wt.created_at,
-      wt.staff_id, wt.is_reversal
+      wt.staff_id, wt.is_reversal, wt.correction_group_id
     FROM wallet_transactions wt
     WHERE wt.wallet_id = $1
       AND wt.type = 'debit'
@@ -88,6 +88,48 @@ const APP_DEBITS_SQL = `
     AND COALESCE(x.description, '') NOT ILIKE 'Correction reversal%'
   ORDER BY x.created_at
 `;
+
+/* Some corrections (e.g. expense corrections) do not use correction_group_id: they post a
+   credit "… correction reversal …" for the old amount and a new debit. Such a reversed debit
+   must not count as an app payment, otherwise it shows up as "In app, not in bank".
+   Each ungrouped reversal credit cancels one earlier ungrouped debit of the same amount
+   (same reference first, then the closest one before it). */
+const REVERSAL_CREDITS_SQL = `
+  SELECT wt.id, wt.amount::numeric AS amount, wt.reference_id, wt.description, wt.created_at
+  FROM wallet_transactions wt
+  WHERE wt.wallet_id = $1 AND wt.type = 'credit'
+    AND (wt.is_reversal IS TRUE OR wt.description ILIKE '%reversal%')
+    AND NULLIF(wt.correction_group_id::text, '') IS NULL
+    AND wt.created_at >= (($2::date - 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
+    AND wt.created_at <  (($3::date + 2)::timestamp AT TIME ZONE 'Asia/Kolkata')
+  ORDER BY wt.created_at, wt.id`;
+
+async function loadAppDebits(db, walletId, from, to) {
+  const debits = (await db.query(APP_DEBITS_SQL, [walletId, from, to])).rows;
+  const reversals = (await db.query(REVERSAL_CREDITS_SQL, [walletId, from, to])).rows;
+  // Bookings made FROM this screen ("Match & book" difference, "Book as expense") are already
+  // explained by their match — they must not reappear as "In app, not in bank".
+  const cancelled = new Set((await db.query(
+    `SELECT adjustment_tx_id FROM bank_statement_matches
+     WHERE wallet_id = $1 AND adjustment_tx_id IS NOT NULL AND status <> 'rejected'`,
+    [walletId]
+  )).rows.map((r) => r.adjustment_tx_id));
+  const origId = (d) => (String(d || '').match(/Original ID:\s*(\d+)/i) || [])[1];
+  for (const r of reversals) {
+    const p = Math.round(Number(r.amount) * 100);
+    const cands = debits.filter((d) => !cancelled.has(d.id)
+      && !d.correction_group_id
+      && Math.round(Number(d.amount) * 100) === p
+      && new Date(d.created_at) <= new Date(r.created_at));
+    if (!cands.length) continue;
+    const ref = origId(r.description);
+    const best = cands.find((d) => ref && String(d.reference_id) === ref)
+      || cands.find((d) => r.reference_id != null && d.reference_id === r.reference_id)
+      || cands[cands.length - 1]; // closest earlier debit
+    cancelled.add(best.id);
+  }
+  return debits.filter((d) => !cancelled.has(d.id));
+}
 
 // Re-run matching for a wallet + period. Confirmed / rejected decisions are kept.
 async function runMatching(client, wallet, from, to) {
@@ -121,7 +163,7 @@ async function runMatching(client, wallet, from, to) {
     [wallet.id]
   )).rows.map((r) => r.wallet_tx_id));
 
-  const app = (await client.query(APP_DEBITS_SQL, [wallet.id, from, to])).rows
+  const app = (await loadAppDebits(client, wallet.id, from, to))
     .filter((a) => !used.has(a.id))
     .map((a) => ({ ...a, amount: Number(a.amount) }));
 
@@ -328,7 +370,7 @@ router.get('/:id', async (req, res) => {
     )).rows;
     const lineIds = lines.map((l) => l.id);
 
-    const app = (await req.db.query(APP_DEBITS_SQL, [wallet.id, s.period_from, s.period_to])).rows;
+    const app = await loadAppDebits(req.db, wallet.id, s.period_from, s.period_to);
     const appById = Object.fromEntries(app.map((a) => [a.id, a]));
 
     const matches = (await req.db.query(
@@ -607,4 +649,5 @@ router.delete('/app/:txId/check', requireWriter, async (req, res) => {
   }
 });
 
+export { loadAppDebits };
 export default router;
