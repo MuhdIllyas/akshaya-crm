@@ -7,7 +7,7 @@ import {
   FiFileText, FiEdit3, FiRotateCcw, FiAlertCircle, FiClock as FiHistory,
   FiTrendingDown, FiMessageCircle, FiCornerDownLeft, FiPaperclip, FiPackage,
   FiLock, FiMapPin, FiAtSign, FiGlobe, FiBell, FiList, FiUserCheck, FiTarget,
-  FiMail, FiFlag, FiActivity, FiZap
+  FiMail, FiFlag, FiActivity, FiZap, FiPrinter
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
