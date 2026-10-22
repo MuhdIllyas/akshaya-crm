@@ -1,7 +1,8 @@
 // services/statementMatcher.js — matches bank DEBITS against the app's debits for the same
 // bank wallet. Pure function, no database, no AI. Amounts are compared in paise (integers).
 //
-// Order (each step only uses what is still unmatched):
+// Order (each step only uses what is still unmatched). Same-day steps run first, then the
+// same steps again allowing ±1 day:
 //   1. exact      1 bank debit = 1 app entry, same amount, same day        → auto
 //                 (±1 day: auto when the type fits, otherwise a suggestion)
 //   2. many_bank  2–5 bank debits of the SAME type, same day = 1 app entry → suggestion
@@ -79,15 +80,15 @@ export function matchStatement(bankRows, appRows, learned = {}, opts = {}) {
     m.app_ids.forEach((id) => usedApp.add(id));
     matches.push(m);
   };
-  const label = (b) => b.type_label || b.type_key || 'debit';
+  const label = (b) => (!b.type_key || b.type_key === 'other' ? 'bank' : b.type_label || b.type_key);
 
-  // ---- 1. exact, 1 = 1 (same day first, then ±1 day); best type fit wins
-  for (const window of [0, o.dateWindowDays]) {
+  // ---- exact, 1 = 1 within `window` days; best type fit wins
+  const exactPass = (window) => {
     for (const b of freeBank()) {
       const cands = freeApp()
         .filter((a) => a.p === b.p && dayDiff(a.date, b.value_date) <= window)
         .map((a) => ({ a, fit: typeFit(b, a, learned), dd: dayDiff(a.date, b.value_date) }))
-        .sort((x, y) => y.fit - x.fit || x.dd - y.dd);
+        .sort((x, y) => x.dd - y.dd || y.fit - x.fit);
       if (!cands.length) continue;
       const best = cands[0];
       const auto = best.dd === 0 || best.fit >= 2;
@@ -102,87 +103,102 @@ export function matchStatement(bankRows, appRows, learned = {}, opts = {}) {
         reason: best.dd === 0 ? 'Same amount, same day' : 'Same amount, 1 day apart',
       });
     }
-  }
+  };
 
-  // ---- 2. several bank debits (same type, same day) = 1 app entry
-  for (const a of freeApp().sort((x, y) => y.p - x.p)) {
-    const pool = freeBank().filter((b) => dayDiff(b.value_date, a.date) <= o.dateWindowDays);
-    // try each narration type separately — never mix e-Treasury with KSmart
-    const byType = {};
-    pool.forEach((b) => (byType[b.type_key] = byType[b.type_key] || []).push(b));
-    const types = Object.keys(byType).sort((x, y) => typeFit({ type_key: y }, a, learned) - typeFit({ type_key: x }, a, learned));
-    for (const t of types) {
-      const same = byType[t].filter((b) => dayDiff(b.value_date, a.date) === 0);
-      const subset = findSubset(same.length >= 2 ? same : byType[t], a.p, o.maxCombo, o.maxSearch);
+  // ---- several bank debits (same type) = 1 app entry
+  const manyBankPass = (window) => {
+    for (const a of freeApp().sort((x, y) => y.p - x.p)) {
+      const pool = freeBank().filter((b) => dayDiff(b.value_date, a.date) <= window);
+      // try each narration type separately — never mix e-Treasury with KSmart
+      const byType = {};
+      pool.forEach((b) => (byType[b.type_key] = byType[b.type_key] || []).push(b));
+      const types = Object.keys(byType).sort((x, y) => typeFit({ type_key: y }, a, learned) - typeFit({ type_key: x }, a, learned));
+      for (const t of types) {
+        const subset = findSubset(byType[t], a.p, o.maxCombo, o.maxSearch);
+        if (subset) {
+          take({
+            kind: 'many_bank',
+            bank_ids: subset.map((b) => b.id),
+            app_ids: [a.id],
+            bank_total: subset.reduce((s, b) => s + b.p, 0) / 100,
+            app_total: a.amount,
+            diff: 0,
+            confidence: 'suggest',
+            reason: `${subset.length} ${label(subset[0])} debits add up to this entry`,
+          });
+          break;
+        }
+      }
+    }
+  };
+
+  // ---- one bank debit = several app entries of the same day
+  const manyAppPass = () => {
+    for (const b of freeBank().sort((x, y) => y.p - x.p)) {
+      const pool = freeApp().filter((a) => dayDiff(a.date, b.value_date) === 0);
+      // Only combine entries that plausibly belong together — with many small entries a day,
+      // "any entries that add up" would almost always find a meaningless combination.
+      //   a) entries whose service fits the narration type (learned or by name), or
+      //   b) entries of one and the same service
+      const fitting = pool.filter((a) => typeFit(b, a, learned) > 0);
+      let subset = fitting.length >= 2 ? findSubset(fitting, b.p, o.maxCombo, o.maxSearch) : null;
+      if (!subset) {
+        const byService = {};
+        pool.forEach((a) => { if (a.service_id) (byService[a.service_id] = byService[a.service_id] || []).push(a); });
+        for (const group of Object.values(byService)) {
+          if (group.length < 2) continue;
+          subset = findSubset(group, b.p, o.maxCombo, o.maxSearch);
+          if (subset) break;
+        }
+      }
       if (subset) {
         take({
-          kind: 'many_bank',
-          bank_ids: subset.map((b) => b.id),
-          app_ids: [a.id],
-          bank_total: subset.reduce((s, b) => s + b.p, 0) / 100,
-          app_total: a.amount,
+          kind: 'many_app',
+          bank_ids: [b.id],
+          app_ids: subset.map((a) => a.id),
+          bank_total: b.debit,
+          app_total: subset.reduce((s, a) => s + a.p, 0) / 100,
           diff: 0,
           confidence: 'suggest',
-          reason: `${subset.length} ${label(subset[0])} debits add up to this entry`,
+          reason: `${subset.length} entries add up to one ${label(b)} debit`,
         });
-        break;
       }
     }
-  }
+  };
 
-  // ---- 3. one bank debit = several app entries of the same day
-  for (const b of freeBank().sort((x, y) => y.p - x.p)) {
-    const pool = freeApp().filter((a) => dayDiff(a.date, b.value_date) === 0);
-    // Only combine entries that plausibly belong together — with many small entries a day,
-    // "any entries that add up" would almost always find a meaningless combination.
-    //   a) entries whose service fits the narration type (learned or by name), or
-    //   b) entries of one and the same service
-    const fitting = pool.filter((a) => typeFit(b, a, learned) > 0);
-    let subset = fitting.length >= 2 ? findSubset(fitting, b.p, o.maxCombo, o.maxSearch) : null;
-    if (!subset) {
-      const byService = {};
-      pool.forEach((a) => { if (a.service_id) (byService[a.service_id] = byService[a.service_id] || []).push(a); });
-      for (const group of Object.values(byService)) {
-        if (group.length < 2) continue;
-        subset = findSubset(group, b.p, o.maxCombo, o.maxSearch);
-        if (subset) break;
-      }
-    }
-    if (subset) {
+  // ---- small difference, 1 = 1 (≤ ₹10 or 2 %) within `window` days
+  const diffPass = (window) => {
+    for (const b of freeBank()) {
+      const limit = Math.max(paise(o.closeAbs), Math.round(b.p * o.closePct));
+      const cands = freeApp()
+        .filter((a) => Math.abs(a.p - b.p) <= limit && dayDiff(a.date, b.value_date) <= window)
+        .map((a) => ({ a, fit: typeFit(b, a, learned), gap: Math.abs(a.p - b.p), dd: dayDiff(a.date, b.value_date) }))
+        .sort((x, y) => y.fit - x.fit || x.gap - y.gap || x.dd - y.dd);
+      if (!cands.length) continue;
+      const best = cands[0];
+      const diff = (b.p - best.a.p) / 100; // + bank paid more than entered
       take({
-        kind: 'many_app',
+        kind: 'amount_diff',
         bank_ids: [b.id],
-        app_ids: subset.map((a) => a.id),
+        app_ids: [best.a.id],
         bank_total: b.debit,
-        app_total: subset.reduce((s, a) => s + a.p, 0) / 100,
-        diff: 0,
+        app_total: best.a.amount,
+        diff,
         confidence: 'suggest',
-        reason: `${subset.length} entries add up to one ${label(b)} debit`,
+        reason: `Bank ₹${Number(b.debit).toFixed(2)} vs entered ₹${Number(best.a.amount).toFixed(2)} (${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)})${best.dd ? ', 1 day apart' : ''}`,
       });
     }
-  }
+  };
 
-  // ---- 4. small difference, 1 = 1
-  for (const b of freeBank()) {
-    const limit = Math.max(paise(o.closeAbs), Math.round(b.p * o.closePct));
-    const cands = freeApp()
-      .filter((a) => Math.abs(a.p - b.p) <= limit && dayDiff(a.date, b.value_date) <= o.dateWindowDays)
-      .map((a) => ({ a, fit: typeFit(b, a, learned), gap: Math.abs(a.p - b.p), dd: dayDiff(a.date, b.value_date) }))
-      .sort((x, y) => y.fit - x.fit || x.gap - y.gap || x.dd - y.dd);
-    if (!cands.length) continue;
-    const best = cands[0];
-    const diff = (b.p - best.a.p) / 100; // + bank paid more than entered
-    take({
-      kind: 'amount_diff',
-      bank_ids: [b.id],
-      app_ids: [best.a.id],
-      bank_total: b.debit,
-      app_total: best.a.amount,
-      diff,
-      confidence: 'suggest',
-      reason: `Bank ₹${b.debit.toFixed(2)} vs entered ₹${Number(best.a.amount).toFixed(2)} (${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)})`,
-    });
-  }
+  // Same-day evidence always wins over a neighbouring day: an exact amount from yesterday
+  // must not take a bank row that is really part of today's split or combination.
+  exactPass(0);
+  manyBankPass(0);
+  manyAppPass();
+  diffPass(0);
+  exactPass(o.dateWindowDays);
+  manyBankPass(o.dateWindowDays);
+  diffPass(o.dateWindowDays);
 
   return {
     matches,
