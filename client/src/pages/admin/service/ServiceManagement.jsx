@@ -20,9 +20,9 @@ import { toast } from "react-toastify";
 /* ---------------- shared styles ---------------- */
 
 const inputCls =
-  "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20";
+  "w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20";
 const btnBase =
-  "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 transition-colors";
+  "inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 transition-colors";
 const btnPrimary = `${btnBase} bg-navy-700 text-white shadow-sm hover:bg-navy-800`;
 const btnGhost = `${btnBase} border border-slate-200 bg-white text-slate-700 hover:bg-slate-50`;
 const iconBtn =
@@ -40,8 +40,8 @@ const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /* ---------------- small building blocks ---------------- */
 
 const KpiTile = ({ label, value, icon: Icon, chip }) => (
-  <div className="flex flex-col items-start gap-2 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-3 sm:p-4">
-    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${chip}`}>
+  <div className="flex flex-col items-start gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:gap-3 sm:p-4">
+    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${chip}`}>
       <Icon className="h-5 w-5" />
     </span>
     <div className="min-w-0">
@@ -55,7 +55,7 @@ const Pill = ({ icon: Icon, tone = "slate", children, title }) => {
   const tones = {
     slate: "bg-slate-100 text-slate-600",
     green: "bg-emerald-50 text-emerald-700",
-    blue: "bg-blue-50 text-navy-700",
+    blue: "bg-slate-100 text-navy-700",
     amber: "bg-amber-50 text-amber-700",
   };
   return (
@@ -78,7 +78,7 @@ const Field = ({ label, hint, children }) => (
 );
 
 const Check = ({ label, hint, ...props }) => (
-  <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-200 p-3 hover:bg-slate-50">
+  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 p-3 hover:bg-slate-50">
     <input
       type="checkbox"
       className="mt-0.5 h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-navy-500"
@@ -113,7 +113,7 @@ const Modal = ({ title, subtitle, onClose, onSubmit, submitLabel, children }) =>
         initial={{ scale: 0.97, y: 12 }}
         animate={{ scale: 1, y: 0 }}
         exit={{ scale: 0.97, y: 12 }}
-        className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-xl bg-white shadow-xl"
+        className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl bg-white shadow-xl"
       >
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
@@ -483,7 +483,7 @@ const ServiceManagement = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="w-full space-y-5">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -501,14 +501,14 @@ const ServiceManagement = () => {
         {/* KPI tiles */}
         {showList && (
           <div className="grid grid-cols-3 gap-2 sm:gap-3">
-            <KpiTile label="Total services" value={counts.all} icon={FiBriefcase} chip="bg-blue-50 text-navy-700" />
+            <KpiTile label="Total services" value={counts.all} icon={FiBriefcase} chip="bg-slate-100 text-navy-700" />
             <KpiTile label="Active services" value={counts.active} icon={FiCheckCircle} chip="bg-emerald-50 text-emerald-600" />
             <KpiTile label="Sub-categories" value={counts.subs} icon={FiLayers} chip="bg-amber-50 text-amber-600" />
           </div>
         )}
 
         {/* Toolbar */}
-        <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:flex-row sm:items-center">
           <div className="relative flex-1">
             <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input
@@ -529,7 +529,7 @@ const ServiceManagement = () => {
               </button>
             )}
           </div>
-          <div className="inline-flex shrink-0 overflow-x-auto rounded-lg bg-slate-100 p-0.5" role="tablist">
+          <div className="inline-flex shrink-0 overflow-x-auto rounded-xl bg-slate-100 p-0.5" role="tablist">
             {STATUS_TABS.map((t) => (
               <button
                 key={t.id}
@@ -550,7 +550,7 @@ const ServiceManagement = () => {
 
         {/* Load error */}
         {loadError && !loading && (
-          <div className="flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
             <span className="flex items-center gap-2">
               <FiAlertCircle className="h-4 w-4 shrink-0" />
               {loadError}
@@ -563,11 +563,11 @@ const ServiceManagement = () => {
 
         {/* Loading skeleton */}
         {loading && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" aria-busy="true">
             {[0, 1, 2].map((i) => (
-              <div key={i} className="animate-pulse space-y-4 rounded-xl border border-slate-200 bg-white p-5">
+              <div key={i} className="animate-pulse space-y-4 rounded-2xl border border-slate-200 bg-white p-5">
                 <div className="flex gap-3">
-                  <div className="h-10 w-10 rounded-lg bg-slate-100" />
+                  <div className="h-10 w-10 rounded-xl bg-slate-100" />
                   <div className="flex-1 space-y-2">
                     <div className="h-4 w-2/3 rounded bg-slate-100" />
                     <div className="h-3 w-1/3 rounded bg-slate-100" />
@@ -575,8 +575,8 @@ const ServiceManagement = () => {
                 </div>
                 <div className="h-3 w-full rounded bg-slate-100" />
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="h-14 rounded-lg bg-slate-100" />
-                  <div className="h-14 rounded-lg bg-slate-100" />
+                  <div className="h-14 rounded-xl bg-slate-100" />
+                  <div className="h-14 rounded-xl bg-slate-100" />
                 </div>
               </div>
             ))}
@@ -585,7 +585,7 @@ const ServiceManagement = () => {
 
         {/* Services grid */}
         {showList && filteredServices.length > 0 && (
-          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {filteredServices.map((service) => {
               const wallet = getWalletById(service.wallet_id);
               const isActive = service.status === "active";
@@ -597,12 +597,12 @@ const ServiceManagement = () => {
               return (
                 <div
                   key={service.id}
-                  className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
                 >
                   <div className="p-4">
                     {/* title row */}
                     <div className="flex items-start gap-3">
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-navy-700">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-navy-700">
                         <FiFileText className="h-5 w-5" />
                       </span>
                       <div className="min-w-0 flex-1">
@@ -638,13 +638,13 @@ const ServiceManagement = () => {
 
                     {/* charges */}
                     <div className="mt-3 grid grid-cols-2 gap-2">
-                      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
                         <p className="text-[11px] font-medium text-slate-500">Dept. charges</p>
                         <p className="text-base font-semibold tabular-nums text-slate-800">
                           {formatCurrency(service.department_charges)}
                         </p>
                       </div>
-                      <div className="rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2">
+                      <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2">
                         <p className="text-[11px] font-medium text-emerald-700">Service charges</p>
                         <p className="text-base font-semibold tabular-nums text-emerald-700">
                           {formatCurrency(service.service_charges)}
@@ -751,7 +751,7 @@ const ServiceManagement = () => {
                                   return (
                                     <div
                                       key={subCat.id}
-                                      className={`overflow-hidden rounded-lg border bg-white ${
+                                      className={`overflow-hidden rounded-xl border bg-white ${
                                         isMatch ? "border-navy-500 ring-1 ring-navy-500/30" : "border-slate-200"
                                       }`}
                                     >
@@ -823,7 +823,7 @@ const ServiceManagement = () => {
                               </div>
                             ) : (
                               addSubFor !== service.id && (
-                                <p className="rounded-lg bg-slate-50 px-3 py-3 text-xs text-slate-500">
+                                <p className="rounded-xl bg-slate-50 px-3 py-3 text-xs text-slate-500">
                                   No sub-categories yet.
                                 </p>
                               )
@@ -831,7 +831,7 @@ const ServiceManagement = () => {
 
                             {/* add sub-category */}
                             {addSubFor === service.id && (
-                              <div className="mt-3 space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3">
+                              <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
                                 <p className="text-sm font-medium text-slate-800">New sub-category</p>
                                 <Field label="Name *">
                                   <input
@@ -904,7 +904,7 @@ const ServiceManagement = () => {
 
         {/* Empty state */}
         {showList && filteredServices.length === 0 && (
-          <div className="rounded-xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
             <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-slate-100 text-slate-400">
               <FiBriefcase className="h-6 w-6" />
             </span>

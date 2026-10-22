@@ -83,10 +83,10 @@ const StaffManagement = () => {
   };
 
   const stats = [
-    { label: "Total Staff", value: staffList.length, icon: FiUsers, tone: "bg-blue-50 text-blue-600" },
+    { label: "Total Staff", value: staffList.length, icon: FiUsers, tone: "bg-slate-100 text-navy-700" },
     { label: "Active", value: staffList.filter((s) => s.status === "Active").length, icon: FiUserCheck, tone: "bg-emerald-50 text-emerald-600" },
     { label: "On Leave", value: staffList.filter((s) => s.status === "On Leave").length, icon: FiClock, tone: "bg-amber-50 text-amber-600" },
-    { label: "Departments", value: new Set(staffList.map((s) => s.department).filter(Boolean)).size, icon: FiLayers, tone: "bg-purple-50 text-purple-600" },
+    { label: "Departments", value: new Set(staffList.map((s) => s.department).filter(Boolean)).size, icon: FiLayers, tone: "bg-slate-100 text-slate-600" },
   ];
 
   const exportCsv = () => {
@@ -114,13 +114,13 @@ const StaffManagement = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+      <div className="w-full">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Staff Management</h1>
-            <p className="text-gray-500 mt-1">Manage your team members, roles and details</p>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Staff Management</h1>
+            <p className="text-slate-500 mt-1">Manage your team members, roles and details</p>
           </div>
           <button
             onClick={() => setShowAddForm(true)}
@@ -133,10 +133,10 @@ const StaffManagement = () => {
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           {stats.map(({ label, value, icon: Icon, tone }) => (
-            <div key={label} className="bg-white rounded-2xl p-5 border border-gray-200 shadow-sm flex items-center justify-between">
+            <div key={label} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-500 font-medium">{label}</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{loading ? "–" : value}</p>
+                <p className="text-sm text-slate-500 font-medium">{label}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{loading ? "–" : value}</p>
               </div>
               <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tone}`}>
                 <Icon size={20} />
@@ -146,19 +146,19 @@ const StaffManagement = () => {
         </div>
 
         {/* Toolbar */}
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4 mb-6">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
           <div className="flex flex-col lg:flex-row gap-3">
             <div className="relative flex-1">
-              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" size={17} />
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
                 type="text"
                 placeholder="Search name, username, employee ID, email or phone…"
-                className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                className="w-full pl-10 pr-9 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none text-sm"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
               {searchTerm && (
-                <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
                   <FiX size={16} />
                 </button>
               )}
@@ -168,25 +168,25 @@ const StaffManagement = () => {
               <select
                 value={selectedDepartment}
                 onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 outline-none"
               >
                 {DEPARTMENTS.map((d) => <option key={d} value={d}>{d === "All" ? "All departments" : d}</option>)}
               </select>
               <select
                 value={selectedStatus}
                 onChange={(e) => setSelectedStatus(e.target.value)}
-                className="px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                className="px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 outline-none"
               >
                 {STATUSES.map((s) => <option key={s} value={s}>{s === "All" ? "All statuses" : s}</option>)}
               </select>
 
-              <div className="flex bg-gray-100 rounded-xl p-1">
+              <div className="flex bg-slate-100 rounded-xl p-1">
                 {[["card", FiGrid, "Cards"], ["table", FiList, "Table"]].map(([mode, Icon, label]) => (
                   <button
                     key={mode}
                     onClick={() => changeView(mode)}
-                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-medium transition-colors ${
-                      viewMode === mode ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                    className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                      viewMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                     }`}
                   >
                     <Icon size={15} /> <span className="hidden sm:inline">{label}</span>
@@ -196,7 +196,7 @@ const StaffManagement = () => {
 
               <button
                 onClick={exportCsv}
-                className="inline-flex items-center gap-2 px-3.5 py-2.5 border border-gray-300 rounded-xl text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 <FiDownload size={15} /> Export
               </button>
@@ -204,39 +204,39 @@ const StaffManagement = () => {
           </div>
 
           {hasFilters && (
-            <div className="mt-3 flex items-center gap-3 text-sm text-gray-500">
+            <div className="mt-3 flex items-center gap-3 text-sm text-slate-500">
               Showing {filteredStaff.length} of {staffList.length}
-              <button onClick={resetFilters} className="text-blue-600 hover:text-blue-800 font-medium">Clear filters</button>
+              <button onClick={resetFilters} className="text-navy-700 hover:text-navy-800 font-medium">Clear filters</button>
             </div>
           )}
         </div>
 
         {/* Content */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse">
+              <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse">
                 <div className="flex gap-3">
-                  <div className="w-14 h-14 rounded-full bg-gray-200" />
+                  <div className="w-14 h-14 rounded-full bg-slate-200" />
                   <div className="flex-1 space-y-2 pt-1">
-                    <div className="h-4 bg-gray-200 rounded w-3/4" />
-                    <div className="h-3 bg-gray-200 rounded w-1/2" />
+                    <div className="h-4 bg-slate-200 rounded w-3/4" />
+                    <div className="h-3 bg-slate-200 rounded w-1/2" />
                   </div>
                 </div>
                 <div className="mt-5 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded" />
-                  <div className="h-3 bg-gray-200 rounded w-5/6" />
+                  <div className="h-3 bg-slate-200 rounded" />
+                  <div className="h-3 bg-slate-200 rounded w-5/6" />
                 </div>
               </div>
             ))}
           </div>
         ) : filteredStaff.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-200 p-12 text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <FiSearch className="text-gray-400" size={24} />
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <FiSearch className="text-slate-400" size={24} />
             </div>
-            <h3 className="text-lg font-semibold text-gray-900">No staff members found</h3>
-            <p className="text-gray-500 mt-1 mb-5">Try adjusting your search or filters</p>
+            <h3 className="text-lg font-semibold text-slate-900">No staff members found</h3>
+            <p className="text-slate-500 mt-1 mb-5">Try adjusting your search or filters</p>
             {hasFilters && (
               <button onClick={resetFilters} className="px-5 py-2.5 bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800">
                 Clear filters
@@ -244,23 +244,23 @@ const StaffManagement = () => {
             )}
           </div>
         ) : viewMode === "table" ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <StaffTable staffList={filteredStaff} />
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
             {filteredStaff.map((staff) => {
               const dob = staff.dateOfBirth || staff.dob;
               return (
-                <div key={staff.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300 transition-all flex flex-col">
+                <div key={staff.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all flex flex-col">
                   <div className="p-5 flex-1">
                     <div className="flex items-start gap-3">
                       <StaffAvatar staff={staff} size="w-14 h-14" text="text-base" />
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-gray-900 truncate">{staff.name}</h3>
-                        <p className="text-xs text-gray-500 truncate">
+                        <h3 className="font-semibold text-slate-900 truncate">{staff.name}</h3>
+                        <p className="text-xs text-slate-500 truncate">
                           @{staff.username}
-                          {staff.employeeId && <span className="text-gray-400"> · {staff.employeeId}</span>}
+                          {staff.employeeId && <span className="text-slate-400"> · {staff.employeeId}</span>}
                         </p>
                         <div className="flex flex-wrap gap-1.5 mt-2">
                           <RoleBadge role={staff.role} />
@@ -269,44 +269,44 @@ const StaffManagement = () => {
                       </div>
                     </div>
 
-                    <div className="mt-4 space-y-2 text-sm text-gray-600">
+                    <div className="mt-4 space-y-2 text-sm text-slate-600">
                       <p className="flex items-center gap-2.5 min-w-0">
-                        <FiMail className="text-gray-400 shrink-0" size={14} />
+                        <FiMail className="text-slate-400 shrink-0" size={14} />
                         <span className="truncate">{staff.email}</span>
                       </p>
                       <p className="flex items-center gap-2.5">
-                        <FiPhone className="text-gray-400 shrink-0" size={14} />
+                        <FiPhone className="text-slate-400 shrink-0" size={14} />
                         {staff.phone || "—"}
                       </p>
                       {staff.department && (
                         <p className="flex items-center gap-2.5">
-                          <FiLayers className="text-gray-400 shrink-0" size={14} />
+                          <FiLayers className="text-slate-400 shrink-0" size={14} />
                           {staff.department}
                         </p>
                       )}
                       <p className="flex items-center gap-2.5">
-                        <FiCalendar className="text-gray-400 shrink-0" size={14} />
+                        <FiCalendar className="text-slate-400 shrink-0" size={14} />
                         Joined {formatDate(staff.joinDate)}
                       </p>
                       {dob && (
                         <p className="flex items-center gap-2.5">
-                          <FiGift className="text-gray-400 shrink-0" size={14} />
+                          <FiGift className="text-slate-400 shrink-0" size={14} />
                           Birthday {formatDate(dob, { day: "2-digit", month: "short" })}
                         </p>
                       )}
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 border-t border-gray-100">
+                  <div className="grid grid-cols-2 border-t border-slate-100">
                     <Link
                       to={`/dashboard/admin/staff/edit/${staff.id}`}
-                      className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-gray-600 hover:text-blue-700 hover:bg-gray-50 rounded-bl-2xl border-r border-gray-100"
+                      className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-slate-600 hover:text-navy-700 hover:bg-slate-50 rounded-bl-2xl border-r border-slate-100"
                     >
                       <FiEdit2 size={14} /> Edit
                     </Link>
                     <Link
                       to={`/dashboard/admin/staff/${staff.id}`}
-                      className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-blue-600 hover:text-blue-800 hover:bg-gray-50 rounded-br-2xl"
+                      className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-navy-700 hover:text-navy-800 hover:bg-slate-50 rounded-br-2xl"
                     >
                       View Profile
                     </Link>
