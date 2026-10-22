@@ -824,7 +824,7 @@ const StaffDashboard = () => {
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
       <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 text-white px-6 py-6">
-        <div className="w-full">
+        <div className="w-full max-w-[1440px] mx-auto">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
@@ -918,7 +918,7 @@ const StaffDashboard = () => {
               </motion.span>
             ))}
 
-            <div className="relative w-full px-6 py-5 flex items-center justify-between gap-4">
+            <div className="relative w-full max-w-[1440px] mx-auto px-6 py-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="text-5xl">🎂</div>
                 <div>
@@ -944,7 +944,7 @@ const StaffDashboard = () => {
       {/* ===== BIRTHDAY: COLLEAGUES ===== */}
       {colleagueBirthdays.length > 0 && (
         <div className="bg-rose-50 border-l-4 border-rose-500">
-          <div className="w-full px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="w-full max-w-[1440px] mx-auto px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex -space-x-2 shrink-0">
                 {colleagueBirthdays.slice(0, 3).map(b => (
@@ -1008,7 +1008,7 @@ const StaffDashboard = () => {
                     : 'bg-amber-50 border-amber-500')
             }`}
           >
-            <div className="w-full px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="w-full max-w-[1440px] mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {!todayAttendance || !todayAttendance.punch_in ? (
                   <>
@@ -1067,7 +1067,7 @@ const StaffDashboard = () => {
       
       {/* Original Header */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="px-6 py-6">
+        <div className="px-6 py-6 max-w-[1440px] mx-auto">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gradient-to-br from-navy-500 to-navy-700 rounded-xl flex items-center justify-center shadow-lg">
@@ -1185,7 +1185,7 @@ const StaffDashboard = () => {
       </div>
 
       <main id="sd-main" className="p-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-[1440px] mx-auto">
           
           {/* ===== LAYOUT F: MAIN WORK AREA + MY DAY PANEL ===== */}
           <div className="flex flex-col xl:flex-row gap-6 items-start">
@@ -1251,7 +1251,7 @@ const StaffDashboard = () => {
               </div>
 
               {/* Stats Row */}
-              <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-4 mb-8">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
                 {statView === 'applications' ? (
                   <>
                     <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-slate-600" />
@@ -1971,7 +1971,7 @@ const StaffDashboard = () => {
             </div>
 
             {/* My day panel – target, tasks, attendance & wallet, calendar */}
-            <aside aria-label="My day" className="w-full xl:w-[360px] xl:shrink-0 xl:order-first space-y-6">
+            <aside aria-label="My day" className="w-full xl:w-[340px] xl:shrink-0 xl:order-first space-y-6">
               {/* ===== TARGET (summary) ===== */}
               <div
                 onClick={scrollToPerf}
