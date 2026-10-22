@@ -9,7 +9,7 @@ import {
 } from './centrePdf';
 
 export const DEFAULT_CHECKLIST_NOTE =
-  'Please bring the original documents along with one self-attested photocopy of each. ' +
+  'Please bring the original documents. ' +
   'The department may ask for additional documents depending on your case.';
 
 const money = (n) =>
