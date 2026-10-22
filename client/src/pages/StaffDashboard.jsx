@@ -1639,7 +1639,7 @@ const StaffDashboard = () => {
 
               <div className="mt-6">
               {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 items-start scroll-mt-20">
+              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch scroll-mt-20">
 
                 {/* 3a: MONTHLY & DAILY TARGET METER */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
@@ -2158,7 +2158,7 @@ const StaffDashboard = () => {
             {/* Right rail – recent activity */}
             <div className="w-full 2xl:w-[340px] 2xl:shrink-0 order-last">
               {/* Recent Activity (Compact Version) */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm" role="region" aria-label="Recent activity">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" role="region" aria-label="Recent activity">
                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
@@ -2176,7 +2176,7 @@ const StaffDashboard = () => {
                             <div className="p-1 bg-slate-100 rounded text-slate-500">
                               <FiCalendar className="h-3 w-3" />
                             </div>
-                            <h4 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
                               {formatDateUI(date)}
                             </h4>
                             <div className="h-px bg-slate-200 flex-1 ml-1"></div>
@@ -2200,7 +2200,7 @@ const StaffDashboard = () => {
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
                                         entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
                                         entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
                                         entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
@@ -2210,30 +2210,30 @@ const StaffDashboard = () => {
                                       </span>
                                     </div>
                                     
-                                    <span className="text-[10px] font-medium text-slate-400 shrink-0">
+                                    <span className="text-xs font-medium text-slate-600 shrink-0">
                                       {formatTime(entry.created_at)}
                                     </span>
                                   </div>
                                   
                                   <div className="flex justify-between items-end gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-[11px] font-medium text-slate-600 truncate max-w-[160px]">
+                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
                                       </p>
                                       
                                       {entry.tokenId && (
-                                        <span className="text-[10px] text-slate-400 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                        <span className="text-xs text-slate-600 font-mono font-bold before:content-['•'] before:mr-1.5">
                                           {shortenTokenId(entry.tokenId)}
                                         </span>
                                       )}
                                       
                                       {entry.workSource === 'online' && (
-                                        <span className="text-[9px] text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
+                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
                                           <FiGlobe className="h-2 w-2" /> Online
                                         </span>
                                       )}
                                       {entry.is_edited && (
-                                        <span className="text-[9px] text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
+                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
                                           Edited
                                         </span>
                                       )}
@@ -2242,7 +2242,7 @@ const StaffDashboard = () => {
                                     {(entry.tokenId || entry.tracking_id) && (
                                       <button 
                                         onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                        className="text-[10px] font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
+                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors shrink-0 flex items-center gap-1"
                                       >
                                         Details <FiChevronRight className="h-3 w-3" />
                                       </button>
@@ -2256,7 +2256,7 @@ const StaffDashboard = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-600">
                       <FiActivity className="h-8 w-8 mb-2 opacity-20" />
                       <p className="text-sm font-medium">No recent activity</p>
                     </div>
