@@ -1640,7 +1640,7 @@ const StaffDashboard = () => {
 
               <div className="mt-6">
               {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch scroll-mt-20">
+              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-6 items-stretch scroll-mt-20">
 
                 {/* 3a: MONTHLY & DAILY TARGET METER */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
@@ -1725,7 +1725,7 @@ const StaffDashboard = () => {
                             )}
                           </div>
 
-                          <div className="flex gap-2 overflow-x-auto pb-1">
+                          <div className="flex flex-wrap gap-2">
                             {[...targetHistory].reverse().map((h) => {
                               const met = h.percent >= 100;
                               return (
@@ -1833,14 +1833,14 @@ const StaffDashboard = () => {
                 </div>
 
                 {/* Recent Activity (Compact Version) */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:col-span-2 xl:col-span-1" role="region" aria-label="Recent activity">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:col-span-2 2xl:col-span-1" role="region" aria-label="Recent activity">
                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
                     {recentServiceEntries.length} items
                   </span>
                 </div>
-                <div className="p-4 overflow-y-auto max-h-[420px]">
+                <div className="p-4 overflow-y-auto overflow-x-hidden max-h-[420px]">
                   {Object.keys(groupedRecentActivities).length > 0 ? (
                     <div className="space-y-6">
                       {Object.entries(groupedRecentActivities).map(([date, entries]) => (
@@ -1869,9 +1869,9 @@ const StaffDashboard = () => {
                                   <FiUser className="h-3.5 w-3.5 text-navy-700" />
                                 </div>
 
-                                <div className="flex-1 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-slate-300 flex flex-col justify-center">
+                                <div className="flex-1 min-w-0 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-slate-300 flex flex-col justify-center">
                                   
-                                  <div className="flex justify-between items-center mb-1.5 gap-2">
+                                  <div className="flex flex-wrap justify-between items-center mb-1.5 gap-x-2 gap-y-1">
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
@@ -1890,7 +1890,7 @@ const StaffDashboard = () => {
                                     </span>
                                   </div>
                                   
-                                  <div className="flex justify-between items-end gap-2">
+                                  <div className="flex flex-wrap justify-between items-end gap-x-2 gap-y-1.5">
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
