@@ -38,6 +38,7 @@ import ScheduledActionsPanel from '@/components/automations/ScheduledActionsPane
 import { validateDraft, toApiAction } from '@/utils/automations/automationUtils';
 import { getPresets , createAutomations } from '@/services/automationService';
 import { todayIST, addDays } from "@/utils/dates";
+import { printServiceChecklist } from '@/utils/pdf/requiredDocumentsPdf';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -1803,6 +1804,22 @@ const ServiceEntry = () => {
                               {/* Docs & Web */}
                               {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
                                 <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      printServiceChecklist({
+                                        items: [{
+                                          category: categories.find(c => c.id === parseInt(svc.category)),
+                                          subcategory: subcategories.find(s => s.id === parseInt(svc.subcategory)) || null,
+                                        }],
+                                        customerName: formData.customerName,
+                                        phone: formData.phone,
+                                      }).catch(err => toast.error(err.message))
+                                    }
+                                    className="ml-auto inline-flex items-center gap-1 rounded-md border border-blue-200 bg-white px-2 py-1 font-medium text-blue-700 hover:bg-blue-50"
+                                  >
+                                    <FiPrinter className="h-3.5 w-3.5" /> Print checklist
+                                  </button>
                                   {website && (
                                     <div className="flex items-center gap-1.5">
                                       <FiLink className="text-blue-500 shrink-0" />
@@ -2318,6 +2335,20 @@ const ServiceEntry = () => {
             >
               <FiFileText className="h-5 w-5" />
               Preview Invoice
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const items = formData.services.filter(s => s.category).map(s => {
+                  const category = categories.find(c => c.id === parseInt(s.category));
+                  return { category, subcategory: category?.subcategories?.find(x => x.id === parseInt(s.subcategory)) || null };
+                });
+                printServiceChecklist({ items, customerName: formData.customerName, phone: formData.phone })
+                  .catch(err => toast.error(err.message));
+              }}
+              className="px-4 py-3 bg-white border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 flex items-center gap-2"
+            >
+              <FiPrinter className="h-5 w-5" /> Print Doc Checklist
             </button>
             <button
               type="submit"

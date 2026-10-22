@@ -38,6 +38,7 @@ import ServiceWorkspace from './components/ServiceWorkspace';
 import StaffPerformance from './pages/staff/StaffPerformance';
 import StaffAttendance from "./pages/staff/StaffAttendance";
 import ServiceEntry from "./pages/staff/ServiceEntry";
+import ServiceRequirementsPrint from './pages/staff/ServiceRequirementsPrint';
 import ExpenseEntry from "./pages/staff/ExpenseEntry";
 import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
 import PendingPayments from './pages/staff/PendingPayments';
@@ -478,6 +479,10 @@ const App = () => {
             <Route
               path="staff/service_entry"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceEntry /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/service_checklist"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceChecklist /></ProtectedRoute>}
             />
             <Route
               path="staff/token/:tokenId/service"
