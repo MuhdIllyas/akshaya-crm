@@ -34,8 +34,8 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
     whileHover={{ y: -2 }}
     className="bg-white rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-300 p-5"
   >
-    <div className="flex items-center justify-between">
-      <div>
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
         <p className="font-medium text-slate-600 mb-1 text-sm">{title}</p>
         {loading ? (
           <div className="h-8 w-20 bg-slate-200 animate-pulse rounded"></div>
@@ -44,7 +44,7 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
         )}
         {subtitle && <p className="text-slate-500 text-sm mt-1">{subtitle}</p>}
       </div>
-      <div className={`rounded-xl ${color} p-3`}>
+      <div className={`rounded-xl ${color} p-3 shrink-0`}>
         <Icon className="text-white h-6 w-6" />
       </div>
     </div>
@@ -1170,7 +1170,7 @@ const StaffDashboard = () => {
                 </AnimatePresence>
               </div>
               
-              <span className="text-xs text-slate-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
+              <span className="hidden md:inline text-xs text-slate-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
               <button
                 onClick={refreshTokens}
                 className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
@@ -1184,7 +1184,7 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      <main id="sd-main" className="p-6">
+      <main id="sd-main" className="p-6 pb-24">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
           
           {/* ===== LAYOUT F: MAIN WORK AREA + MY DAY PANEL ===== */}
@@ -1251,7 +1251,7 @@ const StaffDashboard = () => {
               </div>
 
               {/* Stats Row */}
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-3 mb-6">
                 {statView === 'applications' ? (
                   <>
                     <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-slate-600" />
