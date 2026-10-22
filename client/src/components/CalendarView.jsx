@@ -75,15 +75,15 @@ const DraggableEvent = ({ event, onDragStart, onEdit, onDelete, isCompact = fals
   const displayKey = event.event_type || event.type;
 
   const colors = {
-    holiday: 'bg-red-100 text-red-800 border-red-200',
-    deadline: 'bg-red-100 text-red-800 border-red-200',
-    weekend: 'bg-gray-100 text-gray-800 border-gray-200',
-    working: 'bg-green-100 text-green-800 border-green-200',
-    start: 'bg-green-100 text-green-800 border-green-200',
-    task: 'bg-purple-100 text-purple-800 border-purple-200',
-    expiry: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    announcement: 'bg-blue-100 text-blue-800 border-blue-200',
-    default: 'bg-gray-100 text-gray-800 border-gray-200'
+    holiday: 'bg-rose-100 text-rose-800 border-rose-200',
+    deadline: 'bg-rose-100 text-rose-800 border-rose-200',
+    weekend: 'bg-slate-100 text-slate-800 border-slate-200',
+    working: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    start: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+    task: 'bg-slate-100 text-navy-800 border-slate-300',
+    expiry: 'bg-amber-100 text-amber-800 border-amber-200',
+    announcement: 'bg-slate-100 text-navy-800 border-slate-200',
+    default: 'bg-slate-100 text-slate-800 border-slate-200'
   };
 
   const icons = {
@@ -119,10 +119,10 @@ const DraggableEvent = ({ event, onDragStart, onEdit, onDelete, isCompact = fals
 
   const getStaffColor = (staffId) => {
     const colorsList = [
-      'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500',
-      'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
+      'bg-navy-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
+      'bg-slate-500', 'bg-orange-500', 'bg-navy-700', 'bg-teal-500'
     ];
-    if (!staffId) return 'bg-gray-400';
+    if (!staffId) return 'bg-slate-400';
     return colorsList[staffId % colorsList.length];
   };
 
@@ -144,7 +144,7 @@ const DraggableEvent = ({ event, onDragStart, onEdit, onDelete, isCompact = fals
 
         {(event.centre_name || (event.centre_id && centresMap[event.centre_id])) && (
           <span 
-            className="px-1.5 py-0.5 bg-black/5 rounded-full text-[8px] font-medium text-gray-700 shrink-0 max-w-[35%] truncate" 
+            className="px-1.5 py-0.5 bg-black/5 rounded-full text-[8px] font-medium text-slate-700 shrink-0 max-w-[35%] truncate" 
             title={event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
           >
             {event.centre_name || centresMap[event.centre_id] || `Centre ${event.centre_id}`}
@@ -157,35 +157,35 @@ const DraggableEvent = ({ event, onDragStart, onEdit, onDelete, isCompact = fals
       </div>
 
       {event.description && event.description !== event.title && (
-        <p className="truncate text-xs mt-0.5 text-gray-600">{event.description}</p>
+        <p className="truncate text-xs mt-0.5 text-slate-600">{event.description}</p>
       )}
 
       {event.type === 'task' && (
-        <div className={`flex items-center ${isCompact ? 'mt-2' : 'mt-1 pt-1 border-t border-purple-200 border-opacity-50'}`}>
+        <div className={`flex items-center ${isCompact ? 'mt-2' : 'mt-1 pt-1 border-t border-slate-300'}`}>
           {event.staff_name ? (
             <>
               {event.staff_photo ? (
-                <img src={getPhotoUrl(event.staff_photo)} alt={event.staff_name} className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full object-cover mr-1 shrink-0 border border-gray-200`} />
+                <img src={getPhotoUrl(event.staff_photo)} alt={event.staff_name} className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full object-cover mr-1 shrink-0 border border-slate-200`} />
               ) : (
                 <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full ${getStaffColor(event.staff_id)} flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
                   {getStaffInitials(event.staff_name)}
                 </div>
               )}
-              <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-gray-700 font-medium truncate`}>
+              <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-slate-700 font-medium truncate`}>
                 {event.staff_name}
               </span>
               {!isCompact && event.staff_role && (
-                <span className="ml-1 text-[6px] bg-gray-200 text-gray-600 px-1 rounded-full">
+                <span className="ml-1 text-[6px] bg-slate-200 text-slate-600 px-1 rounded-full">
                   {event.staff_role}
                 </span>
               )}
             </>
           ) : (
             <>
-              <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full bg-gray-400 flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
+              <div className={`${isCompact ? 'w-5 h-5' : 'w-4 h-4'} rounded-full bg-slate-400 flex items-center justify-center ${isCompact ? 'text-xs' : 'text-[8px]'} text-white font-medium mr-1 shrink-0`}>
                 ?
               </div>
-              <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-gray-500 italic truncate`}>
+              <span className={`${isCompact ? 'text-xs' : 'text-[8px]'} text-slate-500 italic truncate`}>
                 Unassigned
               </span>
             </>
@@ -197,13 +197,15 @@ const DraggableEvent = ({ event, onDragStart, onEdit, onDelete, isCompact = fals
         <div className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 flex space-x-1 bg-white/80 rounded-bl p-0.5">
           <button
             onClick={e => { e.stopPropagation(); onEdit(event); }}
-            className="p-0.5 bg-white rounded text-gray-600 hover:text-indigo-600"
+            aria-label={`Edit ${event.title || event.description || "event"}`}
+            className="p-0.5 bg-white rounded text-slate-600 hover:text-navy-700"
           >
             <FiEdit className="h-2 w-2" />
           </button>
           <button
             onClick={e => { e.stopPropagation(); onDelete(event); }}
-            className="p-0.5 bg-white rounded text-gray-600 hover:text-red-600"
+            aria-label={`Delete ${event.title || event.description || "event"}`}
+            className="p-0.5 bg-white rounded text-slate-600 hover:text-rose-600"
           >
             <FiTrash2 className="h-2 w-2" />
           </button>
@@ -250,7 +252,7 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-navy-800/50 flex items-center justify-center z-50 p-4"
       onClick={onClose}
     >
       <motion.div
@@ -258,25 +260,28 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
         animate={{ y: 0, opacity: 1 }}
         exit={{ y: 20, opacity: 0 }}
         // Strict height and flex layout prevent UI shivering when tabs change
-        className="bg-white rounded-xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden shadow-2xl"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`Details for ${formatDate(day.date)}`}
+        className="bg-white rounded-2xl w-full max-w-2xl h-[80vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={e => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-gray-200 flex justify-between items-center bg-gray-50 shrink-0">
+        <div className="p-6 border-b border-slate-200 flex justify-between items-center bg-slate-50 shrink-0">
           <div>
-            <h3 className="text-xl font-bold text-gray-800">
+            <h3 className="text-xl font-bold text-slate-800">
               {formatDate(day.date)}
             </h3>
-            <p className="text-sm text-gray-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1">
               {events.length} events • {leaves.length} staff on leave
             </p>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-full transition-colors">
-            <FiX size={20} className="text-gray-600" />
+          <button onClick={onClose} aria-label="Close" className="p-2 hover:bg-slate-200 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-navy-500/30">
+            <FiX size={20} className="text-slate-600" />
           </button>
         </div>
 
-        <div className="border-b border-gray-200 px-6 pt-4 shrink-0">
-          <div className="flex space-x-6 overflow-x-auto">
+        <div className="border-b border-slate-200 px-6 pt-4 shrink-0">
+          <div className="flex space-x-6 overflow-x-auto" role="tablist">
             {["all", "events", "tasks", "leaves"].map((tab) => {
               const count = tab === "all" ? events.length + leaves.length :
                             tab === "events" ? events.length :
@@ -287,11 +292,13 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
               return (
                 <button
                   key={tab}
+                  role="tab"
+                  aria-selected={activeTab === tab}
                   onClick={() => setActiveTab(tab)}
                   className={`pb-3 px-1 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                     activeTab === tab
-                      ? "border-indigo-600 text-indigo-600"
-                      : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                      ? "border-navy-700 text-navy-700"
+                      : "border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300"
                   }`}
                 >
                   {labels[tab]} ({count})
@@ -305,8 +312,8 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
         <div className="p-6 overflow-y-auto flex-1 space-y-4 custom-scrollbar">
           {filteredItems.length === 0 ? (
             <div className="text-center py-12">
-              <FiCalendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">No items in this category</p>
+              <FiCalendar className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-500">No items in this category</p>
             </div>
           ) : (
             filteredItems.map((item, idx) => {
@@ -315,17 +322,17 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
                 const formattedToDate = formatShortDate(item.to_date);
 
                 return (
-                  <div key={`leave-${item.id}-${idx}`} className="p-4 rounded-lg border bg-yellow-50 border-yellow-200">
+                  <div key={`leave-${item.id}-${idx}`} className="p-4 rounded-xl border bg-amber-50 border-amber-200">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-yellow-200 flex items-center justify-center text-yellow-800 font-bold">
+                        <div className="w-10 h-10 rounded-full bg-amber-200 flex items-center justify-center text-amber-800 font-bold">
                           {item.staff_name?.charAt(0) || '?'}
                         </div>
                         <div>
-                          <p className="font-semibold text-yellow-800">
+                          <p className="font-semibold text-amber-800">
                             {item.staff_name || 'Unknown Staff'}
                           </p>
-                          <p className="text-sm text-yellow-600 flex items-center gap-1">
+                          <p className="text-sm text-amber-600 flex items-center gap-1">
                             <FiClock className="h-3 w-3" />
                             {formattedFromDate} - {formattedToDate}
                           </p>
@@ -333,7 +340,7 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
                       </div>
                     </div>
                     {item.reason && (
-                      <p className="text-sm text-yellow-700 mt-3 border-t border-yellow-200 pt-3">
+                      <p className="text-sm text-amber-700 mt-3 border-t border-amber-200 pt-3">
                         <span className="font-medium">Reason:</span> {item.reason}
                       </p>
                     )}
@@ -356,8 +363,8 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
           )}
         </div>
 
-        <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end shrink-0">
-          <button onClick={onClose} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium">
+        <div className="p-4 border-t border-slate-200 bg-slate-50 flex justify-end shrink-0">
+          <button onClick={onClose} className="px-4 py-2 bg-navy-700 text-white rounded-xl hover:bg-navy-800 transition text-sm font-medium focus:outline-none focus:ring-2 focus:ring-navy-500/30">
             Close
           </button>
         </div>
@@ -399,16 +406,16 @@ const CalendarView = ({
   const currentYear = currentDate.getFullYear();
 
   const colorMapping = {
-    holiday: { background: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
-    deadline: { background: 'bg-red-50', border: 'border-red-200', text: 'text-red-800' },
-    weekend: { background: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-800' },
-    working: { background: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
-    start: { background: 'bg-green-50', border: 'border-green-200', text: 'text-green-800' },
-    task: { background: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-800' },
-    expiry: { background: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-800' },
-    announcement: { background: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800' },
-    today: { background: 'bg-blue-50', border: 'border-blue-300', text: 'text-blue-800' },
-    default: { background: 'bg-white', border: 'border-gray-200', text: 'text-gray-900' }
+    holiday: { background: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-800' },
+    deadline: { background: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-800' },
+    weekend: { background: 'bg-slate-50', border: 'border-slate-200', text: 'text-slate-700' },
+    working: { background: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-800' },
+    start: { background: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-800' },
+    task: { background: 'bg-slate-100', border: 'border-slate-300', text: 'text-navy-800' },
+    expiry: { background: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-800' },
+    announcement: { background: 'bg-white', border: 'border-navy-500', text: 'text-navy-800' },
+    today: { background: 'bg-white', border: 'border-navy-500', text: 'text-navy-800' },
+    default: { background: 'bg-white', border: 'border-slate-200', text: 'text-slate-900' }
   };
 
   const getDayStyle = (day) => {
@@ -422,8 +429,8 @@ const CalendarView = ({
       else if (day.events.some(e => e.type === 'task')) Object.assign(s, colorMapping.task);
     }
     if (day.isDragOver) {
-      s.background = 'bg-indigo-100';
-      s.border = 'border-indigo-300';
+      s.background = 'bg-slate-200';
+      s.border = 'border-navy-500';
     }
     return s;
   };
@@ -544,7 +551,7 @@ const CalendarView = ({
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 relative">
+    <div className="w-full bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 relative">
       
       {/* Properly wrapped Modal so it fades in and out */}
       <AnimatePresence>
@@ -561,17 +568,19 @@ const CalendarView = ({
 
       <div className="flex items-center justify-between mb-6 flex-wrap gap-4">
         <div className="flex items-center space-x-4 flex-wrap gap-2">
-          <h2 className="text-xl font-bold text-gray-900">Working Days Calendar</h2>
-          <div className="flex items-center space-x-2 bg-gray-100 rounded-lg p-1">
+          <h2 className="text-xl font-bold text-slate-900">Working Days Calendar</h2>
+          <div className="flex items-center flex-wrap gap-1 bg-slate-100 rounded-xl p-1">
             <button
               onClick={() => setView('month')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${view === 'month' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              aria-pressed={view === 'month'}
+              className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${view === 'month' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               Month View
             </button>
             <button
               onClick={() => setView('list')}
-              className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900'}`}
+              aria-pressed={view === 'list'}
+              className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${view === 'list' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-900'}`}
             >
               List View
             </button>
@@ -580,7 +589,8 @@ const CalendarView = ({
               <select
                 value={selectedCentreFilter}
                 onChange={(e) => setSelectedCentreFilter(e.target.value)}
-                className="ml-2 px-3 py-1 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm cursor-pointer hover:border-indigo-300"
+                aria-label="Filter by centre"
+                className="ml-2 px-3 py-1 bg-white border border-slate-300 rounded-lg text-sm text-slate-700 shadow-sm cursor-pointer hover:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
               >
                 <option value="all">All Centres</option>
                 {Object.entries(centresMap).map(([id, name]) => (
@@ -595,13 +605,14 @@ const CalendarView = ({
               <button
                 key={type}
                 onClick={() => setFilters(prev => ({ ...prev, [type]: !prev[type] }))}
-                className={`px-3 py-1 text-xs font-medium rounded-full border capitalize ${
+                aria-pressed={filters[type]}
+                className={`px-3 py-1 text-xs font-medium rounded-full border capitalize transition-colors ${
                   filters[type]
-                    ? type === 'working' ? 'bg-green-100 text-green-700 border-green-300' :
-                      type === 'holiday' ? 'bg-red-100 text-red-700 border-red-300' :
-                      type === 'weekend' ? 'bg-gray-100 text-gray-700 border-gray-300' :
-                      'bg-purple-100 text-purple-700 border-purple-300'
-                    : "bg-gray-100 text-gray-500 border-gray-200"
+                    ? type === 'working' ? 'bg-emerald-100 text-emerald-700 border-emerald-300' :
+                      type === 'holiday' ? 'bg-rose-100 text-rose-700 border-rose-300' :
+                      type === 'weekend' ? 'bg-slate-100 text-slate-700 border-slate-300' :
+                      'bg-slate-100 text-navy-700 border-slate-300'
+                    : "bg-slate-100 text-slate-500 border-slate-200"
                 }`}
               >
                 {type}
@@ -611,19 +622,19 @@ const CalendarView = ({
         </div>
         <div className="flex items-center space-x-3">
           <div className="flex items-center space-x-2">
-            <button onClick={prevMonth} className="p-2 hover:bg-gray-100 rounded-lg">
-              <FiChevronLeft className="h-5 w-5 text-gray-600" />
+            <button onClick={prevMonth} aria-label="Previous month" className="p-2 hover:bg-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30">
+              <FiChevronLeft className="h-5 w-5 text-slate-600" />
             </button>
-            <h3 className="text-lg font-semibold text-gray-900 min-w-32 text-center">
+            <h3 className="text-lg font-semibold text-slate-900 min-w-32 text-center">
               {monthNames[currentMonth]} {currentYear}
             </h3>
-            <button onClick={nextMonth} className="p-2 hover:bg-gray-100 rounded-lg">
-              <FiChevronRight className="h-5 w-5 text-gray-600" />
+            <button onClick={nextMonth} aria-label="Next month" className="p-2 hover:bg-slate-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30">
+              <FiChevronRight className="h-5 w-5 text-slate-600" />
             </button>
           </div>
           <button
             onClick={onAddEvent}
-            className="flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="flex items-center space-x-2 px-4 py-2 bg-navy-700 text-white rounded-xl hover:bg-navy-800 transition-colors focus:outline-none focus:ring-2 focus:ring-navy-500/30"
           >
             <FiPlus className="h-4 w-4" />
             <span>Add Event</span>
@@ -635,7 +646,7 @@ const CalendarView = ({
         <div className="calendar-grid">
           <div className="grid grid-cols-7 gap-1 mb-2">
             {dayNames.map(d => (
-              <div key={d} className="p-3 text-center text-sm font-medium text-gray-500 uppercase">
+              <div key={d} className="p-3 text-center text-sm font-medium text-slate-500 uppercase">
                 {d}
               </div>
             ))}
@@ -651,7 +662,13 @@ const CalendarView = ({
                   onDragLeave={handleDragLeave}
                   onDrop={e => day && handleDrop(e, day.dateStr)}
                   onClick={() => handleDayClick(day)}
-                  className={`min-h-24 p-2 rounded-lg transition-all ${style.background} ${style.border} ${day ? 'cursor-pointer hover:shadow-md' : ''} ${day?.isDragOver ? 'border-indigo-400 bg-indigo-100 shadow-inner' : ''} ${hasEvents ? 'font-medium' : ''}`}
+                  {...(hasEvents ? {
+                    role: "button",
+                    tabIndex: 0,
+                    "aria-label": `${formatDate(day.dateStr)}, ${day.events.length + day.leavesForDay.length} items`,
+                    onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleDayClick(day); } }
+                  } : {})}
+                  className={`min-h-24 p-2 rounded-xl ${day ? 'border' : ''} transition-all ${style.background} ${style.border} ${day ? 'cursor-pointer hover:shadow-md' : ''} ${day?.isDragOver ? 'border-navy-500 bg-slate-200 shadow-inner' : ''} ${hasEvents ? 'font-medium focus:outline-none focus:ring-2 focus:ring-navy-500/30' : ''}`}
                 >
                   {day && (
                     <>
@@ -660,12 +677,12 @@ const CalendarView = ({
                           {day.day}
                         </span>
                         {day.isToday && (
-                          <span className="px-1.5 py-0.5 bg-blue-600 text-white rounded text-xs">
+                          <span className="px-1.5 py-0.5 bg-navy-700 text-white rounded text-xs">
                             Today
                           </span>
                         )}
                         {hasEvents && (
-                          <span className="px-1.5 py-0.5 bg-indigo-100 text-indigo-700 rounded text-xs">
+                          <span className="px-1.5 py-0.5 bg-slate-200 text-navy-700 rounded text-xs">
                             {day.events.length + day.leavesForDay.length}
                           </span>
                         )}
@@ -677,12 +694,12 @@ const CalendarView = ({
                             <div
                               key={`event-preview-${ev.id}-${idx}`}
                               className={`px-1.5 py-1 text-[10px] rounded border ${
-                                displayKey === 'holiday' || displayKey === 'deadline' ? 'bg-red-100 text-red-800 border-red-200' :
-                                displayKey === 'weekend' ? 'bg-gray-100 text-gray-800 border-gray-200' :
-                                displayKey === 'working' || displayKey === 'start' ? 'bg-green-100 text-green-800 border-green-200' :
-                                displayKey === 'task' ? 'bg-purple-100 text-purple-800 border-purple-200' :
-                                displayKey === 'expiry' ? 'bg-yellow-100 text-yellow-800 border-yellow-200' :
-                                'bg-blue-100 text-blue-800 border-blue-200'
+                                displayKey === 'holiday' || displayKey === 'deadline' ? 'bg-rose-100 text-rose-800 border-rose-200' :
+                                displayKey === 'weekend' ? 'bg-slate-100 text-slate-800 border-slate-200' :
+                                displayKey === 'working' || displayKey === 'start' ? 'bg-emerald-100 text-emerald-800 border-emerald-200' :
+                                displayKey === 'task' ? 'bg-slate-100 text-navy-800 border-slate-300' :
+                                displayKey === 'expiry' ? 'bg-amber-100 text-amber-800 border-amber-200' :
+                                'bg-white text-navy-800 border-navy-500'
                               }`}
                             >
                               <div className="flex items-start justify-between gap-1">
@@ -691,9 +708,9 @@ const CalendarView = ({
                                 </span>
                               </div>
                               {ev.type === 'task' && ev.staff_name && (
-                                <div className="flex items-center mt-1 text-[8px] text-gray-600 gap-1">
+                                <div className="flex items-center mt-1 text-[8px] text-slate-600 gap-1">
                                   {ev.staff_photo ? (
-                                    <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-3.5 h-3.5 rounded-full object-cover shrink-0 border border-gray-200" />
+                                    <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-3.5 h-3.5 rounded-full object-cover shrink-0 border border-slate-200" />
                                   ) : (
                                     <FiUser className="h-2.5 w-2.5 shrink-0" />
                                   )}
@@ -711,16 +728,16 @@ const CalendarView = ({
                           return (
                             <div
                               key={`leave-preview-${leave.id}-${i}`}
-                              className="px-1.5 py-1 text-[10px] rounded border bg-yellow-100 text-yellow-800 border-yellow-200"
+                              className="px-1.5 py-1 text-[10px] rounded border bg-amber-100 text-amber-800 border-amber-200"
                             >
                               <div className="flex items-center justify-between">
                                 <span className="font-medium truncate">{leave.staff_name || 'Staff'}</span>
-                                <span className="ml-1 text-[8px] bg-yellow-200 px-1 rounded-full">
+                                <span className="ml-1 text-[8px] bg-amber-200 px-1 rounded-full">
                                   Leave
                                 </span>
                               </div>
                               {(formattedFromDate !== "N/A" || formattedToDate !== "N/A") && (
-                                <div className="flex items-center mt-0.5 text-[8px] text-yellow-600">
+                                <div className="flex items-center mt-0.5 text-[8px] text-amber-600">
                                   <FiClock className="h-2 w-2 mr-0.5" />
                                   <span className="truncate">
                                     {formattedFromDate} - {formattedToDate}
@@ -732,7 +749,7 @@ const CalendarView = ({
                         })}
 
                         {(day.events.length + day.leavesForDay.length) > 2 && (
-                          <div className="text-[10px] text-gray-500 text-center bg-gray-100 rounded py-1">
+                          <div className="text-[10px] text-slate-500 text-center bg-slate-100 rounded py-1">
                             +{day.events.length + day.leavesForDay.length - 2} more
                           </div>
                         )}
@@ -785,10 +802,10 @@ const CalendarView = ({
 
               const getStaffColor = (staffId) => {
                 const colorsList = [
-                  'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-red-500',
-                  'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500'
+                  'bg-navy-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
+                  'bg-slate-500', 'bg-orange-500', 'bg-navy-700', 'bg-teal-500'
                 ];
-                if (!staffId) return 'bg-gray-400';
+                if (!staffId) return 'bg-slate-400';
                 return colorsList[staffId % colorsList.length];
               };
 
@@ -796,12 +813,12 @@ const CalendarView = ({
                 <motion.div
                   key={ev.id || i}
                   layout
-                  className={`flex items-center justify-between p-4 rounded-lg border ${s.background} ${s.border} ${ev.type !== 'task' ? 'cursor-move' : ''}`}
+                  className={`flex items-center justify-between p-4 rounded-xl border ${s.background} ${s.border} ${ev.type !== 'task' ? 'cursor-move' : ''}`}
                   draggable={ev.type !== 'task'}
                   onDragStart={e => handleDragStart(e, ev)}
                 >
                   <div className="flex items-center space-x-4 flex-1">
-                    <div className={`flex items-center justify-center w-12 h-12 ${s.background} rounded-lg border ${s.border} relative shrink-0`}>
+                    <div className={`flex items-center justify-center w-12 h-12 ${s.background} rounded-xl border ${s.border} relative shrink-0`}>
                       <span className={`text-lg font-bold ${s.text}`}>
                         {new Date(ev.date).getDate()}
                       </span>
@@ -812,12 +829,12 @@ const CalendarView = ({
                           {getEventLabel()}
                         </p>
                       </div>
-                      <p className="text-sm text-gray-600 flex items-center gap-1">
+                      <p className="text-sm text-slate-600 flex items-center gap-1">
                         <FiCalendar className="h-3 w-3" />
                         {formatDate(ev.date)}
                       </p>
                       {ev.description && (
-                        <p className="text-sm text-gray-700 mt-1">
+                        <p className="text-sm text-slate-700 mt-1">
                           {ev.description}
                         </p>
                       )}
@@ -827,25 +844,25 @@ const CalendarView = ({
                           {ev.staff_name ? (
                             <>
                               {ev.staff_photo ? (
-                                <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-6 h-6 rounded-full object-cover mr-2 shrink-0 border border-gray-200" />
+                                <img src={getPhotoUrl(ev.staff_photo)} alt={ev.staff_name} className="w-6 h-6 rounded-full object-cover mr-2 shrink-0 border border-slate-200" />
                               ) : (
                                 <div className={`w-6 h-6 rounded-full ${getStaffColor(ev.staff_id)} flex items-center justify-center text-[10px] text-white font-medium mr-2 shrink-0`}>
                                   {getStaffInitials(ev.staff_name)}
                                 </div>
                               )}
                               <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-gray-700">
+                                <span className="text-xs font-medium text-slate-700">
                                   {ev.staff_name}
                                 </span>
                                 {ev.staff_role && (
-                                  <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">
+                                  <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">
                                     {ev.staff_role}
                                   </span>
                                 )}
                               </div>
                             </>
                           ) : (
-                            <div className="flex items-center text-xs text-gray-500 italic">
+                            <div className="flex items-center text-xs text-slate-500 italic">
                               <FiUser className="h-3 w-3 mr-1" />
                               Unassigned
                             </div>
@@ -855,18 +872,20 @@ const CalendarView = ({
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 shrink-0">
-                    {ev.type !== 'task' && <FiMove className="h-4 w-4 text-gray-400" />}
+                    {ev.type !== 'task' && <FiMove className="h-4 w-4 text-slate-400" />}
                     {ev.type !== 'task' && (
                       <>
                         <button
                           onClick={() => onEditEvent(ev)}
-                          className="p-2 text-gray-600 hover:bg-white rounded-lg"
+                          aria-label={`Edit ${ev.title || ev.description || "event"}`}
+                          className="p-2 text-slate-600 hover:bg-white rounded-xl"
                         >
                           <FiEdit className="h-4 w-4" />
                         </button>
                         <button
                           onClick={() => onDeleteEvent(ev)}
-                          className="p-2 text-red-600 hover:bg-white rounded-lg"
+                          aria-label={`Delete ${ev.title || ev.description || "event"}`}
+                          className="p-2 text-rose-600 hover:bg-white rounded-xl"
                         >
                           <FiTrash2 className="h-4 w-4" />
                         </button>
@@ -888,41 +907,41 @@ const CalendarView = ({
             }
           }).length === 0 && (
             <div className="text-center py-8">
-              <FiCalendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500">No events match the selected filters</p>
+              <FiCalendar className="h-12 w-12 text-slate-400 mx-auto mb-4" />
+              <p className="text-slate-500">No events match the selected filters</p>
             </div>
           )}
         </div>
       )}
 
-      <div className="mt-6 pt-6 border-t border-gray-200">
+      <div className="mt-6 pt-6 border-t border-slate-200">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-medium text-gray-900 mb-3">Color Legend</h4>
+            <h4 className="text-sm font-medium text-slate-900 mb-3">Color Legend</h4>
             <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-blue-100 border border-blue-300 rounded"></div>
-                <span className="text-sm text-gray-600">Today</span>
+                <div className="w-4 h-4 bg-white border border-navy-500 rounded"></div>
+                <span className="text-sm text-slate-600">Today</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-green-100 border border-green-200 rounded"></div>
-                <span className="text-sm text-gray-600">Working Day</span>
+                <div className="w-4 h-4 bg-emerald-100 border border-emerald-200 rounded"></div>
+                <span className="text-sm text-slate-600">Working Day</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-red-100 border border-red-200 rounded"></div>
-                <span className="text-sm text-gray-600">Holiday</span>
+                <div className="w-4 h-4 bg-rose-100 border border-rose-200 rounded"></div>
+                <span className="text-sm text-slate-600">Holiday</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-gray-100 border border-gray-200 rounded"></div>
-                <span className="text-sm text-gray-600">Weekend</span>
+                <div className="w-4 h-4 bg-slate-100 border border-slate-200 rounded"></div>
+                <span className="text-sm text-slate-600">Weekend</span>
               </div>
               <div className="flex items-center space-x-2">
-                <div className="w-4 h-4 bg-purple-100 border border-purple-200 rounded"></div>
-                <span className="text-sm text-gray-600">Task</span>
+                <div className="w-4 h-4 bg-slate-100 border border-slate-300 rounded"></div>
+                <span className="text-sm text-slate-600">Task</span>
               </div>
             </div>
           </div>
-          <div className="text-sm text-gray-500 flex items-center space-x-2">
+          <div className="text-sm text-slate-500 flex items-center space-x-2">
             <FiMove className="h-4 w-4" />
             <span>Drag & drop to move (tasks cannot be moved)</span>
           </div>
