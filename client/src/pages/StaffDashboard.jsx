@@ -804,7 +804,7 @@ const StaffDashboard = () => {
   if (error) return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
       <div className="bg-white rounded-xl p-8 max-w-md w-full border border-slate-200 text-center">
-        <FiAlertCircle className="mx-auto h-12 w-12 text-rose-500 mb-4" />
+        <FiAlertCircle className="mx-auto h-12 w-12 text-rose-600 mb-4" />
         <h3 className="text-lg font-semibold text-slate-900 mb-2">Data Loading Error</h3>
         <p className="text-slate-600 mb-6">{error}</p>
         <button onClick={() => window.location.reload()} className="px-6 py-3 bg-navy-700 text-white rounded-xl hover:bg-navy-800">Try Again</button>
@@ -816,7 +816,11 @@ const StaffDashboard = () => {
   const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 sd-root">
+      <style>{`.sd-root button:focus-visible,.sd-root a:focus-visible,.sd-root select:focus-visible,.sd-root input:focus-visible,.sd-root [tabindex]:focus-visible{outline:3px solid #3b5d8f;outline-offset:2px}`}</style>
+      <a href="#sd-main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:bg-white focus:text-navy-800 focus:px-4 focus:py-2 focus:rounded-xl focus:font-semibold focus:shadow-lg">
+        Skip to main content
+      </a>
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
       <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 text-white px-6 py-6">
@@ -928,6 +932,7 @@ const StaffDashboard = () => {
                 onClick={dismissMyBirthday}
                 className="p-2 rounded-full bg-white/20 hover:bg-white/30 shrink-0"
                 title="Dismiss"
+                aria-label="Dismiss birthday message"
               >
                 <FiXCircle className="h-5 w-5" />
               </button>
@@ -994,6 +999,7 @@ const StaffDashboard = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
+            role="status"
             className={`border-l-4 shadow-sm ${
               !todayAttendance || !todayAttendance.punch_in 
                 ? 'bg-rose-50 border-rose-500' 
@@ -1017,7 +1023,7 @@ const StaffDashboard = () => {
                 ) : !todayAttendance.punch_out ? (
                   <>
                     <div className="p-2 bg-emerald-100 rounded-full">
-                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
+                      <FiCheckCircle className="h-5 w-5 text-emerald-700" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
@@ -1029,7 +1035,7 @@ const StaffDashboard = () => {
                 ) : (
                   <>
                     <div className="p-2 bg-amber-100 rounded-full">
-                      <FiClock className="h-5 w-5 text-amber-600" />
+                      <FiClock className="h-5 w-5 text-amber-700" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
@@ -1178,12 +1184,14 @@ const StaffDashboard = () => {
         </div>
       </div>
 
-      <div className="p-6">
+      <main id="sd-main" className="p-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
           
           {/* Floating Action Button */}
           <button
             onClick={() => setShowQuickService(true)}
+            aria-label="Quick service"
+            title="Quick service"
             className="fixed bottom-8 right-8 bg-navy-700 text-white p-4 rounded-full shadow-lg hover:bg-navy-800 transition-all z-20"
           >
             <FiPlus className="h-6 w-6" />
@@ -1192,7 +1200,7 @@ const StaffDashboard = () => {
           {/* Search & Filter Bar + Wallet Pill */}
           <div className="flex flex-wrap gap-4 mb-6 items-center">
             <div className="relative flex-1 max-w-md">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
               <input
                 type="text"
                 aria-label="Search tokens"
@@ -1230,10 +1238,10 @@ const StaffDashboard = () => {
 
           {/* Stats Toggle Header */}
           <div className="flex items-center justify-between mb-4 mt-2">
-            <h3 className="text-lg font-bold text-slate-900">Overview Metrics</h3>
+            <h2 className="text-lg font-bold text-slate-900">Today at a glance</h2>
             <div className="bg-slate-100 p-1 rounded-xl inline-flex">
-              <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Applications</button>
-              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Walk-in Tokens</button>
+              <button aria-pressed={statView === 'applications'} onClick={() => setStatView('applications')} className={`px-4 py-2 min-h-[40px] text-sm font-bold rounded-lg transition-all ${statView === 'applications' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Applications</button>
+              <button aria-pressed={statView === 'tokens'} onClick={() => setStatView('tokens')} className={`px-4 py-2 min-h-[40px] text-sm font-bold rounded-lg transition-all ${statView === 'tokens' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Walk-in Tokens</button>
             </div>
           </div>
 
@@ -1259,59 +1267,15 @@ const StaffDashboard = () => {
           </div>
 
           {/* ===== STEP 2: GLANCE STRIP ===== */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr] gap-4 mb-6">
-
-            {/* Target */}
-            <div
-              onClick={scrollToPerf}
-              className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm cursor-pointer hover:border-navy-500 transition-colors"
-            >
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-slate-600 flex items-center">
-                  <FiTarget className="h-3.5 w-3.5 mr-1.5 text-navy-700" />
-                  Target (+10% Growth)
-                </p>
-                {!performanceLoading && performance.monthlyTarget > 0 && (
-                  <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-600' : 'text-slate-700'}`}>
-                    {performance.targetProgress.toFixed(0)}%
-                  </span>
-                )}
-              </div>
-
-              {performanceLoading ? (
-                <div className="h-14 bg-slate-200 animate-pulse rounded" />
-              ) : performance.monthlyTarget > 0 ? (
-                <>
-                  <div className="flex justify-between items-baseline text-sm mb-1">
-                    <span className="font-black text-slate-900">{formatCurrency(performance.currentAchieved)}</span>
-                    <span className="text-xs text-slate-500">of {formatCurrency(performance.monthlyTarget)}</span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                    <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
-                         style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
-                  </div>
-
-                  <div className="flex justify-between text-[11px] text-slate-500 mt-2.5 mb-1">
-                    <span>Today's goal</span>
-                    <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-600' : ''}>
-                      {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                    </span>
-                  </div>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-navy-500'}`}
-                      style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <p className="text-xs text-slate-400 py-3">No target set for this month yet</p>
-              )}
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
 
             {/* Score */}
             <div
               onClick={scrollToPerf}
+              role="button"
+              tabIndex={0}
+              aria-label="Performance score. Press to jump to performance details"
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollToPerf(); } }}
               className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm cursor-pointer hover:border-navy-500 transition-colors"
             >
               <p className="text-xs font-semibold text-slate-600 flex items-center mb-3">
@@ -1323,7 +1287,7 @@ const StaffDashboard = () => {
               ) : (
                 <>
                   <p className="text-2xl font-black text-slate-900">{performance.incentiveScore}%</p>
-                  <p className="text-[11px] text-slate-500 mb-2">{scoreLabel}</p>
+                  <p className="text-xs text-slate-500 mb-2">{scoreLabel}</p>
                   <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                     <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
                   </div>
@@ -1339,13 +1303,13 @@ const StaffDashboard = () => {
               </p>
               <p className="text-2xl font-black text-slate-900">{myTasks.length}</p>
               {overdueTasks.length > 0 ? (
-                <p className="text-[11px] font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
+                <p className="text-xs font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
               ) : nextTask ? (
-                <p className="text-[11px] text-slate-500 mt-1 truncate" title={nextTask.title}>
+                <p className="text-xs text-slate-500 mt-1 truncate" title={nextTask.title}>
                   Next: {nextTask.title}
                 </p>
               ) : (
-                <p className="text-[11px] text-emerald-600 mt-1">All clear</p>
+                <p className="text-xs text-emerald-700 mt-1">All clear</p>
               )}
             </div>
 
@@ -1358,40 +1322,40 @@ const StaffDashboard = () => {
               {nextEvent ? (
                 <>
                   <p className="text-sm font-bold text-slate-900 line-clamp-2" title={nextEvent.title}>{nextEvent.title}</p>
-                  <p className="text-[11px] text-slate-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
+                  <p className="text-xs text-slate-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
                 </>
               ) : (
-                <p className="text-xs text-slate-400">Nothing upcoming</p>
+                <p className="text-xs text-slate-500">Nothing upcoming</p>
               )}
             </div>
           </div>
 
           {/* Two‑Column Layout */}
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] gap-6 items-start">
             
             {/* Left Column – Unified Workspace */}
-            <div className="xl:col-span-2 flex flex-col gap-6">
+            <div className="flex flex-col gap-6 min-w-0">
               
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[850px]">
+              <div role="region" aria-label="Work queue" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[min(850px,85vh)] min-h-[520px]">
                 
                 {/* Master Workspace Tabs */}
-                <div className="flex p-3 border-b border-slate-200 bg-slate-50/80 gap-2 overflow-x-auto hide-scrollbar">
-                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                <div role="tablist" aria-label="Work queue sections" className="flex p-3 border-b border-slate-200 bg-slate-50/80 gap-2 overflow-x-auto hide-scrollbar">
+                  <button role="tab" aria-selected={workspaceTab === 'tokens'} onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
                     <FiUsers className="h-4 w-4" />
                     Walk-in Tokens
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{statusCounts.total}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button role="tab" aria-selected={workspaceTab === 'queue'} onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
                     <FiGlobe className="h-4 w-4" />
                     Online Queue
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{onlineBookings.length}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button role="tab" aria-selected={workspaceTab === 'processing'} onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
                     <FiPlayCircle className="h-4 w-4" />
                     My Online Work
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{processingBookings.length}</span>
                   </button>
-                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button role="tab" aria-selected={workspaceTab === 'applications'} onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
                     <FiTarget className="h-4 w-4" />
                     Applications
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{trackingStats.total || 0}</span>
@@ -1409,8 +1373,9 @@ const StaffDashboard = () => {
                         {['active', 'completed', 'campaign'].map(tab => (
                           <button
                             key={tab}
+                            aria-pressed={activeView === tab}
                             onClick={() => setActiveView(tab)}
-                            className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors ${
+                            className={`px-4 py-2 min-h-[40px] rounded-full text-xs font-bold capitalize transition-colors ${
                               activeView === tab ? 'bg-navy-700 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                             }`}
                           >
@@ -1420,7 +1385,7 @@ const StaffDashboard = () => {
                       </div>
 
                       {Object.keys(groupedTokens).length === 0 ? (
-                        <div className="text-center py-16 text-slate-400">
+                        <div className="text-center py-16 text-slate-500">
                           <FiPlayCircle className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                           <p className="font-medium">No tokens found</p>
                         </div>
@@ -1451,10 +1416,10 @@ const StaffDashboard = () => {
                                         <div className="min-w-0 flex-1">
                                           <div className="flex items-center gap-2 mb-0.5">
                                             <h4 className="font-bold text-slate-900 text-sm truncate">{token.customerName || 'Customer'}</h4>
-                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
+                                            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
                                               {token.status?.replace('-', ' ')}
                                             </span>
-                                            {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Mine</span>}
+                                            {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-xs font-bold">Mine</span>}
                                           </div>
                                           <p className="text-xs text-slate-500 truncate flex items-center gap-2">
                                             <span className="font-medium text-slate-700">{getCategoryName(token.categoryId)}</span>
@@ -1470,21 +1435,22 @@ const StaffDashboard = () => {
                                           <>
                                             <button 
                                               onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
-                                              className="px-3 py-1.5 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
+                                              className="px-3 py-2 min-h-[40px] bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
                                             >
                                               <FiPlayCircle className="h-3.5 w-3.5" /> {token.status === 'pending' ? 'Start' : 'Resume'}
                                             </button>
                                             <button 
                                               onClick={() => openCancelModal(token)} 
-                                              className="p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"
+                                              className="p-2.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"
                                               title="Cancel Token"
+                                              aria-label={`Cancel token ${token.tokenId}`}
                                             >
                                               <FiXCircle className="h-4 w-4" />
                                             </button>
                                           </>
                                         )}
                                         {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
-                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-1.5 bg-white border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
+                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-2 min-h-[40px] bg-white border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
                                             <FiBarChart2 className="h-3.5 w-3.5" /> Details
                                           </button>
                                         )}
@@ -1504,7 +1470,7 @@ const StaffDashboard = () => {
                   {workspaceTab === 'queue' && (
                     <div className="space-y-3">
                       {onlineBookings.length === 0 ? (
-                        <div className="text-center py-16 text-slate-400">
+                        <div className="text-center py-16 text-slate-500">
                           <FiGlobe className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                           <p className="font-medium">No pending online bookings</p>
                         </div>
@@ -1516,10 +1482,10 @@ const StaffDashboard = () => {
                               <div className="min-w-0">
                                 <h4 className="font-bold text-slate-900 text-sm truncate">{booking.customer_name}</h4>
                                 <p className="text-xs text-slate-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                                <p className="text-[10px] text-slate-400 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
+                                <p className="text-xs text-slate-500 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
                               </div>
                             </div>
-                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-navy-700 text-white text-xs font-bold rounded-xl hover:bg-navy-800 shadow-sm shrink-0 transition-colors">
+                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 min-h-[40px] bg-navy-700 text-white text-xs font-bold rounded-xl hover:bg-navy-800 shadow-sm shrink-0 transition-colors">
                               Take Work
                             </button>
                           </div>
@@ -1532,7 +1498,7 @@ const StaffDashboard = () => {
                   {workspaceTab === 'processing' && (
                     <div className="space-y-3">
                       {processingBookings.length === 0 ? (
-                        <div className="text-center py-16 text-slate-400">
+                        <div className="text-center py-16 text-slate-500">
                           <FiCheckSquare className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                           <p className="font-medium">No active online work</p>
                         </div>
@@ -1544,13 +1510,13 @@ const StaffDashboard = () => {
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 mb-0.5">
                                   <h4 className="font-bold text-slate-900 text-sm truncate">{booking.customer_name}</h4>
-                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Assigned to you</span>
+                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Assigned to you</span>
                                 </div>
                                 <p className="text-xs text-slate-500 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                                <p className="text-[10px] text-slate-400 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
+                                <p className="text-xs text-slate-500 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
                               </div>
                             </div>
-                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
+                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 min-h-[40px] bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
                               <FiPlayCircle className="h-4 w-4" /> Start
                             </button>
                           </div>
@@ -1575,13 +1541,14 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab}
+                              aria-pressed={activeAppView === tab}
                               onClick={() => setActiveAppView(tab)}
-                              className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
+                              className={`px-4 py-2 min-h-[40px] rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
                                 activeAppView === tab ? 'bg-navy-800 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                               }`}
                             >
                               {tab}
-                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeAppView === tab ? 'bg-white/20' : 'bg-slate-200 text-slate-500'}`}>
+                              <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeAppView === tab ? 'bg-white/20' : 'bg-slate-200 text-slate-500'}`}>
                                 {count}
                               </span>
                             </button>
@@ -1592,7 +1559,7 @@ const StaffDashboard = () => {
                       {/* Application List */}
                       <div className="space-y-3">
                         {filteredApplications.length === 0 ? (
-                          <div className="text-center py-16 text-slate-400">
+                          <div className="text-center py-16 text-slate-500">
                             <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                             <p className="font-medium">No {activeAppView} applications found</p>
                           </div>
@@ -1610,7 +1577,7 @@ const StaffDashboard = () => {
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
                                     <h4 className="font-bold text-slate-900 text-sm truncate">{app.customer_name}</h4>
-                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
                                       app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
                                       app.status === 'in_progress' ? 'bg-slate-200 text-navy-700' :
                                       app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
@@ -1620,7 +1587,7 @@ const StaffDashboard = () => {
                                     }`}>
                                       {app.status?.replace('_', ' ')}
                                     </span>
-                                    <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                                    <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
                                       {app.progress}%
                                     </span>
                                   </div>
@@ -1629,14 +1596,14 @@ const StaffDashboard = () => {
                                     <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
                                     <span>{app.current_step || 'Submitted'}</span>
                                   </p>
-                                  <p className="text-[10px] text-slate-400 mt-1 font-mono">
+                                  <p className="text-xs text-slate-500 mt-1 font-mono">
                                     Last updated: {new Date(app.updated_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                                   </p>
                                 </div>
                               </div>
                               <button 
                                 onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
-                                className="px-4 py-2 bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
+                                className="px-4 py-2 min-h-[40px] bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
                               >
                                 <FiBarChart2 className="h-4 w-4" /> Track
                               </button>
@@ -1650,11 +1617,65 @@ const StaffDashboard = () => {
               </div>
             </div>
 
-            {/* Right Column – Tasks & Events (Performance cards moved out) */}
-            <div className="space-y-6">
+            {/* Right Column – Target, Tasks, Attendance, Events, Activity */}
+            <div className="space-y-6 min-w-0">
+
+              {/* ===== TARGET (summary) ===== */}
+              <div
+                onClick={scrollToPerf}
+                role="button"
+                tabIndex={0}
+                aria-label="Monthly target. Press to jump to target details"
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollToPerf(); } }}
+                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-navy-500 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs font-semibold text-slate-600 flex items-center">
+                    <FiTarget className="h-3.5 w-3.5 mr-1.5 text-navy-700" />
+                    Target (+10% Growth)
+                  </p>
+                  {!performanceLoading && performance.monthlyTarget > 0 && (
+                    <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-700' : 'text-slate-700'}`}>
+                      {performance.targetProgress.toFixed(0)}%
+                    </span>
+                  )}
+                </div>
+
+                {performanceLoading ? (
+                  <div className="h-14 bg-slate-200 animate-pulse rounded" />
+                ) : performance.monthlyTarget > 0 ? (
+                  <>
+                    <div className="flex justify-between items-baseline text-sm mb-1">
+                      <span className="font-black text-slate-900">{formatCurrency(performance.currentAchieved)}</span>
+                      <span className="text-xs text-slate-500">of {formatCurrency(performance.monthlyTarget)}</span>
+                    </div>
+                    <div role="progressbar" aria-label="Monthly target progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(performance.targetProgress, 100))} className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
+                      <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
+                           style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
+                    </div>
+
+                    <div className="flex justify-between text-xs text-slate-500 mt-2.5 mb-1">
+                      <span>Today's goal</span>
+                      <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-700' : ''}>
+                        {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
+                      </span>
+                    </div>
+                    <div role="progressbar" aria-label="Today goal progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100))} className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-navy-500'}`}
+                        style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-xs text-slate-500 py-3">No target set for this month yet</p>
+                )}
+              </div>
+
+
 
               {/* ===== MY TASKS ===== */}
-              <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div role="region" aria-label="My pending tasks" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="font-semibold text-slate-900 text-sm flex items-center">
                     <FiCheckSquare className="h-4 w-4 mr-2 text-navy-700" />
@@ -1675,15 +1696,16 @@ const StaffDashboard = () => {
                       <div key={task.id} className="flex gap-3 items-start p-3 border border-slate-100 rounded-xl bg-slate-50 hover:bg-white transition shadow-sm">
                         <button 
                           onClick={() => handleCompleteTask(task.id)}
-                          className="mt-0.5 text-slate-400 hover:text-emerald-500 transition-colors"
+                          className="mt-0.5 p-1 text-slate-500 hover:text-emerald-700 transition-colors"
                           title="Mark as complete"
+                          aria-label={`Mark task complete: ${task.title}`}
                         >
                           <FiCheckCircle className="h-5 w-5" />
                         </button>
                         <div className="flex-1">
                           <p className="text-sm font-medium text-slate-800">{task.title}</p>
                           {task.due_date && (
-                            <p className="text-xs text-rose-500 mt-1 flex items-center gap-1 font-medium">
+                            <p className="text-xs text-rose-600 mt-1 flex items-center gap-1 font-medium">
                               <FiClock className="h-3 w-3" /> Due {getEventDayLabel(task.due_date)}
                             </p>
                           )}
@@ -1694,8 +1716,42 @@ const StaffDashboard = () => {
                 )}
               </div>
 
+              {/* ===== MY DAY: ATTENDANCE & WALLET ===== */}
+              <div role="region" aria-label="Attendance and wallet" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-3">
+                  <FiClock className="h-4 w-4 mr-2 text-navy-700" />
+                  Attendance &amp; wallet
+                </h3>
+                <dl className="divide-y divide-slate-100 text-sm">
+                  <div className="flex justify-between py-2">
+                    <dt className="text-slate-600">Status</dt>
+                    <dd className="font-semibold text-slate-900">
+                      {!todayAttendance || !todayAttendance.punch_in ? 'Not punched in' : (!todayAttendance.punch_out ? 'Punched in' : 'Punched out')}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <dt className="text-slate-600">Punch in</dt>
+                    <dd className="font-semibold text-slate-900">
+                      {todayAttendance?.punch_in ? new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <dt className="text-slate-600">Punch out</dt>
+                    <dd className="font-semibold text-slate-900">
+                      {todayAttendance?.punch_out ? new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between py-2">
+                    <dt className="text-slate-600">{myWallet ? myWallet.name : 'My wallet'}</dt>
+                    <dd className="font-semibold text-slate-900">{myWallet ? formatCurrency(myWallet.balance) : 'Not assigned'}</dd>
+                  </div>
+                </dl>
+              </div>
+
               {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
+                role="region"
+                aria-label="Upcoming calendar"
                 className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"
                 onMouseEnter={() => setIsEventsHovered(true)}
                 onMouseLeave={() => setIsEventsHovered(false)}
@@ -1705,7 +1761,7 @@ const StaffDashboard = () => {
                     <FiCalendar className="h-4 w-4 mr-2 text-navy-700" />
                     Upcoming Calendar
                   </h3>
-                  <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 flex items-center gap-1">
+                  <span className="text-xs uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
                     {isEventsHovered ? <FiClock className="text-amber-500" /> : <FiPlayCircle className="text-emerald-500 animate-pulse" />}
                     {isEventsHovered ? 'Paused' : 'Auto'}
                   </span>
@@ -1727,15 +1783,16 @@ const StaffDashboard = () => {
                     return (
                       <button
                         key={tab}
+                        aria-pressed={activeEventTab === tab}
                         onClick={() => setActiveEventTab(tab)}
-                        className={`text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                        className={`text-xs px-3 py-2 min-h-[40px] rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                           activeEventTab === tab 
                             ? 'bg-navy-700 text-white shadow-md' 
                             : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                         }`}
                       >
                         {tab} 
-                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeEventTab === tab ? 'bg-white/20' : 'bg-slate-200'}`}>
+                        <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeEventTab === tab ? 'bg-white/20' : 'bg-slate-200'}`}>
                           {count}
                         </span>
                       </button>
@@ -1791,11 +1848,11 @@ const StaffDashboard = () => {
                         badgeLabel = 'Expiry';
                       } else if (event.source === 'task' || displayKey === 'task' || displayKey === 'deadline') {
                         Icon = FiCheckSquare;
-                        typeColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
+                        typeColor = 'text-emerald-700 bg-emerald-50 border-emerald-100';
                         badgeLabel = 'Task';
                       } else if (displayKey === 'working' || displayKey === 'start') {
                         Icon = FiBriefcase;
-                        typeColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
+                        typeColor = 'text-emerald-700 bg-emerald-50 border-emerald-100';
                         badgeLabel = displayKey === 'working' ? 'Working Day' : 'Start';
                       } else if (displayKey === 'holiday') {
                         Icon = FiStar;
@@ -1822,11 +1879,11 @@ const StaffDashboard = () => {
                             <div className="flex items-center justify-between mt-1.5">
                               <p className="text-xs font-medium flex items-center gap-1">
                                 <FiClock className="h-3 w-3" />
-                                <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-600 font-bold' : 'text-slate-600'}`}>
+                                <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-700 font-bold' : 'text-slate-600'}`}>
                                   {dayLabel}
                                 </span>
                               </p>
-                              <span className="text-[9px] uppercase tracking-wider font-bold opacity-70">
+                              <span className="text-xs uppercase tracking-wider font-bold opacity-70">
                                 {badgeLabel}
                               </span>
                             </div>
@@ -1837,6 +1894,7 @@ const StaffDashboard = () => {
                               onClick={() => handleViewService(event)}
                               className="p-2 bg-white/60 hover:bg-white rounded-full shadow-sm text-slate-500 hover:text-navy-700 transition-all border border-black/5 opacity-80 hover:opacity-100"
                               title="Go to Service Tracking"
+                              aria-label={`Open ${event.title} in service tracking`}
                             >
                               <FiExternalLink className="h-4 w-4" />
                             </button>
@@ -1849,7 +1907,7 @@ const StaffDashboard = () => {
               </div>
 
               {/* Recent Activity (Compact Version) */}
-              <div className="bg-white rounded-2xl border border-slate-200">
+              <div role="region" aria-label="Recent activity" className="bg-white rounded-2xl border border-slate-200">
                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
@@ -1867,7 +1925,7 @@ const StaffDashboard = () => {
                             <div className="p-1 bg-slate-100 rounded text-slate-500">
                               <FiCalendar className="h-3 w-3" />
                             </div>
-                            <h4 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
                               {formatDateUI(date)}
                             </h4>
                             <div className="h-px bg-slate-200 flex-1 ml-1"></div>
@@ -1891,7 +1949,7 @@ const StaffDashboard = () => {
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
+                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
                                         entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
                                         entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
                                         entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
@@ -1901,30 +1959,30 @@ const StaffDashboard = () => {
                                       </span>
                                     </div>
                                     
-                                    <span className="text-[10px] font-medium text-slate-400 shrink-0">
+                                    <span className="text-xs font-medium text-slate-500 shrink-0">
                                       {formatTime(entry.created_at)}
                                     </span>
                                   </div>
                                   
                                   <div className="flex justify-between items-end gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-[11px] font-medium text-slate-600 truncate max-w-[160px]">
+                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
                                       </p>
                                       
                                       {entry.tokenId && (
-                                        <span className="text-[10px] text-slate-400 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                        <span className="text-xs text-slate-500 font-mono font-bold before:content-['•'] before:mr-1.5">
                                           {shortenTokenId(entry.tokenId)}
                                         </span>
                                       )}
                                       
                                       {entry.workSource === 'online' && (
-                                        <span className="text-[9px] text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
+                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
                                           <FiGlobe className="h-2 w-2" /> Online
                                         </span>
                                       )}
                                       {entry.is_edited && (
-                                        <span className="text-[9px] text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
+                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
                                           Edited
                                         </span>
                                       )}
@@ -1933,7 +1991,7 @@ const StaffDashboard = () => {
                                     {(entry.tokenId || entry.tracking_id) && (
                                       <button 
                                         onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                        className="text-[10px] font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
+                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 min-h-[36px] rounded-lg transition-colors shrink-0 flex items-center gap-1"
                                       >
                                         Details <FiChevronRight className="h-3 w-3" />
                                       </button>
@@ -1947,7 +2005,7 @@ const StaffDashboard = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-500">
                       <FiActivity className="h-8 w-8 mb-2 opacity-20" />
                       <p className="text-sm font-medium">No recent activity</p>
                     </div>
@@ -1959,7 +2017,7 @@ const StaffDashboard = () => {
           </div>
 
           {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-          <div id="perf-details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
+          <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
 
             {/* 3a: MONTHLY & DAILY TARGET METER */}
             <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
@@ -1988,7 +2046,7 @@ const StaffDashboard = () => {
                     </div>
                   </div>
                   
-                  <div className="w-full bg-slate-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
+                  <div role="progressbar" aria-label="Monthly target progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(performance.targetProgress, 100))} className="w-full bg-slate-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
                     <div 
                       className={`h-full rounded-full transition-all duration-1000 ${
                         performance.targetProgress >= 100 ? 'bg-emerald-500' :
@@ -1998,7 +2056,7 @@ const StaffDashboard = () => {
                       style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
                     ></div>
                   </div>
-                  <p className="text-[10px] font-bold text-slate-500 text-right mb-4">
+                  <p className="text-xs font-bold text-slate-500 text-right mb-4">
                     {performance.targetProgress.toFixed(1)}% Completed
                   </p>
 
@@ -2027,7 +2085,7 @@ const StaffDashboard = () => {
                       ></div>
                     </div>
                     {performance.todayAchieved >= performance.dailyTarget && performance.dailyTarget > 0 && (
-                       <p className="text-[10px] font-bold text-emerald-600 mt-1.5 flex items-center gap-1">
+                       <p className="text-xs font-bold text-emerald-700 mt-1.5 flex items-center gap-1">
                          <FiCheckCircle className="h-3 w-3" /> Daily target met!
                        </p>
                     )}
@@ -2038,7 +2096,7 @@ const StaffDashboard = () => {
                       <div className="flex items-center justify-between mb-2">
                         <h4 className="text-xs font-bold text-slate-700">Previous months</h4>
                         {targetStreak >= 2 && (
-                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                             🔥 {targetStreak} months in a row
                           </span>
                         )}
@@ -2056,7 +2114,7 @@ const StaffDashboard = () => {
                                     : 'bg-rose-50 border-rose-200 text-rose-700'
                               }`}
                             >
-                              <p className="text-[10px] font-medium">
+                              <p className="text-xs font-medium">
                                 {new Date(h.month).toLocaleString('en-IN', { month: 'short' })}
                               </p>
                               <p className="text-xs font-bold">
@@ -2068,10 +2126,10 @@ const StaffDashboard = () => {
                       </div>
 
                       {lastMonth && (
-                        <p className="text-[11px] text-slate-500 mt-2">
+                        <p className="text-xs text-slate-500 mt-2">
                           Last month:{' '}
                           {lastMonth.percent >= 100
-                            ? <span className="font-semibold text-emerald-600">target achieved 🎉</span>
+                            ? <span className="font-semibold text-emerald-700">target achieved 🎉</span>
                             : <span className="font-semibold text-rose-600">
                                 {formatCurrency(Math.max(lastMonth.target - lastMonth.achieved, 0))} short of target
                               </span>}
@@ -2090,16 +2148,16 @@ const StaffDashboard = () => {
                   <FiTarget className="h-4 w-4 mr-2 text-navy-700" />
                   Performance Score
                 </h3>
-                <div className="relative group">
-                  <FiInfo className="h-4 w-4 text-slate-400 cursor-pointer" />
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-slate-900 text-white text-xs rounded-xl z-10">
+                <div className="relative group" tabIndex={0} aria-label="How the score is calculated: collection rate 50%, revenue efficiency 30%, consistency 20%">
+                  <FiInfo className="h-4 w-4 text-slate-500 cursor-pointer" />
+                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block group-focus-within:block w-64 p-2 bg-slate-900 text-white text-xs rounded-xl z-10">
                     Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
                   </div>
                 </div>
               </div>
               <div className="text-center">
                 <div className="relative inline-block">
-                  <svg className="w-32 h-32">
+                  <svg className="w-32 h-32" role="img" aria-label={`Performance score ${performanceLoading ? 0 : performance.incentiveScore} percent`}>
                     <circle className="text-slate-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
                     <circle
                       className="transition-all duration-1000"
@@ -2149,7 +2207,7 @@ const StaffDashboard = () => {
                       <span className="text-slate-600">Completion Rate</span>
                       <span className="font-medium text-slate-900">{performance.completionRate}%</span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div role="progressbar" aria-label="Completion rate" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(performance.completionRate) || 0} className="w-full bg-slate-200 rounded-full h-2">
                       <div className="bg-emerald-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
                     </div>
                   </div>
@@ -2200,7 +2258,7 @@ const StaffDashboard = () => {
           </div>
 
         </motion.div>
-      </div>
+      </main>
       {/* Cancel Modal */}
         {showCancelModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-800/50 backdrop-blur-sm p-4">
