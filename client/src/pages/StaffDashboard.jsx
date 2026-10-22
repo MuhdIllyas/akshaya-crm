@@ -1242,6 +1242,7 @@ const StaffDashboard = () => {
                       <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
                         <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
                       </div>
+                      <p className="text-xs text-slate-500 mt-2">Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)</p>
                     </>
                   )}
                 </div>
@@ -1639,7 +1640,7 @@ const StaffDashboard = () => {
 
               <div className="mt-6">
               {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch scroll-mt-20">
+              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch scroll-mt-20">
 
                 {/* 3a: MONTHLY & DAILY TARGET METER */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
@@ -1763,53 +1764,6 @@ const StaffDashboard = () => {
                   )}
                 </div>
 
-                {/* 3b: PERFORMANCE SCORE CARD */}
-                <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-                      <FiTarget className="h-4 w-4 mr-2 text-navy-700" />
-                      Performance Score
-                    </h3>
-                    <div className="relative group" tabIndex={0} aria-label="How the score is calculated: collection rate 50%, revenue efficiency 30%, consistency 20%">
-                      <FiInfo className="h-4 w-4 text-slate-500 cursor-pointer" />
-                      <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block group-focus-within:block w-64 p-2 bg-slate-900 text-white text-xs rounded-xl z-10">
-                        Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
-                      </div>
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <div className="relative inline-block">
-                      <svg className="w-32 h-32" role="img" aria-label={`Performance score ${performanceLoading ? 0 : performance.incentiveScore} percent`}>
-                        <circle className="text-slate-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
-                        <circle
-                          className="transition-all duration-1000"
-                          strokeWidth="12"
-                          strokeDasharray={339.292}
-                          strokeDashoffset={339.292 * (1 - (performanceLoading ? 0 : performance.incentiveScore / 100))}
-                          strokeLinecap="round"
-                          stroke={`url(#gradient)`}
-                          fill="transparent"
-                          r="54"
-                          cx="64"
-                          cy="64"
-                        />
-                        <defs>
-                          <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor={performance.incentiveScore >= 80 ? '#10B981' : performance.incentiveScore >= 60 ? '#F59E0B' : '#EF4444'} />
-                            <stop offset="100%" stopColor={performance.incentiveScore >= 80 ? '#059669' : performance.incentiveScore >= 60 ? '#D97706' : '#DC2626'} />
-                          </linearGradient>
-                        </defs>
-                      </svg>
-                      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                        <p className="text-2xl font-bold text-slate-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
-                        <p className="text-xs text-slate-500">
-                          {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
                 {/* 3c: PERFORMANCE METRICS */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-5">
                   <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
@@ -1879,6 +1833,115 @@ const StaffDashboard = () => {
                 </div>
               </div>
 
+              </div>
+
+              <div className="mt-6">
+{/* Recent Activity (Compact Version) */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" role="region" aria-label="Recent activity">
+                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
+                  <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
+                    {recentServiceEntries.length} items
+                  </span>
+                </div>
+                <div className="p-4 overflow-y-auto max-h-[500px]">
+                  {Object.keys(groupedRecentActivities).length > 0 ? (
+                    <div className="space-y-6">
+                      {Object.entries(groupedRecentActivities).map(([date, entries]) => (
+                        <div key={date} className="relative">
+                          
+                          {/* Compact Date Sticky Header */}
+                          <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
+                            <div className="p-1 bg-slate-100 rounded text-slate-500">
+                              <FiCalendar className="h-3 w-3" />
+                            </div>
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
+                              {formatDateUI(date)}
+                            </h4>
+                            <div className="h-px bg-slate-200 flex-1 ml-1"></div>
+                          </div>
+
+                          {/* Compact Timeline Entries */}
+                          <div className="space-y-2.5 relative">
+                            {entries.map((entry, index) => (
+                              <div key={entry.id} className="group relative flex gap-3">
+                                {index !== entries.length - 1 && (
+                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                                )}
+                                
+                                <div className="w-8 h-8 mt-1 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
+                                  <FiUser className="h-3.5 w-3.5 text-navy-700" />
+                                </div>
+
+                                <div className="flex-1 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-slate-300 flex flex-col justify-center">
+                                  
+                                  <div className="flex justify-between items-center mb-1.5 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
+                                      
+                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
+                                        entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
+                                        entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
+                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
+                                        'bg-slate-50 text-slate-700'
+                                      }`}>
+                                        {entry.status?.replace('-', ' ')}
+                                      </span>
+                                    </div>
+                                    
+                                    <span className="text-xs font-medium text-slate-600 shrink-0">
+                                      {formatTime(entry.created_at)}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-end gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
+                                        {getCategoryName(entry.category)}
+                                      </p>
+                                      
+                                      {entry.tokenId && (
+                                        <span className="text-xs text-slate-600 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                          {shortenTokenId(entry.tokenId)}
+                                        </span>
+                                      )}
+                                      
+                                      {entry.workSource === 'online' && (
+                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
+                                          <FiGlobe className="h-2 w-2" /> Online
+                                        </span>
+                                      )}
+                                      {entry.is_edited && (
+                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
+                                          Edited
+                                        </span>
+                                      )}
+                                    </div>
+                                    
+                                    {(entry.tokenId || entry.tracking_id) && (
+                                      <button 
+                                        onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
+                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-1.5 rounded-md transition-colors shrink-0 flex items-center gap-1"
+                                      >
+                                        Details <FiChevronRight className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-600">
+                      <FiActivity className="h-8 w-8 mb-2 opacity-20" />
+                      <p className="text-sm font-medium">No recent activity</p>
+                    </div>
+                  )}
+                </div>
+              </div>
               </div>
             </div>
 
