@@ -1340,7 +1340,7 @@ const StaffDashboard = () => {
               {/* Work queue: shown only when there is something to work on (or Applications is opened) */}
               {(activeTokens.length > 0 || campaignTokens.length > 0 || onlineBookings.length > 0 || processingBookings.length > 0 || workspaceTab === 'applications') ? (
               <>
-              <div role="region" aria-label="Work queue" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[min(850px,85vh)] min-h-[520px]">
+              <div role="region" aria-label="Work queue" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[min(850px,85vh)]">
                 
                 {/* Master Workspace Tabs */}
                 <div role="tablist" aria-label="Work queue sections" className="flex p-3 border-b border-slate-200 bg-slate-50/80 gap-2 overflow-x-auto hide-scrollbar">
@@ -1367,7 +1367,7 @@ const StaffDashboard = () => {
                 </div>
 
                 {/* Workspace Content */}
-                <div className="flex-1 overflow-y-auto bg-slate-50/30 p-4 sm:p-6">
+                <div className="flex-1 min-h-0 overflow-y-auto bg-slate-50/30 p-4 sm:p-6">
                   
                   {/* TAB 1: TOKENS */}
                   {workspaceTab === 'tokens' && (
@@ -1402,7 +1402,7 @@ const StaffDashboard = () => {
                                 <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{formatDateUI(date)}</h3>
                                 <div className="h-px bg-slate-200 flex-1 ml-2"></div>
                               </div>
-                              <div className="grid grid-cols-1 gap-3">
+                              <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-3">
                                 {dateTokens.map(token => {
                                   const isAssignedToMe = String(token.staffId || '').trim() === String(staffId).trim();
                                   const isUnassigned = !token.staffId || token.staffId === 'null';
