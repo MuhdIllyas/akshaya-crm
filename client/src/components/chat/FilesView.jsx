@@ -22,13 +22,13 @@ import {
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 const categories = [
-  { id: "govt_orders", label: "Government Orders", icon: "📜", color: "bg-purple-100 text-purple-700" },
-  { id: "circulars", label: "Circulars", icon: "🔄", color: "bg-blue-100 text-blue-700" },
-  { id: "application_forms", label: "Application Forms", icon: "📋", color: "bg-green-100 text-green-700" },
-  { id: "affidavits", label: "Affidavits", icon: "📑", color: "bg-red-100 text-red-700" },
-  { id: "notifications", label: "Notifications", icon: "🔔", color: "bg-yellow-100 text-yellow-700" },
-  { id: "manuals", label: "Manuals", icon: "📘", color: "bg-indigo-100 text-indigo-700" },
-  { id: "general_files", label: "General Files", icon: "📁", color: "bg-gray-100 text-gray-700" }
+  { id: "govt_orders", label: "Government Orders", icon: "📜", color: "bg-slate-100 text-navy-700" },
+  { id: "circulars", label: "Circulars", icon: "🔄", color: "bg-slate-200 text-navy-800" },
+  { id: "application_forms", label: "Application Forms", icon: "📋", color: "bg-emerald-100 text-emerald-700" },
+  { id: "affidavits", label: "Affidavits", icon: "📑", color: "bg-rose-100 text-rose-700" },
+  { id: "notifications", label: "Notifications", icon: "🔔", color: "bg-amber-100 text-amber-700" },
+  { id: "manuals", label: "Manuals", icon: "📘", color: "bg-orange-100 text-orange-700" },
+  { id: "general_files", label: "General Files", icon: "📁", color: "bg-slate-50 text-slate-600" }
 ];
 
 const FilesView = ({ user }) => {
@@ -362,19 +362,19 @@ const FilesView = ({ user }) => {
   }, []);
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-slate-50">
       {/* MAIN CONTENT */}
       <div className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ${selectedFile ? 'mr-96' : ''}`}>
         {/* Header */}
-        <div className="bg-white border-b px-6 py-4">
+        <div className="bg-white border-b border-slate-200 px-6 py-4">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h1 className="text-2xl font-bold text-gray-800">File Repository</h1>
-              <p className="text-sm text-gray-500 mt-1">Manage and organize your documents</p>
+              <h1 className="text-2xl font-bold text-slate-800">File Repository</h1>
+              <p className="text-sm text-slate-500 mt-1">Manage and organize your documents</p>
             </div>
             <button
               onClick={() => setIsUploadOpen(true)}
-              className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-navy-700 text-white rounded-xl hover:bg-navy-800 transition flex items-center gap-2 shadow-sm"
             >
               <FiPlus size={18} />
               <span>Upload File</span>
@@ -384,19 +384,21 @@ const FilesView = ({ user }) => {
           {/* Search and Filters */}
           <div className="flex items-center gap-4">
             <div className="flex-1 relative">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" size={18} />
               <input
                 type="text"
+                aria-label="Search files"
                 placeholder="Search files by name or category..."
-                className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`px-4 py-2 border rounded-lg flex items-center gap-2 transition-colors ${
-                showFilters ? 'bg-blue-50 border-blue-300 text-blue-600' : 'hover:bg-gray-50'
+              aria-expanded={showFilters}
+              className={`px-4 py-2 border border-slate-300 rounded-xl flex items-center gap-2 transition-colors ${
+                showFilters ? 'bg-slate-100 border-navy-500 text-navy-700' : 'hover:bg-slate-50'
               }`}
             >
               <FiFilter size={18} />
@@ -407,12 +409,13 @@ const FilesView = ({ user }) => {
 
           {/* Filter Panel */}
           {showFilters && (
-            <div className="mt-4 p-4 bg-gray-50 rounded-lg border animate-fadeIn">
+            <div className="mt-4 p-4 bg-slate-50 rounded-xl border animate-fadeIn">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <label htmlFor="fv-filter-category" className="block text-sm font-medium text-slate-700 mb-2">Category</label>
                   <select
-                    className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    id="fv-filter-category"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
                   >
@@ -423,9 +426,10 @@ const FilesView = ({ user }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">File Type</label>
+                  <label htmlFor="fv-filter-type" className="block text-sm font-medium text-slate-700 mb-2">File Type</label>
                   <select
-                    className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    id="fv-filter-type"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                     value={filterType}
                     onChange={(e) => setFilterType(e.target.value)}
                   >
@@ -435,9 +439,10 @@ const FilesView = ({ user }) => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Sort By</label>
+                  <label htmlFor="fv-filter-sort" className="block text-sm font-medium text-slate-700 mb-2">Sort By</label>
                   <select
-                    className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
+                    id="fv-filter-sort"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                     value={sortBy}
                     onChange={(e) => setSortBy(e.target.value)}
                   >
@@ -455,11 +460,11 @@ const FilesView = ({ user }) => {
         <div className="flex-1 overflow-y-auto p-6">
           {loading ? (
             <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy-700"></div>
             </div>
           ) : filteredFiles.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-64 text-gray-500">
-              <FiFolder size={48} className="mb-4 text-gray-300" />
+            <div className="flex flex-col items-center justify-center h-64 text-slate-500">
+              <FiFolder size={48} className="mb-4 text-slate-300" />
               <p className="text-lg">No files found</p>
               <p className="text-sm">Try adjusting your filters or upload a new file</p>
             </div>
@@ -471,9 +476,19 @@ const FilesView = ({ user }) => {
                 return (
                   <div
                     key={file.id}
-                    className={`group bg-white rounded-xl border hover:shadow-lg transition-all cursor-pointer transform hover:-translate-y-1 ${
-                      selectedFile?.id === file.id ? 'ring-2 ring-blue-500 border-blue-500' : ''
+                    className={`group bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all cursor-pointer transform hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-navy-500/30 ${
+                      selectedFile?.id === file.id ? 'ring-2 ring-navy-500 border-navy-500' : ''
                     }`}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open version history for ${file.name}`}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setSelectedFile(file);
+                        fetchVersions(file.id);
+                      }
+                    }}
                     onClick={() => {
                       setSelectedFile(file);
                       fetchVersions(file.id);
@@ -481,42 +496,42 @@ const FilesView = ({ user }) => {
                   >
                     <div className="p-4">
                       <div className="flex items-start justify-between mb-3">
-                        <div className={`w-10 h-10 ${category.color} rounded-lg flex items-center justify-center text-xl`}>
+                        <div className={`w-10 h-10 ${category.color} rounded-xl flex items-center justify-center text-xl`}>
                           {category.icon}
                         </div>
-                        <span className="text-xs bg-gray-100 px-2 py-1 rounded-full font-medium">
+                        <span className="text-xs bg-slate-100 px-2 py-1 rounded-full font-medium">
                           v{file.version_number || 1}
                         </span>
                       </div>
-                      <h3 className="font-semibold text-gray-800 mb-1 line-clamp-2">{file.name}</h3>
+                      <h3 className="font-semibold text-slate-800 mb-1 line-clamp-2">{file.name}</h3>
                       <div className="flex items-center gap-2 mb-3 flex-wrap">
                         <span className={`text-xs px-2 py-1 rounded-full ${category.color}`}>
                           {category.label}
                         </span>
                         {serviceName && (
-                          <span className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded-full flex items-center gap-1">
+                          <span className="text-xs bg-slate-100 text-navy-700 px-2 py-1 rounded-full flex items-center gap-1">
                             <FiBriefcase size={10} />
                             {serviceName}
                           </span>
                         )}
                         {file.related_service_id && !serviceName && (
-                          <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full flex items-center gap-1">
+                          <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full flex items-center gap-1">
                             <FiBriefcase size={10} />
                             Loading...
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center justify-between text-xs text-slate-500">
                         <div className="flex items-center gap-1">
                           <FiClock size={12} />
                           {file.created_at ? new Date(file.created_at).toLocaleDateString() : 'N/A'}
                         </div>
                         {file.is_global ? (
-                          <span className="flex items-center gap-1 text-purple-600 font-medium">
+                          <span className="flex items-center gap-1 text-navy-800 font-medium">
                             <FiGlobe size={12} /> Global
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-blue-600">
+                          <span className="flex items-center gap-1 text-navy-700">
                             <FiHome size={12} /> Centre {file.centre_id || 'Not Assigned'}
                           </span>
                         )}
@@ -532,30 +547,30 @@ const FilesView = ({ user }) => {
 
       {/* VERSION DRAWER */}
       {selectedFile && (
-        <div className="fixed right-0 top-0 w-96 h-full bg-white border-l shadow-xl overflow-y-auto animate-slideIn z-40">
-          <div className="sticky top-0 bg-white border-b p-4 flex items-center justify-between">
-            <h2 className="font-semibold text-gray-800">Version History</h2>
-            <button onClick={() => setSelectedFile(null)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
-              <FiX size={18} className="text-gray-500" />
+        <div className="fixed right-0 top-0 w-96 max-w-full h-full bg-white border-l border-slate-200 shadow-xl overflow-y-auto animate-slideIn z-40">
+          <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+            <h2 className="font-semibold text-slate-800">Version History</h2>
+            <button onClick={() => setSelectedFile(null)} aria-label="Close version history" className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+              <FiX size={18} className="text-slate-500" />
             </button>
           </div>
           <div className="p-4">
-            <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-              <h3 className="font-medium text-blue-800 mb-1">Current File</h3>
-              <p className="text-sm text-blue-600 line-clamp-2">{selectedFile.name}</p>
+            <div className="mb-4 p-3 bg-slate-100 border border-slate-200 rounded-xl">
+              <h3 className="font-medium text-navy-800 mb-1">Current File</h3>
+              <p className="text-sm text-navy-700 line-clamp-2">{selectedFile.name}</p>
               <div className="mt-2 flex items-center gap-2 text-xs">
                 {selectedFile.is_global ? (
-                  <span className="flex items-center gap-1 text-purple-600 bg-purple-100 px-2 py-1 rounded-full">
+                  <span className="flex items-center gap-1 text-navy-700 bg-slate-200 px-2 py-1 rounded-full">
                     <FiGlobe size={12} /> Global Access
                   </span>
                 ) : (
-                  <span className="flex items-center gap-1 text-blue-600 bg-blue-100 px-2 py-1 rounded-full">
+                  <span className="flex items-center gap-1 text-navy-700 bg-slate-100 border border-slate-200 px-2 py-1 rounded-full">
                     <FiHome size={12} /> Centre {selectedFile.centre_id || 'Not Assigned'}
                   </span>
                 )}
               </div>
               {selectedFile.related_service_id && (
-                <p className="text-xs text-blue-500 mt-2 flex items-center gap-1">
+                <p className="text-xs text-slate-600 mt-2 flex items-center gap-1">
                   <FiBriefcase size={12} />
                   Service: {getServiceName(selectedFile.related_service_id) || 'Loading...'}
                 </p>
@@ -563,10 +578,10 @@ const FilesView = ({ user }) => {
             </div>
             {versionsLoading ? (
               <div className="flex justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
               </div>
             ) : versions.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-slate-500">
                 <p>No version history available</p>
               </div>
             ) : (
@@ -574,41 +589,41 @@ const FilesView = ({ user }) => {
                 {versions.map((v, index) => (
                   <div key={v.id} className="relative">
                     {index !== versions.length - 1 && (
-                      <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-gray-200"></div>
+                      <div className="absolute left-5 top-10 bottom-0 w-0.5 bg-slate-200"></div>
                     )}
-                    <div className="bg-white border rounded-lg p-3 hover:shadow-md transition-shadow">
+                    <div className="bg-white border border-slate-200 rounded-xl p-3 hover:shadow-md transition-shadow">
                       <div className="flex items-start gap-3">
-                        <div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-sm font-medium">
+                        <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center text-sm font-medium">
                           {v.version_number}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-1">
                             <span className="font-medium">Version {v.version_number}</span>
-                            <span className="text-xs text-gray-500 flex items-center gap-1">
+                            <span className="text-xs text-slate-500 flex items-center gap-1">
                               <FiClock size={12} />
                               {v.created_at ? new Date(v.created_at).toLocaleDateString() : 'N/A'}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-500 mb-2">
+                          <div className="text-xs text-slate-500 mb-2">
                             Size: {v.file_size ? (v.file_size / 1024).toFixed(2) : 0} KB
                           </div>
-                          <div className="text-xs text-gray-600 mb-3">
+                          <div className="text-xs text-slate-600 mb-3">
                             Uploaded by: {v.uploaded_by_name || 'Unknown'}
                           </div>
                           <div className="flex items-center gap-2">
                             <button
                               onClick={() => downloadVersion(v.id, selectedFile.name)}
                               disabled={downloadLoading}
-                              className="flex-1 px-3 py-1.5 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-colors flex items-center justify-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                              className="flex-1 px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-xl hover:bg-emerald-100 transition-colors flex items-center justify-center gap-1 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               {downloadLoading ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-emerald-600"></div>
                               ) : (
                                 <FiDownload size={14} />
                               )}
                               Download
                             </button>
-                            <label className="flex-1 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex items-center justify-center gap-1 text-sm cursor-pointer">
+                            <label className="flex-1 px-3 py-1.5 bg-slate-100 text-navy-700 rounded-xl hover:bg-slate-200 transition-colors flex items-center justify-center gap-1 text-sm cursor-pointer">
                               <FiUpload size={14} />
                               Update
                               <input type="file" hidden onChange={(e) => handleVersionUpload(e, selectedFile.id)} />
@@ -616,7 +631,8 @@ const FilesView = ({ user }) => {
                             {(normalizedRole === "superadmin" || normalizedRole === "admin") && index === 0 && (
                               <button
                                 onClick={() => deleteFile(selectedFile.id)}
-                                className="px-3 py-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                aria-label="Delete file"
+                                className="px-3 py-1.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors"
                               >
                                 <FiTrash2 size={14} />
                               </button>
@@ -635,10 +651,10 @@ const FilesView = ({ user }) => {
 
       {/* UPLOAD MODAL */}
       {isUploadOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-fadeIn">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-2xl">
+        <div className="fixed inset-0 bg-navy-800/50 flex items-center justify-center z-50 p-4 animate-fadeIn">
+          <div role="dialog" aria-modal="true" aria-label="Upload new file" className="bg-white rounded-2xl w-full max-w-md p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-800">Upload New File</h2>
+              <h2 className="text-xl font-bold text-slate-800">Upload New File</h2>
               <button
                 onClick={() => {
                   setIsUploadOpen(false);
@@ -646,20 +662,21 @@ const FilesView = ({ user }) => {
                   setUploadSuccess("");
                   setUploadStep(1);
                 }}
-                className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                aria-label="Close"
+                className="p-2 hover:bg-slate-100 rounded-full transition-colors"
               >
-                <FiX size={20} className="text-gray-500" />
+                <FiX size={20} className="text-slate-500" />
               </button>
             </div>
 
             {uploadError && (
-              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-center gap-2 text-rose-700">
                 <FiAlertCircle size={18} />
                 <span className="text-sm">{uploadError}</span>
               </div>
             )}
             {uploadSuccess && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center gap-2 text-emerald-700">
                 <FiCheckCircle size={18} />
                 <span className="text-sm">{uploadSuccess}</span>
               </div>
@@ -669,12 +686,12 @@ const FilesView = ({ user }) => {
               {[1, 2, 3].map((step) => (
                 <div key={step} className="flex items-center">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                    uploadStep >= step ? 'bg-navy-700 text-white' : 'bg-gray-200 text-gray-500'
+                    uploadStep >= step ? 'bg-navy-700 text-white' : 'bg-slate-200 text-slate-500'
                   }`}>
                     {step}
                   </div>
                   {step < 3 && (
-                    <div className={`w-12 h-1 ${uploadStep > step ? 'bg-navy-700' : 'bg-gray-200'}`}></div>
+                    <div className={`w-12 h-1 ${uploadStep > step ? 'bg-navy-700' : 'bg-slate-200'}`}></div>
                   )}
                 </div>
               ))}
@@ -683,11 +700,11 @@ const FilesView = ({ user }) => {
             {uploadProgress > 0 && uploadProgress < 100 ? (
               <div className="space-y-4">
                 <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Uploading...</span>
+                  <span className="text-slate-600">Uploading...</span>
                   <span className="font-medium">{uploadProgress}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div className="bg-navy-700 h-2 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
+                <div className="w-full bg-slate-200 rounded-full h-2">
+                  <div role="progressbar" aria-valuenow={uploadProgress} aria-valuemin={0} aria-valuemax={100} className="bg-navy-700 h-2 rounded-full transition-all duration-300" style={{ width: `${uploadProgress}%` }}></div>
                 </div>
               </div>
             ) : (
@@ -695,22 +712,24 @@ const FilesView = ({ user }) => {
                 {uploadStep === 1 && (
                   <form onSubmit={(e) => { e.preventDefault(); setUploadStep(2); }} className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        File Name <span className="text-red-500">*</span>
+                      <label htmlFor="fv-name" className="block text-sm font-medium text-slate-700 mb-1">
+                        File Name <span className="text-rose-500">*</span>
                       </label>
                       <input
+                        id="fv-name"
                         type="text"
                         placeholder="Enter file name"
-                        className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                         value={newFileData.name}
                         onChange={(e) => setNewFileData({ ...newFileData, name: e.target.value })}
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                      <label htmlFor="fv-desc" className="block text-sm font-medium text-slate-700 mb-1">Description (optional)</label>
                       <textarea
+                        id="fv-desc"
                         placeholder="Enter file description"
-                        className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                         rows="3"
                         value={newFileData.description}
                         onChange={(e) => setNewFileData({ ...newFileData, description: e.target.value })}
@@ -719,7 +738,7 @@ const FilesView = ({ user }) => {
                     <button
                       type="submit"
                       disabled={!newFileData.name}
-                      className="w-full bg-navy-700 text-white py-2 rounded-lg hover:bg-navy-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                      className="w-full bg-navy-700 text-white py-2 rounded-xl hover:bg-navy-800 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
                     >
                       Next
                     </button>
@@ -729,11 +748,12 @@ const FilesView = ({ user }) => {
                 {uploadStep === 2 && (
                   <>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Category <span className="text-red-500">*</span>
+                      <label htmlFor="fv-category" className="block text-sm font-medium text-slate-700 mb-1">
+                        Category <span className="text-rose-500">*</span>
                       </label>
                       <select
-                        className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        id="fv-category"
+                        className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                         value={newFileData.category}
                         onChange={(e) => setNewFileData({ ...newFileData, category: e.target.value })}
                       >
@@ -746,9 +766,9 @@ const FilesView = ({ user }) => {
 
                     {/* Access Level – shown for both admin and superadmin */}
                     {(normalizedRole === "admin" || normalizedRole === "superadmin") && (
-                      <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3 mt-2">
-                        <h4 className="text-sm font-semibold text-gray-700 flex items-center">
-                          <FiGlobe className="mr-2 text-indigo-600" />
+                      <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 mt-2">
+                        <h4 className="text-sm font-semibold text-slate-700 flex items-center">
+                          <FiGlobe className="mr-2 text-navy-700" />
                           File Access Level
                         </h4>
                         <div className="flex gap-6">
@@ -758,9 +778,9 @@ const FilesView = ({ user }) => {
                               name="is_global"
                               checked={!newFileData.is_global}
                               onChange={() => setNewFileData({ ...newFileData, is_global: false, centre_id: "" })}
-                              className="text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                              className="text-navy-700 focus:ring-navy-500 w-4 h-4"
                             />
-                            <span className="text-sm text-gray-700 font-medium">Local (Selected Centre Only)</span>
+                            <span className="text-sm text-slate-700 font-medium">Local (Selected Centre Only)</span>
                           </label>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
@@ -768,29 +788,30 @@ const FilesView = ({ user }) => {
                               name="is_global"
                               checked={newFileData.is_global}
                               onChange={() => setNewFileData({ ...newFileData, is_global: true, centre_id: "" })}
-                              className="text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                              className="text-navy-700 focus:ring-navy-500 w-4 h-4"
                             />
-                            <span className="text-sm text-gray-700 font-medium">Global (All Centres)</span>
+                            <span className="text-sm text-slate-700 font-medium">Global (All Centres)</span>
                           </label>
                         </div>
 
                         {/* Superadmin: centre selection for local files */}
                         {normalizedRole === "superadmin" && !newFileData.is_global && (
-                          <div className="mt-3 pt-3 border-t border-gray-200">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                              Assign to Centre <span className="text-red-500">*</span>
+                          <div className="mt-3 pt-3 border-t border-slate-200">
+                            <label htmlFor="fv-centre" className="block text-sm font-medium text-slate-700 mb-1">
+                              Assign to Centre <span className="text-rose-500">*</span>
                             </label>
                             {centresLoading ? (
-                              <div className="text-sm text-gray-500">Loading centres...</div>
+                              <div className="text-sm text-slate-500">Loading centres...</div>
                             ) : centresError ? (
-                              <div className="text-sm text-red-600">{centresError}</div>
+                              <div className="text-sm text-rose-600">{centresError}</div>
                             ) : centres.length === 0 ? (
                               <div className="text-sm text-amber-600">No centres available. Please create a centre first.</div>
                             ) : (
                               <select
+                                id="fv-centre"
                                 value={newFileData.centre_id}
                                 onChange={(e) => setNewFileData({ ...newFileData, centre_id: e.target.value })}
-                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                                className="w-full px-4 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 bg-white"
                               >
                                 <option value="">Select a centre...</option>
                                 {centres.map(c => (
@@ -803,13 +824,13 @@ const FilesView = ({ user }) => {
 
                         {/* Admin: read‑only centre display */}
                         {normalizedRole === "admin" && !newFileData.is_global && (
-                          <div className="mt-2 text-sm text-blue-700 flex items-center gap-2">
+                          <div className="mt-2 text-sm text-navy-700 flex items-center gap-2">
                             <FiHome size={14} /> Centre: {user.centre_name || user.centre_id || "Your assigned centre"}
                           </div>
                         )}
 
                         {newFileData.is_global && (
-                          <div className="mt-2 text-sm text-purple-700 flex items-center gap-2">
+                          <div className="mt-2 text-sm text-navy-800 flex items-center gap-2">
                             <FiGlobe size={14} /> This file will be accessible globally.
                           </div>
                         )}
@@ -818,10 +839,11 @@ const FilesView = ({ user }) => {
 
                     {/* Related Service Dropdown */}
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Related Service (optional)</label>
+                      <label htmlFor="fv-service" className="block text-sm font-medium text-slate-700 mb-1">Related Service (optional)</label>
                       <div className="relative">
                         <select
-                          className="w-full border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                          id="fv-service"
+                          className="w-full border border-slate-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 appearance-none"
                           value={newFileData.related_service_id}
                           onChange={(e) => setNewFileData({ ...newFileData, related_service_id: e.target.value })}
                         >
@@ -836,7 +858,7 @@ const FilesView = ({ user }) => {
                             ))
                           )}
                         </select>
-                        <FiBriefcase className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                        <FiBriefcase className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                       </div>
                       {services.length === 0 && !servicesLoading && (
                         <p className="text-xs text-amber-600 mt-1">No services found. Please add services first.</p>
@@ -844,7 +866,7 @@ const FilesView = ({ user }) => {
                     </div>
 
                     <div className="flex gap-2 mt-4">
-                      <button onClick={() => setUploadStep(1)} className="flex-1 bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                      <button onClick={() => setUploadStep(1)} className="flex-1 bg-slate-100 text-slate-700 py-2 rounded-xl hover:bg-slate-200 transition-colors">
                         Back
                       </button>
                       <button
@@ -853,7 +875,7 @@ const FilesView = ({ user }) => {
                           !newFileData.category ||
                           (normalizedRole === "superadmin" && !newFileData.is_global && !newFileData.centre_id)
                         }
-                        className="flex-1 bg-navy-700 text-white py-2 rounded-lg hover:bg-navy-800 transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+                        className="flex-1 bg-navy-700 text-white py-2 rounded-xl hover:bg-navy-800 transition-colors disabled:bg-slate-300 disabled:cursor-not-allowed"
                       >
                         Next
                       </button>
@@ -863,13 +885,13 @@ const FilesView = ({ user }) => {
 
                 {uploadStep === 3 && (
                   <>
-                    <div className="relative border-2 border-dashed rounded-lg p-8 text-center hover:border-blue-500 transition-colors">
-                      <FiUpload size={32} className="mx-auto mb-2 text-gray-400" />
-                      <p className="text-sm text-gray-600 mb-2">Click to browse or drag and drop</p>
-                      <p className="text-xs text-gray-400">PDF, DOC, XLS, Images (Max 10MB)</p>
-                      <input type="file" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleNewUpload} />
+                    <div className="relative border-2 border-dashed border-slate-300 rounded-xl p-8 text-center hover:border-navy-500 transition-colors">
+                      <FiUpload size={32} className="mx-auto mb-2 text-slate-400" />
+                      <p className="text-sm text-slate-600 mb-2">Click to browse or drag and drop</p>
+                      <p className="text-xs text-slate-400">PDF, DOC, XLS, Images (Max 10MB)</p>
+                      <input type="file" aria-label="Choose file to upload" className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleNewUpload} />
                     </div>
-                    <div className="bg-gray-50 p-3 rounded-lg space-y-1 text-sm">
+                    <div className="bg-slate-50 p-3 rounded-xl space-y-1 text-sm">
                       <p><span className="font-medium">File Name:</span> {newFileData.name}</p>
                       <p><span className="font-medium">Category:</span> {categories.find(c => c.id === newFileData.category)?.label || 'Not selected'}</p>
                       {newFileData.related_service_id && (
@@ -877,7 +899,7 @@ const FilesView = ({ user }) => {
                       )}
                       <p><span className="font-medium">Access:</span> {newFileData.is_global ? 'Global' : `Centre ${newFileData.centre_id || user?.centre_id || 'Not assigned'}`}</p>
                     </div>
-                    <button onClick={() => setUploadStep(2)} className="w-full bg-gray-100 text-gray-700 py-2 rounded-lg hover:bg-gray-200 transition-colors">
+                    <button onClick={() => setUploadStep(2)} className="w-full bg-slate-100 text-slate-700 py-2 rounded-xl hover:bg-slate-200 transition-colors">
                       Back
                     </button>
                   </>
