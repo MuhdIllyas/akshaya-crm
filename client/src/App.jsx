@@ -482,7 +482,7 @@ const App = () => {
             />
             <Route
               path="staff/service_checklist"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceChecklist /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceRequirementsPrint /></ProtectedRoute>}
             />
             <Route
               path="staff/token/:tokenId/service"
