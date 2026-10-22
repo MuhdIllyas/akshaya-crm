@@ -824,7 +824,7 @@ const StaffDashboard = () => {
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
       <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 text-white px-6 py-6">
-        <div className="w-full max-w-[1440px] mx-auto">
+        <div className="w-full">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
@@ -918,7 +918,7 @@ const StaffDashboard = () => {
               </motion.span>
             ))}
 
-            <div className="relative w-full max-w-[1440px] mx-auto px-6 py-5 flex items-center justify-between gap-4">
+            <div className="relative w-full px-6 py-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="text-5xl">🎂</div>
                 <div>
@@ -944,7 +944,7 @@ const StaffDashboard = () => {
       {/* ===== BIRTHDAY: COLLEAGUES ===== */}
       {colleagueBirthdays.length > 0 && (
         <div className="bg-rose-50 border-l-4 border-rose-500">
-          <div className="w-full max-w-[1440px] mx-auto px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="w-full px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex -space-x-2 shrink-0">
                 {colleagueBirthdays.slice(0, 3).map(b => (
@@ -1008,7 +1008,7 @@ const StaffDashboard = () => {
                     : 'bg-amber-50 border-amber-500')
             }`}
           >
-            <div className="w-full max-w-[1440px] mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="w-full px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {!todayAttendance || !todayAttendance.punch_in ? (
                   <>
@@ -1067,7 +1067,7 @@ const StaffDashboard = () => {
       
       {/* Original Header */}
       <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="px-6 py-6 max-w-[1440px] mx-auto">
+        <div className="px-6 py-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 bg-gradient-to-br from-navy-500 to-navy-700 rounded-xl flex items-center justify-center shadow-lg">
@@ -1185,13 +1185,13 @@ const StaffDashboard = () => {
       </div>
 
       <main id="sd-main" className="p-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full max-w-[1440px] mx-auto">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
           
           {/* ===== LAYOUT F: MAIN WORK AREA + MY DAY PANEL ===== */}
           <div className="flex flex-col xl:flex-row gap-6 items-start">
 
             {/* Main column – stats, work queue, activity, performance */}
-            <div className="flex-1 min-w-0 w-full">
+            <div className="flex-1 min-w-0 w-full 2xl:max-w-[1200px]">
               {/* Floating Action Button */}
               <button
                 onClick={() => setShowQuickService(true)}
@@ -1616,112 +1616,6 @@ const StaffDashboard = () => {
                 </div>
               </div>
 
-              {/* Recent Activity (Compact Version) */}
-              <div role="region" aria-label="Recent activity" className="bg-white rounded-2xl border border-slate-200">
-                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
-                  <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
-                    {recentServiceEntries.length} items
-                  </span>
-                </div>
-                <div className="p-4 overflow-y-auto max-h-[500px]">
-                  {Object.keys(groupedRecentActivities).length > 0 ? (
-                    <div className="space-y-6">
-                      {Object.entries(groupedRecentActivities).map(([date, entries]) => (
-                        <div key={date} className="relative">
-                          
-                          {/* Compact Date Sticky Header */}
-                          <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
-                            <div className="p-1 bg-slate-100 rounded text-slate-500">
-                              <FiCalendar className="h-3 w-3" />
-                            </div>
-                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
-                              {formatDateUI(date)}
-                            </h4>
-                            <div className="h-px bg-slate-200 flex-1 ml-1"></div>
-                          </div>
-
-                          {/* Compact Timeline Entries */}
-                          <div className="space-y-2.5 relative">
-                            {entries.map((entry, index) => (
-                              <div key={entry.id} className="group relative flex gap-3">
-                                {index !== entries.length - 1 && (
-                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
-                                )}
-                                
-                                <div className="w-8 h-8 mt-1 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
-                                  <FiUser className="h-3.5 w-3.5 text-navy-700" />
-                                </div>
-
-                                <div className="flex-1 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-slate-300 flex flex-col justify-center">
-                                  
-                                  <div className="flex justify-between items-center mb-1.5 gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
-                                      
-                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
-                                        entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
-                                        entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
-                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
-                                        'bg-slate-50 text-slate-700'
-                                      }`}>
-                                        {entry.status?.replace('-', ' ')}
-                                      </span>
-                                    </div>
-                                    
-                                    <span className="text-xs font-medium text-slate-500 shrink-0">
-                                      {formatTime(entry.created_at)}
-                                    </span>
-                                  </div>
-                                  
-                                  <div className="flex justify-between items-end gap-2">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
-                                        {getCategoryName(entry.category)}
-                                      </p>
-                                      
-                                      {entry.tokenId && (
-                                        <span className="text-xs text-slate-500 font-mono font-bold before:content-['•'] before:mr-1.5">
-                                          {shortenTokenId(entry.tokenId)}
-                                        </span>
-                                      )}
-                                      
-                                      {entry.workSource === 'online' && (
-                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
-                                          <FiGlobe className="h-2 w-2" /> Online
-                                        </span>
-                                      )}
-                                      {entry.is_edited && (
-                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
-                                          Edited
-                                        </span>
-                                      )}
-                                    </div>
-                                    
-                                    {(entry.tokenId || entry.tracking_id) && (
-                                      <button 
-                                        onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 min-h-[36px] rounded-lg transition-colors shrink-0 flex items-center gap-1"
-                                      >
-                                        Details <FiChevronRight className="h-3 w-3" />
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-500">
-                      <FiActivity className="h-8 w-8 mb-2 opacity-20" />
-                      <p className="text-sm font-medium">No recent activity</p>
-                    </div>
-                  )}
-                </div>
-              </div>
 
               </div>
 
@@ -2258,6 +2152,113 @@ const StaffDashboard = () => {
                 </motion.div>
               </div>
 
+
+              {/* Recent Activity (Compact Version) */}
+              <div role="region" aria-label="Recent activity" className="bg-white rounded-2xl border border-slate-200">
+                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
+                  <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
+                    {recentServiceEntries.length} items
+                  </span>
+                </div>
+                <div className="p-4 overflow-y-auto max-h-[500px]">
+                  {Object.keys(groupedRecentActivities).length > 0 ? (
+                    <div className="space-y-6">
+                      {Object.entries(groupedRecentActivities).map(([date, entries]) => (
+                        <div key={date} className="relative">
+                          
+                          {/* Compact Date Sticky Header */}
+                          <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
+                            <div className="p-1 bg-slate-100 rounded text-slate-500">
+                              <FiCalendar className="h-3 w-3" />
+                            </div>
+                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
+                              {formatDateUI(date)}
+                            </h4>
+                            <div className="h-px bg-slate-200 flex-1 ml-1"></div>
+                          </div>
+
+                          {/* Compact Timeline Entries */}
+                          <div className="space-y-2.5 relative">
+                            {entries.map((entry, index) => (
+                              <div key={entry.id} className="group relative flex gap-3">
+                                {index !== entries.length - 1 && (
+                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                                )}
+                                
+                                <div className="w-8 h-8 mt-1 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
+                                  <FiUser className="h-3.5 w-3.5 text-navy-700" />
+                                </div>
+
+                                <div className="flex-1 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-slate-300 flex flex-col justify-center">
+                                  
+                                  <div className="flex justify-between items-center mb-1.5 gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
+                                      
+                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
+                                        entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
+                                        entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
+                                        entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
+                                        'bg-slate-50 text-slate-700'
+                                      }`}>
+                                        {entry.status?.replace('-', ' ')}
+                                      </span>
+                                    </div>
+                                    
+                                    <span className="text-xs font-medium text-slate-500 shrink-0">
+                                      {formatTime(entry.created_at)}
+                                    </span>
+                                  </div>
+                                  
+                                  <div className="flex justify-between items-end gap-2">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
+                                        {getCategoryName(entry.category)}
+                                      </p>
+                                      
+                                      {entry.tokenId && (
+                                        <span className="text-xs text-slate-500 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                          {shortenTokenId(entry.tokenId)}
+                                        </span>
+                                      )}
+                                      
+                                      {entry.workSource === 'online' && (
+                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
+                                          <FiGlobe className="h-2 w-2" /> Online
+                                        </span>
+                                      )}
+                                      {entry.is_edited && (
+                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
+                                          Edited
+                                        </span>
+                                      )}
+                                    </div>
+                                    
+                                    {(entry.tokenId || entry.tracking_id) && (
+                                      <button 
+                                        onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
+                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 min-h-[36px] rounded-lg transition-colors shrink-0 flex items-center gap-1"
+                                      >
+                                        Details <FiChevronRight className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+                      <FiActivity className="h-8 w-8 mb-2 opacity-20" />
+                      <p className="text-sm font-medium">No recent activity</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </aside>
           </div>
 
