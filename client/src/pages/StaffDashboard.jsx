@@ -1640,7 +1640,7 @@ const StaffDashboard = () => {
 
               <div className="mt-6">
               {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch scroll-mt-20">
+              <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 items-stretch scroll-mt-20">
 
                 {/* 3a: MONTHLY & DAILY TARGET METER */}
                 <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
@@ -1831,20 +1831,16 @@ const StaffDashboard = () => {
                     </div>
                   )}
                 </div>
-              </div>
 
-              </div>
-
-              <div className="mt-6">
-{/* Recent Activity (Compact Version) */}
-              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" role="region" aria-label="Recent activity">
+                {/* Recent Activity (Compact Version) */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col md:col-span-2 xl:col-span-1" role="region" aria-label="Recent activity">
                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
                     {recentServiceEntries.length} items
                   </span>
                 </div>
-                <div className="p-4 overflow-y-auto max-h-[500px]">
+                <div className="p-4 overflow-y-auto max-h-[420px]">
                   {Object.keys(groupedRecentActivities).length > 0 ? (
                     <div className="space-y-6">
                       {Object.entries(groupedRecentActivities).map(([date, entries]) => (
@@ -1943,6 +1939,9 @@ const StaffDashboard = () => {
                 </div>
               </div>
               </div>
+
+              </div>
+
             </div>
 
             {/* My day panel – target, tasks, attendance & wallet, calendar */}
