@@ -32,17 +32,17 @@ const formatDate = (date) => {
 const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-300 p-5"
+    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 p-5"
   >
     <div className="flex items-center justify-between">
       <div>
-        <p className="font-medium text-slate-600 mb-1 text-sm">{title}</p>
+        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
         {loading ? (
-          <div className="h-8 w-20 bg-slate-200 animate-pulse rounded"></div>
+          <div className="h-8 w-20 bg-gray-200 animate-pulse rounded"></div>
         ) : (
-          <p className="font-bold text-slate-900 text-2xl">{value}</p>
+          <p className="font-bold text-gray-900 text-2xl">{value}</p>
         )}
-        {subtitle && <p className="text-slate-500 text-sm mt-1">{subtitle}</p>}
+        {subtitle && <p className="text-gray-500 text-sm mt-1">{subtitle}</p>}
       </div>
       <div className={`rounded-xl ${color} p-3`}>
         <Icon className="text-white h-6 w-6" />
@@ -743,16 +743,16 @@ const StaffDashboard = () => {
 
   const getStatusBadgeColor = (status) => {
     switch(status) {
-      case 'completed': return 'bg-emerald-100 text-emerald-800';
-      case 'in-progress': case 'processing': return 'bg-slate-200 text-navy-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'in-progress': case 'processing': return 'bg-blue-100 text-blue-800';
       case 'pending': return 'bg-amber-100 text-amber-800';
-      default: return 'bg-slate-100 text-slate-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
   const getStatusIcon = (status) => {
     switch(status) {
-      case 'completed': return <FiCheckCircle className="h-4 w-4 text-emerald-500" />;
-      case 'in-progress': case 'processing': return <FiPlayCircle className="h-4 w-4 text-navy-500" />;
+      case 'completed': return <FiCheckCircle className="h-4 w-4 text-green-500" />;
+      case 'in-progress': case 'processing': return <FiPlayCircle className="h-4 w-4 text-blue-500" />;
       case 'pending': return <FiClock className="h-4 w-4 text-amber-500" />;
       default: return null;
     }
@@ -797,17 +797,17 @@ const StaffDashboard = () => {
     document.getElementById('perf-details')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   if (loading) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-      <div className="text-center"><div className="w-12 h-12 border-[3px] border-navy-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="text-slate-600">Loading dashboard...</p></div>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center"><div className="w-12 h-12 border-3 border-gray-900 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div><p className="text-gray-600">Loading dashboard...</p></div>
     </div>
   );
   if (error) return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-      <div className="bg-white rounded-xl p-8 max-w-md w-full border border-slate-200 text-center">
-        <FiAlertCircle className="mx-auto h-12 w-12 text-rose-600 mb-4" />
-        <h3 className="text-lg font-semibold text-slate-900 mb-2">Data Loading Error</h3>
-        <p className="text-slate-600 mb-6">{error}</p>
-        <button onClick={() => window.location.reload()} className="px-6 py-3 bg-navy-700 text-white rounded-xl hover:bg-navy-800">Try Again</button>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-lg p-8 max-w-md w-full border border-gray-200 text-center">
+        <FiAlertCircle className="mx-auto h-12 w-12 text-red-500 mb-4" />
+        <h3 className="text-lg font-semibold text-gray-900 mb-2">Data Loading Error</h3>
+        <p className="text-gray-600 mb-6">{error}</p>
+        <button onClick={() => window.location.reload()} className="px-6 py-3 bg-blue-700 text-white rounded-lg hover:bg-blue-800">Try Again</button>
       </div>
     </div>
   );
@@ -816,15 +816,11 @@ const StaffDashboard = () => {
   const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
 
   return (
-    <div className="min-h-screen bg-slate-50 sd-root">
-      <style>{`.sd-root button:focus-visible,.sd-root a:focus-visible,.sd-root select:focus-visible,.sd-root input:focus-visible,.sd-root [tabindex]:focus-visible{outline:3px solid #3b5d8f;outline-offset:2px}`}</style>
-      <a href="#sd-main" className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-50 focus:bg-white focus:text-navy-800 focus:px-4 focus:py-2 focus:rounded-xl focus:font-semibold focus:shadow-lg">
-        Skip to main content
-      </a>
+    <div className="min-h-screen bg-gray-50">
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
-      <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 text-white px-6 py-6">
-        <div className="w-full">
+      <div className="bg-gradient-to-r from-blue-900 via-blue-800 to-indigo-900 text-white px-6 py-6">
+        <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-start gap-4 mb-3">
@@ -851,7 +847,7 @@ const StaffDashboard = () => {
               </div>
               <div className="flex items-center gap-4 text-sm text-white/90 mt-2 mb-6">
                 <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 bg-emerald-400 rounded-full"></span>
+                  <span className="h-2 w-2 bg-green-400 rounded-full"></span>
                   <span>Online</span>
                 </div>
                 <button
@@ -866,19 +862,19 @@ const StaffDashboard = () => {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => navigate('/dashboard/staff/token')}
-                    className="px-4 py-2 bg-white/20 rounded-xl text-sm font-medium hover:bg-white/30 transition"
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     New Token
                   </button>
                   <button
                     onClick={() => setShowQuickService(true)}
-                    className="px-4 py-2 bg-white/20 rounded-xl text-sm font-medium hover:bg-white/30 transition"
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     Quick Service
                   </button>
                   <button
                     onClick={() => navigate('/dashboard/staff/performance')}
-                    className="px-4 py-2 bg-white/20 rounded-xl text-sm font-medium hover:bg-white/30 transition"
+                    className="px-4 py-2 bg-white/20 rounded-lg text-sm font-medium hover:bg-white/30 transition"
                   >
                     View Reports
                   </button>
@@ -903,7 +899,7 @@ const StaffDashboard = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="relative overflow-hidden bg-rose-600 text-white"
+            className="relative overflow-hidden bg-pink-600 text-white"
           >
             {/* floating emojis */}
             {['🎉', '🎈', '🎂', '✨', '🎁', '🎊'].map((e, i) => (
@@ -918,7 +914,7 @@ const StaffDashboard = () => {
               </motion.span>
             ))}
 
-            <div className="relative w-full px-6 py-5 flex items-center justify-between gap-4">
+            <div className="relative max-w-7xl mx-auto px-6 py-5 flex items-center justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="text-5xl">🎂</div>
                 <div>
@@ -932,7 +928,6 @@ const StaffDashboard = () => {
                 onClick={dismissMyBirthday}
                 className="p-2 rounded-full bg-white/20 hover:bg-white/30 shrink-0"
                 title="Dismiss"
-                aria-label="Dismiss birthday message"
               >
                 <FiXCircle className="h-5 w-5" />
               </button>
@@ -943,8 +938,8 @@ const StaffDashboard = () => {
 
       {/* ===== BIRTHDAY: COLLEAGUES ===== */}
       {colleagueBirthdays.length > 0 && (
-        <div className="bg-rose-50 border-l-4 border-rose-500">
-          <div className="w-full px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="bg-pink-50 border-l-4 border-pink-500">
+          <div className="max-w-7xl mx-auto px-6 py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <div className="flex -space-x-2 shrink-0">
                 {colleagueBirthdays.slice(0, 3).map(b => (
@@ -952,13 +947,13 @@ const StaffDashboard = () => {
                     <img key={b.id} src={toPhotoUrl(b.photo)} alt={b.name}
                         className="w-9 h-9 rounded-full border-2 border-white object-cover" />
                   ) : (
-                    <div key={b.id} className="w-9 h-9 rounded-full border-2 border-white bg-rose-200 text-rose-800 flex items-center justify-center text-xs font-bold">
+                    <div key={b.id} className="w-9 h-9 rounded-full border-2 border-white bg-pink-200 text-pink-800 flex items-center justify-center text-xs font-bold">
                       {b.name?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                     </div>
                   )
                 ))}
               </div>
-              <p className="text-sm text-rose-900">
+              <p className="text-sm text-pink-900">
                 🎂 Today is{' '}
                 <span className="font-bold">
                   {colleagueBirthdays.map(b => b.name).join(', ').replace(/, ([^,]*)$/, ' & $1')}
@@ -970,7 +965,7 @@ const StaffDashboard = () => {
               <button
                 onClick={() => handleSendWishes(colleagueBirthdays[0])}
                 disabled={!!openingChatFor}
-                className="px-4 py-2 bg-rose-600 text-white text-sm font-bold rounded-xl hover:bg-rose-700 shadow-sm shrink-0 disabled:opacity-60"
+                className="px-4 py-2 bg-pink-600 text-white text-sm font-bold rounded-lg hover:bg-pink-700 shadow-sm shrink-0 disabled:opacity-60"
               >
                 {openingChatFor ? 'Opening…' : 'Send Wishes'}
               </button>
@@ -981,7 +976,7 @@ const StaffDashboard = () => {
                     key={b.id}
                     onClick={() => handleSendWishes(b)}
                     disabled={!!openingChatFor}
-                    className="px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-xl hover:bg-rose-700 shadow-sm disabled:opacity-60"
+                    className="px-3 py-1.5 bg-pink-600 text-white text-xs font-bold rounded-lg hover:bg-pink-700 shadow-sm disabled:opacity-60"
                   >
                     {openingChatFor === b.id ? 'Opening…' : `Wish ${(b.name || '').split(' ')[0]}`}
                   </button>
@@ -999,7 +994,6 @@ const StaffDashboard = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            role="status"
             className={`border-l-4 shadow-sm ${
               !todayAttendance || !todayAttendance.punch_in 
                 ? 'bg-rose-50 border-rose-500' 
@@ -1008,7 +1002,7 @@ const StaffDashboard = () => {
                     : 'bg-amber-50 border-amber-500')
             }`}
           >
-            <div className="w-full px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 {!todayAttendance || !todayAttendance.punch_in ? (
                   <>
@@ -1023,7 +1017,7 @@ const StaffDashboard = () => {
                 ) : !todayAttendance.punch_out ? (
                   <>
                     <div className="p-2 bg-emerald-100 rounded-full">
-                      <FiCheckCircle className="h-5 w-5 text-emerald-700" />
+                      <FiCheckCircle className="h-5 w-5 text-emerald-600" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-emerald-900">You are punched in</h3>
@@ -1035,7 +1029,7 @@ const StaffDashboard = () => {
                 ) : (
                   <>
                     <div className="p-2 bg-amber-100 rounded-full">
-                      <FiClock className="h-5 w-5 text-amber-700" />
+                      <FiClock className="h-5 w-5 text-amber-600" />
                     </div>
                     <div>
                       <h3 className="text-sm font-bold text-amber-900">You are currently punched out</h3>
@@ -1049,11 +1043,11 @@ const StaffDashboard = () => {
               <button
                 onClick={handleQuickPunch}
                 disabled={attendanceLoading}
-                className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
+                className={`px-6 py-2 rounded-lg text-sm font-bold text-white shadow-sm transition-all disabled:opacity-50 flex items-center justify-center min-w-[140px] ${
                   !todayAttendance || !todayAttendance.punch_in 
                     ? 'bg-rose-600 hover:bg-rose-700' 
                     : (!todayAttendance.punch_out 
-                        ? 'bg-navy-700 hover:bg-navy-800' 
+                        ? 'bg-gray-800 hover:bg-gray-900' 
                         : 'bg-amber-600 hover:bg-amber-700')
                 }`}
               >
@@ -1066,16 +1060,16 @@ const StaffDashboard = () => {
       {/* ========================================= */}
       
       {/* Original Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+      <div className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="px-6 py-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-navy-500 to-navy-700 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-12 h-12 bg-linear-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
                 <FiTrendingUp className="text-white h-6 w-6" />
               </div>
               <div>
-                <h1 className="font-bold text-slate-900 text-2xl">Service Dashboard</h1>
-                <p className="text-slate-600 text-sm">Manage tokens, track services, and view performance</p>
+                <h1 className="font-bold text-gray-900 text-2xl">Service Dashboard</h1>
+                <p className="text-gray-600 text-sm">Manage tokens, track services, and view performance</p>
               </div>
             </div>
             <div className="flex items-center space-x-3">
@@ -1083,9 +1077,9 @@ const StaffDashboard = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center space-x-2 px-4 py-2 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  <FiCalendar className="h-4 w-4 text-slate-500" />
+                  <FiCalendar className="h-4 w-4 text-gray-500" />
                   <span className="text-sm">
                     {period === 'today' && 'Today'}
                     {period === 'week' && 'This Week'}
@@ -1094,7 +1088,7 @@ const StaffDashboard = () => {
                     {period === 'year' && 'This Year'}
                     {period === 'custom' && 'Custom Range'}
                   </span>
-                  <FiChevronRight className="h-4 w-4 text-slate-500 transform rotate-90" />
+                  <FiChevronRight className="h-4 w-4 text-gray-500 transform rotate-90" />
                 </button>
                 
                 <AnimatePresence>
@@ -1105,60 +1099,58 @@ const StaffDashboard = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full mt-2 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-64"
+                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
                       >
                         <div className="p-3">
                           <button
                             onClick={() => { setPeriod('today'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'today' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'today' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
                           >
                             Today
                           </button>
                           <button
                             onClick={() => { setPeriod('week'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'week' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'week' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
                           >
                             This Week
                           </button>
                           <button
                             onClick={() => { setPeriod('month'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'month' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'month' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
                           >
                             This Month
                           </button>
                           <button
                             onClick={() => { setPeriod('quarter'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'quarter' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'quarter' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
                           >
                             This Quarter
                           </button>
                           <button
                             onClick={() => { setPeriod('year'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'year' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'year' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
                           >
                             This Year
                           </button>
-                          <div className="border-t border-slate-200 my-2"></div>
+                          <div className="border-t border-gray-200 my-2"></div>
                           <div className="space-y-2">
                             <input
                               type="date"
                               value={customDateRange.from}
                               onChange={(e) => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                               placeholder="From Date"
-                              aria-label="From date"
                             />
                             <input
                               type="date"
                               value={customDateRange.to}
                               onChange={(e) => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
-                              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                               placeholder="To Date"
-                              aria-label="To date"
                             />
                             <button
                               onClick={() => { setPeriod('custom'); setShowDatePicker(false); }}
-                              className="w-full px-3 py-2 bg-navy-700 text-white rounded-xl text-sm hover:bg-navy-800"
+                              className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
                             >
                               Apply
                             </button>
@@ -1170,29 +1162,26 @@ const StaffDashboard = () => {
                 </AnimatePresence>
               </div>
               
-              <span className="text-xs text-slate-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
+              <span className="text-xs text-gray-500">Last updated: {lastUpdated.toLocaleTimeString()}</span>
               <button
                 onClick={refreshTokens}
-                className="p-2 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+                className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
                 title="Refresh"
-                aria-label="Refresh tokens"
               >
-                <FiRefreshCw className="h-4 w-4 text-slate-600" />
+                <FiRefreshCw className="h-4 w-4 text-gray-600" />
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      <main id="sd-main" className="p-6">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
+      <div className="p-6">
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="max-w-7xl mx-auto">
           
           {/* Floating Action Button */}
           <button
             onClick={() => setShowQuickService(true)}
-            aria-label="Quick service"
-            title="Quick service"
-            className="fixed bottom-8 right-8 bg-navy-700 text-white p-4 rounded-full shadow-lg hover:bg-navy-800 transition-all z-20"
+            className="fixed bottom-8 right-8 bg-blue-700 text-white p-4 rounded-full shadow-lg hover:bg-blue-800 transition-all z-20"
           >
             <FiPlus className="h-6 w-6" />
           </button>
@@ -1200,17 +1189,16 @@ const StaffDashboard = () => {
           {/* Search & Filter Bar + Wallet Pill */}
           <div className="flex flex-wrap gap-4 mb-6 items-center">
             <div className="relative flex-1 max-w-md">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                aria-label="Search tokens"
                 placeholder="Search by token, customer name, or phone..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 pr-4 py-2.5 w-full border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
+                className="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <select aria-label="Date range" value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500">
+            <select value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2.5">
               <option value="today">Today</option>
               <option value="yesterday">Yesterday</option>
               <option value="week">This Week</option>
@@ -1221,15 +1209,15 @@ const StaffDashboard = () => {
             {myWallet && (
               <motion.div
                 whileHover={{ y: -1 }}
-                className="inline-flex items-center gap-2 bg-white border border-slate-300 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                className="inline-flex items-center gap-2 bg-white border border-indigo-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
               >
-                <div className="p-1 bg-slate-200 rounded-full">
-                  <FiBriefcase className="h-3.5 w-3.5 text-navy-700" />
+                <div className="p-1 bg-indigo-100 rounded-full">
+                  <FiBriefcase className="h-3.5 w-3.5 text-indigo-600" />
                 </div>
-                <span className="text-sm font-medium text-slate-700">
+                <span className="text-sm font-medium text-gray-700">
                   {myWallet.name}
                 </span>
-                <span className="text-sm font-bold text-slate-900">
+                <span className="text-sm font-bold text-gray-900">
                   {formatCurrency(myWallet.balance)}
                 </span>
               </motion.div>
@@ -1238,10 +1226,10 @@ const StaffDashboard = () => {
 
           {/* Stats Toggle Header */}
           <div className="flex items-center justify-between mb-4 mt-2">
-            <h2 className="text-lg font-bold text-slate-900">Today at a glance</h2>
-            <div className="bg-slate-100 p-1 rounded-xl inline-flex">
-              <button aria-pressed={statView === 'applications'} onClick={() => setStatView('applications')} className={`px-4 py-2 min-h-[40px] text-sm font-bold rounded-lg transition-all ${statView === 'applications' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Applications</button>
-              <button aria-pressed={statView === 'tokens'} onClick={() => setStatView('tokens')} className={`px-4 py-2 min-h-[40px] text-sm font-bold rounded-lg transition-all ${statView === 'tokens' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Walk-in Tokens</button>
+            <h3 className="text-lg font-bold text-gray-900">Overview Metrics</h3>
+            <div className="bg-gray-100 p-1 rounded-lg inline-flex">
+              <button onClick={() => setStatView('applications')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'applications' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Applications</button>
+              <button onClick={() => setStatView('tokens')} className={`px-4 py-1.5 text-sm font-bold rounded-md transition-all ${statView === 'tokens' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Walk-in Tokens</button>
             </div>
           </div>
 
@@ -1249,46 +1237,90 @@ const StaffDashboard = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
             {statView === 'applications' ? (
               <>
-                <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-slate-600" />
+                <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-gray-600" />
                 <StatCard title="Pending" value={trackingStats.pending || 0} icon={FiClock} color="bg-amber-500" />
-                <StatCard title="In Progress" value={trackingStats.in_progress || 0} icon={FiPlayCircle} color="bg-navy-500" />
-                <StatCard title="Completed" value={trackingStats.completed || 0} icon={FiCheckCircle} color="bg-emerald-500" />
+                <StatCard title="In Progress" value={trackingStats.in_progress || 0} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={trackingStats.completed || 0} icon={FiCheckCircle} color="bg-green-500" />
                 <StatCard title="Delayed" value={trackingStats.delayed || 0} icon={FiAlertCircle} color="bg-rose-500" />
               </>
             ) : (
               <>
-                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-slate-600" />
+                <StatCard title="Total Tokens" value={statusCounts.total} icon={FiUsers} color="bg-gray-600" />
                 <StatCard title="Pending" value={statusCounts.pending} icon={FiClock} color="bg-amber-500" />
-                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-navy-500" />
-                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-emerald-500" />
-                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-navy-500" />
+                <StatCard title="In Progress" value={statusCounts.inProgress} icon={FiPlayCircle} color="bg-blue-500" />
+                <StatCard title="Completed" value={statusCounts.completed} icon={FiCheckCircle} color="bg-green-500" />
+                <StatCard title="Campaign" value={statusCounts.campaign} icon={FiAward} color="bg-purple-500" />
               </>
             )}
           </div>
 
           {/* ===== STEP 2: GLANCE STRIP ===== */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[2fr_1fr_1fr_1fr] gap-4 mb-6">
+
+            {/* Target */}
+            <div
+              onClick={scrollToPerf}
+              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold text-gray-600 flex items-center">
+                  <FiTarget className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
+                  Target (+10% Growth)
+                </p>
+                {!performanceLoading && performance.monthlyTarget > 0 && (
+                  <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-600' : 'text-gray-700'}`}>
+                    {performance.targetProgress.toFixed(0)}%
+                  </span>
+                )}
+              </div>
+
+              {performanceLoading ? (
+                <div className="h-14 bg-gray-200 animate-pulse rounded" />
+              ) : performance.monthlyTarget > 0 ? (
+                <>
+                  <div className="flex justify-between items-baseline text-sm mb-1">
+                    <span className="font-black text-gray-900">{formatCurrency(performance.currentAchieved)}</span>
+                    <span className="text-xs text-gray-500">of {formatCurrency(performance.monthlyTarget)}</span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                    <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
+                         style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
+                  </div>
+
+                  <div className="flex justify-between text-[11px] text-gray-500 mt-2.5 mb-1">
+                    <span>Today's goal</span>
+                    <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-600' : ''}>
+                      {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                      style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
+                    />
+                  </div>
+                </>
+              ) : (
+                <p className="text-xs text-gray-400 py-3">No target set for this month yet</p>
+              )}
+            </div>
 
             {/* Score */}
             <div
               onClick={scrollToPerf}
-              role="button"
-              tabIndex={0}
-              aria-label="Performance score. Press to jump to performance details"
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollToPerf(); } }}
-              className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm cursor-pointer hover:border-navy-500 transition-colors"
+              className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm cursor-pointer hover:border-indigo-300 transition-colors"
             >
-              <p className="text-xs font-semibold text-slate-600 flex items-center mb-3">
-                <FiAward className="h-3.5 w-3.5 mr-1.5 text-navy-700" />
+              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
+                <FiAward className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
                 Performance score
               </p>
               {performanceLoading ? (
-                <div className="h-14 bg-slate-200 animate-pulse rounded" />
+                <div className="h-14 bg-gray-200 animate-pulse rounded" />
               ) : (
                 <>
-                  <p className="text-2xl font-black text-slate-900">{performance.incentiveScore}%</p>
-                  <p className="text-xs text-slate-500 mb-2">{scoreLabel}</p>
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                  <p className="text-2xl font-black text-gray-900">{performance.incentiveScore}%</p>
+                  <p className="text-[11px] text-gray-500 mb-2">{scoreLabel}</p>
+                  <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
                     <div className={`h-full rounded-full ${scoreColor}`} style={{ width: `${Math.min(performance.incentiveScore, 100)}%` }} />
                   </div>
                 </>
@@ -1296,87 +1328,86 @@ const StaffDashboard = () => {
             </div>
 
             {/* Tasks */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs font-semibold text-slate-600 flex items-center mb-3">
-                <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-navy-700" />
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
+                <FiCheckSquare className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
                 Pending tasks
               </p>
-              <p className="text-2xl font-black text-slate-900">{myTasks.length}</p>
+              <p className="text-2xl font-black text-gray-900">{myTasks.length}</p>
               {overdueTasks.length > 0 ? (
-                <p className="text-xs font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
+                <p className="text-[11px] font-bold text-rose-600 mt-1">{overdueTasks.length} overdue</p>
               ) : nextTask ? (
-                <p className="text-xs text-slate-500 mt-1 truncate" title={nextTask.title}>
+                <p className="text-[11px] text-gray-500 mt-1 truncate" title={nextTask.title}>
                   Next: {nextTask.title}
                 </p>
               ) : (
-                <p className="text-xs text-emerald-700 mt-1">All clear</p>
+                <p className="text-[11px] text-emerald-600 mt-1">All clear</p>
               )}
             </div>
 
             {/* Next event */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs font-semibold text-slate-600 flex items-center mb-3">
-                <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-navy-700" />
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+              <p className="text-xs font-semibold text-gray-600 flex items-center mb-3">
+                <FiCalendar className="h-3.5 w-3.5 mr-1.5 text-indigo-600" />
                 Next event
               </p>
               {nextEvent ? (
                 <>
-                  <p className="text-sm font-bold text-slate-900 line-clamp-2" title={nextEvent.title}>{nextEvent.title}</p>
-                  <p className="text-xs text-slate-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
+                  <p className="text-sm font-bold text-gray-900 line-clamp-2" title={nextEvent.title}>{nextEvent.title}</p>
+                  <p className="text-[11px] text-gray-500 mt-1">{getEventDayLabel(nextEvent.date || nextEvent.start_datetime)}</p>
                 </>
               ) : (
-                <p className="text-xs text-slate-500">Nothing upcoming</p>
+                <p className="text-xs text-gray-400">Nothing upcoming</p>
               )}
             </div>
           </div>
 
           {/* Two‑Column Layout */}
-          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_400px] gap-6 items-start">
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
             
             {/* Left Column – Unified Workspace */}
-            <div className="flex flex-col gap-6 min-w-0">
+            <div className="xl:col-span-2 flex flex-col gap-6">
               
-              <div role="region" aria-label="Work queue" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col h-[min(850px,85vh)] min-h-[520px]">
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col h-[850px]">
                 
                 {/* Master Workspace Tabs */}
-                <div role="tablist" aria-label="Work queue sections" className="flex p-3 border-b border-slate-200 bg-slate-50/80 gap-2 overflow-x-auto hide-scrollbar">
-                  <button role="tab" aria-selected={workspaceTab === 'tokens'} onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                <div className="flex p-3 border-b border-gray-200 bg-gray-50/80 gap-2 overflow-x-auto hide-scrollbar">
+                  <button onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-indigo-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiUsers className="h-4 w-4" />
                     Walk-in Tokens
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{statusCounts.total}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'}`}>{statusCounts.total}</span>
                   </button>
-                  <button role="tab" aria-selected={workspaceTab === 'queue'} onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('queue')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'queue' ? 'bg-white text-blue-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiGlobe className="h-4 w-4" />
                     Online Queue
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{onlineBookings.length}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'queue' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>{onlineBookings.length}</span>
                   </button>
-                  <button role="tab" aria-selected={workspaceTab === 'processing'} onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('processing')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'processing' ? 'bg-white text-emerald-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiPlayCircle className="h-4 w-4" />
                     My Online Work
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{processingBookings.length}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-200 text-gray-600'}`}>{processingBookings.length}</span>
                   </button>
-                  <button role="tab" aria-selected={workspaceTab === 'applications'} onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-purple-700 shadow-sm border border-gray-200' : 'text-gray-600 hover:bg-gray-200/50'}`}>
                     <FiTarget className="h-4 w-4" />
                     Applications
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{trackingStats.total || 0}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-purple-100 text-purple-700' : 'bg-gray-200 text-gray-600'}`}>{trackingStats.total || 0}</span>
                   </button>
                 </div>
 
                 {/* Workspace Content */}
-                <div className="flex-1 overflow-y-auto bg-slate-50/30 p-4 sm:p-6">
+                <div className="flex-1 overflow-y-auto bg-gray-50/30 p-4 sm:p-6">
                   
                   {/* TAB 1: TOKENS */}
                   {workspaceTab === 'tokens' && (
                     <div className="space-y-4">
                       {/* Sub-Tabs for Tokens */}
-                      <div className="flex gap-2 border-b border-slate-200 pb-3">
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'campaign'].map(tab => (
                           <button
                             key={tab}
-                            aria-pressed={activeView === tab}
                             onClick={() => setActiveView(tab)}
-                            className={`px-4 py-2 min-h-[40px] rounded-full text-xs font-bold capitalize transition-colors ${
-                              activeView === tab ? 'bg-navy-700 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                            className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors ${
+                              activeView === tab ? 'bg-gray-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
                             }`}
                           >
                             {tab}
@@ -1385,7 +1416,7 @@ const StaffDashboard = () => {
                       </div>
 
                       {Object.keys(groupedTokens).length === 0 ? (
-                        <div className="text-center py-16 text-slate-500">
+                        <div className="text-center py-16 text-gray-400">
                           <FiPlayCircle className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                           <p className="font-medium">No tokens found</p>
                         </div>
@@ -1394,9 +1425,9 @@ const StaffDashboard = () => {
                           {Object.entries(groupedTokens).map(([date, dateTokens]) => (
                             <div key={date}>
                               <div className="flex items-center gap-2 mb-3 pl-1">
-                                <FiCalendar className="h-4 w-4 text-navy-500" />
-                                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{formatDateUI(date)}</h3>
-                                <div className="h-px bg-slate-200 flex-1 ml-2"></div>
+                                <FiCalendar className="h-4 w-4 text-indigo-500" />
+                                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">{formatDateUI(date)}</h3>
+                                <div className="h-px bg-gray-200 flex-1 ml-2"></div>
                               </div>
                               <div className="grid grid-cols-1 gap-3">
                                 {dateTokens.map(token => {
@@ -1404,28 +1435,28 @@ const StaffDashboard = () => {
                                   const isUnassigned = !token.staffId || token.staffId === 'null';
                                   
                                   return (
-                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-slate-200 rounded-xl hover:shadow-md hover:border-navy-500 transition-all group">
+                                    <div key={token.tokenId} className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all group">
                                       <div className="flex items-center gap-3 min-w-0 flex-1">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
-                                          activeView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                                          activeView === 'campaign' ? 'bg-slate-100 text-navy-700 border border-slate-200' :
-                                          'bg-slate-100 text-navy-700 border border-slate-200'
+                                        <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                                          activeView === 'completed' ? 'bg-green-50 text-green-700 border border-green-100' :
+                                          activeView === 'campaign' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+                                          'bg-indigo-50 text-indigo-700 border border-indigo-100'
                                         }`}>
                                           {shortenTokenId(token.tokenId)}
                                         </div>
                                         <div className="min-w-0 flex-1">
                                           <div className="flex items-center gap-2 mb-0.5">
-                                            <h4 className="font-bold text-slate-900 text-sm truncate">{token.customerName || 'Customer'}</h4>
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
+                                            <h4 className="font-bold text-gray-900 text-sm truncate">{token.customerName || 'Customer'}</h4>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${getStatusBadgeColor(token.status)}`}>
                                               {token.status?.replace('-', ' ')}
                                             </span>
-                                            {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-xs font-bold">Mine</span>}
+                                            {isAssignedToMe && activeView === 'active' && <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold">Mine</span>}
                                           </div>
-                                          <p className="text-xs text-slate-500 truncate flex items-center gap-2">
-                                            <span className="font-medium text-slate-700">{getCategoryName(token.categoryId)}</span>
-                                            <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                          <p className="text-xs text-gray-500 truncate flex items-center gap-2">
+                                            <span className="font-medium text-gray-700">{getCategoryName(token.categoryId)}</span>
+                                            <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                                             <span>{formatTime(token.createdAt)}</span>
-                                            {token.phone && <><span className="w-1 h-1 bg-slate-300 rounded-full"></span><span>{token.phone}</span></>}
+                                            {token.phone && <><span className="w-1 h-1 bg-gray-300 rounded-full"></span><span>{token.phone}</span></>}
                                           </p>
                                         </div>
                                       </div>
@@ -1435,22 +1466,21 @@ const StaffDashboard = () => {
                                           <>
                                             <button 
                                               onClick={() => handleStartService(token.tokenId, token.staffId, token.status)} 
-                                              className="px-3 py-2 min-h-[40px] bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
+                                              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors"
                                             >
                                               <FiPlayCircle className="h-3.5 w-3.5" /> {token.status === 'pending' ? 'Start' : 'Resume'}
                                             </button>
                                             <button 
                                               onClick={() => openCancelModal(token)} 
-                                              className="p-2.5 text-slate-500 hover:bg-rose-50 hover:text-rose-600 rounded-xl transition-colors"
+                                              className="p-1.5 text-gray-400 hover:bg-rose-50 hover:text-rose-600 rounded-lg transition-colors"
                                               title="Cancel Token"
-                                              aria-label={`Cancel token ${token.tokenId}`}
                                             >
                                               <FiXCircle className="h-4 w-4" />
                                             </button>
                                           </>
                                         )}
                                         {(activeView === 'completed' || (activeView === 'campaign' && token.status === 'completed')) && (
-                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-2 min-h-[40px] bg-white border border-slate-300 text-slate-700 rounded-xl hover:bg-slate-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
+                                          <button onClick={() => handleViewDetails(token.tokenId, token.trackingId)} className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center gap-1.5 text-xs font-semibold shadow-sm transition-colors">
                                             <FiBarChart2 className="h-3.5 w-3.5" /> Details
                                           </button>
                                         )}
@@ -1470,22 +1500,22 @@ const StaffDashboard = () => {
                   {workspaceTab === 'queue' && (
                     <div className="space-y-3">
                       {onlineBookings.length === 0 ? (
-                        <div className="text-center py-16 text-slate-500">
+                        <div className="text-center py-16 text-gray-400">
                           <FiGlobe className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                           <p className="font-medium">No pending online bookings</p>
                         </div>
                       ) : (
                         onlineBookings.map(booking => (
-                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-all group">
+                          <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-blue-100 rounded-xl hover:shadow-md transition-all group">
                             <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-slate-100 text-navy-700 border border-slate-200 rounded-xl flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
+                              <div className="w-10 h-10 bg-blue-50 text-blue-700 border border-blue-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
                               <div className="min-w-0">
-                                <h4 className="font-bold text-slate-900 text-sm truncate">{booking.customer_name}</h4>
-                                <p className="text-xs text-slate-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                                <p className="text-xs text-slate-500 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
+                                <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
+                                <p className="text-xs text-gray-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
+                                <p className="text-[10px] text-gray-400 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
                               </div>
                             </div>
-                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 min-h-[40px] bg-navy-700 text-white text-xs font-bold rounded-xl hover:bg-navy-800 shadow-sm shrink-0 transition-colors">
+                            <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-sm shrink-0 transition-colors">
                               Take Work
                             </button>
                           </div>
@@ -1498,7 +1528,7 @@ const StaffDashboard = () => {
                   {workspaceTab === 'processing' && (
                     <div className="space-y-3">
                       {processingBookings.length === 0 ? (
-                        <div className="text-center py-16 text-slate-500">
+                        <div className="text-center py-16 text-gray-400">
                           <FiCheckSquare className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                           <p className="font-medium">No active online work</p>
                         </div>
@@ -1506,17 +1536,17 @@ const StaffDashboard = () => {
                         processingBookings.map(booking => (
                           <div key={booking.id} className="flex items-center justify-between p-4 bg-white border border-emerald-100 rounded-xl hover:shadow-md transition-all group">
                             <div className="flex items-center gap-4 min-w-0">
-                              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
+                              <div className="w-10 h-10 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-lg flex items-center justify-center font-bold text-sm shrink-0">#{booking.id}</div>
                               <div className="min-w-0">
                                 <div className="flex items-center gap-2 mb-0.5">
-                                  <h4 className="font-bold text-slate-900 text-sm truncate">{booking.customer_name}</h4>
-                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider">Assigned to you</span>
+                                  <h4 className="font-bold text-gray-900 text-sm truncate">{booking.customer_name}</h4>
+                                  <span className="bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider">Assigned to you</span>
                                 </div>
-                                <p className="text-xs text-slate-500 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
-                                <p className="text-xs text-slate-500 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
+                                <p className="text-xs text-gray-500 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
+                                <p className="text-[10px] text-gray-400 mt-1 font-mono">Taken at: {new Date(booking.taken_at || booking.applied_at).toLocaleString()}</p>
                               </div>
                             </div>
-                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 min-h-[40px] bg-emerald-700 text-white text-xs font-bold rounded-xl hover:bg-emerald-800 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
+                            <button onClick={() => handleStartOnlineService(booking)} className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-lg hover:bg-emerald-700 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors">
                               <FiPlayCircle className="h-4 w-4" /> Start
                             </button>
                           </div>
@@ -1530,7 +1560,7 @@ const StaffDashboard = () => {
                     <div className="space-y-4">
                       
                       {/* Sub-Tabs for Applications */}
-                      <div className="flex gap-2 border-b border-slate-200 pb-3">
+                      <div className="flex gap-2 border-b border-gray-200 pb-3">
                         {['active', 'completed', 'delayed'].map(tab => {
                           // Calculate counts based on global stats for the badges
                           let count = 0;
@@ -1541,14 +1571,13 @@ const StaffDashboard = () => {
                           return (
                             <button
                               key={tab}
-                              aria-pressed={activeAppView === tab}
                               onClick={() => setActiveAppView(tab)}
-                              className={`px-4 py-2 min-h-[40px] rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
-                                activeAppView === tab ? 'bg-navy-800 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                              className={`px-4 py-1.5 rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
+                                activeAppView === tab ? 'bg-purple-800 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-100'
                               }`}
                             >
                               {tab}
-                              <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeAppView === tab ? 'bg-white/20' : 'bg-slate-200 text-slate-500'}`}>
+                              <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeAppView === tab ? 'bg-white/20' : 'bg-gray-200 text-gray-500'}`}>
                                 {count}
                               </span>
                             </button>
@@ -1559,51 +1588,51 @@ const StaffDashboard = () => {
                       {/* Application List */}
                       <div className="space-y-3">
                         {filteredApplications.length === 0 ? (
-                          <div className="text-center py-16 text-slate-500">
+                          <div className="text-center py-16 text-gray-400">
                             <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
                             <p className="font-medium">No {activeAppView} applications found</p>
                           </div>
                         ) : (
                           filteredApplications.map(app => (
-                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-all group">
+                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-purple-100 rounded-xl hover:shadow-md transition-all group">
                               <div className="flex items-center gap-4 min-w-0">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
                                   activeAppView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
                                   activeAppView === 'delayed' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-                                  'bg-slate-100 text-navy-700 border border-slate-200'
+                                  'bg-purple-50 text-purple-700 border border-purple-100'
                                 }`}>
                                   {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
                                 </div>
                                 <div className="min-w-0">
                                   <div className="flex items-center gap-2 mb-0.5">
-                                    <h4 className="font-bold text-slate-900 text-sm truncate">{app.customer_name}</h4>
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
+                                    <h4 className="font-bold text-gray-900 text-sm truncate">{app.customer_name}</h4>
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
                                       app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                      app.status === 'in_progress' ? 'bg-slate-200 text-navy-700' :
+                                      app.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
                                       app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
                                       app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
                                       app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
-                                      'bg-slate-100 text-slate-700'
+                                      'bg-gray-100 text-gray-700'
                                     }`}>
                                       {app.status?.replace('_', ' ')}
                                     </span>
-                                    <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
+                                    <span className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded font-bold">
                                       {app.progress}%
                                     </span>
                                   </div>
-                                  <p className="text-xs text-slate-500 truncate flex items-center gap-2">
+                                  <p className="text-xs text-gray-500 truncate flex items-center gap-2">
                                     <span className="font-medium">{app.service_name}</span>
-                                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
+                                    <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                                     <span>{app.current_step || 'Submitted'}</span>
                                   </p>
-                                  <p className="text-xs text-slate-500 mt-1 font-mono">
+                                  <p className="text-[10px] text-gray-400 mt-1 font-mono">
                                     Last updated: {new Date(app.updated_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
                                   </p>
                                 </div>
                               </div>
                               <button 
                                 onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
-                                className="px-4 py-2 min-h-[40px] bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
+                                className="px-4 py-2 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded-lg hover:bg-gray-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
                               >
                                 <FiBarChart2 className="h-4 w-4" /> Track
                               </button>
@@ -1617,95 +1646,40 @@ const StaffDashboard = () => {
               </div>
             </div>
 
-            {/* Right Column – Target, Tasks, Attendance, Events, Activity */}
-            <div className="space-y-6 min-w-0">
-
-              {/* ===== TARGET (summary) ===== */}
-              <div
-                onClick={scrollToPerf}
-                role="button"
-                tabIndex={0}
-                aria-label="Monthly target. Press to jump to target details"
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); scrollToPerf(); } }}
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm cursor-pointer hover:border-navy-500 transition-colors"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs font-semibold text-slate-600 flex items-center">
-                    <FiTarget className="h-3.5 w-3.5 mr-1.5 text-navy-700" />
-                    Target (+10% Growth)
-                  </p>
-                  {!performanceLoading && performance.monthlyTarget > 0 && (
-                    <span className={`text-xs font-bold ${performance.targetProgress >= 100 ? 'text-emerald-700' : 'text-slate-700'}`}>
-                      {performance.targetProgress.toFixed(0)}%
-                    </span>
-                  )}
-                </div>
-
-                {performanceLoading ? (
-                  <div className="h-14 bg-slate-200 animate-pulse rounded" />
-                ) : performance.monthlyTarget > 0 ? (
-                  <>
-                    <div className="flex justify-between items-baseline text-sm mb-1">
-                      <span className="font-black text-slate-900">{formatCurrency(performance.currentAchieved)}</span>
-                      <span className="text-xs text-slate-500">of {formatCurrency(performance.monthlyTarget)}</span>
-                    </div>
-                    <div role="progressbar" aria-label="Monthly target progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(performance.targetProgress, 100))} className="w-full bg-slate-100 rounded-full h-2.5 overflow-hidden">
-                      <div className={`h-full rounded-full ${barColor(performance.targetProgress)}`}
-                           style={{ width: `${Math.min(performance.targetProgress, 100)}%` }} />
-                    </div>
-
-                    <div className="flex justify-between text-xs text-slate-500 mt-2.5 mb-1">
-                      <span>Today's goal</span>
-                      <span className={performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'font-bold text-emerald-700' : ''}>
-                        {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
-                      </span>
-                    </div>
-                    <div role="progressbar" aria-label="Today goal progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100))} className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${performance.dailyTarget > 0 && performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-navy-500'}`}
-                        style={{ width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` }}
-                      />
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-xs text-slate-500 py-3">No target set for this month yet</p>
-                )}
-              </div>
-
-
+            {/* Right Column – Tasks & Events (Performance cards moved out) */}
+            <div className="space-y-6">
 
               {/* ===== MY TASKS ===== */}
-              <div role="region" aria-label="My pending tasks" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-                    <FiCheckSquare className="h-4 w-4 mr-2 text-navy-700" />
+                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
+                    <FiCheckSquare className="h-4 w-4 mr-2 text-indigo-600" />
                     My Pending Tasks
                   </h3>
-                  <span className="bg-slate-200 text-navy-800 text-xs font-bold px-2 py-0.5 rounded-full">
+                  <span className="bg-indigo-100 text-indigo-800 text-xs font-bold px-2 py-0.5 rounded-full">
                     {myTasks.length}
                   </span>
                 </div>
                 
                 {myTasks.length === 0 ? (
-                  <div className="text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                    <p className="text-sm text-slate-500">No pending tasks! 🎉</p>
+                  <div className="text-center py-4 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                    <p className="text-sm text-gray-500">No pending tasks! 🎉</p>
                   </div>
                 ) : (
                   <div className="space-y-3 max-h-60 overflow-y-auto pr-1">
                     {myTasks.map(task => (
-                      <div key={task.id} className="flex gap-3 items-start p-3 border border-slate-100 rounded-xl bg-slate-50 hover:bg-white transition shadow-sm">
+                      <div key={task.id} className="flex gap-3 items-start p-3 border border-gray-100 rounded-lg bg-gray-50 hover:bg-white transition shadow-sm">
                         <button 
                           onClick={() => handleCompleteTask(task.id)}
-                          className="mt-0.5 p-1 text-slate-500 hover:text-emerald-700 transition-colors"
+                          className="mt-0.5 text-gray-400 hover:text-emerald-500 transition-colors"
                           title="Mark as complete"
-                          aria-label={`Mark task complete: ${task.title}`}
                         >
                           <FiCheckCircle className="h-5 w-5" />
                         </button>
                         <div className="flex-1">
-                          <p className="text-sm font-medium text-slate-800">{task.title}</p>
+                          <p className="text-sm font-medium text-gray-800">{task.title}</p>
                           {task.due_date && (
-                            <p className="text-xs text-rose-600 mt-1 flex items-center gap-1 font-medium">
+                            <p className="text-xs text-rose-500 mt-1 flex items-center gap-1 font-medium">
                               <FiClock className="h-3 w-3" /> Due {getEventDayLabel(task.due_date)}
                             </p>
                           )}
@@ -1716,52 +1690,18 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* ===== MY DAY: ATTENDANCE & WALLET ===== */}
-              <div role="region" aria-label="Attendance and wallet" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-3">
-                  <FiClock className="h-4 w-4 mr-2 text-navy-700" />
-                  Attendance &amp; wallet
-                </h3>
-                <dl className="divide-y divide-slate-100 text-sm">
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">Status</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {!todayAttendance || !todayAttendance.punch_in ? 'Not punched in' : (!todayAttendance.punch_out ? 'Punched in' : 'Punched out')}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">Punch in</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {todayAttendance?.punch_in ? new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">Punch out</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {todayAttendance?.punch_out ? new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">{myWallet ? myWallet.name : 'My wallet'}</dt>
-                    <dd className="font-semibold text-slate-900">{myWallet ? formatCurrency(myWallet.balance) : 'Not assigned'}</dd>
-                  </div>
-                </dl>
-              </div>
-
               {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
-                role="region"
-                aria-label="Upcoming calendar"
-                className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm"
+                className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm"
                 onMouseEnter={() => setIsEventsHovered(true)}
                 onMouseLeave={() => setIsEventsHovered(false)}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-                    <FiCalendar className="h-4 w-4 mr-2 text-navy-700" />
+                  <h3 className="font-semibold text-gray-900 text-sm flex items-center">
+                    <FiCalendar className="h-4 w-4 mr-2 text-indigo-600" />
                     Upcoming Calendar
                   </h3>
-                  <span className="text-xs uppercase font-bold tracking-wider text-slate-500 flex items-center gap-1">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-gray-400 flex items-center gap-1">
                     {isEventsHovered ? <FiClock className="text-amber-500" /> : <FiPlayCircle className="text-emerald-500 animate-pulse" />}
                     {isEventsHovered ? 'Paused' : 'Auto'}
                   </span>
@@ -1783,16 +1723,15 @@ const StaffDashboard = () => {
                     return (
                       <button
                         key={tab}
-                        aria-pressed={activeEventTab === tab}
                         onClick={() => setActiveEventTab(tab)}
-                        className={`text-xs px-3 py-2 min-h-[40px] rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
+                        className={`text-xs px-3 py-1.5 rounded-full font-medium whitespace-nowrap transition-colors flex items-center gap-1.5 ${
                           activeEventTab === tab 
-                            ? 'bg-navy-700 text-white shadow-md' 
-                            : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                            ? 'bg-indigo-600 text-white shadow-md' 
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                         }`}
                       >
                         {tab} 
-                        <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeEventTab === tab ? 'bg-white/20' : 'bg-slate-200'}`}>
+                        <span className={`px-1.5 py-0.5 rounded-full text-[10px] ${activeEventTab === tab ? 'bg-white/20' : 'bg-gray-200'}`}>
                           {count}
                         </span>
                       </button>
@@ -1821,8 +1760,8 @@ const StaffDashboard = () => {
 
                     if (filteredEvents.length === 0) {
                       return (
-                        <div className="text-center py-6 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                          <p className="text-sm text-slate-500">No {activeEventTab.toLowerCase()} scheduled.</p>
+                        <div className="text-center py-6 bg-gray-50 rounded-lg border border-dashed border-gray-200">
+                          <p className="text-sm text-gray-500">No {activeEventTab.toLowerCase()} scheduled.</p>
                         </div>
                       );
                     }
@@ -1835,12 +1774,12 @@ const StaffDashboard = () => {
                       const displayKey = event.event_type || event.type;
                       
                       let Icon = FiCalendar;
-                      let typeColor = 'text-navy-700 bg-slate-100 border-slate-200';
+                      let typeColor = 'text-indigo-600 bg-indigo-50 border-indigo-100';
                       let badgeLabel = 'Event';
                       
                       if (event.source === 'service_delivery') {
                         Icon = FiBriefcase;
-                        typeColor = 'text-navy-700 bg-slate-100 border-slate-200';
+                        typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
                         badgeLabel = 'Delivery';
                       } else if (event.source === 'service_expiry') {
                         Icon = FiAlertCircle;
@@ -1848,42 +1787,42 @@ const StaffDashboard = () => {
                         badgeLabel = 'Expiry';
                       } else if (event.source === 'task' || displayKey === 'task' || displayKey === 'deadline') {
                         Icon = FiCheckSquare;
-                        typeColor = 'text-emerald-700 bg-emerald-50 border-emerald-100';
+                        typeColor = 'text-emerald-600 bg-emerald-50 border-emerald-100';
                         badgeLabel = 'Task';
                       } else if (displayKey === 'working' || displayKey === 'start') {
                         Icon = FiBriefcase;
-                        typeColor = 'text-emerald-700 bg-emerald-50 border-emerald-100';
+                        typeColor = 'text-green-600 bg-green-50 border-green-100';
                         badgeLabel = displayKey === 'working' ? 'Working Day' : 'Start';
                       } else if (displayKey === 'holiday') {
                         Icon = FiStar;
-                        typeColor = 'text-rose-600 bg-rose-50 border-rose-100';
+                        typeColor = 'text-red-600 bg-red-50 border-red-100';
                         badgeLabel = 'Holiday';
                       } else if (displayKey === 'weekend') {
                         Icon = FiClock; 
-                        typeColor = 'text-slate-600 bg-slate-50 border-slate-200';
+                        typeColor = 'text-gray-600 bg-gray-50 border-gray-200';
                         badgeLabel = 'Weekend';
                       } else if (displayKey === 'announcement') {
                         Icon = FiInfo;
-                        typeColor = 'text-navy-700 bg-slate-100 border-slate-200';
+                        typeColor = 'text-blue-600 bg-blue-50 border-blue-100';
                         badgeLabel = 'Announcement';
                       }
 
                       return (
-                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-xl border ${typeColor} shadow-sm transition-all hover:shadow-md group`}>
+                        <div key={event.id} className={`flex items-start gap-3 p-3 rounded-lg border ${typeColor} shadow-sm transition-all hover:shadow-md group`}>
                           <div className={`mt-0.5 p-1.5 rounded-md bg-white shadow-sm shrink-0`}>
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-slate-900 truncate" title={event.title}>{event.title}</p>
-                            {event.description && <p className="text-xs text-slate-600 truncate mt-0.5">{event.description}</p>}
+                            <p className="text-sm font-bold text-gray-900 truncate" title={event.title}>{event.title}</p>
+                            {event.description && <p className="text-xs text-gray-600 truncate mt-0.5">{event.description}</p>}
                             <div className="flex items-center justify-between mt-1.5">
                               <p className="text-xs font-medium flex items-center gap-1">
                                 <FiClock className="h-3 w-3" />
-                                <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-700 font-bold' : 'text-slate-600'}`}>
+                                <span className={`${isToday ? 'text-rose-600 font-bold' : isTomorrow ? 'text-amber-600 font-bold' : 'text-gray-600'}`}>
                                   {dayLabel}
                                 </span>
                               </p>
-                              <span className="text-xs uppercase tracking-wider font-bold opacity-70">
+                              <span className="text-[9px] uppercase tracking-wider font-bold opacity-70">
                                 {badgeLabel}
                               </span>
                             </div>
@@ -1892,9 +1831,8 @@ const StaffDashboard = () => {
                           <div className="shrink-0 flex flex-col items-center justify-center self-stretch ml-1">
                             <button
                               onClick={() => handleViewService(event)}
-                              className="p-2 bg-white/60 hover:bg-white rounded-full shadow-sm text-slate-500 hover:text-navy-700 transition-all border border-black/5 opacity-80 hover:opacity-100"
+                              className="p-2 bg-white/60 hover:bg-white rounded-full shadow-sm text-gray-500 hover:text-indigo-600 transition-all border border-black/5 opacity-80 hover:opacity-100"
                               title="Go to Service Tracking"
-                              aria-label={`Open ${event.title} in service tracking`}
                             >
                               <FiExternalLink className="h-4 w-4" />
                             </button>
@@ -1907,10 +1845,10 @@ const StaffDashboard = () => {
               </div>
 
               {/* Recent Activity (Compact Version) */}
-              <div role="region" aria-label="Recent activity" className="bg-white rounded-2xl border border-slate-200">
-                <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
-                  <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
+              <div className="bg-white rounded-xl border border-gray-200">
+                <div className="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-gray-900">Recent Activity</h3>
+                  <span className="text-xs font-medium text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded-full shadow-sm">
                     {recentServiceEntries.length} items
                   </span>
                 </div>
@@ -1922,13 +1860,13 @@ const StaffDashboard = () => {
                           
                           {/* Compact Date Sticky Header */}
                           <div className="flex items-center gap-2 mb-3 sticky top-0 bg-white/95 backdrop-blur-sm py-1.5 z-20 -mx-1 px-1">
-                            <div className="p-1 bg-slate-100 rounded text-slate-500">
+                            <div className="p-1 bg-gray-100 rounded text-gray-500">
                               <FiCalendar className="h-3 w-3" />
                             </div>
-                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
+                            <h4 className="text-[10px] font-bold text-gray-800 uppercase tracking-widest">
                               {formatDateUI(date)}
                             </h4>
-                            <div className="h-px bg-slate-200 flex-1 ml-1"></div>
+                            <div className="h-px bg-gray-200 flex-1 ml-1"></div>
                           </div>
 
                           {/* Compact Timeline Entries */}
@@ -1936,53 +1874,53 @@ const StaffDashboard = () => {
                             {entries.map((entry, index) => (
                               <div key={entry.id} className="group relative flex gap-3">
                                 {index !== entries.length - 1 && (
-                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-slate-100 group-hover:bg-slate-200 transition-colors"></div>
+                                  <div className="absolute left-[15px] top-8 bottom-[-10px] w-[2px] bg-gray-100 group-hover:bg-indigo-100 transition-colors"></div>
                                 )}
                                 
-                                <div className="w-8 h-8 mt-1 bg-slate-100 border border-slate-200 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
-                                  <FiUser className="h-3.5 w-3.5 text-navy-700" />
+                                <div className="w-8 h-8 mt-1 bg-indigo-50 border border-indigo-100 rounded-full flex items-center justify-center shrink-0 z-10 transition-transform group-hover:scale-110">
+                                  <FiUser className="h-3.5 w-3.5 text-indigo-600" />
                                 </div>
 
-                                <div className="flex-1 bg-white border border-slate-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-slate-300 flex flex-col justify-center">
+                                <div className="flex-1 bg-white border border-gray-100 rounded-xl p-3 shadow-sm hover:shadow-md transition-all group-hover:border-indigo-200 flex flex-col justify-center">
                                   
                                   <div className="flex justify-between items-center mb-1.5 gap-2">
                                     <div className="flex items-center gap-2 min-w-0">
-                                      <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
+                                      <p className="text-sm font-bold text-gray-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                                         entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
-                                        entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
+                                        entry.status === 'in-progress' ? 'bg-blue-50 text-blue-700' :
                                         entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
-                                        'bg-slate-50 text-slate-700'
+                                        'bg-gray-50 text-gray-700'
                                       }`}>
                                         {entry.status?.replace('-', ' ')}
                                       </span>
                                     </div>
                                     
-                                    <span className="text-xs font-medium text-slate-500 shrink-0">
+                                    <span className="text-[10px] font-medium text-gray-400 shrink-0">
                                       {formatTime(entry.created_at)}
                                     </span>
                                   </div>
                                   
                                   <div className="flex justify-between items-end gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
+                                      <p className="text-[11px] font-medium text-gray-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
                                       </p>
                                       
                                       {entry.tokenId && (
-                                        <span className="text-xs text-slate-500 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                        <span className="text-[10px] text-gray-400 font-mono font-bold before:content-['•'] before:mr-1.5">
                                           {shortenTokenId(entry.tokenId)}
                                         </span>
                                       )}
                                       
                                       {entry.workSource === 'online' && (
-                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
+                                        <span className="text-[9px] text-blue-600 font-bold uppercase border border-blue-100 bg-blue-50 px-1 rounded flex items-center gap-0.5 ml-1">
                                           <FiGlobe className="h-2 w-2" /> Online
                                         </span>
                                       )}
                                       {entry.is_edited && (
-                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
+                                        <span className="text-[9px] text-gray-500 font-bold uppercase border border-gray-200 bg-gray-50 px-1 rounded ml-1">
                                           Edited
                                         </span>
                                       )}
@@ -1991,7 +1929,7 @@ const StaffDashboard = () => {
                                     {(entry.tokenId || entry.tracking_id) && (
                                       <button 
                                         onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 min-h-[36px] rounded-lg transition-colors shrink-0 flex items-center gap-1"
+                                        className="text-[10px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
                                       >
                                         Details <FiChevronRight className="h-3 w-3" />
                                       </button>
@@ -2005,7 +1943,7 @@ const StaffDashboard = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+                    <div className="flex flex-col items-center justify-center py-10 text-gray-400">
                       <FiActivity className="h-8 w-8 mb-2 opacity-20" />
                       <p className="text-sm font-medium">No recent activity</p>
                     </div>
@@ -2017,36 +1955,36 @@ const StaffDashboard = () => {
           </div>
 
           {/* ===== STEP 3: PERFORMANCE DETAILS ROW ===== */}
-          <div id="perf-details" role="region" aria-label="Performance details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
+          <div id="perf-details" className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start mt-6 scroll-mt-20">
 
             {/* 3a: MONTHLY & DAILY TARGET METER */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-              <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
-                <FiTarget className="h-4 w-4 mr-2 text-navy-700" />
+            <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+              <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
+                <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
                 Target (+10% Growth)
               </h3>
               
               {performanceLoading ? (
-                <div className="h-24 bg-slate-200 animate-pulse rounded"></div>
+                <div className="h-24 bg-gray-200 animate-pulse rounded"></div>
               ) : (
                 <div>
                   {/* --- MONTHLY PROGRESS --- */}
                   <div className="flex justify-between items-end mb-2">
                     <div>
-                      <p className="text-xs text-slate-500 font-medium">Month Achieved</p>
-                      <p className="text-xl font-black text-slate-900">
+                      <p className="text-xs text-gray-500 font-medium">Month Achieved</p>
+                      <p className="text-xl font-black text-gray-900">
                         {formatCurrency(performance.currentAchieved)}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-xs text-slate-500 font-medium">Month Target</p>
-                      <p className="text-lg font-bold text-slate-900">
+                      <p className="text-xs text-gray-500 font-medium">Month Target</p>
+                      <p className="text-lg font-bold text-gray-900">
                         {formatCurrency(performance.monthlyTarget)}
                       </p>
                     </div>
                   </div>
                   
-                  <div role="progressbar" aria-label="Monthly target progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(Math.min(performance.targetProgress, 100))} className="w-full bg-slate-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
+                  <div className="w-full bg-gray-100 rounded-full h-3 mb-1 overflow-hidden shadow-inner">
                     <div 
                       className={`h-full rounded-full transition-all duration-1000 ${
                         performance.targetProgress >= 100 ? 'bg-emerald-500' :
@@ -2056,28 +1994,28 @@ const StaffDashboard = () => {
                       style={{ width: `${Math.min(performance.targetProgress, 100)}%` }}
                     ></div>
                   </div>
-                  <p className="text-xs font-bold text-slate-500 text-right mb-4">
+                  <p className="text-[10px] font-bold text-gray-500 text-right mb-4">
                     {performance.targetProgress.toFixed(1)}% Completed
                   </p>
 
-                  <div className="border-t border-slate-100 mb-4"></div>
+                  <div className="border-t border-gray-100 mb-4"></div>
 
                   {/* --- DAILY PROGRESS --- */}
-                  <div className="bg-slate-100/50 rounded-xl p-3 border border-slate-100">
+                  <div className="bg-indigo-50/50 rounded-lg p-3 border border-indigo-50">
                     <div className="flex justify-between items-center mb-2">
-                      <h4 className="text-xs font-bold text-navy-800 flex items-center gap-1.5">
-                        <FiActivity className="h-3 w-3 text-navy-700" />
+                      <h4 className="text-xs font-bold text-indigo-900 flex items-center gap-1.5">
+                        <FiActivity className="h-3 w-3 text-indigo-600" />
                         Today's Goal
                       </h4>
-                      <span className="text-xs font-bold text-navy-700">
+                      <span className="text-xs font-bold text-indigo-700">
                         {formatCurrency(performance.todayAchieved)} / {formatCurrency(performance.dailyTarget)}
                       </span>
                     </div>
                     
-                    <div className="w-full bg-slate-200/50 rounded-full h-2 overflow-hidden">
+                    <div className="w-full bg-indigo-100/50 rounded-full h-2 overflow-hidden">
                       <div 
                         className={`h-full rounded-full transition-all duration-1000 ${
-                          performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-navy-500'
+                          performance.todayAchieved >= performance.dailyTarget ? 'bg-emerald-500' : 'bg-indigo-500'
                         }`}
                         style={{ 
                           width: `${Math.min(performance.dailyTarget > 0 ? (performance.todayAchieved / performance.dailyTarget) * 100 : 0, 100)}%` 
@@ -2085,18 +2023,18 @@ const StaffDashboard = () => {
                       ></div>
                     </div>
                     {performance.todayAchieved >= performance.dailyTarget && performance.dailyTarget > 0 && (
-                       <p className="text-xs font-bold text-emerald-700 mt-1.5 flex items-center gap-1">
+                       <p className="text-[10px] font-bold text-emerald-600 mt-1.5 flex items-center gap-1">
                          <FiCheckCircle className="h-3 w-3" /> Daily target met!
                        </p>
                     )}
                   </div>
                   {/* --- PREVIOUS MONTHS --- */}
                   {targetHistory.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-slate-100">
+                    <div className="mt-4 pt-4 border-t border-gray-100">
                       <div className="flex items-center justify-between mb-2">
-                        <h4 className="text-xs font-bold text-slate-700">Previous months</h4>
+                        <h4 className="text-xs font-bold text-gray-700">Previous months</h4>
                         {targetStreak >= 2 && (
-                          <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                          <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
                             🔥 {targetStreak} months in a row
                           </span>
                         )}
@@ -2109,12 +2047,12 @@ const StaffDashboard = () => {
                             <div
                               key={h.month}
                               title={`Target ${formatCurrency(h.target)} · Achieved ${formatCurrency(h.achieved)}`}
-                              className={`flex-shrink-0 rounded-xl px-2.5 py-1.5 text-center border ${
+                              className={`flex-shrink-0 rounded-lg px-2.5 py-1.5 text-center border ${
                                 met ? 'bg-emerald-50 border-emerald-200 text-emerald-700'
                                     : 'bg-rose-50 border-rose-200 text-rose-700'
                               }`}
                             >
-                              <p className="text-xs font-medium">
+                              <p className="text-[10px] font-medium">
                                 {new Date(h.month).toLocaleString('en-IN', { month: 'short' })}
                               </p>
                               <p className="text-xs font-bold">
@@ -2126,10 +2064,10 @@ const StaffDashboard = () => {
                       </div>
 
                       {lastMonth && (
-                        <p className="text-xs text-slate-500 mt-2">
+                        <p className="text-[11px] text-gray-500 mt-2">
                           Last month:{' '}
                           {lastMonth.percent >= 100
-                            ? <span className="font-semibold text-emerald-700">target achieved 🎉</span>
+                            ? <span className="font-semibold text-emerald-600">target achieved 🎉</span>
                             : <span className="font-semibold text-rose-600">
                                 {formatCurrency(Math.max(lastMonth.target - lastMonth.achieved, 0))} short of target
                               </span>}
@@ -2142,23 +2080,23 @@ const StaffDashboard = () => {
             </div>
 
             {/* 3b: PERFORMANCE SCORE CARD */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5">
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-                  <FiTarget className="h-4 w-4 mr-2 text-navy-700" />
+                <h3 className="font-semibold text-gray-900 text-sm flex items-center">
+                  <FiTarget className="h-4 w-4 mr-2 text-indigo-600" />
                   Performance Score
                 </h3>
-                <div className="relative group" tabIndex={0} aria-label="How the score is calculated: collection rate 50%, revenue efficiency 30%, consistency 20%">
-                  <FiInfo className="h-4 w-4 text-slate-500 cursor-pointer" />
-                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block group-focus-within:block w-64 p-2 bg-slate-900 text-white text-xs rounded-xl z-10">
+                <div className="relative group">
+                  <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
+                  <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
                     Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
                   </div>
                 </div>
               </div>
               <div className="text-center">
                 <div className="relative inline-block">
-                  <svg className="w-32 h-32" role="img" aria-label={`Performance score ${performanceLoading ? 0 : performance.incentiveScore} percent`}>
-                    <circle className="text-slate-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
+                  <svg className="w-32 h-32">
+                    <circle className="text-gray-200" strokeWidth="12" stroke="currentColor" fill="transparent" r="54" cx="64" cy="64" />
                     <circle
                       className="transition-all duration-1000"
                       strokeWidth="12"
@@ -2179,8 +2117,8 @@ const StaffDashboard = () => {
                     </defs>
                   </svg>
                   <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                    <p className="text-2xl font-bold text-slate-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
-                    <p className="text-xs text-slate-500">
+                    <p className="text-2xl font-bold text-gray-900">{performanceLoading ? '...' : `${performance.incentiveScore}%`}</p>
+                    <p className="text-xs text-gray-500">
                       {!performanceLoading && (performance.incentiveScore >= 80 ? 'Excellent' : performance.incentiveScore >= 60 ? 'Good' : performance.incentiveScore >= 40 ? 'Average' : 'Needs Improvement')}
                     </p>
                   </div>
@@ -2189,37 +2127,37 @@ const StaffDashboard = () => {
             </div>
 
             {/* 3c: PERFORMANCE METRICS */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-5">
-              <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
-                <FiActivity className="h-4 w-4 mr-2 text-navy-700" />
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
+                <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
                 Performance Metrics
               </h3>
               {performanceLoading ? (
                 <div className="space-y-3">
-                  <div className="h-8 bg-slate-200 animate-pulse rounded"></div>
-                  <div className="h-8 bg-slate-200 animate-pulse rounded"></div>
-                  <div className="h-8 bg-slate-200 animate-pulse rounded"></div>
+                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+                  <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
                 </div>
               ) : (
                 <div className="space-y-4">
                   <div>
                     <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-slate-600">Completion Rate</span>
-                      <span className="font-medium text-slate-900">{performance.completionRate}%</span>
+                      <span className="text-gray-600">Completion Rate</span>
+                      <span className="font-medium text-gray-900">{performance.completionRate}%</span>
                     </div>
-                    <div role="progressbar" aria-label="Completion rate" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Number(performance.completionRate) || 0} className="w-full bg-slate-200 rounded-full h-2">
-                      <div className="bg-emerald-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div className="bg-green-600 h-2 rounded-full" style={{ width: `${performance.completionRate}%` }} />
                     </div>
                   </div>
 
                   <div>
                     <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-slate-600">Avg Transaction Value</span>
-                      <span className="font-medium text-slate-900">{formatCurrency(performance.avgTransactionValue)}</span>
+                      <span className="text-gray-600">Avg Transaction Value</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(performance.avgTransactionValue)}</span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className="bg-navy-700 h-2 rounded-full"
+                        className="bg-blue-600 h-2 rounded-full"
                         style={{ width: `${Math.min((performance.avgTransactionValue / 1000) * 100, 100)}%` }}
                       />
                     </div>
@@ -2227,29 +2165,29 @@ const StaffDashboard = () => {
 
                   <div>
                     <div className="flex justify-between mb-1 text-sm">
-                      <span className="text-slate-600">Customer Satisfaction</span>
-                      <span className="font-medium text-slate-900">{performance.customerSatisfaction}</span>
+                      <span className="text-gray-600">Customer Satisfaction</span>
+                      <span className="font-medium text-gray-900">{performance.customerSatisfaction}</span>
                     </div>
-                    <div className="w-full bg-slate-200 rounded-full h-2">
+                    <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
-                        className="bg-navy-700 h-2 rounded-full"
+                        className="bg-purple-600 h-2 rounded-full"
                         style={{ width: `${(performance.avgRating / 5) * 100}%` }}
                       />
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-slate-100">
+                  <div className="pt-2 border-t border-gray-100">
                     <div className="flex justify-between text-sm">
-                      <span className="text-slate-600">Collection Rate</span>
-                      <span className="font-medium text-slate-900">{performance.collectionRate}%</span>
+                      <span className="text-gray-600">Collection Rate</span>
+                      <span className="font-medium text-gray-900">{performance.collectionRate}%</span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-slate-600">Total Revenue</span>
-                      <span className="font-medium text-slate-900">{formatCurrency(performance.totalCollected)}</span>
+                      <span className="text-gray-600">Total Revenue</span>
+                      <span className="font-medium text-gray-900">{formatCurrency(performance.totalCollected)}</span>
                     </div>
                     <div className="flex justify-between text-sm mt-2">
-                      <span className="text-slate-600">Total Services</span>
-                      <span className="font-medium text-slate-900">{performance.totalServices}</span>
+                      <span className="text-gray-600">Total Services</span>
+                      <span className="font-medium text-gray-900">{performance.totalServices}</span>
                     </div>
                   </div>
                 </div>
@@ -2258,37 +2196,36 @@ const StaffDashboard = () => {
           </div>
 
         </motion.div>
-      </main>
+      </div>
       {/* Cancel Modal */}
         {showCancelModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-800/50 backdrop-blur-sm p-4">
-            <div role="dialog" aria-modal="true" aria-label="Cancel token" className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-              <h3 className="text-xl font-semibold text-slate-900 mb-2">Cancel Token</h3>
-              <p className="text-slate-600 mb-4">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-2">Cancel Token</h3>
+              <p className="text-gray-600 mb-4">
                 Are you sure you want to cancel token <span className="font-mono font-bold">{cancelTokenData?.tokenId}</span> for <span className="font-medium">{cancelTokenData?.customerName}</span>?
               </p>
               <div className="mb-4">
-                <label htmlFor="cancel-reason" className="block text-sm font-medium text-slate-700 mb-1">Reason (optional)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Reason (optional)</label>
                 <textarea 
-                  id="cancel-reason"
                   value={cancelReason} 
                   onChange={(e) => setCancelReason(e.target.value)} 
                   rows="3" 
-                  className="w-full px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500" 
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl focus:ring-indigo-500 focus:border-indigo-500" 
                   placeholder="e.g., customer requested, duplicate entry..." 
                 />
               </div>
               <div className="flex gap-3 justify-end">
                 <button 
                   onClick={() => setShowCancelModal(false)} 
-                  className="px-4 py-2 text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition"
+                  className="px-4 py-2 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition"
                 >
                   No, Keep Token
                 </button>
                 <button 
                   onClick={handleCancelConfirm} 
                   disabled={cancelling} 
-                  className="px-4 py-2 bg-rose-600 text-white rounded-xl hover:bg-rose-700 transition disabled:opacity-50"
+                  className="px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition disabled:opacity-50"
                 >
                   {cancelling ? 'Cancelling...' : 'Yes, Cancel Token'}
                 </button>
