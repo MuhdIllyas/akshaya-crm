@@ -1187,60 +1187,6 @@ const StaffDashboard = () => {
       <main id="sd-main" className="p-6 pb-24">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
           
-          {/* ===== LAYOUT F: MAIN WORK AREA + MY DAY PANEL ===== */}
-          <div className="flex flex-col xl:flex-row xl:flex-wrap 2xl:flex-nowrap gap-6 items-start">
-
-            {/* Main column – stats, work queue, activity, performance */}
-            <div className="flex-1 min-w-0 w-full">
-              {/* Floating Action Button */}
-              <button
-                onClick={() => setShowQuickService(true)}
-                aria-label="Quick service"
-                title="Quick service"
-                className="fixed bottom-8 right-8 bg-navy-700 text-white p-4 rounded-full shadow-lg hover:bg-navy-800 transition-all z-20"
-              >
-                <FiPlus className="h-6 w-6" />
-              </button>
-
-              {/* Search & Filter Bar + Wallet Pill */}
-              <div className="flex flex-wrap gap-4 mb-6 items-center">
-                <div className="relative flex-1 max-w-md">
-                  <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    aria-label="Search tokens"
-                    placeholder="Search by token, customer name, or phone..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-10 pr-4 py-2.5 w-full border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
-                  />
-                </div>
-                <select aria-label="Date range" value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500">
-                  <option value="today">Today</option>
-                  <option value="yesterday">Yesterday</option>
-                  <option value="week">This Week</option>
-                  <option value="all">All Time</option>
-                </select>
-
-                {/* ----- Ultra‑Compact Wallet Pill ----- */}
-                {myWallet && (
-                  <motion.div
-                    whileHover={{ y: -1 }}
-                    className="inline-flex items-center gap-2 bg-white border border-slate-300 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                  >
-                    <div className="p-1 bg-slate-200 rounded-full">
-                      <FiBriefcase className="h-3.5 w-3.5 text-navy-700" />
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      {myWallet.name}
-                    </span>
-                    <span className="text-sm font-bold text-slate-900">
-                      {formatCurrency(myWallet.balance)}
-                    </span>
-                  </motion.div>
-                )}
-              </div>
-
               {/* Stats Toggle Header */}
               <div className="flex items-center justify-between mb-4 mt-2">
                 <h2 className="text-lg font-bold text-slate-900">Today at a glance</h2>
@@ -1251,7 +1197,7 @@ const StaffDashboard = () => {
               </div>
 
               {/* Stats Row */}
-              <div className="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-5 gap-3 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3 mb-6">
                 {statView === 'applications' ? (
                   <>
                     <StatCard title="Total Apps" value={trackingStats.total || 0} icon={FiTarget} color="bg-slate-600" />
@@ -1333,6 +1279,60 @@ const StaffDashboard = () => {
                     <p className="text-xs text-slate-500">Nothing upcoming</p>
                   )}
                 </div>
+              </div>
+
+          {/* ===== LAYOUT F: MAIN WORK AREA + MY DAY PANEL ===== */}
+          <div className="flex flex-col xl:flex-row xl:flex-wrap 2xl:flex-nowrap gap-6 items-start">
+
+            {/* Main column – stats, work queue, activity, performance */}
+            <div className="flex-1 min-w-0 w-full">
+              {/* Floating Action Button */}
+              <button
+                onClick={() => setShowQuickService(true)}
+                aria-label="Quick service"
+                title="Quick service"
+                className="fixed bottom-8 right-8 bg-navy-700 text-white p-4 rounded-full shadow-lg hover:bg-navy-800 transition-all z-20"
+              >
+                <FiPlus className="h-6 w-6" />
+              </button>
+
+              {/* Search & Filter Bar + Wallet Pill */}
+              <div className="flex flex-wrap gap-4 mb-6 items-center">
+                <div className="relative flex-1 max-w-md">
+                  <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    aria-label="Search tokens"
+                    placeholder="Search by token, customer name, or phone..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-4 py-2.5 w-full border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
+                  />
+                </div>
+                <select aria-label="Date range" value={activeDate} onChange={(e) => setActiveDate(e.target.value)} className="border border-slate-300 rounded-xl px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500">
+                  <option value="today">Today</option>
+                  <option value="yesterday">Yesterday</option>
+                  <option value="week">This Week</option>
+                  <option value="all">All Time</option>
+                </select>
+
+                {/* ----- Ultra‑Compact Wallet Pill ----- */}
+                {myWallet && (
+                  <motion.div
+                    whileHover={{ y: -1 }}
+                    className="inline-flex items-center gap-2 bg-white border border-slate-300 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                  >
+                    <div className="p-1 bg-slate-200 rounded-full">
+                      <FiBriefcase className="h-3.5 w-3.5 text-navy-700" />
+                    </div>
+                    <span className="text-sm font-medium text-slate-700">
+                      {myWallet.name}
+                    </span>
+                    <span className="text-sm font-bold text-slate-900">
+                      {formatCurrency(myWallet.balance)}
+                    </span>
+                  </motion.div>
+                )}
               </div>
 
               <div className="flex flex-col gap-6">
@@ -1981,6 +1981,7 @@ const StaffDashboard = () => {
               </div>
 
               {/* ===== MY DAY: ATTENDANCE & WALLET ===== */}
+              {myWallet && (
               <div role="region" aria-label="My wallet" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-3">
                   <FiDollarSign className="h-4 w-4 mr-2 text-navy-700" />
@@ -1993,6 +1994,7 @@ const StaffDashboard = () => {
                   </div>
                 </dl>
               </div>
+              )}
 
               {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
@@ -2156,7 +2158,7 @@ const StaffDashboard = () => {
             {/* Right rail – recent activity */}
             <div className="w-full 2xl:w-[340px] 2xl:shrink-0 order-last">
               {/* Recent Activity (Compact Version) */}
-              <div role="region" aria-label="Recent activity" className="bg-white rounded-2xl border border-slate-200">
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm" role="region" aria-label="Recent activity">
                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
                   <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
                   <span className="text-xs font-medium text-slate-500 bg-white border border-slate-200 px-2 py-0.5 rounded-full shadow-sm">
@@ -2174,7 +2176,7 @@ const StaffDashboard = () => {
                             <div className="p-1 bg-slate-100 rounded text-slate-500">
                               <FiCalendar className="h-3 w-3" />
                             </div>
-                            <h4 className="text-xs font-bold text-slate-800 uppercase tracking-widest">
+                            <h4 className="text-[10px] font-bold text-slate-800 uppercase tracking-widest">
                               {formatDateUI(date)}
                             </h4>
                             <div className="h-px bg-slate-200 flex-1 ml-1"></div>
@@ -2198,7 +2200,7 @@ const StaffDashboard = () => {
                                     <div className="flex items-center gap-2 min-w-0">
                                       <p className="text-sm font-bold text-slate-900 truncate">{entry.customerName || 'Customer'}</p>
                                       
-                                      <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider shrink-0 ${
+                                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 ${
                                         entry.status === 'completed' ? 'bg-emerald-50 text-emerald-700' :
                                         entry.status === 'in-progress' ? 'bg-slate-100 text-navy-700' :
                                         entry.status === 'pending' ? 'bg-amber-50 text-amber-700' : 
@@ -2208,30 +2210,30 @@ const StaffDashboard = () => {
                                       </span>
                                     </div>
                                     
-                                    <span className="text-xs font-medium text-slate-500 shrink-0">
+                                    <span className="text-[10px] font-medium text-slate-400 shrink-0">
                                       {formatTime(entry.created_at)}
                                     </span>
                                   </div>
                                   
                                   <div className="flex justify-between items-end gap-2">
                                     <div className="flex items-center gap-1.5 flex-wrap">
-                                      <p className="text-xs font-medium text-slate-600 truncate max-w-[160px]">
+                                      <p className="text-[11px] font-medium text-slate-600 truncate max-w-[160px]">
                                         {getCategoryName(entry.category)}
                                       </p>
                                       
                                       {entry.tokenId && (
-                                        <span className="text-xs text-slate-500 font-mono font-bold before:content-['•'] before:mr-1.5">
+                                        <span className="text-[10px] text-slate-400 font-mono font-bold before:content-['•'] before:mr-1.5">
                                           {shortenTokenId(entry.tokenId)}
                                         </span>
                                       )}
                                       
                                       {entry.workSource === 'online' && (
-                                        <span className="text-xs text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
+                                        <span className="text-[9px] text-navy-700 font-bold uppercase border border-slate-200 bg-slate-100 px-1 rounded flex items-center gap-0.5 ml-1">
                                           <FiGlobe className="h-2 w-2" /> Online
                                         </span>
                                       )}
                                       {entry.is_edited && (
-                                        <span className="text-xs text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
+                                        <span className="text-[9px] text-slate-500 font-bold uppercase border border-slate-200 bg-slate-50 px-1 rounded ml-1">
                                           Edited
                                         </span>
                                       )}
@@ -2240,7 +2242,7 @@ const StaffDashboard = () => {
                                     {(entry.tokenId || entry.tracking_id) && (
                                       <button 
                                         onClick={() => handleViewDetails(entry.tokenId, entry.tracking_id)}
-                                        className="text-xs font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-3 py-2 min-h-[36px] rounded-lg transition-colors shrink-0 flex items-center gap-1"
+                                        className="text-[10px] font-bold text-navy-700 bg-slate-100 hover:bg-slate-200 px-2.5 py-1 rounded-md transition-colors shrink-0 flex items-center gap-1"
                                       >
                                         Details <FiChevronRight className="h-3 w-3" />
                                       </button>
@@ -2254,7 +2256,7 @@ const StaffDashboard = () => {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center justify-center py-10 text-slate-500">
+                    <div className="flex flex-col items-center justify-center py-10 text-slate-400">
                       <FiActivity className="h-8 w-8 mb-2 opacity-20" />
                       <p className="text-sm font-medium">No recent activity</p>
                     </div>
