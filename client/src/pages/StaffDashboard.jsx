@@ -571,7 +571,7 @@ const StaffDashboard = () => {
       const tokenStaff = String(t.staffId || '').trim();
       const isAssignedToMe = tokenStaff === localStaff;
       const isUnassigned = !tokenStaff || tokenStaff === 'null' || tokenStaff === '';
-      return (isAssignedToMe || isUnassigned) && t.status !== 'completed' && t.status !== 'cancelled';
+      return (isAssignedToMe || isUnassigned) && t.type !== 'campaign' && t.status !== 'completed' && t.status !== 'cancelled';
     });
 
     const completed = tokens.filter(t => {
@@ -1188,10 +1188,10 @@ const StaffDashboard = () => {
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }} className="w-full">
           
           {/* ===== LAYOUT F: MAIN WORK AREA + MY DAY PANEL ===== */}
-          <div className="flex flex-col xl:flex-row gap-6 items-start">
+          <div className="flex flex-col xl:flex-row xl:flex-wrap 2xl:flex-nowrap gap-6 items-start">
 
             {/* Main column – stats, work queue, activity, performance */}
-            <div className="flex-1 min-w-0 w-full 2xl:max-w-[1200px]">
+            <div className="flex-1 min-w-0 w-full">
               {/* Floating Action Button */}
               <button
                 onClick={() => setShowQuickService(true)}
@@ -1963,30 +1963,12 @@ const StaffDashboard = () => {
               </div>
 
               {/* ===== MY DAY: ATTENDANCE & WALLET ===== */}
-              <div role="region" aria-label="Attendance and wallet" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div role="region" aria-label="My wallet" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                 <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-3">
-                  <FiClock className="h-4 w-4 mr-2 text-navy-700" />
-                  Attendance &amp; wallet
+                  <FiDollarSign className="h-4 w-4 mr-2 text-navy-700" />
+                  My wallet
                 </h3>
                 <dl className="divide-y divide-slate-100 text-sm">
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">Status</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {!todayAttendance || !todayAttendance.punch_in ? 'Not punched in' : (!todayAttendance.punch_out ? 'Punched in' : 'Punched out')}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">Punch in</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {todayAttendance?.punch_in ? new Date(`1970-01-01T${todayAttendance.punch_in}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">Punch out</dt>
-                    <dd className="font-semibold text-slate-900">
-                      {todayAttendance?.punch_out ? new Date(`1970-01-01T${todayAttendance.punch_out}`).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }) : '—'}
-                    </dd>
-                  </div>
                   <div className="flex justify-between py-2">
                     <dt className="text-slate-600">{myWallet ? myWallet.name : 'My wallet'}</dt>
                     <dd className="font-semibold text-slate-900">{myWallet ? formatCurrency(myWallet.balance) : 'Not assigned'}</dd>
@@ -2151,8 +2133,10 @@ const StaffDashboard = () => {
                   })()}
                 </motion.div>
               </div>
+            </aside>
 
-
+            {/* Right rail – recent activity */}
+            <div className="w-full 2xl:w-[340px] 2xl:shrink-0 order-last">
               {/* Recent Activity (Compact Version) */}
               <div role="region" aria-label="Recent activity" className="bg-white rounded-2xl border border-slate-200">
                 <div className="px-5 py-3 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
@@ -2259,7 +2243,7 @@ const StaffDashboard = () => {
                   )}
                 </div>
               </div>
-            </aside>
+            </div>
           </div>
 
         </motion.div>
