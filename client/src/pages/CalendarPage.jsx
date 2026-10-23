@@ -35,13 +35,13 @@ function TooltipCard({ event, position }) {
   if (!event) return null;
 
   const typeColors = {
-    deadline: "text-rose-700 bg-rose-50 border-rose-200",
-    start: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    deadline: "text-orange-800 bg-orange-50 border-orange-200",
+    start: "text-emerald-800 bg-emerald-50 border-emerald-200",
     announcement: "text-navy-700 bg-slate-100 border-slate-200",
-    expiry: "text-amber-700 bg-amber-50 border-amber-200",
+    expiry: "text-violet-800 bg-violet-50 border-violet-200",
     task: "text-navy-700 bg-slate-100 border-slate-300",
-    holiday: "text-rose-700 bg-rose-50 border-rose-200",
-    working: "text-emerald-700 bg-emerald-50 border-emerald-200",
+    holiday: "text-orange-800 bg-orange-50 border-orange-200",
+    working: "text-emerald-800 bg-emerald-50 border-emerald-200",
     weekend: "text-slate-700 bg-slate-50 border-slate-200",
     default: "text-slate-700 bg-slate-50 border-slate-200",
   };
@@ -335,10 +335,10 @@ function AgendaView({
   }, [allItems]);
 
   const eventTypeStyles = {
-    deadline: { dot: "bg-rose-500", label: "Deadline" },
-    start: { dot: "bg-emerald-500", label: "Start" },
+    deadline: { dot: "bg-orange-500", label: "Deadline" },
+    start: { dot: "bg-emerald-600", label: "Start" },
     announcement: { dot: "bg-navy-500", label: "Announcement" },
-    expiry: { dot: "bg-amber-500", label: "Expiry" },
+    expiry: { dot: "bg-violet-500", label: "Expiry" },
     task: { dot: "bg-slate-500", label: "Task" },
     default: { dot: "bg-slate-400", label: "Event" },
   };
@@ -481,13 +481,13 @@ function AgendaView({
 //  CalendarView (with hover callbacks)
 // ----------------------------------------------------------------------
 const eventColors = {
-  deadline: { bg: "#fecaca", border: "#f87171", text: "#991b1b" },
-  start: { bg: "#bbf7d0", border: "#4ade80", text: "#166534" },
+  deadline: { bg: "#fde7cf", border: "#ea8a3a", text: "#7c3a0a" },
+  start: { bg: "#d4eadb", border: "#3f9a6a", text: "#14532d" },
   announcement: { bg: "#dbe5f2", border: "#3b5d8f", text: "#162c4a" },
-  expiry: { bg: "#fde68a", border: "#facc15", text: "#713f12" },
+  expiry: { bg: "#e8e4f6", border: "#8b7ac7", text: "#3b2f6b" },
   task: { bg: "#e2e8f0", border: "#64748b", text: "#0f172a" },
-  holiday: { bg: "#fee2e2", border: "#fca5a5", text: "#991b1b" },
-  working: { bg: "#dcfce3", border: "#86efac", text: "#166534" },
+  holiday: { bg: "#fef0e0", border: "#f2a766", text: "#7c3a0a" },
+  working: { bg: "#e3f2e8", border: "#7fbf9a", text: "#14532d" },
   weekend: { bg: "#f3f4f6", border: "#d1d5db", text: "#374151" },
   default: { bg: "#e5e7eb", border: "#9ca3af", text: "#374151" },
 };
@@ -540,10 +540,13 @@ function CalendarView({
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6 fc-navy">
       <div className="flex flex-wrap gap-3 mb-3 text-xs">
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 bg-rose-400 rounded-full" /> Deadline
+          <span className="w-2 h-2 bg-orange-500 rounded-full" /> Deadline
         </span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 bg-emerald-400 rounded-full" /> Start
+          <span className="w-2 h-2 bg-emerald-600 rounded-full" /> Start
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="w-2 h-2 bg-violet-500 rounded-full" /> Expiry
         </span>
         <span className="flex items-center gap-1">
           <span className="w-2 h-2 bg-navy-500 rounded-full" /> Announcement
@@ -657,12 +660,12 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
   }[event.event_type || event.type] || (event.type || "Event");
 
   const colorSets = {
-    deadline: "border-rose-200 bg-rose-50",
+    deadline: "border-orange-200 bg-orange-50",
     start: "border-emerald-200 bg-emerald-50",
-    expiry: "border-amber-200 bg-amber-50",
+    expiry: "border-violet-200 bg-violet-50",
     announcement: "border-slate-200 bg-slate-100",
     task: "border-slate-300 bg-slate-100",
-    holiday: "border-rose-200 bg-rose-50",
+    holiday: "border-orange-200 bg-orange-50",
     working: "border-emerald-200 bg-emerald-50",
     weekend: "border-slate-200 bg-slate-50",
     default: "border-slate-200 bg-slate-50",
