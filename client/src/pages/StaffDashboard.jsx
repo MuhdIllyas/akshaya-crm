@@ -903,7 +903,7 @@ const StaffDashboard = () => {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="relative overflow-hidden bg-rose-600 text-white"
+            className="relative overflow-hidden bg-gradient-to-r from-navy-700 to-navy-500 border-l-4 border-amber-400 text-white"
           >
             {/* floating emojis */}
             {['🎉', '🎈', '🎂', '✨', '🎁', '🎊'].map((e, i) => (
