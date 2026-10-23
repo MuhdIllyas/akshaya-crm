@@ -823,7 +823,7 @@ const StaffDashboard = () => {
       </a>
 
       {/* ===== DARK BLUE WELCOME BANNER ===== */}
-      <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 text-white px-6 py-6">
+      <div className="bg-gradient-to-r from-navy-800 via-navy-700 to-navy-800 text-white px-6 py-6 rounded-t-2xl">
         <div className="w-full">
           <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6">
             <div className="flex-1">
