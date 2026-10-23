@@ -65,7 +65,7 @@ const APP_DEBITS_SQL = `
     x.id, x.amount::numeric AS amount, x.category, x.description, x.reference_id,
     to_char(x.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS date,
     to_char(x.created_at AT TIME ZONE 'Asia/Kolkata', 'HH24:MI')    AS time,
-    se.id AS entry_id, se.customer_name,
+    se.id AS entry_id, se.customer_name, se.service_charges::numeric AS service_charges,
     sv.id AS service_id, sv.name AS service_name, sc.name AS subcategory_name,
     st.name AS staff_name
   FROM (
@@ -228,7 +228,9 @@ async function learnFromMatch(client, wallet, matchId) {
 /* Book a bank difference / bank-only debit in the app, posted today (like other corrections).
    amount > 0 → money went out of the bank that the app doesn't have: expense + debit
    amount < 0 → the app took out more than the bank: credit back (misc income)     */
-async function bookAdjustment(client, req, wallet, amount, category, description) {
+// Only used for a bank row with NO app entry behind it ("Book as expense": bank charges,
+// a payment nobody entered). staffId defaults to the admin who booked it.
+async function bookAdjustment(client, req, wallet, amount, category, description, staffId = req.user.id) {
   const amt = r2(Math.abs(amount));
   if (!(amt > 0)) throw httpError(400, 'Nothing to book');
   if (amount > 0) {
@@ -236,13 +238,13 @@ async function bookAdjustment(client, req, wallet, amount, category, description
     const tx = await client.query(
       `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
        VALUES ($1, $2, 'debit', $3, $4, $5, NOW()) RETURNING id`,
-      [wallet.id, req.user.id, amt, description, category]
+      [wallet.id, staffId, amt, description, category]
     );
     await client.query(
       `INSERT INTO expenses (centre_id, staff_id, category, amount, description, wallet_id,
                              payment_method, expense_date, status, requires_approval, submitted_at)
        VALUES ($1, $2, $3, $4, $5, $6, 'online', CURRENT_DATE, 'auto_approved', false, NOW())`,
-      [wallet.centre_id, req.user.id, category, amt, description, wallet.id]
+      [wallet.centre_id, staffId, category, amt, description, wallet.id]
     );
     return tx.rows[0].id;
   }
@@ -250,9 +252,128 @@ async function bookAdjustment(client, req, wallet, amount, category, description
   const tx = await client.query(
     `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, correction_group_id, created_at)
      VALUES ($1, $2, 'credit', $3, $4, 'Misc Income', $5, NOW()) RETURNING id`,
-    [wallet.id, req.user.id, amt, description, crypto.randomUUID()]
+    [wallet.id, staffId, amt, description, crypto.randomUUID()]
   );
   return tx.rows[0].id;
+}
+
+// One wallet movement for a difference: + = bank paid more (debit), − = bank paid less (credit back).
+async function postDifferenceTx(client, wallet, diff, staffId, category, referenceId, description) {
+  const amt = r2(Math.abs(diff));
+  const type = diff > 0 ? 'debit' : 'credit';
+  await client.query(
+    `UPDATE wallets SET balance = balance ${diff > 0 ? '-' : '+'} $1, updated_at = NOW() WHERE id = $2`,
+    [amt, wallet.id]
+  );
+  // no correction_group_id: the original transaction stays the "latest" of its own group
+  const tx = await client.query(
+    `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, created_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) RETURNING id`,
+    [wallet.id, staffId, type, amt, description.slice(0, 500), category, referenceId]
+  );
+  return tx.rows[0].id;
+}
+
+async function auditLog(client, req, wallet, action, details) {
+  // best effort — never let the audit row break the booking
+  await client.query('SAVEPOINT audit_sp');
+  try {
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
+      [action, req.user.username || String(req.user.id), details.slice(0, 1000), wallet.centre_id]
+    );
+    await client.query('RELEASE SAVEPOINT audit_sp');
+  } catch {
+    await client.query('ROLLBACK TO SAVEPOINT audit_sp');
+  }
+}
+
+/* The bank paid a different amount than was entered (e.g. bank ₹505.90, entered ₹500).
+   The difference is NOT a separate expense / misc income: it is added to (or taken off)
+   the SAME entry, under the SAME staff member who made it — even though an admin presses the button.
+     • department fee of a service entry → department_charges ± diff, service_charges ∓ diff
+       (the customer paid the same total, so what the centre keeps changes, not the bill)
+     • an expense                        → that expense's amount ± diff
+   With several app entries in one match the largest one carries the difference. */
+async function bookDifference(client, req, wallet, m, dates) {
+  const diff = r2(Number(m.diff));
+  if (!diff) throw httpError(400, 'There is no difference to book');
+  const txs = (await client.query(
+    `SELECT wt.id, wt.amount::numeric AS amount, wt.category, wt.reference_id, wt.staff_id, wt.description,
+            to_char(wt.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS d
+     FROM bank_statement_match_items i JOIN wallet_transactions wt ON wt.id = i.wallet_tx_id
+     WHERE i.match_id = $1 ORDER BY wt.amount DESC, wt.id`,
+    [m.id]
+  )).rows;
+  if (!txs.length) throw httpError(400, 'This match has no app entry to adjust');
+  const note = `bank statement ${dates}: bank ₹${Number(m.bank_total).toFixed(2)} vs entered ₹${Number(m.app_total).toFixed(2)}, adjusted by ${req.user.username || 'admin'}`;
+
+  // 1. department fee of a service entry
+  const dep = txs.find((t) => t.category === 'Department Payment' && t.reference_id);
+  if (dep) {
+    const se = (await client.query(
+      `SELECT se.id, se.staff_id, se.service_charges, se.department_charges, sv.name AS service_name
+       FROM service_entries se LEFT JOIN services sv ON sv.id = se.category_id
+       WHERE se.id = $1 FOR UPDATE OF se`,
+      [dep.reference_id]
+    )).rows[0];
+    if (se) {
+      const newDept = r2(Number(se.department_charges) + diff);
+      const newSvc = r2(Number(se.service_charges) - diff);
+      if (newDept < 0) throw httpError(409, `The department fee of entry #${se.id} would go below zero — use "Match only" and correct the entry`);
+      // The bank fee is bigger than the whole service charge: don't book it automatically —
+      // the admin confirms with "Match only" and fixes the entry by hand.
+      if (newSvc < 0) {
+        throw httpError(409, `Entry #${se.id} (${se.service_name || 'service'}): the difference ₹${Math.abs(diff).toFixed(2)} is more than its service charge ₹${Number(se.service_charges).toFixed(2)}. Use "Match only" and correct the entry by hand.`);
+      }
+      await client.query(
+        `UPDATE service_entries SET department_charges = $1, service_charges = $2, updated_at = NOW() WHERE id = $3`,
+        [newDept, newSvc, se.id]
+      );
+      const txId = await postDifferenceTx(
+        client, wallet, diff, se.staff_id || dep.staff_id, 'Department Payment', se.id,
+        `Department charge adjustment for ${se.service_name || 'service'} (#${se.id}) ${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)} — ${note}`
+      );
+      await auditLog(client, req, wallet, 'Department Charge Adjusted',
+        `Entry #${se.id}: department ₹${Number(se.department_charges).toFixed(2)} → ₹${newDept.toFixed(2)}, service ₹${Number(se.service_charges).toFixed(2)} → ₹${newSvc.toFixed(2)} (${note})`);
+      return txId;
+    }
+  }
+
+  // 2. an expense (wallet transaction category 'Expense' → expenses row, same wallet and amount)
+  const ex = txs.find((t) => t.category === 'Expense');
+  if (ex) {
+    const exp = (await client.query(
+      `SELECT id, staff_id, amount::numeric AS amount, category FROM expenses
+       WHERE wallet_id = $1 AND amount = $2 AND COALESCE(is_reversal, false) = false
+         AND status NOT IN ('rejected', 'pending')
+         AND (id = $3 OR (expense_date = $4::date AND staff_id = $5))
+       ORDER BY (id = $3) DESC, id DESC LIMIT 1 FOR UPDATE`,
+      [wallet.id, ex.amount, ex.reference_id || 0, ex.d, ex.staff_id || 0]
+    )).rows[0];
+    if (exp) {
+      const newAmt = r2(Number(exp.amount) + diff);
+      if (!(newAmt > 0)) throw httpError(409, `Expense #${exp.id} would become ₹0 or less — use "Match only" and correct the expense`);
+      await client.query(
+        `UPDATE expenses SET amount = $1,
+                remarks = CONCAT_WS(' | ', NULLIF(remarks, ''), 'Bank difference ' || $2), updated_at = NOW()
+         WHERE id = $3`,
+        [newAmt, `${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)} (${dates})`, exp.id]
+      );
+      const txId = await postDifferenceTx(
+        client, wallet, diff, exp.staff_id || ex.staff_id, 'Expense', exp.id,
+        `Expense adjustment: ${exp.category} (#${exp.id}) ${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)} — ${note}`
+      );
+      await auditLog(client, req, wallet, 'Expense Adjusted',
+        `Expense #${exp.id}: ₹${Number(exp.amount).toFixed(2)} → ₹${newAmt.toFixed(2)} (${note})`);
+      return txId;
+    }
+  }
+
+  // 3. anything else (transfers, manual debits): keep the old booking, but under the entry's staff
+  return bookAdjustment(client, req, wallet, diff, 'Bank Difference',
+    `Bank statement difference ${dates}: bank ₹${Number(m.bank_total).toFixed(2)} vs entered ₹${Number(m.app_total).toFixed(2)}`,
+    txs[0].staff_id || req.user.id);
 }
 
 /* =========================================================
@@ -398,6 +519,13 @@ router.get('/:id', async (req, res) => {
     }
 
     const inMatch = new Set(matches.flatMap((m) => m.tx_ids));
+    // an entry may be matched to a row of ANOTHER statement (e.g. paid today, debited tomorrow)
+    (await req.db.query(
+      `SELECT DISTINCT i.wallet_tx_id FROM bank_statement_match_items i
+       JOIN bank_statement_matches m ON m.id = i.match_id
+       WHERE m.wallet_id = $1 AND m.status IN ('proposed', 'confirmed') AND i.wallet_tx_id IS NOT NULL`,
+      [wallet.id]
+    )).rows.forEach((r) => inMatch.add(r.wallet_tx_id));
     const checks = (await req.db.query('SELECT wallet_tx_id, note FROM bank_statement_app_checks WHERE wallet_id = $1', [wallet.id])).rows;
     const checkedNote = Object.fromEntries(checks.map((c) => [c.wallet_tx_id, c.note]));
     const appInPeriod = app.filter((a) => a.date >= s.period_from && a.date <= s.period_to);
@@ -455,7 +583,8 @@ async function loadMatch(client, req, id) {
 }
 
 /* POST /matches/:id/confirm   { book_difference?: true }
-   For an amount difference, book_difference = true books the gap as "Bank difference". */
+   For an amount difference, book_difference = true adds the gap to the same entry
+   (department fee / expense) under the same staff — see bookDifference. */
 router.post('/matches/:id/confirm', requireWriter, async (req, res) => {
   const client = await req.db.connect();
   try {
@@ -467,10 +596,7 @@ router.post('/matches/:id/confirm', requireWriter, async (req, res) => {
     let adjustmentTxId = null;
     if (req.body?.book_difference && Number(m.diff) !== 0) {
       const dates = (await client.query(`SELECT string_agg(DISTINCT to_char(value_date,'DD Mon'), ', ') AS d FROM bank_statement_lines WHERE id = ANY($1::int[])`, [lineIds])).rows[0].d;
-      adjustmentTxId = await bookAdjustment(
-        client, req, wallet, Number(m.diff), 'Bank Difference',
-        `Bank statement difference ${dates}: bank ₹${Number(m.bank_total).toFixed(2)} vs entered ₹${Number(m.app_total).toFixed(2)}`
-      );
+      adjustmentTxId = await bookDifference(client, req, wallet, m, dates);
     }
     await client.query(
       `UPDATE bank_statement_matches SET status = 'confirmed', decided_by = $1, decided_at = NOW(), adjustment_tx_id = $2 WHERE id = $3`,
@@ -561,7 +687,7 @@ router.post('/manual-match', requireWriter, async (req, res) => {
    (bank charges, a payment nobody entered) — books it as an expense and matches it */
 router.post('/lines/:id/book', requireWriter, async (req, res) => {
   const note = String(req.body?.note || '').trim();
-  const category = String(req.body?.category || 'Bank Charges').trim().slice(0, 60);
+  const category = String(req.body?.category || 'Bank / CDM Charges').trim().slice(0, 60);
   if (note.length < 3) return res.status(400).json({ error: 'Add a short note' });
   const client = await req.db.connect();
   try {

@@ -33,7 +33,11 @@ const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/
 const istNowTime = () =>
   new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }); // "HH:MM:SS" in IST
 const round2 = (n) => Math.round(Number(n || 0) * 100) / 100;
-const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+const inr = (v) => {
+  const n = Math.round(Number(v || 0) * 100) / 100;
+  const frac = Number.isInteger(n) ? 0 : 2; // ₹5,799.30, not ₹5,799.3
+  return `${n < 0 ? '−' : ''}₹${Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: frac, maximumFractionDigits: frac })}`;
+};
 const signed = (v) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${inr(Math.abs(v))}`;
 
 const RECON_TOLERANCE = 10; // within ±₹10 is shown as "Reconciled" (same rule as before)

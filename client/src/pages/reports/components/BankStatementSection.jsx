@@ -13,6 +13,21 @@ import {
 } from 'react-icons/fi';
 
 const API = `${import.meta.env.VITE_API_URL}/api/bankstatements`;
+// What happens to a difference: it is added to / taken off the SAME entry (department fee or
+// expense) under the staff who made it — never a separate expense or misc income.
+const diffLabel = (d) => (Number(d) > 0 ? `Match & add ${inr(Math.abs(d))} to entry` : `Match & take ${inr(Math.abs(d))} off entry`);
+// The difference goes onto the largest department-fee entry; if it is more than that entry's
+// service charge the server refuses (the entry must be fixed by hand), so don't offer it.
+const diffBlocked = (d, entries) => {
+  if (!(Number(d) > 0)) return null;
+  const dep = entries.filter((a) => a && a.category === 'Department Payment' && a.entry_id)
+    .sort((x, y) => Number(y.amount) - Number(x.amount))[0];
+  if (!dep || dep.service_charges == null) return null;
+  return Number(d) > Number(dep.service_charges)
+    ? `The difference is more than the service charge of entry #${dep.entry_id} (${inr(dep.service_charges)}). Use "Match only" and correct the entry by hand.`
+    : null;
+};
+const diffDone = (d) => `Matched — ${inr(Math.abs(d))} ${Number(d) > 0 ? 'added to' : 'taken off'} the entry, under the same staff`;
 const auth = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
 const inr = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const fmtDate = (ymd) => (ymd ? new Date(`${ymd}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' }) : '—');
@@ -51,7 +66,7 @@ const card = 'rounded-2xl border border-slate-200 bg-white shadow-sm';
 // small modal for notes (no window.prompt — it blocks the page)
 const NoteModal = ({ title, hint, withCategory, confirmLabel, onCancel, onSave, busy }) => {
   const [note, setNote] = useState('');
-  const [category, setCategory] = useState('Bank Charges');
+  const [category, setCategory] = useState('Bank / CDM Charges');
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4" role="dialog" aria-modal="true" aria-label={title} onClick={() => !busy && onCancel()}>
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -64,8 +79,8 @@ const NoteModal = ({ title, hint, withCategory, confirmLabel, onCancel, onSave, 
             <label className="block text-sm font-medium text-slate-700">
               Expense category
               <select value={category} onChange={(e) => setCategory(e.target.value)} className="mt-1 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                <option>Bank Charges</option>
-                <option>Department Payment</option>
+                {/* same names as the Expense module, so reports group them together */}
+                <option>Bank / CDM Charges</option>
                 <option>Other Expenses</option>
               </select>
             </label>
@@ -155,7 +170,15 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
   const [uploadErrors, setUploadErrors] = useState(null);
 
   useEffect(() => {
-    if (!walletId && bankWallets.length) setWalletId(String(bankWallets[0].id));
+    if (!walletId && bankWallets.length) {
+      // all centres use SBI for department fees — open on it; remember the admin's last choice
+      let last = null;
+      try { last = localStorage.getItem('bankstmt_wallet'); } catch { /* storage blocked */ }
+      const pick = bankWallets.find((w) => String(w.id) === last)
+        || bankWallets.find((w) => /sbi|state bank/i.test(w.name))
+        || bankWallets[0];
+      setWalletId(String(pick.id));
+    }
   }, [bankWallets, walletId]);
 
   const loadStatements = useCallback(async (selectId) => {
@@ -230,6 +253,7 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
   const selBankTotal = selBank.reduce((s, id) => s + Number(L[id]?.debit || 0), 0);
   const selAppTotal = selApp.reduce((s, id) => s + Number(A[id]?.amount || 0), 0);
   const selDiff = Math.round((selBankTotal - selAppTotal) * 100) / 100;
+  const selBlocked = selBank.length && selApp.length ? diffBlocked(selDiff, selApp.map((id) => A[id])) : null;
   const toggle = (setter) => (id) => setter((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const manualMatch = (bookDifference) => act('manual', async () => {
@@ -257,7 +281,7 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-xs font-medium text-slate-600">
               Bank wallet
-              <select value={walletId} onChange={(e) => setWalletId(e.target.value)} className="mt-1 block rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm">
+              <select value={walletId} onChange={(e) => { setWalletId(e.target.value); try { localStorage.setItem('bankstmt_wallet', e.target.value); } catch { /* ignore */ } }} className="mt-1 block rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-sm">
                 {bankWallets.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
               </select>
             </label>
@@ -378,11 +402,20 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
                           onClick={() => act(`c${m.id}`, () => api(`/matches/${m.id}/confirm`, { method: 'POST', body: {} }), 'Matched')}>
                           <FiCheck className="h-3.5 w-3.5" />Match only
                         </button>
+                        {diffBlocked(m.diff, m.tx_ids.map((id) => A[id])) ? (
+                          <span className="flex items-center gap-1 text-[11px] text-amber-700">
+                            <FiAlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />{diffBlocked(m.diff, m.tx_ids.map((id) => A[id]))}
+                          </span>
+                        ) : (
                         <button type="button" className={btnGood} disabled={!!busy}
+                          title={Number(m.diff) > 0
+                            ? 'The bank paid more: the department fee / expense of this entry goes up, under the same staff'
+                            : 'The bank paid less: the department fee / expense of this entry goes down, under the same staff'}
                           onClick={() => act(`b${m.id}`, () => api(`/matches/${m.id}/confirm`, { method: 'POST', body: { book_difference: true } }),
-                            `Matched and ${inr(Math.abs(m.diff))} booked as ${Number(m.diff) > 0 ? 'Bank Difference expense' : 'misc income'}`)}>
-                          <FiCheck className="h-3.5 w-3.5" />Match &amp; book {inr(Math.abs(m.diff))}
+                            diffDone(m.diff))}>
+                          <FiCheck className="h-3.5 w-3.5" />{diffLabel(m.diff)}
                         </button>
+                        )}
                       </>
                     ) : (
                       <button type="button" className={btnGood} disabled={!!busy}
@@ -411,9 +444,12 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
                 {selDiff !== 0 && (
                   <button type="button" className={btnGhost} disabled={!selBank.length || !selApp.length || !!busy} onClick={() => manualMatch(false)}>Match only</button>
                 )}
+                {selBlocked && <span className="max-w-xs self-center text-[11px] text-amber-700">{selBlocked}</span>}
+                {!selBlocked && (
                 <button type="button" className={btnPrimary} disabled={!selBank.length || !selApp.length || !!busy} onClick={() => manualMatch(selDiff !== 0)}>
-                  <FiLink className="h-3.5 w-3.5" />{selDiff !== 0 ? `Match & book ${inr(Math.abs(selDiff))}` : 'Match selected'}
+                  <FiLink className="h-3.5 w-3.5" />{selDiff !== 0 ? diffLabel(selDiff) : 'Match selected'}
                 </button>
+                )}
               </div>
             </div>
           )}
@@ -464,7 +500,7 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
                   {m.line_ids.map((id) => L[id] && `${fmtDate(L[id].value_date)} ${L[id].type_label} ${inr(L[id].debit)}`).filter(Boolean).join(' + ')}
                   <span className="mx-1 text-slate-400">↔</span>
                   {m.tx_ids.map((id) => A[id] && `${A[id].service_name || A[id].category} ${inr(A[id].amount)}`).filter(Boolean).join(' + ')}
-                  {m.adjustment_tx_id && Number(m.diff) !== 0 && <span className="ml-2 text-amber-700">· {inr(Math.abs(m.diff))} difference booked</span>}
+                  {m.adjustment_tx_id && Number(m.diff) !== 0 && <span className="ml-2 text-amber-700">· {Number(m.diff) > 0 ? '+' : '−'}{inr(Math.abs(m.diff))} {Number(m.diff) > 0 ? 'added to' : 'taken off'} entry</span>}
                 </div>
                 {!readOnly && !m.adjustment_tx_id && (
                   <button type="button" className={`${btnGhost} flex-shrink-0`} disabled={!!busy}

@@ -122,6 +122,9 @@ router.get('/daily-summary', requireAccounting, async (req, res) => {
 
     // Business Inflow / Outflow
     let cashInflow = 0, digitalInflow = 0, bankInflow = 0;
+    // "of which misc income" — still inside the inflows above (it IS money in the wallet, so the
+    // cash count and balances need it), but shown separately: misc income is not service income / profit.
+    let cashMisc = 0, digitalMisc = 0, bankMisc = 0;
     let cashOutflow = 0, digitalOutflow = 0, bankOutflow = 0;
     
     // Internal Transfers (Liquidity Movements)
@@ -153,6 +156,11 @@ router.get('/daily-summary', requireAccounting, async (req, res) => {
           if (isCash) cashInflow += amount;
           else if (isBank) bankInflow += amount;
           else if (isDigital) digitalInflow += amount;
+          if (row.category === 'Misc Income') {
+            if (isCash) cashMisc += amount;
+            else if (isBank) bankMisc += amount;
+            else if (isDigital) digitalMisc += amount;
+          }
         } else if (row.type === 'debit') {
           if (isCash) cashOutflow += amount;
           else if (isBank) bankOutflow += amount;
@@ -180,6 +188,10 @@ router.get('/daily-summary', requireAccounting, async (req, res) => {
             cashInflow,
             digitalInflow,
             bankInflow,
+
+            cashMisc,         // part of cashInflow
+            digitalMisc,      // part of digitalInflow
+            bankMisc,         // part of bankInflow
 
             cashOutflow,
             digitalOutflow,

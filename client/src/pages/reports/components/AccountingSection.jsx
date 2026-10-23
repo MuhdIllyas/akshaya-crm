@@ -57,7 +57,13 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
 );
 
 // Nightly Accounting Checklist Component
-const inr2 = (v) => `₹${Number(v || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+// ₹1,240 · ₹5,799.30 · −₹1,019.70 (never "₹5,799.3" or "₹-1,019.7")
+const inr2 = (v) => {
+  const n = Math.round(Number(v || 0) * 100) / 100;
+  const frac = Number.isInteger(n) ? 0 : 2;
+  const s = Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: frac, maximumFractionDigits: frac });
+  return `${n < 0 ? '−' : ''}₹${s}`;
+};
 
 const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCash, readOnly = false }) => {
   const [checklist, setChecklist] = useState(
@@ -375,12 +381,22 @@ const calculateTotals = () => {
     toast.success('Daily summary saved');
   };
 
+  // Collections are shown WITHOUT misc income; misc income gets its own row (the totals still include it)
+  const fieldValue = (field) => {
+    const d = formData.derived || {};
+    if (field.key === 'actualCashInHand') return Number(formData.manual?.actualCashInHand || 0);
+    if (field.sum) return field.sum.reduce((t, k) => t + Number(d[k] || 0), 0);
+    return Number(d[field.key] || 0) - (field.less ? Number(d[field.less] || 0) : 0);
+  };
+
   const fields = [
     { key: 'openingBalance', label: 'Opening Balance', type: 'balance', category: 'system' },
     { key: 'cashOpening', label: 'Cash Opening Balance', type: 'cash', category: 'system' },
-    { key: 'cashInflow', label: 'Cash Collections', type: 'cash', category: 'inflow' },
-    { key: 'digitalInflow', label: 'Digital Collections', type: 'digital', category: 'inflow' },
-    { key: 'bankInflow', label: 'Bank Collections', type: 'bank', category: 'inflow' },
+    { key: 'cashInflow', label: 'Cash Collections', type: 'cash', category: 'inflow', less: 'cashMisc' },
+    { key: 'digitalInflow', label: 'Digital Collections', type: 'digital', category: 'inflow', less: 'digitalMisc' },
+    { key: 'bankInflow', label: 'Bank Collections', type: 'bank', category: 'inflow', less: 'bankMisc' },
+    // misc income: money in the wallet (counted in the totals) but NOT service income / profit
+    { key: 'miscIncome', label: 'Misc Income (not profit)', type: 'misc', category: 'inflow', sum: ['cashMisc', 'digitalMisc', 'bankMisc'] },
     { key: 'cashOutflow', label: 'Cash Outflow', type: 'cash', category: 'outflow' },
     { key: 'digitalOutflow', label: 'Digital Outflow', type: 'digital', category: 'outflow' },
     { key: 'bankOutflow', label: 'Bank Outflow', type: 'bank', category: 'outflow' },
@@ -548,7 +564,7 @@ const calculateTotals = () => {
                     />
                   ) : (
                     <span className="text-xs font-semibold text-slate-800">
-                      ₹{(field.key === 'actualCashInHand' ? formData.manual.actualCashInHand : formData.derived[field.key])?.toLocaleString() || '0'}
+                      {inr2(fieldValue(field))}
                     </span>
                   )}
                 </td>
@@ -3215,14 +3231,14 @@ const handleExportExcel = () => {
           />
           <StatCard
             title="Cash in Hand"
-            value={`₹${calculateCashInHand().toLocaleString()}`}
+            value={inr2(calculateCashInHand())}
             subtitle="Physical cash wallets"
             icon={FiDollarSign}
             color="bg-navy-500"
           />
           <StatCard
             title="Total Wallet Balance"
-            value={`₹${calculateTotalWalletBalance().toLocaleString()}`}
+            value={inr2(calculateTotalWalletBalance())}
             subtitle="All wallets combined"
             icon={FiSmartphone}
             color="bg-slate-600"
