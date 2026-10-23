@@ -91,19 +91,19 @@ const formatTime = (time) => {
 const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, loading, trendValue }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 cursor-pointer p-5"
+    className="bg-white rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-300 cursor-pointer p-5"
     onClick={onClick}
   >
     <div className="flex items-center justify-between">
       <div>
-        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
+        <p className="font-medium text-slate-600 mb-1 text-sm">{title}</p>
         {loading ? (
-          <div className="h-8 w-24 bg-gray-200 animate-pulse rounded"></div>
+          <div className="h-8 w-24 bg-slate-200 animate-pulse rounded"></div>
         ) : (
-          <p className="font-bold text-gray-900 mb-1 text-2xl">{value}</p>
+          <p className="font-bold text-slate-900 mb-1 text-2xl">{value}</p>
         )}
         {subtitle && (
-          <p className="text-gray-500 text-sm">{subtitle}</p>
+          <p className="text-slate-500 text-sm">{subtitle}</p>
         )}
         {trend !== undefined && trendValue !== undefined && (
           <p className={`font-medium text-sm mt-1 flex items-center ${trendValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -142,15 +142,15 @@ const PerformanceGauge = ({ score, loading }) => {
   };
   
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
+    <div className="bg-white rounded-2xl border border-slate-200 p-5">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-          <FiAward className="h-4 w-4 mr-2 text-indigo-600" />
+        <h3 className="font-semibold text-slate-900 text-sm flex items-center">
+          <FiAward className="h-4 w-4 mr-2 text-navy-700" />
           Performance Score
         </h3>
         <div className="relative group">
-          <FiInfo className="h-4 w-4 text-gray-400 cursor-pointer" />
-          <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-gray-900 text-white text-xs rounded-lg z-10">
+          <FiInfo className="h-4 w-4 text-slate-500 cursor-pointer" />
+          <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-slate-900 text-white text-xs rounded-xl z-10">
             Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
           </div>
         </div>
@@ -158,14 +158,14 @@ const PerformanceGauge = ({ score, loading }) => {
       
       {loading ? (
         <div className="h-32 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
         </div>
       ) : (
         <div className="text-center">
           <div className="relative inline-block">
             <svg className="w-32 h-32">
               <circle
-                className="text-gray-200"
+                className="text-slate-200"
                 strokeWidth="12"
                 stroke="currentColor"
                 fill="transparent"
@@ -193,11 +193,11 @@ const PerformanceGauge = ({ score, loading }) => {
               </defs>
             </svg>
             <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-              <p className="text-2xl font-bold text-gray-900">{score}%</p>
-              <p className="text-xs text-gray-500">{getScoreLabel()}</p>
+              <p className="text-2xl font-bold text-slate-900">{score}%</p>
+              <p className="text-xs text-slate-500">{getScoreLabel()}</p>
             </div>
           </div>
-          <p className="text-xs text-gray-600 mt-3">{getScoreMessage()}</p>
+          <p className="text-xs text-slate-600 mt-3">{getScoreMessage()}</p>
         </div>
       )}
     </div>
@@ -206,51 +206,51 @@ const PerformanceGauge = ({ score, loading }) => {
 
 // Rating Card Component
 const RatingCard = ({ rating, totalReviews, distribution, loading }) => (
-  <div className="bg-white rounded-xl border border-gray-200 p-5">
+  <div className="bg-white rounded-2xl border border-slate-200 p-5">
     <div className="flex items-center justify-between mb-4">
-      <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-        <FiStar className="h-4 w-4 mr-2 text-yellow-500" />
+      <h3 className="font-semibold text-slate-900 text-sm flex items-center">
+        <FiStar className="h-4 w-4 mr-2 text-amber-500" />
         Customer Rating
       </h3>
     </div>
     
     {loading ? (
       <div className="space-y-3">
-        <div className="h-12 bg-gray-200 animate-pulse rounded"></div>
-        <div className="h-8 bg-gray-200 animate-pulse rounded"></div>
+        <div className="h-12 bg-slate-200 animate-pulse rounded"></div>
+        <div className="h-8 bg-slate-200 animate-pulse rounded"></div>
       </div>
     ) : (
       <>
         <div className="flex items-center justify-between mb-4">
           <div>
-            <div className="text-3xl font-bold text-gray-900">
+            <div className="text-3xl font-bold text-slate-900">
               {rating || '—'}
             </div>
             <div className="flex items-center mt-1">
               {[1, 2, 3, 4, 5].map(star => (
                 <FiStar
                   key={star}
-                  className={`h-4 w-4 ${star <= Math.round(rating || 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`}
+                  className={`h-4 w-4 ${star <= Math.round(rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`}
                 />
               ))}
             </div>
           </div>
           <div className="text-right">
-            <p className="text-sm text-gray-600">{totalReviews || 0} reviews</p>
-            <p className="text-xs text-gray-500">Total feedback</p>
+            <p className="text-sm text-slate-600">{totalReviews || 0} reviews</p>
+            <p className="text-xs text-slate-500">Total feedback</p>
           </div>
         </div>
         
         {/* Rating Distribution */}
         {distribution && distribution.length > 0 && (
-          <div className="space-y-2 mt-4 pt-4 border-t border-gray-100">
+          <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
             {distribution.map((item, idx) => {
               const percentage = totalReviews > 0 ? (item.count / totalReviews) * 100 : 0;
               return (
                 <div key={idx} className="flex items-center text-xs">
-                  <span className="w-8 text-gray-600">{item.rating}★</span>
+                  <span className="w-8 text-slate-600">{item.rating}★</span>
                   <div className="flex-1 mx-2">
-                    <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div className="w-full bg-slate-200 rounded-full h-1.5">
                       <div
                         className={`h-1.5 rounded-full ${
                           item.rating >= 4 ? 'bg-emerald-500' :
@@ -260,7 +260,7 @@ const RatingCard = ({ rating, totalReviews, distribution, loading }) => (
                       />
                     </div>
                   </div>
-                  <span className="w-12 text-right text-gray-500">
+                  <span className="w-12 text-right text-slate-500">
                     {Math.round(percentage)}% ({item.count})
                   </span>
                 </div>
@@ -280,7 +280,7 @@ const AchievementCard = ({ achievement, index }) => (
     animate={{ opacity: 1, y: 0 }}
     transition={{ delay: index * 0.05 }}
     className={`bg-white rounded-xl border p-4 ${
-      achievement.earned ? 'border-emerald-200 bg-emerald-50' : 'border-gray-200'
+      achievement.earned ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200'
     }`}
   >
     <div className="flex items-center space-x-3">
@@ -288,23 +288,23 @@ const AchievementCard = ({ achievement, index }) => (
         {achievement.icon}
       </div>
       <div className="flex-1">
-        <h4 className={`font-semibold text-sm ${achievement.earned ? 'text-emerald-800' : 'text-gray-700'}`}>
+        <h4 className={`font-semibold text-sm ${achievement.earned ? 'text-emerald-800' : 'text-slate-700'}`}>
           {achievement.name}
         </h4>
-        <p className="text-xs text-gray-500">{achievement.description}</p>
+        <p className="text-xs text-slate-500">{achievement.description}</p>
         {!achievement.earned && achievement.progress !== undefined && (
           <div className="mt-2">
             <div className="flex justify-between text-xs mb-1">
-              <span className="text-gray-600">Progress</span>
-              <span className="text-gray-600">{Math.round((achievement.progress / achievement.target) * 100)}%</span>
+              <span className="text-slate-600">Progress</span>
+              <span className="text-slate-600">{Math.round((achievement.progress / achievement.target) * 100)}%</span>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-1.5">
+            <div className="w-full bg-slate-200 rounded-full h-1.5">
               <div
-                className="bg-indigo-500 h-1.5 rounded-full"
+                className="bg-navy-500 h-1.5 rounded-full"
                 style={{ width: `${(achievement.progress / achievement.target) * 100}%` }}
               />
             </div>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-slate-500 mt-1">
               {achievement.progress.toLocaleString()} / {achievement.target.toLocaleString()}
             </p>
           </div>
@@ -536,8 +536,8 @@ const StaffPerformance = () => {
         {
           label: 'Revenue Collected (₹)',
           data: data.daily_performance.map(d => d.collected_amount),
-          borderColor: 'rgb(99, 102, 241)',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          borderColor: 'rgb(30, 58, 95)',
+          backgroundColor: 'rgba(30, 58, 95, 0.1)',
           tension: 0.4,
           fill: true,
           yAxisID: 'y',
@@ -601,7 +601,7 @@ const StaffPerformance = () => {
     if (!serviceBreakdown?.length) return null;
     
     const top5 = serviceBreakdown.slice(0, 5);
-    const colors = ['#6366F1', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6'];
+    const colors = ['#1e3a5f', '#10B981', '#F59E0B', '#E11D48', '#3b5d8f'];
     
     return {
       labels: top5.map(c => c.service_name),
@@ -647,8 +647,8 @@ const StaffPerformance = () => {
         {
           label: 'Revenue',
           data: data.monthly_trends.map(t => t.total_collected),
-          borderColor: 'rgb(99, 102, 241)',
-          backgroundColor: 'rgba(99, 102, 241, 0.1)',
+          borderColor: 'rgb(30, 58, 95)',
+          backgroundColor: 'rgba(30, 58, 95, 0.1)',
           fill: true,
           tension: 0.4,
         },
@@ -677,18 +677,18 @@ const StaffPerformance = () => {
   ];
   
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-sm">
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="px-6 py-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+              <div className="w-12 h-12 bg-gradient-to-br from-navy-500 to-navy-700 rounded-xl flex items-center justify-center shadow-lg">
                 <FiTrendingUp className="text-white h-6 w-6" />
               </div>
               <div>
-                <h1 className="font-bold text-gray-900 text-2xl">My Performance Dashboard</h1>
-                <p className="text-gray-600 flex items-center text-sm">
+                <h1 className="font-bold text-slate-900 text-2xl">My Performance Dashboard</h1>
+                <p className="text-slate-600 flex items-center text-sm">
                   <FiBriefcase className="h-3 w-3 mr-1" />
                   Track your revenue, services, and customer satisfaction
                 </p>
@@ -700,9 +700,9 @@ const StaffPerformance = () => {
               <div className="relative">
                 <button
                   onClick={() => setShowDatePicker(!showDatePicker)}
-                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center space-x-2 px-4 py-2 border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
                 >
-                  <FiCalendar className="h-4 w-4 text-gray-500" />
+                  <FiCalendar className="h-4 w-4 text-slate-500" />
                   <span className="text-sm">
                     {period === 'today' && 'Today'}
                     {period === 'week' && 'This Week'}
@@ -711,7 +711,7 @@ const StaffPerformance = () => {
                     {period === 'year' && 'This Year'}
                     {period === 'custom' && 'Custom Range'}
                   </span>
-                  <FiChevronRight className="h-4 w-4 text-gray-500 transform rotate-90" />
+                  <FiChevronRight className="h-4 w-4 text-slate-500 transform rotate-90" />
                 </button>
                 
                 <AnimatePresence>
@@ -722,58 +722,60 @@ const StaffPerformance = () => {
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0, y: 10 }}
-                        className="absolute top-full mt-2 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-50 w-64"
+                        className="absolute top-full mt-2 right-0 bg-white border border-slate-200 rounded-xl shadow-lg z-50 w-64"
                       >
                         <div className="p-3">
                           <button
                             onClick={() => { setPeriod('today'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'today' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'today' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
                           >
                             Today
                           </button>
                           <button
                             onClick={() => { setPeriod('week'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'week' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'week' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
                           >
                             This Week
                           </button>
                           <button
                             onClick={() => { setPeriod('month'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'month' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'month' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
                           >
                             This Month
                           </button>
                           <button
                             onClick={() => { setPeriod('quarter'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'quarter' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'quarter' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
                           >
                             This Quarter
                           </button>
                           <button
                             onClick={() => { setPeriod('year'); setShowDatePicker(false); }}
-                            className={`w-full text-left px-3 py-2 rounded-lg text-sm ${period === 'year' ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-50'}`}
+                            className={`w-full text-left px-3 py-2 rounded-xl text-sm ${period === 'year' ? 'bg-slate-100 text-navy-700' : 'hover:bg-slate-50'}`}
                           >
                             This Year
                           </button>
-                          <div className="border-t border-gray-200 my-2"></div>
+                          <div className="border-t border-slate-200 my-2"></div>
                           <div className="space-y-2">
                             <input
                               type="date"
+                              aria-label="From date"
                               value={customDateRange.from}
                               onChange={(e) => setCustomDateRange(prev => ({ ...prev, from: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
                               placeholder="From Date"
                             />
                             <input
                               type="date"
+                              aria-label="To date"
                               value={customDateRange.to}
                               onChange={(e) => setCustomDateRange(prev => ({ ...prev, to: e.target.value }))}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                              className="w-full px-3 py-2 border border-slate-300 rounded-xl text-sm"
                               placeholder="To Date"
                             />
                             <button
                               onClick={applyCustomRange}
-                              className="w-full px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm hover:bg-indigo-700"
+                              className="w-full px-3 py-2 bg-navy-700 text-white rounded-xl text-sm hover:bg-navy-800"
                             >
                               Apply
                             </button>
@@ -787,30 +789,31 @@ const StaffPerformance = () => {
               
               <button
                 onClick={fetchPerformance}
-                className="p-2 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                aria-label="Refresh performance data"
+                className="p-2 min-h-[40px] min-w-[40px] flex items-center justify-center bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
                 disabled={loading}
               >
-                <FiRefreshCw className={`h-4 w-4 text-gray-600 ${loading ? 'animate-spin' : ''}`} />
+                <FiRefreshCw className={`h-4 w-4 text-slate-600 ${loading ? 'animate-spin' : ''}`} />
               </button>
             </div>
           </div>
           
           {/* Staff Info */}
           {staffInfo && (
-            <div className="mt-4 flex items-center space-x-4 p-4 bg-gray-50 rounded-lg">
-              <div className="w-12 h-12 bg-indigo-100 rounded-full flex items-center justify-center">
-                <span className="text-indigo-600 font-bold text-lg">
+            <div className="mt-4 flex items-center space-x-4 p-4 bg-slate-50 rounded-xl">
+              <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center">
+                <span className="text-navy-700 font-bold text-lg">
                   {staffInfo.name?.charAt(0) || 'S'}
                 </span>
               </div>
               <div>
-                <h2 className="font-semibold text-gray-900">{staffInfo.name}</h2>
+                <h2 className="font-semibold text-slate-900">{staffInfo.name}</h2>
                 <div className="flex flex-wrap gap-3 mt-1">
-                  <span className="text-xs text-gray-500 flex items-center">
+                  <span className="text-xs text-slate-500 flex items-center">
                     <FiBriefcase className="h-3 w-3 mr-1" />
                     {staffInfo.role || 'Staff'}
                   </span>
-                  <span className="text-xs text-gray-500 flex items-center">
+                  <span className="text-xs text-slate-500 flex items-center">
                     <FiTarget className="h-3 w-3 mr-1" />
                     Staff ID: {staffInfo.id}
                   </span>
@@ -821,7 +824,7 @@ const StaffPerformance = () => {
           
           {/* Period Info */}
           {data?.period && (
-            <div className="mt-3 text-sm text-gray-500 flex items-center">
+            <div className="mt-3 text-sm text-slate-500 flex items-center">
               <FiCalendar className="h-4 w-4 mr-1" />
               Showing data from {formatDate(data.period.from)} to {formatDate(data.period.to)} ({data.period.total_days} days)
             </div>
@@ -829,18 +832,19 @@ const StaffPerformance = () => {
         </div>
         
         {/* Tabs */}
-        <div className="border-t border-gray-200 px-6">
+        <div className="border-t border-slate-200 px-6">
           <div className="flex space-x-6 overflow-x-auto">
             {tabs.map(tab => {
               const Icon = tab.icon;
               return (
                 <button
                   key={tab.id}
+                  aria-current={activeTab === tab.id ? 'page' : undefined}
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center space-x-2 py-3 border-b-2 text-sm font-medium transition-colors whitespace-nowrap ${
                     activeTab === tab.id
-                      ? 'border-indigo-500 text-indigo-600'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'
+                      ? 'border-navy-500 text-navy-700'
+                      : 'border-transparent text-slate-500 hover:text-slate-700'
                   }`}
                 >
                   <Icon className="h-4 w-4" />
@@ -857,15 +861,15 @@ const StaffPerformance = () => {
         {loading ? (
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
-              <FiLoader className="animate-spin h-8 w-8 text-indigo-600 mx-auto mb-3" />
-              <p className="text-gray-500">Loading your performance data...</p>
+              <FiLoader className="animate-spin h-8 w-8 text-navy-700 mx-auto mb-3" />
+              <p className="text-slate-500">Loading your performance data...</p>
             </div>
           </div>
         ) : !data ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-            <FiBarChart2 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No Data Available</h3>
-            <p className="text-gray-500">
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+            <FiBarChart2 className="h-12 w-12 mx-auto mb-4 text-slate-400" />
+            <h3 className="text-lg font-medium text-slate-900 mb-2">No Data Available</h3>
+            <p className="text-slate-500">
               No service records found for the selected period. Try selecting a different date range.
             </p>
           </div>
@@ -891,7 +895,7 @@ const StaffPerformance = () => {
                     value={summary.total_services || 0}
                     subtitle="Total services"
                     icon={FiBriefcase}
-                    color="bg-blue-600"
+                    color="bg-navy-700"
                     loading={loading}
                     trend="vs last period"
                     trendValue={comparison?.metrics?.services?.change}
@@ -901,7 +905,7 @@ const StaffPerformance = () => {
                     value={`${summary.collection_rate || 0}%`}
                     subtitle="Of total billed"
                     icon={FiTarget}
-                    color="bg-purple-600"
+                    color="bg-navy-500"
                     loading={loading}
                   />
                   <StatCard
@@ -909,7 +913,7 @@ const StaffPerformance = () => {
                     value={formatCurrency(summary.total_service_charges)}
                     subtitle="Your profit"
                     icon={FiTrendingUp}
-                    color="bg-amber-600"
+                    color="bg-amber-500"
                     loading={loading}
                     trend="vs last period"
                     trendValue={comparison?.metrics?.profit?.change}
@@ -923,7 +927,7 @@ const StaffPerformance = () => {
                     value={formatCurrency(summary.avg_daily_revenue)}
                     subtitle="Per active day"
                     icon={FiActivity}
-                    color="bg-indigo-600"
+                    color="bg-navy-700"
                     loading={loading}
                   />
                   <StatCard
@@ -931,7 +935,7 @@ const StaffPerformance = () => {
                     value={formatCurrency(summary.avg_transaction_value)}
                     subtitle="Per service"
                     icon={FiTrendingUp}
-                    color="bg-cyan-600"
+                    color="bg-slate-600"
                     loading={loading}
                   />
                   <StatCard
@@ -939,7 +943,7 @@ const StaffPerformance = () => {
                     value={`${summary.repeat_customer_rate || 0}%`}
                     subtitle="Returning customers"
                     icon={FiUsers}
-                    color="bg-pink-600"
+                    color="bg-navy-500"
                     loading={loading}
                   />
                   <StatCard
@@ -947,7 +951,7 @@ const StaffPerformance = () => {
                     value={`${summary.csat_score || 0}%`}
                     subtitle="Customer satisfaction"
                     icon={FiSmile}
-                    color="bg-orange-600"
+                    color="bg-amber-500"
                     loading={loading}
                   />
                 </div>
@@ -968,7 +972,7 @@ const StaffPerformance = () => {
                   <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
                     <div className="flex items-start justify-between">
                       <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-amber-100 rounded-lg">
+                        <div className="p-2 bg-amber-100 rounded-xl">
                           <FiClock className="h-5 w-5 text-amber-600" />
                         </div>
                         <div>
@@ -989,18 +993,18 @@ const StaffPerformance = () => {
                 
                 {/* Daily Performance Chart */}
                 {dailyChartData && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="font-semibold text-gray-900 text-sm flex items-center">
-                          <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
+                        <h3 className="font-semibold text-slate-900 text-sm flex items-center">
+                          <FiBarChart2 className="h-4 w-4 mr-2 text-navy-700" />
                           Daily Performance
                         </h3>
-                        <p className="text-gray-500 text-xs">Revenue & Services Trend</p>
+                        <p className="text-slate-500 text-xs">Revenue & Services Trend</p>
                       </div>
                       <button
                         onClick={() => setActiveTab('services')}
-                        className="text-xs text-indigo-600 hover:text-indigo-800"
+                        className="text-xs text-navy-700 hover:text-navy-800"
                       >
                         View Details →
                       </button>
@@ -1013,9 +1017,9 @@ const StaffPerformance = () => {
                 
                 {/* Monthly Trends */}
                 {monthlyTrendsChart && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiTrendingUp className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiTrendingUp className="h-4 w-4 mr-2 text-navy-700" />
                       Monthly Performance Trend
                     </h3>
                     <div className="h-64">
@@ -1026,36 +1030,36 @@ const StaffPerformance = () => {
                 
                 {/* Recent Services */}
                 {data?.recent_services?.length > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiClock className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiClock className="h-4 w-4 mr-2 text-navy-700" />
                       Recent Services
                     </h3>
                     <div className="overflow-x-auto">
                       <table className="w-full">
-                        <thead className="bg-gray-50 border-b border-gray-200">
+                        <thead className="bg-slate-50 border-b border-slate-200">
                           <tr>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Date</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Customer</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Service</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Amount</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Your Profit</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-gray-500">Status</th>
+                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Date</th>
+                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Customer</th>
+                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Service</th>
+                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Amount</th>
+                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Your Profit</th>
+                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Status</th>
                           </tr>
                         </thead>
                         <tbody>
                           {data.recent_services.slice(0, 10).map((service, idx) => (
-                            <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer" onClick={() => fetchDailyLog(istDay(service.created_at))}>
-                              <td className="py-2 px-3 text-sm text-gray-600">{formatDate(service.created_at)}</td>
-                              <td className="py-2 px-3 text-sm text-gray-900">{service.customer_name}</td>
-                              <td className="py-2 px-3 text-sm text-gray-600">{service.service_name}</td>
+                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => fetchDailyLog(istDay(service.created_at))}>
+                              <td className="py-2 px-3 text-sm text-slate-600">{formatDate(service.created_at)}</td>
+                              <td className="py-2 px-3 text-sm text-slate-900">{service.customer_name}</td>
+                              <td className="py-2 px-3 text-sm text-slate-600">{service.service_name}</td>
                               <td className="py-2 px-3 font-semibold text-emerald-600 text-sm">{formatCurrency(service.received_amount)}</td>
-                              <td className="py-2 px-3 font-semibold text-indigo-600 text-sm">{formatCurrency(service.service_charges)}</td>
+                              <td className="py-2 px-3 font-semibold text-navy-700 text-sm">{formatCurrency(service.service_charges)}</td>
                               <td className="py-2 px-3">
                                 <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                                   service.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                  service.pending_amount > 0 ? 'bg-yellow-100 text-yellow-700' :
-                                  'bg-gray-100 text-gray-700'
+                                  service.pending_amount > 0 ? 'bg-amber-100 text-amber-700' :
+                                  'bg-slate-100 text-slate-700'
                                 }`}>
                                   {service.status === 'completed' ? 'Completed' : 
                                    service.pending_amount > 0 ? `Pending (${formatCurrency(service.pending_amount)})` : 'Completed'}
@@ -1068,7 +1072,7 @@ const StaffPerformance = () => {
                     </div>
                     {data.recent_services.length > 10 && (
                       <div className="mt-4 text-center">
-                        <button className="text-sm text-indigo-600 hover:text-indigo-800">
+                        <button className="text-sm text-navy-700 hover:text-navy-800">
                           View All Services →
                         </button>
                       </div>
@@ -1082,16 +1086,16 @@ const StaffPerformance = () => {
             {activeTab === 'services' && (
               <>
                 {breakdownLoading && !serviceBreakdown && (
-                  <div className="flex items-center justify-center py-16 text-gray-500">
+                  <div className="flex items-center justify-center py-16 text-slate-500">
                     <FiLoader className="h-5 w-5 mr-2 animate-spin" />
                     Loading service breakdown…
                   </div>
                 )}
                 {/* Category Breakdown - FIXED Responsive Layout */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiPieChart className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiPieChart className="h-4 w-4 mr-2 text-navy-700" />
                       Revenue by Service Category
                     </h3>
                     {categoryChartData && serviceBreakdown?.length > 0 ? (
@@ -1107,11 +1111,11 @@ const StaffPerformance = () => {
                               <div key={idx} className="flex items-center justify-between text-sm">
                                 <div className="flex items-center">
                                   <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: categoryChartData.datasets[0].backgroundColor[idx] }} />
-                                  <span className="text-gray-700 truncate max-w-[120px]">{cat.service_name}</span>
+                                  <span className="text-slate-700 truncate max-w-[120px]">{cat.service_name}</span>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-semibold text-gray-900">{formatCurrency(cat.total_revenue)}</p>
-                                  <p className="text-xs text-gray-500">{cat.total_services} services</p>
+                                  <p className="font-semibold text-slate-900">{formatCurrency(cat.total_revenue)}</p>
+                                  <p className="text-xs text-slate-500">{cat.total_services} services</p>
                                 </div>
                               </div>
                             ))}
@@ -1119,48 +1123,48 @@ const StaffPerformance = () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="h-64 flex items-center justify-center text-gray-500">
+                      <div className="h-64 flex items-center justify-center text-slate-500">
                         <p>No service data available</p>
                       </div>
                     )}
                   </div>
                   
                   {/* Service Performance Metrics */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiActivity className="h-4 w-4 mr-2 text-navy-700" />
                       Service Performance Metrics
                     </h3>
                     {serviceBreakdown?.length > 0 ? (
                       <div className="space-y-4 max-h-96 overflow-y-auto">
                         {serviceBreakdown.map((service, idx) => (
-                          <div key={idx} className="border-b border-gray-100 pb-3 last:border-0">
+                          <div key={idx} className="border-b border-slate-100 pb-3 last:border-0">
                             <div className="flex items-center justify-between mb-2">
-                              <span className="font-medium text-gray-900 text-sm">{service.service_name}</span>
+                              <span className="font-medium text-slate-900 text-sm">{service.service_name}</span>
                               <span className="text-xs font-semibold text-emerald-600">{formatCurrency(service.total_revenue)}</span>
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-xs">
                               <div>
-                                <p className="text-gray-500">Services</p>
-                                <p className="font-semibold text-gray-700">{service.total_services}</p>
+                                <p className="text-slate-500">Services</p>
+                                <p className="font-semibold text-slate-700">{service.total_services}</p>
                               </div>
                               <div>
-                                <p className="text-gray-500">Avg Revenue</p>
-                                <p className="font-semibold text-gray-700">{formatCurrency(service.avg_revenue)}</p>
+                                <p className="text-slate-500">Avg Revenue</p>
+                                <p className="font-semibold text-slate-700">{formatCurrency(service.avg_revenue)}</p>
                               </div>
                               <div>
-                                <p className="text-gray-500">Profit</p>
-                                <p className="font-semibold text-indigo-600">{formatCurrency(service.total_profit)}</p>
+                                <p className="text-slate-500">Profit</p>
+                                <p className="font-semibold text-navy-700">{formatCurrency(service.total_profit)}</p>
                               </div>
                             </div>
                             <div className="mt-2">
                               <div className="flex justify-between text-xs mb-1">
-                                <span className="text-gray-500">Revenue Share</span>
-                                <span className="text-gray-500">{Math.round(service.revenue_percentage)}%</span>
+                                <span className="text-slate-500">Revenue Share</span>
+                                <span className="text-slate-500">{Math.round(service.revenue_percentage)}%</span>
                               </div>
-                              <div className="w-full bg-gray-200 rounded-full h-1.5">
+                              <div className="w-full bg-slate-200 rounded-full h-1.5">
                                 <div
-                                  className="bg-indigo-500 h-1.5 rounded-full"
+                                  className="bg-navy-500 h-1.5 rounded-full"
                                   style={{ width: `${service.revenue_percentage}%` }}
                                 />
                               </div>
@@ -1169,7 +1173,7 @@ const StaffPerformance = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="h-64 flex items-center justify-center text-gray-500">
+                      <div className="h-64 flex items-center justify-center text-slate-500">
                         <p>No service data available</p>
                       </div>
                     )}
@@ -1178,25 +1182,25 @@ const StaffPerformance = () => {
                 
                 {/* Top Customers */}
                 {data?.top_customers?.length > 0 && (
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiUsers className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiUsers className="h-4 w-4 mr-2 text-navy-700" />
                       Top Customers
                     </h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {data.top_customers.map((customer, idx) => (
-                        <div key={idx} className="border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow">
+                        <div key={idx} className="border border-slate-200 rounded-xl p-3 hover:shadow-md transition-shadow">
                           <div className="flex items-center space-x-3">
-                            <div className="w-10 h-10 bg-indigo-100 rounded-full flex items-center justify-center">
-                              <FiUser className="h-5 w-5 text-indigo-600" />
+                            <div className="w-10 h-10 bg-slate-200 rounded-full flex items-center justify-center">
+                              <FiUser className="h-5 w-5 text-navy-700" />
                             </div>
                             <div className="flex-1">
-                              <p className="font-medium text-gray-900 text-sm truncate">{customer.customer_name}</p>
-                              <p className="text-xs text-gray-500">{customer.phone}</p>
+                              <p className="font-medium text-slate-900 text-sm truncate">{customer.customer_name}</p>
+                              <p className="text-xs text-slate-500">{customer.phone}</p>
                             </div>
                             <div className="text-right">
                               <p className="font-bold text-emerald-600 text-sm">{formatCurrency(customer.total_spent)}</p>
-                              <p className="text-xs text-gray-500">{customer.service_count} services</p>
+                              <p className="text-xs text-slate-500">{customer.service_count} services</p>
                             </div>
                           </div>
                         </div>
@@ -1209,7 +1213,7 @@ const StaffPerformance = () => {
             
             {/* Achievements Tab */}
             {activeTab === 'achievements' && !achievements && (
-              <div className="flex items-center justify-center py-16 text-gray-500">
+              <div className="flex items-center justify-center py-16 text-slate-500">
                 <FiLoader className="h-5 w-5 mr-2 animate-spin" />
                 Loading achievements…
               </div>
@@ -1218,19 +1222,19 @@ const StaffPerformance = () => {
               <>
                 {/* Lifetime Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-gradient-to-br from-indigo-500 to-indigo-600 rounded-xl p-4 text-white">
-                    <p className="text-indigo-100 text-xs">Lifetime Services</p>
+                  <div className="bg-gradient-to-br from-navy-700 to-navy-800 rounded-xl p-4 text-white">
+                    <p className="text-slate-200 text-xs">Lifetime Services</p>
                     <p className="text-2xl font-bold">{achievements.lifetime?.total_services || 0}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-xl p-4 text-white">
+                  <div className="bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-xl p-4 text-white">
                     <p className="text-emerald-100 text-xs">Lifetime Revenue</p>
                     <p className="text-2xl font-bold">{formatCurrency(achievements.lifetime?.total_revenue || 0)}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl p-4 text-white">
-                    <p className="text-purple-100 text-xs">Unique Customers</p>
+                  <div className="bg-gradient-to-br from-navy-500 to-navy-700 rounded-xl p-4 text-white">
+                    <p className="text-slate-200 text-xs">Unique Customers</p>
                     <p className="text-2xl font-bold">{achievements.lifetime?.unique_customers || 0}</p>
                   </div>
-                  <div className="bg-gradient-to-br from-amber-500 to-amber-600 rounded-xl p-4 text-white">
+                  <div className="bg-gradient-to-br from-amber-600 to-amber-700 rounded-xl p-4 text-white">
                     <p className="text-amber-100 text-xs">Active Days</p>
                     <p className="text-2xl font-bold">{achievements.lifetime?.active_days || 0}</p>
                   </div>
@@ -1238,42 +1242,42 @@ const StaffPerformance = () => {
                 
                 {/* Additional Lifetime Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Collection Rate</p>
-                    <p className="text-lg font-bold text-gray-900">{fixed1(achievements.lifetime?.lifetime_collection_rate)}%</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 p-3 text-center">
+                    <p className="text-xs text-slate-500">Collection Rate</p>
+                    <p className="text-lg font-bold text-slate-900">{fixed1(achievements.lifetime?.lifetime_collection_rate)}%</p>
                   </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Weekly Streak</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.weekly_streak || 0} weeks</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 p-3 text-center">
+                    <p className="text-xs text-slate-500">Weekly Streak</p>
+                    <p className="text-lg font-bold text-slate-900">{achievements.lifetime?.weekly_streak || 0} weeks</p>
                   </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Revenue Streak</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.daily_revenue_streak || 0} days</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 p-3 text-center">
+                    <p className="text-xs text-slate-500">Revenue Streak</p>
+                    <p className="text-lg font-bold text-slate-900">{achievements.lifetime?.daily_revenue_streak || 0} days</p>
                   </div>
-                  <div className="bg-white rounded-xl border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-500">Categories Mastered</p>
-                    <p className="text-lg font-bold text-gray-900">{achievements.lifetime?.distinct_categories || 0}</p>
+                  <div className="bg-white rounded-2xl border border-slate-200 p-3 text-center">
+                    <p className="text-xs text-slate-500">Categories Mastered</p>
+                    <p className="text-lg font-bold text-slate-900">{achievements.lifetime?.distinct_categories || 0}</p>
                   </div>
                 </div>
                 
                 {/* Best Day & Top Customer */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   {achievements.best_day && (
-                    <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="p-2 bg-amber-100 rounded-lg">
+                        <div className="p-2 bg-amber-100 rounded-xl">
                           <FiZap className="h-5 w-5 text-amber-600" />
                         </div>
-                        <h3 className="font-semibold text-gray-900">Best Day Ever!</h3>
+                        <h3 className="font-semibold text-slate-900">Best Day Ever!</h3>
                       </div>
-                      <p className="text-sm text-gray-600">On {formatDate(achievements.best_day.date)}</p>
+                      <p className="text-sm text-slate-600">On {formatDate(achievements.best_day.date)}</p>
                       <div className="grid grid-cols-2 gap-3 mt-3">
                         <div>
-                          <p className="text-xs text-gray-500">Services</p>
-                          <p className="text-xl font-bold text-gray-900">{achievements.best_day.services_count}</p>
+                          <p className="text-xs text-slate-500">Services</p>
+                          <p className="text-xl font-bold text-slate-900">{achievements.best_day.services_count}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">Revenue</p>
+                          <p className="text-xs text-slate-500">Revenue</p>
                           <p className="text-xl font-bold text-emerald-600">{formatCurrency(achievements.best_day.revenue)}</p>
                         </div>
                       </div>
@@ -1281,21 +1285,21 @@ const StaffPerformance = () => {
                   )}
                   
                   {achievements.top_customer && (
-                    <div className="bg-white rounded-xl border border-gray-200 p-5">
+                    <div className="bg-white rounded-2xl border border-slate-200 p-5">
                       <div className="flex items-center space-x-3 mb-3">
-                        <div className="p-2 bg-purple-100 rounded-lg">
-                          <FiHeart className="h-5 w-5 text-purple-600" />
+                        <div className="p-2 bg-slate-100 rounded-xl">
+                          <FiHeart className="h-5 w-5 text-navy-700" />
                         </div>
-                        <h3 className="font-semibold text-gray-900">Top Customer</h3>
+                        <h3 className="font-semibold text-slate-900">Top Customer</h3>
                       </div>
-                      <p className="text-sm font-medium text-gray-900">{achievements.top_customer.name}</p>
+                      <p className="text-sm font-medium text-slate-900">{achievements.top_customer.name}</p>
                       <div className="grid grid-cols-2 gap-3 mt-3">
                         <div>
-                          <p className="text-xs text-gray-500">Services</p>
-                          <p className="text-xl font-bold text-gray-900">{achievements.top_customer.services_count}</p>
+                          <p className="text-xs text-slate-500">Services</p>
+                          <p className="text-xl font-bold text-slate-900">{achievements.top_customer.services_count}</p>
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">Total Spent</p>
+                          <p className="text-xs text-slate-500">Total Spent</p>
                           <p className="text-xl font-bold text-emerald-600">{formatCurrency(achievements.top_customer.total_spent)}</p>
                         </div>
                       </div>
@@ -1304,9 +1308,9 @@ const StaffPerformance = () => {
                 </div>
                 
                 {/* Achievements Grid */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                    <FiAward className="h-4 w-4 mr-2 text-yellow-500" />
+                <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                  <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                    <FiAward className="h-4 w-4 mr-2 text-amber-500" />
                     Your Achievements
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1323,31 +1327,31 @@ const StaffPerformance = () => {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* Attendance Stats */}
                 <div className="lg:col-span-1 space-y-4">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiClock className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiClock className="h-4 w-4 mr-2 text-navy-700" />
                       Attendance Summary
                     </h3>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Days</span>
-                        <span className="font-semibold text-gray-900">{attendance.total_days || 0}</span>
+                        <span className="text-slate-600 text-sm">Total Days</span>
+                        <span className="font-semibold text-slate-900">{attendance.total_days || 0}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Present Days</span>
+                        <span className="text-slate-600 text-sm">Present Days</span>
                         <span className="font-semibold text-emerald-600">{attendance.present_days || 0}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Absent Days</span>
+                        <span className="text-slate-600 text-sm">Absent Days</span>
                         <span className="font-semibold text-rose-600">{attendance.absent_days || 0}</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Late Days</span>
+                        <span className="text-slate-600 text-sm">Late Days</span>
                         <span className="font-semibold text-amber-600">{attendance.late_days || 0}</span>
                       </div>
-                      <div className="pt-3 border-t border-gray-100">
+                      <div className="pt-3 border-t border-slate-100">
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-600 text-sm">Attendance Rate</span>
+                          <span className="text-slate-600 text-sm">Attendance Rate</span>
                           <span className={`font-bold text-lg ${
                             attendance.attendance_rate >= 90 ? 'text-emerald-600' :
                             attendance.attendance_rate >= 75 ? 'text-amber-600' : 'text-rose-600'
@@ -1355,7 +1359,7 @@ const StaffPerformance = () => {
                             {attendance.attendance_rate || 0}%
                           </span>
                         </div>
-                        <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                        <div className="mt-2 w-full bg-slate-200 rounded-full h-2">
                           <div
                             className={`h-2 rounded-full ${
                               attendance.attendance_rate >= 90 ? 'bg-emerald-500' :
@@ -1368,27 +1372,27 @@ const StaffPerformance = () => {
                     </div>
                   </div>
                   
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiActivity className="h-4 w-4 mr-2 text-navy-700" />
                       Time Metrics
                     </h3>
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Hours Worked</span>
-                        <span className="font-semibold text-gray-900">{fixed1(attendance.total_hours)} hrs</span>
+                        <span className="text-slate-600 text-sm">Total Hours Worked</span>
+                        <span className="font-semibold text-slate-900">{fixed1(attendance.total_hours)} hrs</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Late Minutes</span>
+                        <span className="text-slate-600 text-sm">Total Late Minutes</span>
                         <span className="font-semibold text-rose-600">{attendance.total_late_minutes || 0} min</span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-gray-600 text-sm">Total Extra Minutes</span>
+                        <span className="text-slate-600 text-sm">Total Extra Minutes</span>
                         <span className="font-semibold text-emerald-600">{attendance.total_extra_minutes || 0} min</span>
                       </div>
-                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                        <span className="text-gray-600 text-sm">Avg Daily Hours</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+                        <span className="text-slate-600 text-sm">Avg Daily Hours</span>
+                        <span className="font-semibold text-slate-900">
                           {Number(attendance.present_days) > 0 ? fixed1(Number(attendance.total_hours) / Number(attendance.present_days)) : 0} hrs
                         </span>
                       </div>
@@ -1398,17 +1402,17 @@ const StaffPerformance = () => {
                 
                 {/* Weekly Breakdown */}
                 <div className="lg:col-span-2">
-                  <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <h3 className="font-semibold text-gray-900 text-sm flex items-center mb-4">
-                      <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
+                      <FiBarChart2 className="h-4 w-4 mr-2 text-navy-700" />
                       Weekly Performance
                     </h3>
                     {data?.weekly_breakdown?.length > 0 ? (
                       <div className="space-y-3">
                         {data.weekly_breakdown.map((week, idx) => (
-                          <div key={idx} className="border-b border-gray-100 pb-3 last:border-0">
+                          <div key={idx} className="border-b border-slate-100 pb-3 last:border-0">
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-sm font-medium text-gray-700">
+                              <span className="text-sm font-medium text-slate-700">
                                 Week {week.week_number} ({formatDate(week.week_start)})
                               </span>
                               <span className="text-sm font-bold text-emerald-600">
@@ -1416,14 +1420,14 @@ const StaffPerformance = () => {
                               </span>
                             </div>
                             <div className="flex items-center space-x-4 text-xs">
-                              <span className="text-gray-500">{week.services_count} services</span>
-                              <span className="text-gray-500">
+                              <span className="text-slate-500">{week.services_count} services</span>
+                              <span className="text-slate-500">
                                 Avg: {formatCurrency(Number(week.services_count) > 0 ? Number(week.total_collected) / Number(week.services_count) : 0)}
                               </span>
                             </div>
-                            <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+                            <div className="mt-2 w-full bg-slate-200 rounded-full h-1.5">
                               <div
-                                className="bg-indigo-500 h-1.5 rounded-full"
+                                className="bg-navy-500 h-1.5 rounded-full"
                                 style={{ width: `${Math.min((week.total_collected / (data?.summary?.total_collected || 1)) * 100, 100)}%` }}
                               />
                             </div>
@@ -1431,7 +1435,7 @@ const StaffPerformance = () => {
                         ))}
                       </div>
                     ) : (
-                      <div className="h-48 flex items-center justify-center text-gray-500">
+                      <div className="h-48 flex items-center justify-center text-slate-500">
                         <p>No weekly data available</p>
                       </div>
                     )}
@@ -1460,40 +1464,41 @@ const StaffPerformance = () => {
               exit={{ opacity: 0, scale: 0.95 }}
               className="fixed inset-0 z-50 flex items-center justify-center p-4"
             >
-              <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
-                <div className="border-b border-gray-200 p-4 flex items-center justify-between bg-gray-50">
+              <div role="dialog" aria-modal="true" aria-label="Daily activity log" className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[80vh] overflow-hidden">
+                <div className="border-b border-slate-200 p-4 flex items-center justify-between bg-slate-50">
                   <div>
-                    <h3 className="font-bold text-gray-900">Daily Activity Log</h3>
-                    <p className="text-sm text-gray-600">{formatDate(dailyLog.date)}</p>
+                    <h3 className="font-bold text-slate-900">Daily Activity Log</h3>
+                    <p className="text-sm text-slate-600">{formatDate(dailyLog.date)}</p>
                   </div>
                   <button
                     onClick={() => setShowDailyLog(false)}
-                    className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+                    aria-label="Close"
+                    className="p-2 hover:bg-slate-200 rounded-xl transition-colors"
                   >
-                    <FiX className="h-5 w-5 text-gray-500" />
+                    <FiX className="h-5 w-5 text-slate-500" />
                   </button>
                 </div>
                 
                 <div className="p-4 overflow-y-auto max-h-[calc(80vh-80px)]">
                   {/* Attendance Info */}
                   {dailyLog.attendance && (
-                    <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                      <h4 className="font-medium text-gray-900 text-sm mb-2">Attendance</h4>
+                    <div className="bg-slate-50 rounded-xl p-4 mb-4">
+                      <h4 className="font-medium text-slate-900 text-sm mb-2">Attendance</h4>
                       <div className="grid grid-cols-2 gap-3 text-sm">
                         <div>
-                          <span className="text-gray-500">Punch In:</span>
+                          <span className="text-slate-500">Punch In:</span>
                           <span className="ml-2 font-medium">{formatTime(dailyLog.attendance.punch_in)}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Punch Out:</span>
+                          <span className="text-slate-500">Punch Out:</span>
                           <span className="ml-2 font-medium">{formatTime(dailyLog.attendance.punch_out)}</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Hours Worked:</span>
+                          <span className="text-slate-500">Hours Worked:</span>
                           <span className="ml-2 font-medium">{fixed1(dailyLog.attendance.hours)} hrs</span>
                         </div>
                         <div>
-                          <span className="text-gray-500">Status:</span>
+                          <span className="text-slate-500">Status:</span>
                           <span className={`ml-2 font-medium ${
                             dailyLog.attendance.status === 'present' ? 'text-emerald-600' : 'text-rose-600'
                           }`}>
@@ -1507,21 +1512,21 @@ const StaffPerformance = () => {
                   {/* Services */}
                   {dailyLog.services?.length > 0 ? (
                     <div>
-                      <h4 className="font-medium text-gray-900 text-sm mb-3">
+                      <h4 className="font-medium text-slate-900 text-sm mb-3">
                         Services ({dailyLog.services.length})
                       </h4>
                       <div className="space-y-3">
                         {dailyLog.services.map((service, idx) => (
-                          <div key={idx} className="border border-gray-200 rounded-lg p-3">
+                          <div key={idx} className="border border-slate-200 rounded-xl p-3">
                             <div className="flex justify-between items-start">
                               <div>
-                                <p className="font-medium text-gray-900">{service.service_name}</p>
-                                <p className="text-sm text-gray-600">{service.customer_name}</p>
-                                <p className="text-xs text-gray-500 mt-1">{service.time}</p>
+                                <p className="font-medium text-slate-900">{service.service_name}</p>
+                                <p className="text-sm text-slate-600">{service.customer_name}</p>
+                                <p className="text-xs text-slate-500 mt-1">{service.time}</p>
                               </div>
                               <div className="text-right">
                                 <p className="font-bold text-emerald-600">{formatCurrency(service.amount)}</p>
-                                <p className="text-xs text-gray-500">Profit: {formatCurrency(service.service_charge)}</p>
+                                <p className="text-xs text-slate-500">Profit: {formatCurrency(service.service_charge)}</p>
                               </div>
                             </div>
                             {service.pending > 0 && (
@@ -1533,28 +1538,28 @@ const StaffPerformance = () => {
                         ))}
                       </div>
                       
-                      <div className="mt-4 p-3 bg-indigo-50 rounded-lg">
+                      <div className="mt-4 p-3 bg-slate-100 rounded-xl">
                         <div className="flex justify-between text-sm">
-                          <span className="font-medium text-gray-700">Daily Summary</span>
-                          <span className="font-bold text-indigo-600">{formatCurrency(dailyLog.summary.total_collected)}</span>
+                          <span className="font-medium text-slate-700">Daily Summary</span>
+                          <span className="font-bold text-navy-700">{formatCurrency(dailyLog.summary.total_collected)}</span>
                         </div>
                         <div className="flex justify-between text-sm mt-1">
-                          <span className="text-gray-600">Services:</span>
+                          <span className="text-slate-600">Services:</span>
                           <span className="font-medium">{dailyLog.summary.total_services}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Your Profit:</span>
+                          <span className="text-slate-600">Your Profit:</span>
                           <span className="font-medium text-emerald-600">{formatCurrency(dailyLog.summary.total_profit)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">Avg Transaction:</span>
+                          <span className="text-slate-600">Avg Transaction:</span>
                           <span className="font-medium">{formatCurrency(dailyLog.summary.avg_transaction)}</span>
                         </div>
                       </div>
                     </div>
                   ) : (
-                    <div className="text-center py-8 text-gray-500">
-                      <FiCalendar className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                    <div className="text-center py-8 text-slate-500">
+                      <FiCalendar className="h-12 w-12 mx-auto mb-3 text-slate-400" />
                       <p>No services recorded on this day</p>
                     </div>
                   )}
