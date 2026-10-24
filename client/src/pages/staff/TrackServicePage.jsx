@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -9,7 +9,8 @@ import {
   FiTrendingUp, FiMail, FiDownload, FiFilter, FiMoreHorizontal,
   FiShare2, FiPrinter, FiSettings, FiAward, FiTarget, FiPieChart,
   FiPlus, FiGrid, FiColumns, FiCreditCard, FiFlag, FiArrowLeft, FiMessageCircle,
-  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave, FiMove, FiHash
+  FiUpload, FiTrash2, FiEye, FiEyeOff, FiPaperclip, FiX, FiSave, FiMove, FiHash,
+  FiChevronLeft, FiChevronRight, FiExternalLink, FiSliders, FiList
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -33,6 +34,13 @@ import {
 } from '/src/services/serviceService';
 import { useParams, useNavigate } from 'react-router-dom';
 import NotesPanel from '/src/components/notes/NotesPanel';
+import ApplicationNumberField, { AppNoDisplay, cleanAppNo } from '/src/components/tracking/ApplicationNumberField';
+
+// Numbers typed with spaces ("2003 7006 3049") should still match the stored number
+const normalizeSearch = (term) => {
+  const t = String(term || '').trim();
+  return /^[\d\s-]+$/.test(t) ? t.replace(/[\s-]+/g, '') : t;
+};
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -63,7 +71,7 @@ class ErrorBoundary extends React.Component {
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-6 py-2 bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] transition-colors"
             >
               Refresh Page
             </button>
@@ -118,6 +126,47 @@ const formatTimelineDate = (dateString) => {
     return 'Invalid date';
   }
 };
+
+/**
+ * Date input for quick update. Keeps its own draft so the field shows what staff picked
+ * straight away, and saves once (after a short pause, on blur or Enter) instead of on every
+ * keystroke - typing "2026" used to fire saves for years 0002, 0020, 0202...
+ */
+function DeliveryDateField({ value, onSave, className }) {
+  const [draft, setDraft] = useState(value || '');
+  const timer = useRef(null);
+  const lastSaved = useRef(value || '');
+
+  useEffect(() => {
+    setDraft(value || '');
+    lastSaved.current = value || '';
+  }, [value]);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const isComplete = (v) => v === '' || (/^\d{4}-\d{2}-\d{2}$/.test(v) && +v.slice(0, 4) >= 2000 && +v.slice(0, 4) <= 2100);
+  const commit = (v) => {
+    clearTimeout(timer.current);
+    if (!isComplete(v) || v === lastSaved.current) return;
+    lastSaved.current = v;
+    onSave(v);
+  };
+
+  return (
+    <input
+      type="date"
+      value={draft}
+      onChange={(e) => {
+        const v = e.target.value;
+        setDraft(v);
+        clearTimeout(timer.current);
+        timer.current = setTimeout(() => commit(v), 700);
+      }}
+      onBlur={() => commit(draft)}
+      onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit(draft); } }}
+      className={className}
+    />
+  );
+}
 
 const TrackServicePage = () => {
   const { id } = useParams();
@@ -227,6 +276,25 @@ const TrackServicePage = () => {
   };
 
   const [activeTab, setActiveTab] = useState('overview');
+  // Width of the detail area (see renderServiceDetail)
+  const [detailWidth, setDetailWidth] = useState(0);
+  const [quickUpdateOpen, setQuickUpdateOpen] = useState(() => {
+    try { return localStorage.getItem('trackQuickUpdateOpen') !== '0'; } catch { return true; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('trackQuickUpdateOpen', quickUpdateOpen ? '1' : '0'); } catch { /* ignore */ }
+  }, [quickUpdateOpen]);
+  const detailObserver = useRef(null);
+  const detailMeasureRef = useCallback((node) => {
+    detailObserver.current?.disconnect();
+    detailObserver.current = null;
+    if (!node) return;
+    setDetailWidth(Math.round(node.getBoundingClientRect().width));
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(([entry]) => setDetailWidth(Math.round(entry.contentRect.width)));
+    ro.observe(node);
+    detailObserver.current = ro;
+  }, []);
   const [trackingFormData, setTrackingFormData] = useState({
     applicationNumber: '',
     currentStep: '',
@@ -239,7 +307,21 @@ const TrackServicePage = () => {
     priority: 'medium'
   });
   
-  const [viewMode, setViewMode] = useState('grid');
+  const [viewMode, setViewModeState] = useState(() => {
+    try { return localStorage.getItem('trackServiceView') || 'queue'; } catch { return 'queue'; }
+  });
+  const setViewMode = (mode) => {
+    setViewModeState(mode);
+    try { localStorage.setItem('trackServiceView', mode); } catch { /* storage unavailable */ }
+  };
+  const [exportOpen, setExportOpen] = useState(false);
+
+  useEffect(() => {
+    if (id) return;
+    const onKey = (e) => { if (e.key === 'Escape') setSelectedService(null); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [id]);
   const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const [draggedServiceId, setDraggedServiceId] = useState(null);
@@ -271,7 +353,7 @@ const TrackServicePage = () => {
 
   useEffect(() => {
     if (selectedService && detailPanelRef.current) {
-      detailPanelRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      detailPanelRef.current.scrollTop = 0;
     }
   }, [selectedService?.id]);
 
@@ -405,7 +487,8 @@ const TrackServicePage = () => {
     try {
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return '';
-      return date.toISOString().split('T')[0];
+      // India date, not UTC: toISOString() turned 25 Oct (IST midnight) into 24 Oct
+      return date.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
     } catch (error) {
       console.error('Error formatting date for input:', error);
       return '';
@@ -431,7 +514,8 @@ const TrackServicePage = () => {
 
       // Grouping date must strictly use created_at to avoid moving items to "today" when updated
       const createdDate = new Date(trackingEntry.created_at || trackingEntry.updated_at || Date.now());
-      const dateStr = createdDate.toISOString().split('T')[0];
+      // Group by the IST calendar day (toISOString would use UTC and shift early-morning entries)
+      const dateStr = createdDate.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
       
       const updatedDate = new Date(trackingEntry.updated_at || Date.now());
       const timeStr = updatedDate.toTimeString().split(' ')[0].substring(0, 5);
@@ -447,7 +531,7 @@ const TrackServicePage = () => {
         id: trackingEntry.id.toString(),
         serviceEntryId: trackingEntry.service_entry_id?.toString(),
         trackingId: `TR-${trackingEntry.id}`,
-        applicationNumber: trackingEntry.application_number || `APP${trackingEntry.service_entry_id}`,
+        applicationNumber: trackingEntry.application_number || '',
         customerName: trackingEntry.customer_name || 'Unknown',
         customerPhone: trackingEntry.phone || 'N/A',
         customerEmail: trackingEntry.email || `${trackingEntry.customer_name?.toLowerCase().replace(/\s+/g, '') || 'unknown'}@example.com`,
@@ -476,7 +560,7 @@ const TrackServicePage = () => {
         createdAt: trackingEntry.created_at || trackingEntry.updated_at,
         updatedAt: trackingEntry.updated_at,
         duration: null,
-        notes: trackingEntry.notes || 'No notes available',
+        notes: trackingEntry.notes || '',
         rating: null,
         followUpRequired: trackingEntry.status === 'rejected' || trackingEntry.status === 'resubmit',
         paymentStatus: paymentStatus,
@@ -513,10 +597,10 @@ const TrackServicePage = () => {
         date: dateFilter || undefined,
         service: serviceFilter === 'all' ? undefined : serviceFilter,
         subcategory: subcategoryFilter === 'all' ? undefined : subcategoryFilter,
-        status: statusFilter === 'all' ? undefined : apiStatus,
+        // status is intentionally NOT sent: the status tabs show a count for every status
         staff: staffFilter === 'all' ? undefined : staffFilter,
       });
-    setGlobalStats(data);
+    setGlobalStats(data || {});
   };
 
   const fetchActivityHistory = async (trackingId) => {
@@ -635,7 +719,7 @@ const TrackServicePage = () => {
         const assignedStaff = staffData.find(staff => staff.id === transformed[0].assignedToId);
         
         setTrackingFormData({
-          applicationNumber: transformed[0].applicationNumber || `APP${transformed[0].serviceEntryId}`,
+          applicationNumber: transformed[0].applicationNumber || '',
           currentStep: transformed[0].currentStep || 'Submitted',
           estimatedDelivery: formatDateForInput(transformed[0].rawEstimatedDelivery) || '',
           averageTime: transformed[0].averageTime || '7 days',
@@ -679,7 +763,7 @@ const TrackServicePage = () => {
         status: statusFilter === 'all' ? undefined : apiStatus,
         staff: staffFilter === 'all' ? undefined : staffFilter,
         expiry: expiryFilter === 'all' ? undefined : expiryFilter,
-        search: debouncedSearch || undefined,
+        search: normalizeSearch(debouncedSearch) || undefined,
         aadhaar: debouncedAadhaar || undefined
       };
 
@@ -713,6 +797,9 @@ const TrackServicePage = () => {
       if (subcategoryFilter !== 'all') {
         transformedServices = transformedServices.filter(s => String(s.subcategoryId) === String(subcategoryFilter));
       }
+
+      // Newest first: the same order the queue/table shows, so Prev/Next walks the visible list
+      transformedServices.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
 
       setServices(transformedServices);
       setIsSidebarVisible(true);
@@ -802,20 +889,25 @@ const TrackServicePage = () => {
     }
   };
 
+  // Turns a backend 400 ("Invalid fields" + details) into a readable message
+  const apiErrorText = (error) => {
+    const data = error?.response?.data;
+    if (Array.isArray(data?.details) && data.details.length) return data.details.join(', ');
+    return data?.error || error?.message || 'Unknown error';
+  };
+
   const handleInlineTrackingUpdate = async (service, updates) => {
+    const before = { ...service };
     try {
-      const payload = {
-        applicationNumber: updates.applicationNumber !== undefined ? updates.applicationNumber : service.applicationNumber,
-        currentStep: updates.currentStep !== undefined ? updates.currentStep : service.currentStep,
-        estimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : service.rawEstimatedDelivery,
-        averageTime: service.averageTime || '7 days',
-        notes: service.notes || null,
-        assignedTo: updates.assignedTo !== undefined ? (updates.assignedTo ? parseInt(updates.assignedTo) : null) : service.assignedToId,
-        aadhaar: service.aadhaar || null,
-        email: service.email || null,
-        priority: updates.priority !== undefined ? updates.priority : service.priority,
-        progress: updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress
-      };
+      // Send ONLY what changed. Re-sending every field meant one bad old value
+      // (e.g. an Aadhaar saved with spaces) blocked every quick update with a 400.
+      const payload = {};
+      if (updates.applicationNumber !== undefined) payload.applicationNumber = updates.applicationNumber;
+      if (updates.currentStep !== undefined) payload.currentStep = updates.currentStep;
+      if (updates.estimatedDelivery !== undefined) payload.estimatedDelivery = updates.estimatedDelivery || null;
+      if (updates.assignedTo !== undefined) payload.assignedTo = updates.assignedTo ? parseInt(updates.assignedTo) : null;
+      if (updates.priority !== undefined) payload.priority = updates.priority;
+      payload.progress = updates.currentStep ? calculateProgress(service.status, updates.currentStep) : service.progress;
 
       // Handle Optimistic UI injection for Timeline
       const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
@@ -844,31 +936,23 @@ const TrackServicePage = () => {
       if (updates.applicationNumber !== undefined) service.applicationNumber = updates.applicationNumber;
       if (updates.currentStep !== undefined) service.currentStep = updates.currentStep;
 
-      setServices(prevServices => prevServices.map(s => {
-        if (s.id === service.id) {
-          return {
-            ...s,
-            ...updates,
-            steps: updates.steps || s.steps,
-            updatedAt: updates.updatedAt || s.updatedAt,
-            assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
-            assignedToId: updates.assignedTo !== undefined ? parseInt(updates.assignedTo) : s.assignedToId,
-            rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
-            estimatedDelivery: updates.estimatedDelivery !== undefined ? formatDate(updates.estimatedDelivery) : s.estimatedDelivery,
-            progress: payload.progress
-          };
-        }
-        return s;
-      }));
-      
+      // One merge used for both the list and the open detail, so they never disagree
+      const applyUpdates = (s) => ({
+        ...s,
+        ...updates,
+        steps: updates.steps || s.steps,
+        updatedAt: updates.updatedAt || s.updatedAt,
+        assignedTo: updates.assignedTo !== undefined ? (staffList.find(staff => staff.id === parseInt(updates.assignedTo))?.name || 'Unassigned') : s.assignedTo,
+        assignedToId: updates.assignedTo !== undefined ? (updates.assignedTo ? parseInt(updates.assignedTo) : null) : s.assignedToId,
+        rawEstimatedDelivery: updates.estimatedDelivery !== undefined ? updates.estimatedDelivery : s.rawEstimatedDelivery,
+        estimatedDelivery: updates.estimatedDelivery !== undefined ? formatDate(updates.estimatedDelivery) : s.estimatedDelivery,
+        progress: payload.progress
+      });
+
+      setServices(prevServices => prevServices.map(s => (s.id === service.id ? applyUpdates(s) : s)));
+
       if (selectedService?.id === service.id) {
-        setSelectedService(prev => ({ 
-            ...prev, 
-            ...updates, 
-            steps: updates.steps || prev.steps,
-            updatedAt: updates.updatedAt || prev.updatedAt,
-            progress: payload.progress 
-        }));
+        setSelectedService(prev => applyUpdates(prev));
         setTrackingFormData(prev => ({ ...prev, ...updates }));
       }
 
@@ -878,7 +962,11 @@ const TrackServicePage = () => {
 
     } catch (error) {
       console.error('Error updating details:', error);
-      toast.error('Failed to update tracking details');
+      // Undo the optimistic change so the screen shows what is really saved
+      Object.assign(service, before);
+      setServices(prev => prev.map(s => (s.id === before.id ? before : s)));
+      if (selectedService?.id === before.id) setSelectedService(before);
+      toast.error('Not saved: ' + apiErrorText(error));
     }
   };
 
@@ -923,7 +1011,7 @@ const TrackServicePage = () => {
       const newProgress = calculateProgress(selectedService.status, trackingFormData.currentStep);
       
       const payload = {
-        applicationNumber: trackingFormData.applicationNumber || null,
+        applicationNumber: cleanAppNo(trackingFormData.applicationNumber) || null,
         currentStep: trackingFormData.currentStep || null,
         estimatedDelivery: trackingFormData.estimatedDelivery || null,
         averageTime: trackingFormData.averageTime || '7 days',
@@ -964,7 +1052,7 @@ const TrackServicePage = () => {
       const updatedServices = services.map(service =>
         service.id === selectedService.id ? {
           ...service,
-          applicationNumber: trackingFormData.applicationNumber || `APP${service.serviceEntryId}`,
+          applicationNumber: trackingFormData.applicationNumber || '',
           currentStep: trackingFormData.currentStep || 'Submitted',
           estimatedDelivery: formatDate(trackingFormData.estimatedDelivery),
           averageTime: trackingFormData.averageTime || '7 days',
@@ -984,7 +1072,7 @@ const TrackServicePage = () => {
       setServices(updatedServices);
       setSelectedService({
         ...selectedService,
-        applicationNumber: trackingFormData.applicationNumber || `APP${selectedService.serviceEntryId}`,
+        applicationNumber: trackingFormData.applicationNumber || '',
         currentStep: trackingFormData.currentStep || 'Submitted',
         estimatedDelivery: formatDate(trackingFormData.estimatedDelivery),
         averageTime: trackingFormData.averageTime || '7 days',
@@ -1003,7 +1091,7 @@ const TrackServicePage = () => {
       setActiveTab('overview');
     } catch (error) {
       console.error('TrackServicePage: Error updating tracking details:', error);
-      toast.error('Failed to update tracking details: ' + (error.response?.data?.error || error.message));
+      toast.error('Not saved: ' + apiErrorText(error));
     }
   };
 
@@ -1013,7 +1101,7 @@ const TrackServicePage = () => {
     await fetchDocuments(service.id);
 
     setTrackingFormData({
-      applicationNumber: service.applicationNumber || `APP${service.serviceEntryId}`,
+      applicationNumber: service.applicationNumber || '',
       currentStep: service.currentStep || 'Submitted',
       estimatedDelivery: formatDateForInput(service.rawEstimatedDelivery) || '',
       averageTime: service.averageTime || '7 days',
@@ -1039,178 +1127,543 @@ const TrackServicePage = () => {
     await handleServiceSelect(services[nextIndex], true);
   };
 
-  const renderDetailPane = () => {
-    if (!selectedService) {
-      return (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center shadow-sm">
-          <div className="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center mx-auto mb-4">
-            <FiUser className="h-10 w-10 text-gray-400" />
+
+  /* =====================================================================
+     DETAIL VIEW (shared by the single-application page and the side panel)
+  ===================================================================== */
+
+  const STEP_ORDER = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
+
+  const getDisplaySteps = (service) => {
+    if (service.steps && service.steps.length > 0) {
+      return [...service.steps].sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
+    }
+    const currentOrder = STEP_ORDER[service.currentStep] || 1;
+    return [
+      { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
+      { id: 2, name: 'Initial Review', completed: currentOrder >= 2, step_order: 2, date: currentOrder === 2 ? service.updatedAt : null },
+      { id: 3, name: 'Document Verification', completed: currentOrder >= 3, step_order: 3, date: currentOrder === 3 ? service.updatedAt : null },
+      { id: 4, name: 'Final Approval', completed: currentOrder >= 4, step_order: 4, date: currentOrder >= 4 ? service.updatedAt : null }
+    ];
+  };
+
+  const StatusPill = ({ status, size = 'sm' }) => {
+    const cfg = statusConfig[status] || statusConfig['Pending'];
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full font-semibold border ${cfg.bg} ${cfg.color} ${cfg.border} ${
+        size === 'lg' ? 'px-3 py-1 text-xs' : 'px-2 py-0.5 text-[11px]'
+      }`}>
+        <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+        {status}
+      </span>
+    );
+  };
+
+  const PriorityPill = ({ priority }) => {
+    const cfg = priorityConfig[priority || 'medium'] || priorityConfig.medium;
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${cfg.bg} ${cfg.border} ${cfg.color}`}>
+        <FiFlag className="h-3 w-3" /> {cfg.label}
+      </span>
+    );
+  };
+
+  const sectionLabel = 'text-xs font-semibold text-gray-500';
+  const fieldCls = 'w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]';
+
+  // Header: who, what, contact, main actions
+  const renderDetailHeader = (service) => (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+        <div className="flex items-start gap-4 min-w-0">
+          <div className="w-12 h-12 rounded-xl bg-[#172a45] text-white flex items-center justify-center text-lg font-bold flex-shrink-0">
+            {(service.customerName || '?').charAt(0).toUpperCase()}
           </div>
-          <h3 className="text-xl font-semibold text-gray-900 mb-2">No Service Selected</h3>
-          <p className="text-gray-500 max-w-sm mx-auto">
-            Select a service from the list to view detailed information
-          </p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-xl font-bold text-gray-900 truncate">{service.customerName || 'Unknown'}</h2>
+              <StatusPill status={service.status} size="lg" />
+              <span className={`px-2 py-0.5 text-[11px] font-semibold rounded-full border ${
+                service.workSource === 'online'
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-blue-50 text-blue-700 border-blue-200'
+              }`}>
+                {service.workSource === 'online' ? 'Online booking' : 'Walk-in'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-700 mt-1 font-medium">
+              {service.serviceType}
+              {service.subcategoryName && service.subcategoryName !== 'N/A' && (
+                <span className="text-gray-500 font-normal"> · {service.subcategoryName}</span>
+              )}
+            </p>
+            <div className="flex items-center gap-x-4 gap-y-1 mt-2 flex-wrap text-xs text-gray-600">
+              <span className="inline-flex items-center gap-1 font-mono font-semibold text-gray-800">
+                <FiHash className="h-3.5 w-3.5 text-[#172a45]" />{service.trackingId}
+              </span>
+              {service.applicationNumber && (
+                <span className="inline-flex items-center gap-1 text-gray-800">
+                  <span className="text-gray-500">App no.</span>
+                  <AppNoDisplay value={service.applicationNumber} className="font-semibold" />
+                </span>
+              )}
+              <a href={`tel:${service.phone}`} className="inline-flex items-center gap-1 hover:text-[#172a45]">
+                <FiPhone className="h-3.5 w-3.5" />{service.phone || 'N/A'}
+              </a>
+              {service.email && (
+                <span className="inline-flex items-center gap-1"><FiMail className="h-3.5 w-3.5" />{service.email}</span>
+              )}
+              {service.aadhaar && (
+                <span className="inline-flex items-center gap-1"><FiCreditCard className="h-3.5 w-3.5" />{service.aadhaar}</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <button
+            onClick={() => handleNotifyCustomer(service)}
+            className="px-3 py-2 text-sm font-medium bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center gap-1.5 shadow-sm"
+            title="Send the current status to the customer on WhatsApp"
+          >
+            <FiMessageSquare className="h-4 w-4" /> Notify
+          </button>
+          <button
+            onClick={() => navigate(`/dashboard/staff/service-workspace/${service.id}`)}
+            className="px-3 py-2 text-sm font-medium bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+          >
+            <FiGrid className="h-4 w-4" /> Workspace
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Quick update panel: everything staff change day to day, one click each.
+  // layout = 'side' (narrow column next to the tabs) or 'top' (wide strip above the tabs,
+  // used when the detail area is too narrow for a side column, e.g. the drawer or a laptop screen).
+  const renderQuickUpdate = (service, { layout = 'side', cols = 1 } = {}) => {
+    const steps = stepOptions.map(s => s.value);
+    const currentOrder = STEP_ORDER[service.currentStep] || 1;
+
+    const statusBlock = (
+      <>
+          {/* Status */}
+          <div>
+            <p className={`${sectionLabel} mb-2`}>Status</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {Object.keys(statusConfig).map(statusKey => {
+                const cfg = statusConfig[statusKey];
+                const active = service.status === statusKey;
+                return (
+                  <button
+                    key={statusKey}
+                    onClick={() => !active && handleUpdateStatus(service.id, statusKey)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                      active
+                        ? `${cfg.bg} ${cfg.color} ${cfg.border} ring-2 ring-offset-1 ring-current cursor-default`
+                        : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
+                    {statusKey}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+      </>
+    );
+    const stepBlock = (
+      <>
+          {/* Step */}
+          <div>
+            <p className={`${sectionLabel} mb-2`}>Current step</p>
+            <div className="space-y-1">
+              {steps.map((step, i) => {
+                const order = i + 1;
+                const done = order < currentOrder;
+                const current = order === currentOrder;
+                return (
+                  <button
+                    key={step}
+                    onClick={() => !current && handleInlineTrackingUpdate(service, { currentStep: step })}
+                    className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs text-left transition ${
+                      current ? 'bg-blue-50 text-[#172a45] font-bold' : 'hover:bg-gray-50 text-gray-600'
+                    }`}
+                  >
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0 ${
+                      done ? 'bg-emerald-500 text-white' : current ? 'bg-[#172a45] text-white' : 'bg-gray-200 text-gray-500'
+                    }`}>
+                      {done ? <FiCheckCircle className="h-3 w-3" /> : order}
+                    </span>
+                    {step}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+      </>
+    );
+    const appNoBlock = (
+      <>
+          {/* App number */}
+          <div>
+            <label className={`${sectionLabel} block mb-1.5`}>Application number</label>
+            <ApplicationNumberField
+              key={service.id}
+              value={service.applicationNumber || ''}
+              placeholder="Type or paste the number"
+              onSave={(v) => handleInlineTrackingUpdate(service, { applicationNumber: v })}
+            />
+          </div>
+      </>
+    );
+    const assignedBlock = (
+      <>
+          {/* Assigned */}
+          <div>
+            <label className={`${sectionLabel} block mb-1.5`}>Assigned to</label>
+            <select
+              value={service.assignedToId || ''}
+              onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
+              className={fieldCls}
+            >
+              <option value="">Unassigned</option>
+              {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
+            </select>
+          </div>
+      </>
+    );
+    const deliveryBlock = (
+      <>
+          {/* Delivery */}
+          <div>
+            <label className={`${sectionLabel} block mb-1.5`}>Estimated delivery</label>
+            <DeliveryDateField
+              key={service.id}
+              value={formatDateForInput(service.rawEstimatedDelivery)}
+              onSave={(v) => handleInlineTrackingUpdate(service, { estimatedDelivery: v })}
+              className={fieldCls}
+            />
+          </div>
+      </>
+    );
+    const priorityBlock = (
+      <>
+          {/* Priority */}
+          <div>
+            <p className={`${sectionLabel} mb-1.5`}>Priority</p>
+            <div className="flex bg-gray-100 p-1 rounded-lg">
+              {priorityOptions.map(p => {
+                const active = (service.priority || 'medium') === p.value;
+                return (
+                  <button
+                    key={p.value}
+                    onClick={() => !active && handleInlineTrackingUpdate(service, { priority: p.value })}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition ${
+                      active ? `bg-white shadow-sm ${priorityConfig[p.value].color}` : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    {p.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+      </>
+    );
+    const paymentCard = (
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+              <FiDollarSign className="h-4 w-4 text-emerald-600" /> Payment
+            </h3>
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+              (paymentStatusConfig[service.paymentStatus] || paymentStatusConfig.default).bg
+            } ${(paymentStatusConfig[service.paymentStatus] || paymentStatusConfig.default).color} ${
+              (paymentStatusConfig[service.paymentStatus] || paymentStatusConfig.default).border
+            }`}>
+              {service.paymentStatus}
+            </span>
+          </div>
+          <div className="space-y-1.5 text-sm">
+            <div className="flex justify-between text-gray-600"><span>Service charge</span><span className="font-mono">₹{(service.serviceCharge || 0).toFixed(2)}</span></div>
+            <div className="flex justify-between text-gray-600"><span>Department charge</span><span className="font-mono">₹{(service.departmentCharge || 0).toFixed(2)}</span></div>
+            <div className="flex justify-between font-bold text-gray-900 border-t border-gray-200 pt-1.5 mt-1.5"><span>Total</span><span className="font-mono">₹{(service.totalCharge || 0).toFixed(2)}</span></div>
+          </div>
+          {service.payments?.length > 0 && (
+            <p className="text-[11px] text-gray-500 mt-2 leading-relaxed">{service.paymentDetails}</p>
+          )}
+        </div>
+    );
+
+    const title = (
+      <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+        <FiEdit className="h-4 w-4 text-[#172a45]" /> Quick update
+      </h3>
+    );
+
+    if (layout === 'top') {
+      const gridCls = cols >= 3 ? 'grid-cols-3' : cols === 2 ? 'grid-cols-2' : 'grid-cols-1';
+      return (
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setQuickUpdateOpen(o => !o)}
+            className="w-full flex items-center justify-between gap-2 px-4 py-3"
+            aria-expanded={quickUpdateOpen}
+          >
+            {title}
+            <span className="flex items-center gap-2 text-xs text-gray-500">
+              {!quickUpdateOpen && <StatusPill status={service.status} />}
+              <FiChevronDown className={`h-4 w-4 transition-transform ${quickUpdateOpen ? 'rotate-180' : ''}`} />
+            </span>
+          </button>
+          {quickUpdateOpen && (
+            <div className={`grid ${gridCls} gap-x-5 gap-y-4 px-4 pb-4 border-t border-gray-100 pt-4`}>
+              <div className="space-y-4 min-w-0">{statusBlock}{priorityBlock}</div>
+              <div className="min-w-0">{stepBlock}</div>
+              {cols === 2 ? (
+                <div className="col-span-2 grid grid-cols-2 gap-x-5 gap-y-4">
+                  <div className="col-span-2">{appNoBlock}</div>
+                  <div>{assignedBlock}</div>
+                  <div>{deliveryBlock}</div>
+                </div>
+              ) : (
+                <div className="space-y-4 min-w-0">
+                  {appNoBlock}
+                  {assignedBlock}
+                  {deliveryBlock}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       );
     }
 
     return (
-      <div className="space-y-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
-            <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
-                <FiUser className="h-8 w-8 text-white" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900">{selectedService.customerName || 'Unknown'}</h2>
-                <div className="flex items-center space-x-4 mt-2 flex-wrap gap-y-2">
-  
-                {/* Tracking ID Display */}
-                <div className="flex items-center space-x-1 text-gray-800 bg-gray-100 px-2 py-0.5 rounded-md border border-gray-200">
-                  <FiHash className="h-3.5 w-3.5 text-indigo-600" />
-                  <span className="text-sm font-bold">{selectedService.trackingId}</span>
-                </div>
-
-                <div className="flex items-center space-x-1 text-gray-600">
-                  <FiPhone className="h-4 w-4" />
-                  <span className="text-sm">{selectedService.phone || 'N/A'}</span>
-                </div>
-                <div className="flex items-center space-x-1 text-gray-600">
-                  <FiMail className="h-4 w-4" />
-                  <span className="text-sm">{selectedService.email || 'N/A'}</span>
-                </div>
-                <div className="flex items-center space-x-1 text-gray-600">
-                  <FiCreditCard className="h-4 w-4" />
-                  <span className="text-sm">{selectedService.aadhaar || 'N/A'}</span>
-                </div>
-              </div>
-              </div>
-            </div>
-            <div className="flex space-x-2 mt-4 lg:mt-0">
-              <button
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-                onClick={() => handleNotifyCustomer(selectedService)}
-              >
-                <FiMessageSquare className="h-4 w-4" />
-                <span>Notify</span>
-              </button>
-              <button
-                onClick={() => navigate(`/dashboard/staff/service-workspace/${selectedService.id}`)}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-              >
-                <FiGrid className="h-4 w-4" />
-                <span>Workspace</span>
-              </button>
-              <button 
-                onClick={() => setActiveTab('tracking')}
-                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200 shadow-sm"
-              >
-                <FiEdit className="h-4 w-4" />
-                <span>Edit</span>
-              </button>
-              <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatItem label="Application No." value={selectedService.applicationNumber || 'N/A'} />
-            <StatItem label="Current Step" value={selectedService.currentStep || 'N/A'} />
-            <StatItem label="Est. Delivery" value={selectedService.estimatedDelivery || 'Not set'} />
-            <StatItem label="Assigned To" value={selectedService.assignedTo || 'Unassigned'} />
-          </div>
+      <div className="space-y-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm space-y-4">
+          {title}
+          {statusBlock}
+          {stepBlock}
+          {appNoBlock}
+          {assignedBlock}
+          {deliveryBlock}
+          {priorityBlock}
         </div>
-        
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-          <div className="border-b border-gray-200 bg-gray-50/50">
-            <nav className="flex -mb-px overflow-x-auto hide-scrollbar">
-              {['overview', 'tracking', 'documents', 'history', 'discussion'].map((tab) => (
-                <button
-                  key={tab}
-                  className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
-                    activeTab === tab
-                      ? 'border-indigo-500 text-indigo-600 bg-white'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
-                  }`}
-                  onClick={() => setActiveTab(tab)}
-                >
-                  {tab.charAt(0).toUpperCase() + tab.slice(1)}
-                </button>
-              ))}
-            </nav>
-          </div>
-          <div className="p-6">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={activeTab}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.2 }}
-              >
-                {activeTab === 'overview' && (
-                  <OverviewView 
-                    service={selectedService} 
-                    onUpdateStatus={handleUpdateStatus}
-                    priorityConfig={priorityConfig}
-                  />
-                )}
-                {activeTab === 'tracking' && (
-                  <TrackingView 
-                    service={selectedService}
-                    formData={trackingFormData}
-                    onFormChange={handleTrackingFormChange}
-                    staffList={staffList}
-                    stepOptions={stepOptions}
-                    priorityOptions={priorityOptions}
-                    onSave={handleTrackingFormSubmit}
-                    onCancel={() => setActiveTab('overview')}
-                  />
-                )}
-                {activeTab === 'documents' && (
-                  <EnhancedDocumentsView 
-                    documents={documents}
-                    documentsLoading={documentsLoading}
-                    uploadingDocument={uploadingDocument}
-                    onUpload={(file, label, visible, remark) => handleUploadDocument(selectedService.id, file, label, visible, remark)}
-                    onUpdateRemark={(docId, remark) => handleUpdateDocumentRemark(selectedService.id, docId, remark)}
-                    onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(selectedService.id, docId, visible)}
-                    onDelete={(docId) => handleDeleteDocument(selectedService.id, docId)}
-                  />
-                )}
-                {activeTab === 'history' && (
-                  <HistoryView
-                    activityHistory={activityHistory}
-                    activityLoading={activityLoading}
-                  />
-                )}
-                {activeTab === 'discussion' && (
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FiMessageCircle className="h-5 w-5 text-indigo-600" />
-                      <h3 className="font-semibold text-gray-900">Internal Discussion & Tasks</h3>
-                    </div>
-                    <p className="text-sm text-gray-500 mb-4">
-                      These notes are strictly internal. Tag staff using @ to assign them tasks.
-                    </p>
-                    <div className="bg-gray-50 rounded-xl p-2 sm:p-4 border border-gray-100">
-                      <NotesPanel 
-                        contextType="service_entry" 
-                        contextId={selectedService.serviceEntryId} 
-                        embedded={true} 
-                        showHeader={false}
-                      />
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-        </div>
+        {paymentCard}
       </div>
     );
   };
+
+  const renderPaymentCard = (service) => {
+    const cfg = paymentStatusConfig[service.paymentStatus] || paymentStatusConfig.default;
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 px-4 py-3 shadow-sm flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-sm">
+        <span className="flex items-center gap-2 font-bold text-gray-900">
+          <FiDollarSign className="h-4 w-4 text-emerald-600" /> Payment
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${cfg.bg} ${cfg.color} ${cfg.border}`}>{service.paymentStatus}</span>
+        </span>
+        <span className="flex flex-wrap gap-x-5 gap-y-1 text-gray-600">
+          <span>Service <span className="font-mono">₹{(service.serviceCharge || 0).toFixed(2)}</span></span>
+          <span>Department <span className="font-mono">₹{(service.departmentCharge || 0).toFixed(2)}</span></span>
+          <span className="font-bold text-gray-900">Total <span className="font-mono">₹{(service.totalCharge || 0).toFixed(2)}</span></span>
+        </span>
+      </div>
+    );
+  };
+
+  // Overview tab: progress, timeline, details, review
+  const renderOverview = (service) => {
+    const displaySteps = getDisplaySteps(service);
+    return (
+      <div className="space-y-6">
+        {/* Progress stepper */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-gray-900">Progress</h3>
+            <span className="text-sm font-bold text-[#172a45]">{service.progress}%</span>
+          </div>
+          <div className="w-full bg-gray-100 rounded-full h-2 mb-4">
+            <div className="bg-[#172a45] h-2 rounded-full transition-all duration-500" style={{ width: `${service.progress}%` }} />
+          </div>
+          <ol className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            {displaySteps.map((step, i) => {
+              const current = step.name === service.currentStep;
+              return (
+                <li key={step.id || i} className={`rounded-lg border p-3 ${
+                  current ? 'border-blue-300 bg-blue-50' : step.completed ? 'border-emerald-200 bg-emerald-50/50' : 'border-gray-200 bg-gray-50'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                      step.completed ? 'bg-emerald-500 text-white' : current ? 'bg-[#172a45] text-white' : 'bg-gray-300 text-white'
+                    }`}>
+                      {step.completed ? <FiCheckCircle className="h-3 w-3" /> : i + 1}
+                    </span>
+                    <span className={`text-xs font-semibold ${step.completed || current ? 'text-gray-900' : 'text-gray-500'}`}>{step.name}</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-1.5 pl-7">
+                    {step.completed ? (step.date ? formatTimelineDate(step.date) : 'Done') : current ? 'In this step' : 'Not started'}
+                  </p>
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+
+        {/* Details */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-bold text-gray-900 mb-2">Service details</h3>
+            <dl className="divide-y divide-gray-100 text-sm">
+              {[
+                ['Application no.', <AppNoDisplay value={service.applicationNumber} empty="Not added yet" />],
+                ['Created', formatDate(service.createdAt)],
+                ['Last updated', formatDate(service.updatedAt)],
+                ['Estimated delivery', service.estimatedDelivery || 'Not set'],
+                ['Average time', service.averageTime || 'Not set'],
+                ['Expiry date', service.expiryDate || 'N/A'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between py-1.5 gap-4">
+                  <dt className="text-gray-500">{k}</dt>
+                  <dd className="font-medium text-gray-900 text-right">{v}</dd>
+                </div>
+              ))}
+              <div className="flex justify-between py-1.5 gap-4">
+                <dt className="text-gray-500">Priority</dt>
+                <dd><PriorityPill priority={service.priority} /></dd>
+              </div>
+            </dl>
+          </div>
+          <div className="rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-bold text-gray-900 mb-2">Customer remarks</h3>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">
+              {service.notes && service.notes !== 'No notes available' ? service.notes : <span className="text-gray-400">No remarks</span>}
+            </p>
+          </div>
+        </div>
+
+        {service.serviceRating && (
+          <div className="rounded-xl border border-gray-200 p-4">
+            <h3 className="text-sm font-bold text-gray-900 mb-2">Customer review</h3>
+            <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <span>Service: <span className="text-yellow-500">{'★'.repeat(service.serviceRating)}</span><span className="text-gray-300">{'★'.repeat(5 - service.serviceRating)}</span></span>
+              {service.staffRating && (
+                <span>Staff: <span className="text-yellow-500">{'★'.repeat(service.staffRating)}</span><span className="text-gray-300">{'★'.repeat(5 - service.staffRating)}</span></span>
+              )}
+            </div>
+            {service.reviewText && <p className="text-sm text-gray-600 mt-2 italic">"{service.reviewText}"</p>}
+            {service.reviewSubmittedAt && <p className="text-xs text-gray-400 mt-1">Submitted {formatDate(service.reviewSubmittedAt)}</p>}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const DETAIL_TABS = [
+    { id: 'overview', label: 'Overview', icon: FiBarChart2 },
+    { id: 'tracking', label: 'Edit details', icon: FiEdit },
+    { id: 'documents', label: 'Documents', icon: FiPaperclip },
+    { id: 'history', label: 'History', icon: FiClock },
+    { id: 'discussion', label: 'Discussion', icon: FiMessageCircle },
+  ];
+
+  const renderDetailTabs = (service) => (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <nav className="flex overflow-x-auto border-b border-gray-200 bg-gray-50/60 scrollbar-hide">
+        {DETAIL_TABS.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === tab.id
+                ? 'border-[#172a45] text-[#172a45] bg-white'
+                : 'border-transparent text-gray-500 hover:text-gray-800'
+            }`}
+          >
+            <tab.icon className="h-4 w-4" /> {tab.label}
+            {tab.id === 'documents' && documents.length > 0 && (
+              <span className="ml-0.5 text-[10px] bg-gray-200 text-gray-700 px-1.5 rounded-full">{documents.length}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+      <div className="p-5">
+        {activeTab === 'overview' && renderOverview(service)}
+        {activeTab === 'tracking' && (
+          <TrackingView
+            service={service}
+            formData={trackingFormData}
+            onFormChange={handleTrackingFormChange}
+            staffList={staffList}
+            stepOptions={stepOptions}
+            priorityOptions={priorityOptions}
+            onSave={handleTrackingFormSubmit}
+            onCancel={() => setActiveTab('overview')}
+          />
+        )}
+        {activeTab === 'documents' && (
+          <EnhancedDocumentsView
+            documents={documents}
+            documentsLoading={documentsLoading}
+            uploadingDocument={uploadingDocument}
+            onUpload={(file, label, visible, remark) => handleUploadDocument(service.id, file, label, visible, remark)}
+            onUpdateRemark={(docId, remark) => handleUpdateDocumentRemark(service.id, docId, remark)}
+            onToggleVisibility={(docId, visible) => handleToggleDocumentVisibility(service.id, docId, visible)}
+            onDelete={(docId) => handleDeleteDocument(service.id, docId)}
+          />
+        )}
+        {activeTab === 'history' && (
+          <HistoryView activityHistory={activityHistory} activityLoading={activityLoading} />
+        )}
+        {activeTab === 'discussion' && (
+          <div>
+            <p className="text-sm text-gray-500 mb-3">
+              Internal only — customers never see this. Tag staff with @ to assign them.
+            </p>
+            <NotesPanel
+              contextType="service_entry"
+              contextId={service.serviceEntryId}
+              embedded={true}
+              showHeader={false}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
+  // Full detail layout. Measures its own width (not the screen width), because the same
+  // detail shows full page, inside the queue split view and inside the drawer.
+  //  - wide (>= 1060px): tabs on the left, quick update column on the right
+  //  - narrower: quick update as a collapsible strip on top, tabs full width below
+  const renderServiceDetail = (service) => {
+    const wide = detailWidth >= 1060;
+    const cols = detailWidth >= 760 ? 3 : detailWidth >= 520 ? 2 : 1;
+    return (
+      <div ref={detailMeasureRef} className="space-y-4 min-w-0">
+        {renderDetailHeader(service)}
+        {detailWidth === 0 ? null : wide ? (
+          <div className="grid grid-cols-3 gap-4">
+            <div className="col-span-2 min-w-0">{renderDetailTabs(service)}</div>
+            <aside className="sticky top-4 self-start">{renderQuickUpdate(service)}</aside>
+          </div>
+        ) : (
+          <>
+            {renderQuickUpdate(service, { layout: 'top', cols })}
+            {renderDetailTabs(service)}
+            {renderPaymentCard(service)}
+          </>
+        )}
+      </div>
+    );
+  };
+
+  // Kept for compatibility with any code that still calls it
+  const renderDetailPane = () => (selectedService ? renderServiceDetail(selectedService) : null);
 
   const fetchAllFilteredDataForExport = async () => {
     const apiStatus = reverseStatusMap[statusFilter] || statusFilter;
@@ -1227,7 +1680,7 @@ const TrackServicePage = () => {
       status: statusFilter === 'all' ? undefined : apiStatus,
       staff: staffFilter === 'all' ? undefined : staffFilter,
       expiry: expiryFilter === 'all' ? undefined : expiryFilter,
-      search: debouncedSearch || undefined,
+      search: normalizeSearch(debouncedSearch) || undefined,
       aadhaar: debouncedAadhaar || undefined
     };
 
@@ -1387,241 +1840,12 @@ const TrackServicePage = () => {
     setDragOverColumn(null);
   };
 
-  const TimelineItem = ({ title, dateTime, completed, current }) => (
-    <div className="flex items-center space-x-3">
-      <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : current ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
-      <div className="flex-1">
-        <p className={`text-sm font-medium ${completed || current ? 'text-gray-900' : 'text-gray-500'}`}>
-          {title}
-        </p>
-        <p className="text-xs text-gray-500">{dateTime}</p>
-      </div>
-    </div>
-  );
-
-  const OverviewView = ({ service, onUpdateStatus, priorityConfig }) => {
-    // Dynamic fallback structure to avoid copying a single timestamp across uncompleted steps
-    const getDisplaySteps = () => {
-      if (service.steps && service.steps.length > 0) {
-        return service.steps.sort((a, b) => (a.step_order || 0) - (b.step_order || 0));
-      }
-      
-      const stepOrderMap = { 'Submitted': 1, 'Initial Review': 2, 'Document Verification': 3, 'Final Approval': 4 };
-      const currentOrder = stepOrderMap[service.currentStep] || 1;
-
-      return [
-        { id: 1, name: 'Submitted', completed: true, step_order: 1, date: service.createdAt },
-        { id: 2, name: 'Initial Review', completed: currentOrder >= 2, step_order: 2, date: currentOrder === 2 ? service.updatedAt : null },
-        { id: 3, name: 'Document Verification', completed: currentOrder >= 3, step_order: 3, date: currentOrder === 3 ? service.updatedAt : null },
-        { id: 4, name: 'Final Approval', completed: currentOrder >= 4, step_order: 4, date: currentOrder >= 4 ? service.updatedAt : null }
-      ];
-    };
-
-    const displaySteps = getDisplaySteps();
-
-    return (
-      <div className="space-y-6">
-        <div className="flex justify-end">
-          {service.workSource === "online" ? (
-            <span className="px-3 py-1 text-xs font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
-              Online Booking
-            </span>
-          ) : (
-            <span className="px-3 py-1 text-xs font-medium bg-blue-100 text-blue-700 rounded-full border border-blue-200">
-              Offline Walk-in
-            </span>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2">
-            <h3 className="font-semibold text-gray-900 mb-4">Service Progress</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium">Completion Progress</span>
-                <span className="text-indigo-600 font-semibold">{service.progress}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div 
-                  className="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-500"
-                  style={{ width: `${service.progress}%` }}
-                ></div>
-              </div>
-              <div className="grid grid-cols-4 gap-2 text-xs text-gray-600">
-                <div className="text-center">Submitted</div>
-                <div className="text-center">Initial Review</div>
-                <div className="text-center">Document Verification</div>
-                <div className="text-center">Final Approval</div>
-              </div>
-            </div>
-            <div className="mt-6">
-              <h4 className="font-semibold text-gray-900 mb-3">Update Status</h4>
-              <div className="flex flex-wrap gap-2">
-                {Object.keys(statusConfig).map(statusKey => (
-                  <button
-                    key={statusKey}
-                    className={`px-4 py-2 rounded-lg flex items-center text-sm transition-colors ${
-                      service.status === statusKey 
-                        ? 'bg-gray-600 text-white cursor-not-allowed opacity-75' 
-                        : `${statusConfig[statusKey].button} hover:shadow-md transform hover:scale-105`
-                    }`}
-                    onClick={() => onUpdateStatus(service.id, statusKey)}
-                    disabled={service.status === statusKey}
-                  >
-                    {statusKey === 'In Progress' && <FiTrendingUp className="mr-2" />}
-                    {statusKey === 'Delayed' && <FiAlertCircle className="mr-2" />}
-                    {statusKey === 'Completed' && <FiCheckCircle className="mr-2" />}
-                    {statusKey === 'Pending' && <FiClock className="mr-2" />}
-                    {statusKey === 'Resubmit' && <FiRefreshCw className="mr-2" />}
-                    {statusKey === 'Paid' && <FiDollarSign className="mr-2" />}
-                    {statusKey}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900 mb-4">Timeline</h3>
-            <div className="space-y-3">
-              {displaySteps.length > 0 ? (
-                displaySteps.map((step) => {
-                  const dateTimeStr = step.date ? formatTimelineDate(step.date) : 'Pending';
-                  
-                  return (
-                    <TimelineItem 
-                      key={step.id}
-                      title={step.name}
-                      dateTime={step.completed ? dateTimeStr : 'Pending'}
-                      completed={step.completed}
-                      current={step.name === service.currentStep}
-                    />
-                  );
-                })
-              ) : (
-                <p className="text-sm text-gray-600">No timeline data available</p>
-              )}
-            </div>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Service Details</h3>
-            <div className="space-y-3">
-              <DetailRow label="Service Type" value={service.serviceType || 'Unknown'} />
-              <DetailRow label="Subcategory" value={service.subcategoryName || 'N/A'} />
-              <DetailRow label="Average Time" value={service.averageTime || 'Not set'} />
-              <DetailRow label="Expiry Date" value={service.expiryDate || 'N/A'} />
-              <div className="flex justify-between items-center py-1">
-                <span className="text-sm text-gray-600">Priority</span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium flex items-center space-x-1 ${priorityConfig[service.priority]?.bg} ${priorityConfig[service.priority]?.border}`}>
-                  <FiFlag className={`h-3 w-3 ${priorityConfig[service.priority]?.color}`} />
-                  <span className={priorityConfig[service.priority]?.color}>{priorityConfig[service.priority]?.label}</span>
-                </span>
-              </div>
-              <DetailRow label="Last Updated" value={formatDate(service.updatedAt) || 'N/A'} />
-              <DetailRow label="Notes" value={service.notes || 'No notes'} />
-              <DetailRow label="Assigned To" value={service.assignedTo || 'Unassigned'} />
-            </div>
-          </div>
-          <div className="bg-gray-50 rounded-xl border border-gray-200 p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Financial Summary</h3>
-            <div className="space-y-3">
-              <FinancialRow label="Service Charge" amount={service.serviceCharge} currency="₹" />
-              <FinancialRow label="Department Charge" amount={service.departmentCharge} currency="₹" />
-              <div className="border-t border-gray-300 pt-3">
-                <FinancialRow label="Total Amount" amount={service.totalCharge} currency="₹" isTotal={true} />
-              </div>
-              <DetailRow 
-                label="Payment Status" 
-                value={service.paymentStatus} 
-                valueClass={paymentStatusConfig[service.paymentStatus]?.color || paymentStatusConfig['default'].color} 
-              />
-            </div>
-          </div>
-        </div>
-
-        {service.serviceRating && (
-          <div className="mt-4 p-6 bg-gray-50 rounded-xl border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-3">Customer Review</h3>
-            <div className="space-y-3">
-              <div className="flex items-center space-x-2">
-                <span className="text-sm font-medium text-gray-700">Service Rating:</span>
-                <div className="flex items-center space-x-1">
-                  {[...Array(5)].map((_, i) => (
-                    <span key={i} className={i < service.serviceRating ? 'text-yellow-400' : 'text-gray-300'}>
-                      ★
-                    </span>
-                  ))}
-                  <span className="ml-2 text-sm text-gray-600">({service.serviceRating}/5)</span>
-                </div>
-              </div>
-
-              {service.staffRating && (
-                <div className="flex items-center space-x-2">
-                  <span className="text-sm font-medium text-gray-700">Staff Rating:</span>
-                  <div className="flex items-center space-x-1">
-                    {[...Array(5)].map((_, i) => (
-                      <span key={i} className={i < service.staffRating ? 'text-yellow-400' : 'text-gray-300'}>
-                        ★
-                      </span>
-                    ))}
-                    <span className="ml-2 text-sm text-gray-600">({service.staffRating}/5)</span>
-                  </div>
-                </div>
-              )}
-
-              {service.reviewText && (
-                <div className="mt-3">
-                  <p className="text-sm font-medium text-gray-700 mb-1">Review:</p>
-                  <p className="text-sm text-gray-600 bg-white p-3 rounded-lg border border-gray-200">
-                    "{service.reviewText}"
-                  </p>
-                </div>
-              )}
-
-              {service.reviewSubmittedAt && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Submitted on {formatDate(service.reviewSubmittedAt)}
-                </p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const KPIStat = ({ title, value, subtitle, trend, icon: Icon, color }) => (
-    <motion.div 
-      whileHover={{ y: -2 }}
-      className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
-          <div className="flex items-center space-x-2">
-            <span className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {trend > 0 ? '+' : ''}{trend}%
-            </span>
-            <span className="text-xs text-gray-500">{subtitle}</span>
-          </div>
-        </div>
-        <div className={`p-3 rounded-xl ${color} transition-colors group-hover:scale-110`}>
-          <Icon className="h-6 w-6 text-white" />
-        </div>
-      </div>
-    </motion.div>
-  );
 
   const KanbanCard = ({ service, priorityConfig, isSelected, isDragging, onDragStart, onDragEnd, onClick }) => {
-    const priority = priorityConfig[service.priority || 'medium'];
     const cardRef = useRef(null);
 
     const handleDragStart = (e) => {
-      if (cardRef.current) {
-        e.dataTransfer.setDragImage(cardRef.current, 20, 20);
-      }
+      if (cardRef.current) e.dataTransfer.setDragImage(cardRef.current, 20, 20);
       e.dataTransfer.effectAllowed = 'move';
       onDragStart();
     };
@@ -1635,31 +1859,20 @@ const TrackServicePage = () => {
         onClick={onClick}
         className={`p-3 rounded-lg border bg-white cursor-grab active:cursor-grabbing transition-all ${
           isDragging ? 'opacity-40' : ''
-        } ${
-          isSelected ? 'border-indigo-400 ring-2 ring-indigo-200 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
-        }`}
+        } ${isSelected ? 'border-[#172a45] ring-2 ring-blue-200 shadow-md' : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'}`}
       >
-        <div className="flex items-start justify-between gap-2 mb-1.5">
-          <p className="text-sm font-semibold text-gray-900 truncate" title={service.customerName}>
-            {service.customerName || 'Unknown'}
-          </p>
+        <div className="flex items-start justify-between gap-2 mb-1">
+          <p className="text-sm font-semibold text-gray-900 truncate" title={service.customerName}>{service.customerName || 'Unknown'}</p>
           <FiMove className="h-3 w-3 text-gray-300 flex-shrink-0 mt-0.5" />
         </div>
-        <p className="text-xs text-gray-500 truncate mb-2" title={service.serviceType}>
-          {service.serviceType || 'Unknown'}
-        </p>
+        <p className="text-xs text-gray-500 truncate mb-2" title={service.serviceType}>{service.serviceType || 'Unknown'}</p>
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[11px] font-mono text-gray-400 truncate">
-            {service.applicationNumber || 'N/A'}
-          </span>
-          <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium flex items-center gap-1 flex-shrink-0 ${priority.bg} ${priority.border}`}>
-            <FiFlag className={`h-2.5 w-2.5 ${priority.color}`} />
-            <span className={priority.color}>{priority.label}</span>
-          </span>
+          <AppNoDisplay value={service.applicationNumber} showCopy={false} empty="No app no." className="text-[11px] text-gray-400 truncate" />
+          <PriorityPill priority={service.priority} />
         </div>
         <div className="mt-2 pt-2 border-t border-gray-100 flex items-center justify-between text-[11px]">
-          <span className="text-gray-400 truncate">{service.assignedTo || 'Unassigned'}</span>
-          <span className="text-indigo-500 font-medium flex-shrink-0">{service.estimatedDelivery}</span>
+          <span className="text-gray-500 truncate">{service.assignedTo || 'Unassigned'}</span>
+          <span className="text-[#172a45] font-medium flex-shrink-0">{service.estimatedDelivery}</span>
         </div>
       </div>
     );
@@ -1667,39 +1880,29 @@ const TrackServicePage = () => {
 
   const renderKanbanBoard = () => (
     <div className="overflow-x-auto pb-2">
-      <div className="flex gap-4 min-w-max">
+      <div className="flex gap-3 min-w-max">
         {kanbanColumns.map((statusKey) => {
           const columnServices = servicesByStatus[statusKey] || [];
           const cfg = statusConfig[statusKey];
           const isDragOver = dragOverColumn === statusKey;
-
           return (
             <div
               key={statusKey}
               onDragOver={(e) => { e.preventDefault(); setDragOverColumn(statusKey); }}
               onDragLeave={() => setDragOverColumn(null)}
               onDrop={(e) => { e.preventDefault(); handleColumnDrop(statusKey); }}
-              className={`w-72 flex-shrink-0 rounded-xl border-2 transition-colors ${
-                isDragOver ? `${cfg.border} bg-indigo-50/50` : 'border-gray-200 bg-gray-50'
-              }`}
+              className={`w-72 flex-shrink-0 rounded-xl border-2 transition-colors ${isDragOver ? `${cfg.border} bg-blue-50/50` : 'border-gray-200 bg-gray-50'}`}
             >
-              <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg border-b-2 ${cfg.border} ${cfg.bg}`}>
+              <div className={`flex items-center justify-between px-3 py-2.5 rounded-t-lg border-b ${cfg.border} ${cfg.bg}`}>
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${cfg.dot}`} />
-                  <span className={`text-xs font-bold uppercase tracking-wide ${cfg.color}`}>
-                    {statusKey}
-                  </span>
+                  <span className={`text-xs font-bold uppercase tracking-wide ${cfg.color}`}>{statusKey}</span>
                 </div>
-                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${cfg.color}`}>
-                  {columnServices.length}
-                </span>
+                <span className={`text-xs font-bold px-1.5 py-0.5 rounded-full bg-white/70 ${cfg.color}`}>{columnServices.length}</span>
               </div>
-
               <div className="p-2 space-y-2 max-h-[calc(100vh-320px)] overflow-y-auto min-h-[80px]">
                 {columnServices.length === 0 ? (
-                  <div className="text-center py-8 text-xs text-gray-400">
-                    No applications
-                  </div>
+                  <div className="text-center py-8 text-xs text-gray-400">Drop here</div>
                 ) : (
                   columnServices.map((service) => (
                     <KanbanCard
@@ -1722,194 +1925,649 @@ const TrackServicePage = () => {
     </div>
   );
 
-  const renderQuickActionsPanel = () => (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm h-full flex flex-col justify-center">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Quick Actions</h3>
-        <div className="flex space-x-1">
-          <button 
-            onClick={() => setViewMode('grid')}
-            className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-            title="Spreadsheet View"
-          >
-            <FiGrid className="h-4 w-4" />
-          </button>
-          <button 
-            onClick={() => setViewMode('kanban')}
-            className={`p-2 rounded-lg ${viewMode === 'kanban' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-            title="Board View"
-          >
-            <FiColumns className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-      
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-        <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
-          <FiPlus className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">New</span>
-        </button>
-        
-        <button 
-          onClick={handleExportExcel}
-          className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center">
-          <FiDownload className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">Excel</span>
-        </button>
-        
-        <button 
-          onClick={handleExportPDF}
-          className="p-3 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-100 transition-colors flex flex-col items-center justify-center">
-          <FiFileText className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">PDF</span>
-        </button>
-        
-        <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
-          <FiFilter className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">Filters</span>
-        </button>
-        <button className="p-3 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors flex flex-col items-center justify-center">
-          <FiPrinter className="h-5 w-5 mb-1" />
-          <span className="text-xs font-medium">Print</span>
-        </button>
-      </div>
-    </div>
-  );
+  /* =====================================================================
+     LIST MODE: toolbar, filters, table, side panel
+  ===================================================================== */
 
-  const renderFiltersPanel = () => (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm h-full flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-          <FiFilter className="text-indigo-600" /> Filters
-        </h3>
-        <button 
-          onClick={handleSaveView}
-          className="text-xs font-semibold text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded-md hover:bg-indigo-100 transition-colors"
-        >
-          Save My View
-        </button>
-      </div>
-      <div className="space-y-4">
-        <div className="relative">
-          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+  const STATUS_TABS = [
+    { key: 'all', label: 'All', count: globalStats.total },
+    { key: 'Pending', label: 'Pending', count: globalStats.pending },
+    { key: 'In Progress', label: 'In Progress', count: globalStats.in_progress },
+    { key: 'Resubmit', label: 'Resubmit', count: globalStats.resubmit },
+    { key: 'Delayed', label: 'Delayed', count: globalStats.delayed },
+    { key: 'Completed', label: 'Completed', count: globalStats.completed },
+    { key: 'Paid', label: 'Paid', count: globalStats.paid },
+  ];
+
+  // Rolling periods, matching the backend (based on last activity)
+  const TIME_RANGE_LABELS = { week: 'Last 7 days', month: 'Last 30 days', year: 'Last 12 months', all: 'All time' };
+
+  const activeFilterChips = [
+    statusFilter !== 'all' && { key: 'status', label: `Status: ${statusFilter}`, clear: () => setStatusFilter('all') },
+    serviceFilter !== 'all' && {
+      key: 'service',
+      label: `Service: ${categories.find(c => String(c.id) === String(serviceFilter))?.name || serviceFilter}`,
+      clear: () => setServiceFilter('all'),
+    },
+    subcategoryFilter !== 'all' && {
+      key: 'sub',
+      label: `Type: ${availableSubcategories.find(s => String(s.id) === String(subcategoryFilter))?.name || subcategoryFilter}`,
+      clear: () => setSubcategoryFilter('all'),
+    },
+    staffFilter !== 'all' && {
+      key: 'staff',
+      label: `Staff: ${staffList.find(s => String(s.id) === String(staffFilter))?.name || staffFilter}`,
+      clear: () => setStaffFilter('all'),
+    },
+    dateFilter && { key: 'date', label: `Date: ${formatDate(dateFilter)}`, clear: () => setDateFilter('') },
+    expiryFilter !== 'all' && {
+      key: 'expiry',
+      label: expiryFilter === 'upcoming' ? 'Upcoming expiry' : 'Overdue',
+      clear: () => setExpiryFilter('all'),
+    },
+    aadhaarSearch && { key: 'aadhaar', label: `Aadhaar: ${aadhaarSearch}`, clear: () => setAadhaarSearch('') },
+    searchTerm && { key: 'search', label: `"${searchTerm}"`, clear: () => setSearchTerm('') },
+  ].filter(Boolean);
+
+  const selectCls = 'px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45] cursor-pointer';
+  const cellSelect = 'w-full text-xs bg-white border border-gray-200 rounded-md px-2 py-1 outline-none focus:border-[#172a45] hover:border-gray-300 cursor-pointer';
+
+  const renderToolbar = () => (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+      {/* Main filter row */}
+      <div className="p-3 flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px]">
+          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
           <input
             type="text"
-            placeholder="Search name, phone, app no..."
-            className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+            placeholder="Search name, phone or application no."
+            className="w-full pl-9 pr-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45]"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
+
+        <select className={selectCls} value={timeRange} onChange={(e) => setTimeRange(e.target.value)} title="Period">
+          {Object.entries(TIME_RANGE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+        </select>
+
+        <select className={selectCls} value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
+          <option value="all">All services</option>
+          {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+
+        {serviceFilter !== 'all' && availableSubcategories.length > 0 && (
+          <select className={selectCls} value={subcategoryFilter} onChange={(e) => setSubcategoryFilter(e.target.value)}>
+            <option value="all">All types</option>
+            {availableSubcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        )}
+
+        <select className={selectCls} value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
+          <option value="all">All staff</option>
+          {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+
         <button
-          onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-          className="flex items-center justify-between w-full text-sm font-medium text-gray-600 hover:text-indigo-600 py-2 border-b border-gray-100 transition-colors"
+          onClick={() => setShowAdvancedFilters(v => !v)}
+          className={`px-3 py-2 text-sm rounded-lg border flex items-center gap-1.5 transition ${
+            showAdvancedFilters ? 'bg-blue-50 border-blue-200 text-[#172a45]' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+          }`}
         >
-          <span>Advanced Filters</span>
-          <FiChevronDown className={`transition-transform duration-300 ${showAdvancedFilters ? 'rotate-180' : ''}`} />
+          <FiSliders className="h-4 w-4" /> More
         </button>
-        <AnimatePresence>
-          {showAdvancedFilters && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-                className="overflow-hidden pt-2 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end"
-            >
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Data Range</label>
-                <select 
-                  className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" 
-                  value={timeRange} 
-                  onChange={(e) => setTimeRange(e.target.value)}
-                >
-                  <option value="week">Last 7 Days</option>
-                  <option value="month">This Month</option>
-                  <option value="year">This Year</option>
-                  <option value="all">All Time</option>
-                </select>
-              </div>
+      </div>
 
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Date</label>
-                <div className="relative">
-                  <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input type="date" className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Service Category</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
-                  <option value="all">All Services</option>
-                  {categories.map(category => <option key={category.id} value={category.id}>{category.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Subcategory</label>
-                <select 
-                  className={`w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none transition-all ${serviceFilter === 'all' ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'bg-gray-50 border-gray-200 cursor-pointer text-gray-900'}`} 
-                  value={subcategoryFilter} 
-                  onChange={(e) => setSubcategoryFilter(e.target.value)}
-                  disabled={serviceFilter === 'all'}
-                >
-                  <option value="all">{serviceFilter === 'all' ? 'Select a Service first' : 'All Subcategories'}</option>
-                  {availableSubcategories.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Status</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="all">All Statuses</option>
-                  <option value="Pending">Pending</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Delayed">Delayed</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Resubmit">Resubmit</option>
-                  <option value="Paid">Paid</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Assigned Staff</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={staffFilter} onChange={(e) => setStaffFilter(e.target.value)}>
-                  <option value="all">Everyone</option>
-                  {staffList.map(staff => <option key={staff.id} value={staff.id}>{staff.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Timeline</label>
-                <select className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 appearance-none cursor-pointer" value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
-                  <option value="all">Any Date</option>
-                  <option value="upcoming">Upcoming Expiry</option>
+      {/* Extra filters */}
+      <AnimatePresence initial={false}>
+        {showAdvancedFilters && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="px-3 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <label className="text-xs text-gray-500">
+                Created on
+                <input type="date" className={`${selectCls} w-full mt-1`} value={dateFilter} onChange={(e) => setDateFilter(e.target.value)} />
+              </label>
+              <label className="text-xs text-gray-500">
+                Expiry
+                <select className={`${selectCls} w-full mt-1`} value={expiryFilter} onChange={(e) => setExpiryFilter(e.target.value)}>
+                  <option value="all">Any</option>
+                  <option value="upcoming">Upcoming expiry</option>
                   <option value="overdue">Overdue</option>
                 </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Aadhaar Search</label>
-                <div className="relative">
-                  <FiCreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                  <input type="text" placeholder="Search by Aadhaar..." className="w-full pl-10 pr-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500" value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value)} maxLength="12"/>
-                </div>
-              </div>
-              <div className="col-span-1 md:col-span-3 lg:col-span-4">
-                <button onClick={handleClearFilters} className="w-full py-2.5 text-xs font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-gray-900 rounded-xl transition-all">
-                  Clear All Filters
-                </button>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              </label>
+              <label className="text-xs text-gray-500">
+                Aadhaar number
+                <input type="text" maxLength="12" placeholder="12 digits" className={`${selectCls} w-full mt-1`} value={aadhaarSearch} onChange={(e) => setAadhaarSearch(e.target.value.replace(/\D/g, ''))} />
+              </label>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Active filters */}
+      {activeFilterChips.length > 0 && (
+        <div className="px-3 pb-3 flex flex-wrap items-center gap-1.5">
+          {activeFilterChips.map(chip => (
+            <span key={chip.key} className="inline-flex items-center gap-1 pl-2.5 pr-1 py-1 rounded-full bg-blue-50 text-[#172a45] text-xs font-medium border border-blue-100">
+              {chip.label}
+              <button onClick={chip.clear} className="p-0.5 rounded-full hover:bg-blue-100" title="Remove filter">
+                <FiX className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          <button onClick={handleClearFilters} className="text-xs font-semibold text-gray-500 hover:text-gray-800 px-2">Clear all</button>
+          <button onClick={handleSaveView} className="text-xs font-semibold text-[#172a45] hover:text-[#172a45] px-2 flex items-center gap-1">
+            <FiSave className="h-3 w-3" /> Save as my default
+          </button>
+        </div>
+      )}
     </div>
   );
 
+  const renderTable = () => (
+    <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-left border-collapse min-w-[1000px]">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200 text-[11px] text-gray-500 uppercase tracking-wider">
+              <th className="px-4 py-2.5 font-semibold">Customer</th>
+              <th className="px-4 py-2.5 font-semibold">Service</th>
+              <th className="px-4 py-2.5 font-semibold w-40">Application no.</th>
+              <th className="px-4 py-2.5 font-semibold w-36">Status</th>
+              <th className="px-4 py-2.5 font-semibold w-52">Step</th>
+              <th className="px-4 py-2.5 font-semibold w-40">Assigned</th>
+              <th className="px-4 py-2.5 font-semibold w-36">Delivery</th>
+              <th className="px-4 py-2.5 font-semibold text-right w-24"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(servicesByDate)
+              .sort(([a], [b]) => (a === 'Unknown Date' ? 1 : b === 'Unknown Date' ? -1 : b.localeCompare(a)))
+              .map(([date, dateServices]) => (
+              <React.Fragment key={date}>
+                <tr className="bg-gray-50/80">
+                  <td colSpan="8" className="px-4 py-1.5 text-[11px] font-bold text-gray-600 uppercase tracking-wider border-y border-gray-100">
+                    {date === 'Unknown Date' ? date : formatDate(date)}
+                    <span className="ml-2 text-gray-400 font-medium normal-case">{dateServices.length} {dateServices.length === 1 ? 'entry' : 'entries'}</span>
+                  </td>
+                </tr>
+                {dateServices.map(service => {
+                  const selected = selectedService?.id === service.id;
+                  const cfg = statusConfig[service.status] || statusConfig['Pending'];
+                  return (
+                    <tr
+                      key={service.id}
+                      className={`border-b border-gray-100 transition-colors ${selected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                    >
+                      <td className="px-4 py-2.5">
+                        <button onClick={() => handleServiceSelect(service)} className="text-left group">
+                          <div className="text-sm font-semibold text-gray-900 group-hover:text-[#172a45] whitespace-nowrap">{service.customerName}</div>
+                          <div className="text-xs text-gray-500">{service.phone || 'N/A'}</div>
+                        </button>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="text-sm text-gray-900 truncate max-w-[200px]" title={service.serviceType}>{service.serviceType}</div>
+                        {service.subcategoryName && service.subcategoryName !== 'N/A' && (
+                          <div className="text-xs text-gray-500 truncate max-w-[200px]" title={service.subcategoryName}>{service.subcategoryName}</div>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <ApplicationNumberField
+                          variant="cell"
+                          value={service.applicationNumber || ''}
+                          placeholder="Add app no."
+                          onSave={(v) => handleInlineTrackingUpdate(service, { applicationNumber: v })}
+                        />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <select
+                          value={service.status}
+                          onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
+                          className={`w-full text-[11px] font-bold rounded-full px-2.5 py-1 border outline-none cursor-pointer ${cfg.bg} ${cfg.color} ${cfg.border}`}
+                        >
+                          {Object.keys(statusConfig).map(k => <option key={k} value={k}>{k}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <select
+                          value={service.currentStep || 'Submitted'}
+                          onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
+                          className={cellSelect}
+                        >
+                          {stepOptions.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <select
+                          value={service.assignedToId || ''}
+                          onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
+                          className={cellSelect}
+                        >
+                          <option value="">Unassigned</option>
+                          {staffList.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <input
+                          type="date"
+                          value={formatDateForInput(service.rawEstimatedDelivery)}
+                          onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
+                          className={cellSelect}
+                        />
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleNotifyCustomer(service)}
+                            title="Notify customer on WhatsApp"
+                            className="p-1.5 rounded-md text-gray-400 hover:text-green-600 hover:bg-green-50"
+                          >
+                            <FiMessageSquare className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleServiceSelect(service)}
+                            title="Open details"
+                            className={`p-1.5 rounded-md ${selected ? 'text-[#172a45] bg-blue-100' : 'text-gray-400 hover:text-[#172a45] hover:bg-blue-50'}`}
+                          >
+                            <FiChevronRight className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </React.Fragment>
+            ))}
+
+            {services.length === 0 && (
+              <tr>
+                <td colSpan="8" className="text-center py-16 text-gray-500">
+                  <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
+                  <p className="text-base font-medium text-gray-900">No applications found</p>
+                  <p className="text-sm mt-1">Try a different period or remove some filters.</p>
+                  {activeFilterChips.length > 0 && (
+                    <button onClick={handleClearFilters} className="mt-3 text-sm font-semibold text-[#172a45] hover:text-[#172a45]">Clear all filters</button>
+                  )}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between px-4 py-3 border-t border-gray-200 bg-gray-50 text-sm">
+          <span className="text-gray-600">
+            Showing <b>{(currentPage - 1) * limit + 1}</b>–<b>{(currentPage - 1) * limit + services.length}</b> of <b>{totalRecords}</b>
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1.5 font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              <FiChevronLeft className="h-4 w-4" /> Prev
+            </button>
+            <span className="text-gray-600">Page {currentPage} of {totalPages}</span>
+            <button
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1.5 font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1"
+            >
+              Next <FiChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Side panel that slides in over the list
+  const renderDrawer = () => (
+    <AnimatePresence>
+      {selectedService && (
+        <>
+          <motion.div
+            key="drawer-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedService(null)}
+            className="fixed inset-0 bg-gray-900/30 z-40"
+          />
+          <motion.div
+            key="drawer"
+            initial={{ x: '100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '100%' }}
+            transition={{ type: 'spring', damping: 32, stiffness: 320 }}
+            className="fixed inset-y-0 right-0 z-50 w-full max-w-5xl bg-gray-50 shadow-2xl flex flex-col"
+          >
+            <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-white border-b border-gray-200">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleNavigateApplication(-1)}
+                  disabled={currentServiceIndex <= 0}
+                  className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Previous application"
+                >
+                  <FiChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="text-xs font-medium text-gray-500 tabular-nums">
+                  {currentServiceIndex + 1} / {services.length}
+                </span>
+                <button
+                  onClick={() => handleNavigateApplication(1)}
+                  disabled={currentServiceIndex >= services.length - 1}
+                  className="p-2 rounded-lg text-gray-600 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+                  title="Next application"
+                >
+                  <FiChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => navigate(`/dashboard/staff/track_service/${selectedService.id}`)}
+                  className="px-3 py-1.5 text-xs font-semibold text-[#172a45] hover:bg-blue-50 rounded-lg flex items-center gap-1.5"
+                  title="Open on its own page (shareable link)"
+                >
+                  <FiExternalLink className="h-3.5 w-3.5" /> Open full page
+                </button>
+                <button
+                  onClick={() => setSelectedService(null)}
+                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100"
+                  title="Close (Esc)"
+                >
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+            <div ref={detailPanelRef} className="flex-1 overflow-y-auto p-4">
+              {renderServiceDetail(selectedService)}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+
+  /* =====================================================================
+     METRICS: one status bar + counts (also the status filter)
+  ===================================================================== */
+
+  // Counts can arrive as text ("12") from PostgreSQL COUNT(), and under a few key names
+  const statNum = (...vals) => {
+    for (const v of vals) {
+      if (v === null || v === undefined || v === '') continue;
+      const n = Number(v);
+      if (Number.isFinite(n)) return n;
+    }
+    return null;
+  };
+  const gs = globalStats || {};
+  const METRIC_SEGMENTS = [
+    { key: 'Pending', count: statNum(gs.pending), bar: 'bg-amber-500' },
+    { key: 'In Progress', count: statNum(gs.in_progress, gs.inProgress), bar: 'bg-blue-600' },
+    { key: 'Resubmit', count: statNum(gs.resubmit), bar: 'bg-orange-500' },
+    { key: 'Delayed', count: statNum(gs.delayed, gs.rejected), bar: 'bg-rose-600' },
+    { key: 'Completed', count: statNum(gs.completed), bar: 'bg-emerald-600' },
+    { key: 'Paid', count: statNum(gs.paid), bar: 'bg-green-500' },
+  ].filter(s => s.count !== null);
+
+  const renderMetrics = () => {
+    const total = statNum(gs.total) ?? METRIC_SEGMENTS.reduce((a, s) => a + (s.count || 0), 0);
+    const pct = (n) => (total ? Math.round(((n || 0) / total) * 100) : 0);
+    const onTimeRaw = statNum(gs.sla_compliance, gs.slaCompliance);
+    const onTime = onTimeRaw !== null ? Math.round(onTimeRaw) : null;
+
+    return (
+      <section className="bg-white rounded-xl border border-gray-200 p-4" aria-label="Applications by status">
+        <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+          <div>
+            <p className="text-sm text-gray-500">{TIME_RANGE_LABELS[timeRange]}</p>
+            <p className="text-3xl font-bold text-[#172a45] leading-tight tabular-nums">
+              {total} <span className="text-base font-medium text-gray-500">applications</span>
+            </p>
+          </div>
+          {onTime != null && (
+            <div className="text-right">
+              <p className="text-sm text-gray-500">Delivered on time</p>
+              <p className={`text-2xl font-bold tabular-nums ${onTime >= 90 ? 'text-emerald-700' : onTime >= 75 ? 'text-amber-700' : 'text-rose-700'}`}>
+                {onTime}%
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* The status bar */}
+        <div className="flex h-3 w-full rounded-full overflow-hidden bg-gray-100" role="img"
+          aria-label={METRIC_SEGMENTS.map(s => `${s.key} ${s.count}`).join(', ')}>
+          {METRIC_SEGMENTS.map(s => (s.count > 0 ? (
+            <button
+              key={s.key}
+              onClick={() => setStatusFilter(statusFilter === s.key ? 'all' : s.key)}
+              title={`${s.key}: ${s.count}`}
+              style={{ width: `${pct(s.count)}%` }}
+              className={`${s.bar} h-full transition-opacity ${statusFilter !== 'all' && statusFilter !== s.key ? 'opacity-25' : ''}`}
+            />
+          ) : null))}
+        </div>
+
+        {/* Counts, which are also the status filter */}
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-1 mt-3">
+          <button
+            onClick={() => setStatusFilter('all')}
+            className={`text-left rounded-lg px-3 py-2 transition ${statusFilter === 'all' ? 'bg-[#172a45] text-white' : 'hover:bg-gray-50'}`}
+          >
+            <span className={`block text-xs ${statusFilter === 'all' ? 'text-blue-100' : 'text-gray-500'}`}>All</span>
+            <span className="block text-lg font-bold tabular-nums">{total}</span>
+          </button>
+          {METRIC_SEGMENTS.map(s => {
+            const active = statusFilter === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setStatusFilter(active ? 'all' : s.key)}
+                className={`text-left rounded-lg px-3 py-2 transition ${active ? 'bg-[#172a45] text-white' : 'hover:bg-gray-50'}`}
+              >
+                <span className={`flex items-center gap-1.5 text-xs ${active ? 'text-blue-100' : 'text-gray-500'}`}>
+                  <span className={`w-2 h-2 rounded-full ${s.bar}`} /> {s.key}
+                </span>
+                <span className="block text-lg font-bold tabular-nums">
+                  {s.count}
+                  <span className={`ml-1 text-xs font-medium ${active ? 'text-blue-100' : 'text-gray-400'}`}>{pct(s.count)}%</span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    );
+  };
+
+  /* =====================================================================
+     QUEUE VIEW: list on the left, the selected application on the right
+  ===================================================================== */
+
+  const todayKey = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const isOverdue = (s) =>
+    s.rawEstimatedDelivery &&
+    !['Completed', 'Paid'].includes(s.status) &&
+    formatDateForInput(s.rawEstimatedDelivery) < todayKey;
+
+  const initials = (name) =>
+    (name || '?').split(' ').filter(Boolean).slice(0, 2).map(w => w[0]).join('').toUpperCase();
+
+  const renderQueueItem = (service) => {
+    const selected = selectedService?.id === service.id;
+    const cfg = statusConfig[service.status] || statusConfig['Pending'];
+    const overdue = isOverdue(service);
+    return (
+      <li key={service.id}>
+        <button
+          onClick={() => handleServiceSelect(service)}
+          className={`w-full text-left pl-3 pr-3 py-3 border-l-4 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#172a45] ${
+            selected ? 'bg-blue-50/70 border-[#172a45]' : 'border-transparent hover:bg-gray-50'
+          }`}
+        >
+          <div className="flex items-start justify-between gap-2">
+            <p className={`text-sm truncate ${selected ? 'font-bold text-[#172a45]' : 'font-semibold text-gray-900'}`}>
+              {service.customerName}
+            </p>
+            <span className={`flex-shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold ${cfg.bg} ${cfg.color}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} /> {service.status}
+            </span>
+          </div>
+          <p className="text-xs text-gray-600 truncate mt-0.5">
+            {service.serviceType}
+            {service.subcategoryName && service.subcategoryName !== 'N/A' && <span className="text-gray-400"> / {service.subcategoryName}</span>}
+          </p>
+          <div className="flex items-center justify-between gap-2 mt-1.5 text-[11px]">
+            <AppNoDisplay value={service.applicationNumber} showCopy={false} className="text-gray-500 truncate" />
+            <span className="flex items-center gap-2 flex-shrink-0">
+              {service.rawEstimatedDelivery && (
+                <span className={overdue ? 'text-rose-700 font-semibold' : 'text-gray-500'}>
+                  {overdue ? 'Overdue ' : 'Due '}{service.estimatedDelivery}
+                </span>
+              )}
+              <span
+                className="w-5 h-5 rounded-full bg-gray-200 text-gray-700 text-[9px] font-bold flex items-center justify-center"
+                title={service.assignedTo || 'Unassigned'}
+              >
+                {service.assignedToId ? initials(service.assignedTo) : '–'}
+              </span>
+            </span>
+          </div>
+        </button>
+      </li>
+    );
+  };
+
+  const renderQueue = () => {
+    const groups = Object.entries(servicesByDate).sort(([a], [b]) =>
+      a === 'Unknown Date' ? 1 : b === 'Unknown Date' ? -1 : b.localeCompare(a)
+    );
+    return (
+      <div className="grid grid-cols-1 lg:grid-cols-[360px_minmax(0,1fr)] gap-4 items-start">
+        {/* Queue */}
+        <aside className={`bg-white rounded-xl border border-gray-200 overflow-hidden lg:sticky lg:top-4 ${selectedService ? 'hidden lg:block' : ''}`}>
+          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between text-xs text-gray-500">
+            <span>
+              {services.length === 0
+                ? 'No applications'
+                : <>Showing {(currentPage - 1) * limit + 1}–{(currentPage - 1) * limit + services.length}{totalRecords ? ` of ${totalRecords}` : ''}</>}
+            </span>
+            {totalPages > 1 && (
+              <span className="flex items-center gap-1">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+                  aria-label="Previous page"
+                >
+                  <FiChevronLeft className="h-4 w-4" />
+                </button>
+                <span className="tabular-nums">{currentPage}/{totalPages}</span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30"
+                  aria-label="Next page"
+                >
+                  <FiChevronRight className="h-4 w-4" />
+                </button>
+              </span>
+            )}
+          </div>
+          <div className="max-h-[calc(100vh-180px)] overflow-y-auto">
+            {services.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm font-medium text-gray-900">No applications match</p>
+                <p className="text-xs text-gray-500 mt-1">Try another period, or clear the filters.</p>
+                {activeFilterChips.length > 0 && (
+                  <button onClick={handleClearFilters} className="mt-3 text-sm font-semibold text-[#172a45] underline">Clear filters</button>
+                )}
+              </div>
+            ) : (
+              groups.map(([date, rows]) => (
+                <div key={date}>
+                  <p className="sticky top-0 z-10 bg-gray-50/95 backdrop-blur px-3 py-1.5 text-xs font-semibold text-gray-600 border-y border-gray-100">
+                    {date === 'Unknown Date' ? date : date === todayKey ? 'Today' : formatDate(date)}
+                    <span className="ml-1.5 font-normal text-gray-400">{rows.length}</span>
+                  </p>
+                  <ul className="divide-y divide-gray-100">{rows.map(renderQueueItem)}</ul>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+
+        {/* Selected application */}
+        <div className="min-w-0">
+          {selectedService ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => setSelectedService(null)}
+                  className="lg:hidden flex items-center gap-1.5 text-sm font-medium text-gray-600"
+                >
+                  <FiArrowLeft className="h-4 w-4" /> Back to queue
+                </button>
+                <div className="hidden lg:flex items-center gap-1 text-xs text-gray-500">
+                  <button
+                    onClick={() => handleNavigateApplication(-1)}
+                    disabled={currentServiceIndex <= 0}
+                    className="p-1.5 rounded-md hover:bg-white disabled:opacity-30"
+                    aria-label="Previous application"
+                  >
+                    <FiChevronLeft className="h-4 w-4" />
+                  </button>
+                  <span className="tabular-nums">{currentServiceIndex + 1} of {services.length}</span>
+                  <button
+                    onClick={() => handleNavigateApplication(1)}
+                    disabled={currentServiceIndex >= services.length - 1}
+                    className="p-1.5 rounded-md hover:bg-white disabled:opacity-30"
+                    aria-label="Next application"
+                  >
+                    <FiChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+                <button
+                  onClick={() => navigate(`/dashboard/staff/track_service/${selectedService.id}`)}
+                  className="text-xs font-semibold text-[#172a45] hover:underline flex items-center gap-1"
+                >
+                  <FiExternalLink className="h-3.5 w-3.5" /> Open on its own page
+                </button>
+              </div>
+              {renderServiceDetail(selectedService)}
+            </div>
+          ) : (
+            <div className="hidden lg:flex flex-col items-center justify-center text-center bg-white rounded-xl border border-dashed border-gray-300 py-24 px-6">
+              <FiFileText className="h-10 w-10 text-gray-300 mb-3" />
+              <p className="text-base font-semibold text-gray-900">Pick an application from the queue</p>
+              <p className="text-sm text-gray-500 mt-1">Its details, documents and quick update panel open here.</p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /* =====================================================================
+     PAGE
+  ===================================================================== */
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading service dashboard...</p>
+          <div className="w-12 h-12 border-4 border-[#172a45] border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-gray-600 font-medium">{id ? 'Loading application…' : 'Loading applications…'}</p>
         </div>
       </div>
     );
@@ -1922,391 +2580,131 @@ const TrackServicePage = () => {
     return groups;
   }, {});
 
-  return (
-    <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
-        
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-[1600px] mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                  <FiTarget className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Service Management</h1>
-                  <p className="text-gray-600 text-sm">Track and manage service applications</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                {id && (
-                  <button
-                    onClick={handleBackToList}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-all duration-200"
-                  >
-                    <FiArrowLeft className="h-4 w-4" />
-                    <span>Back to List</span>
-                  </button>
-                )}
-                
-                <button
-                  className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
-                  onClick={() => window.location.reload()}
-                >
-                  <FiRefreshCw className="h-4 w-4" />
-                  <span>Refresh</span>
+  /* ---------- Single application page ---------- */
+  if (id) {
+    return (
+      <ErrorBoundary>
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+          <div className="w-full space-y-4">
+            <div className="flex items-center justify-between gap-3">
+              <button
+                onClick={handleBackToList}
+                className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-[#172a45]"
+              >
+                <FiArrowLeft className="h-4 w-4" /> All applications
+              </button>
+              <button
+                onClick={() => fetchSingleTrackingEntry(id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+              >
+                <FiRefreshCw className="h-4 w-4" /> Refresh
+              </button>
+            </div>
+
+            {selectedService ? (
+              renderServiceDetail(selectedService)
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+                <FiAlertCircle className="mx-auto h-10 w-10 text-gray-300 mb-3" />
+                <h3 className="text-lg font-semibold text-gray-900">Application not found</h3>
+                <p className="text-sm text-gray-500 mt-1">It may have been removed, or you may not have access to it.</p>
+                <button onClick={handleBackToList} className="mt-4 px-4 py-2 text-sm font-semibold text-white bg-[#172a45] rounded-lg hover:bg-[#1e3a5f]">
+                  Go to all applications
                 </button>
               </div>
+            )}
+          </div>
+          <style>{`.scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none}.scrollbar-hide::-webkit-scrollbar{display:none}`}</style>
+        </div>
+      </ErrorBoundary>
+    );
+  }
+
+  /* ---------- All applications ---------- */
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+        <div className="w-full space-y-4">
+          {/* Header */}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Service Tracking</h1>
+              <p className="text-sm text-gray-500">Find an application, update it, and let the customer know.</p>
             </div>
-          </div>
-        </header>
-        
-        <div className="max-w-[1600px] mx-auto px-6 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <KPIStat title="Total Services" value={globalStats.total || 0} subtitle="In selected period" trend={12} icon={FiBarChart2} color="bg-gradient-to-br from-blue-500 to-blue-600" />
-            <KPIStat title="In Progress" value={globalStats.in_progress || 0} subtitle="Active now" trend={8} icon={FiTrendingUp} color="bg-gradient-to-br from-amber-500 to-amber-600" />
-            <KPIStat title="Completed" value={globalStats.completed || 0} subtitle="Successfully done" trend={15} icon={FiCheckCircle} color="bg-gradient-to-br from-emerald-500 to-emerald-600" />
-            <KPIStat title="SLA Compliance" value={`${Math.round(globalStats.sla_compliance || 100)}%`} subtitle="On time delivery" trend={2} icon={FiAward} color="bg-gradient-to-br from-purple-500 to-purple-600" />
-          </div>
-
-          {viewMode === 'grid' ? (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
-                  {renderQuickActionsPanel()}
-                </div>
-                <div className="lg:col-span-2">
-                  {renderFiltersPanel()}
-                </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-white border border-gray-200 p-1 rounded-lg" role="tablist" aria-label="View">
+                {[
+                  { id: 'queue', label: 'Queue', icon: FiColumns },
+                  { id: 'grid', label: 'Table', icon: FiList },
+                  { id: 'kanban', label: 'Board', icon: FiGrid },
+                ].map(v => (
+                  <button
+                    key={v.id}
+                    role="tab"
+                    aria-selected={viewMode === v.id}
+                    onClick={() => setViewMode(v.id)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-1.5 ${
+                      viewMode === v.id ? 'bg-[#172a45] text-white' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <v.icon className="h-4 w-4" /> {v.label}
+                  </button>
+                ))}
               </div>
-              
-              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col min-h-[500px]">
-                <div className="overflow-x-auto flex-1">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-gray-50 border-b border-gray-200 text-xs text-gray-500 uppercase tracking-wider">
-                        <th className="px-4 py-3 font-medium">Customer</th>
-                        <th className="px-4 py-3 font-medium">Service</th>
-                        <th className="px-4 py-3 font-medium w-48">App Number</th>
-                        <th className="px-4 py-3 font-medium w-40">Status & Step</th>
-                        <th className="px-4 py-3 font-medium w-48">Staff & Delivery</th>
-                        <th className="px-4 py-3 font-medium text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 bg-white">
-                      {Object.entries(servicesByDate).map(([date, dateServices]) => (
-                        <React.Fragment key={date}>
-                          <tr className="bg-gray-50 border-y border-gray-200">
-                            <td colSpan="6" className="px-4 py-2.5 text-xs font-bold text-gray-700 uppercase tracking-wider">
-                              <div className="flex items-center gap-2">
-                                <FiCalendar className="h-4 w-4 text-indigo-500" />
-                                {date === 'Unknown Date' ? date : formatDate(date)}
-                                <span className="bg-gray-200 text-gray-600 py-0.5 px-2 rounded-full text-[10px] ml-2">
-                                  {dateServices.length} items
-                                </span>
-                              </div>
-                            </td>
-                           </tr>
-                          
-                          {dateServices.map(service => (
-                            <React.Fragment key={service.id}>
-                              <tr className={`transition-colors group ${
-                                selectedService?.id === service.id
-                                  ? 'bg-indigo-50 ring-2 ring-inset ring-indigo-400'
-                                  : 'hover:bg-gray-50'
-                                }`}>
-                                <td className="px-4 py-3">
-                                  <div className="text-sm font-semibold text-gray-900 whitespace-nowrap">{service.customerName}</div>
-                                  <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
-                                    <FiPhone className="h-3 w-3" /> {service.phone || 'N/A'}
-                                  </div>
-                                 </td>
-                                <td className="px-4 py-3">
-                                  <div className="text-sm text-gray-900 font-medium truncate max-w-[200px]" title={service.serviceType}>
-                                    {service.serviceType}
-                                  </div>
-                                  <div className="text-xs text-gray-500 truncate max-w-[200px] mt-0.5" title={service.subcategoryName}>
-                                    {service.subcategoryName || '-'}
-                                  </div>
-                                 </td>
-                                <td className="px-4 py-3">
-                                  <input 
-                                    type="text"
-                                    defaultValue={service.applicationNumber || ''}
-                                    onBlur={(e) => {
-                                        if(e.target.value !== service.applicationNumber) {
-                                            handleInlineTrackingUpdate(service, { applicationNumber: e.target.value });
-                                        }
-                                    }}
-                                    className="w-full text-xs font-medium border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 px-2 py-1.5 border bg-white shadow-sm transition-all hover:border-gray-400"
-                                    placeholder="App No..."
-                                  />
-                                 </td>
-                                <td className="px-4 py-3 space-y-1.5">
-                                  <select 
-                                    value={service.status}
-                                    onChange={(e) => handleUpdateStatus(service.id, e.target.value)}
-                                    className={`w-full text-[11px] font-bold rounded-md px-2 py-1 border outline-none shadow-sm cursor-pointer transition-all ${
-                                        statusConfig[service.status]?.bg || 'bg-gray-100'
-                                    } ${statusConfig[service.status]?.color || 'text-gray-800'} ${statusConfig[service.status]?.border || 'border-gray-200'}`}
-                                  >
-                                    {Object.keys(statusConfig).map(statusKey => (
-                                        <option key={statusKey} value={statusKey}>{statusKey}</option>
-                                    ))}
-                                  </select>
-                                  
-                                  <select
-                                    value={service.currentStep || 'Submitted'}
-                                    onChange={(e) => handleInlineTrackingUpdate(service, { currentStep: e.target.value })}
-                                    className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                                  >
-                                    {stepOptions.map(step => (
-                                        <option key={step.value} value={step.value}>{step.label}</option>
-                                    ))}
-                                  </select>
-                                 </td>
-                                <td className="px-4 py-3 space-y-1.5">
-                                  <select
-                                    value={service.assignedToId || ''}
-                                    onChange={(e) => handleInlineTrackingUpdate(service, { assignedTo: e.target.value })}
-                                    className="w-full text-[11px] font-medium text-gray-700 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                                  >
-                                    <option value="">Unassigned Staff</option>
-                                    {staffList.map(staff => (
-                                        <option key={staff.id} value={staff.id}>{staff.name}</option>
-                                    ))}
-                                  </select>
-                                  
-                                  <input 
-                                    type="date"
-                                    value={formatDateForInput(service.rawEstimatedDelivery)}
-                                    onChange={(e) => handleInlineTrackingUpdate(service, { estimatedDelivery: e.target.value })}
-                                    className="w-full text-[11px] font-medium text-gray-600 bg-white border border-gray-300 rounded-md px-2 py-1 shadow-sm outline-none focus:border-indigo-500 cursor-pointer"
-                                  />
-                                 </td>
-                                <td className="px-4 py-3 align-top">
-                                  <div className="flex items-center justify-end gap-2 mt-1">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleNotifyCustomer(service);
-                                      }}
-                                      title="Send WhatsApp Notification"
-                                      className="p-1.5 rounded-lg transition-colors border shadow-sm bg-white text-gray-500 border-gray-200 hover:text-green-600 hover:bg-green-50 hover:border-green-200"
-                                    >
-                                      <FiMessageSquare className="h-4 w-4" />
-                                    </button>
-                                    
-                                    <button 
-                                      onClick={() => {
-                                          if (selectedService?.id === service.id) {
-                                              setSelectedService(null);
-                                          } else {
-                                              handleServiceSelect(service, true);
-                                          }
-                                      }} 
-                                      title={selectedService?.id === service.id ? "Collapse Details" : "Expand Details"}
-                                      className={`p-1.5 rounded-lg transition-colors border shadow-sm ${
-                                        selectedService?.id === service.id 
-                                          ? 'bg-indigo-100 text-indigo-700 border-indigo-200' 
-                                          : 'bg-white text-gray-500 border-gray-200 hover:text-indigo-600 hover:bg-indigo-50 hover:border-indigo-200'
-                                      }`}
-                                    >
-                                      <FiChevronDown className={`h-4 w-4 transform transition-transform duration-300 ${selectedService?.id === service.id ? 'rotate-180' : ''}`} />
-                                    </button>
-                                  </div>
-                                 </td>
-                               </tr>
-                              
-                                                              {selectedService?.id === service.id && (
-                                 <tr>
-                                  <td colSpan="6" className={`p-0 border-b-4 shadow-inner ${statusConfig[service.status]?.border || 'border-indigo-300'}`}>
-                                    <div ref={detailPanelRef} className="bg-indigo-50/30">
-                                      {/* Sticky nav toolbar — identity + status always visible while scrolling */}
-                                      <div className={`sticky top-0 z-20 border-b-2 px-4 py-2.5 shadow-sm backdrop-blur bg-white/95 ${statusConfig[service.status]?.border || 'border-indigo-200'}`}>
-                                        <div className="flex items-center justify-between gap-4">
-                                          <button
-                                            onClick={() => handleNavigateApplication(-1)}
-                                            disabled={currentServiceIndex <= 0}
-                                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                                          >
-                                            <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
-                                            Previous
-                                          </button>
 
-                                          <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-center">
-                                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusConfig[service.status]?.dot || 'bg-indigo-500'}`} />
-                                            <span className="text-sm font-bold text-gray-900 truncate">
-                                              {service.customerName}
-                                            </span>
-                                            <span className="text-xs text-gray-400 flex-shrink-0">·</span>
-                                            <span className="text-xs font-mono text-gray-500 truncate flex-shrink-0">
-                                              {service.applicationNumber || 'N/A'}
-                                            </span>
-                                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${statusConfig[service.status]?.bg} ${statusConfig[service.status]?.color}`}>
-                                              {service.status}
-                                            </span>
-                                          </div>
-
-                                          <div className="flex items-center gap-2 flex-shrink-0">
-                                            <span className="text-xs font-medium text-gray-400">
-                                              {currentServiceIndex + 1}/{services.length}
-                                            </span>
-                                            <button
-                                              onClick={() => handleNavigateApplication(1)}
-                                              disabled={currentServiceIndex >= services.length - 1}
-                                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                            >
-                                              Next
-                                              <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
-                                            </button>
-                                            <button
-                                              onClick={() => setSelectedService(null)}
-                                              title="Collapse"
-                                              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                                            >
-                                              <FiX className="h-4 w-4" />
-                                            </button>
-                                          </div>
-                                        </div>
-                                      </div>
-
-                                      <div className="p-6">
-                                        {renderDetailPane()}
-                                      </div>
-                                    </div>
-                                   </td>
-                                 </tr>
-                              )}
-                            </React.Fragment>
-                          ))}
-                        </React.Fragment>
-                      ))}
-                      
-                      {services.length === 0 && (
-                         <tr>
-                          <td colSpan="6" className="text-center py-16 text-gray-500">
-                            <FiSearch className="mx-auto h-10 w-10 mb-3 opacity-30" />
-                            <p className="text-base font-medium text-gray-900">No services found</p>
-                            <p className="text-sm mt-1">Try adjusting your filters or search terms.</p>
-                           </td>
-                         </tr>
-                      )}
-                    </tbody>
-                   </table>
-                </div>
-
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-                    <button
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                    >
-                      Previous Page
+              <div className="relative">
+                <button
+                  onClick={() => setExportOpen(o => !o)}
+                  onBlur={() => setTimeout(() => setExportOpen(false), 150)}
+                  className="px-3 py-2 text-sm font-medium bg-white border border-gray-200 rounded-lg hover:bg-gray-50 flex items-center gap-1.5"
+                >
+                  <FiDownload className="h-4 w-4" /> Export <FiChevronDown className="h-3.5 w-3.5" />
+                </button>
+                {exportOpen && (
+                  <div className="absolute right-0 mt-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-30 py-1">
+                    <button onMouseDown={handleExportExcel} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
+                      <FiFileText className="h-4 w-4 text-emerald-600" /> Excel
                     </button>
-                    <div className="text-sm text-gray-600 font-medium bg-white px-4 py-1.5 rounded-lg border border-gray-200 shadow-sm">
-                      Page {currentPage} of {totalPages}
-                    </div>
-                    <button
-                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                      disabled={currentPage === totalPages}
-                      className="px-4 py-2 text-sm font-medium text-gray-700 bg-white rounded-lg border border-gray-300 hover:bg-gray-50 hover:text-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
-                    >
-                      Next Page
+                    <button onMouseDown={handleExportPDF} className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 flex items-center gap-2">
+                      <FiFileText className="h-4 w-4 text-rose-600" /> PDF
                     </button>
                   </div>
                 )}
               </div>
+
+              <button
+                onClick={() => Promise.all([fetchAllTrackingEntries(), fetchStats()])}
+                className="p-2 text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-50"
+                title="Refresh"
+              >
+                <FiRefreshCw className="h-4 w-4" />
+              </button>
+
+              <button
+                onClick={() => navigate('/dashboard/staff/service_entry')}
+                className="px-3 py-2 text-sm font-semibold bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] flex items-center gap-1.5 shadow-sm whitespace-nowrap"
+              >
+                <FiPlus className="h-4 w-4" /> New entry
+              </button>
             </div>
-                    ) : (
-            <div className="space-y-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1">
-                  {renderQuickActionsPanel()}
-                </div>
-                <div className="lg:col-span-2">
-                  {renderFiltersPanel()}
-                </div>
-              </div>
+          </div>
 
-              {renderKanbanBoard()}
+          {renderMetrics()}
 
-              {selectedService && (
-                <div className={`rounded-xl border-4 shadow-sm overflow-hidden ${statusConfig[selectedService.status]?.border || 'border-indigo-300'}`}>
-                  <div ref={detailPanelRef} className="bg-indigo-50/30">
-                    <div className={`sticky top-0 z-20 border-b-2 px-4 py-2.5 shadow-sm backdrop-blur bg-white/95 ${statusConfig[selectedService.status]?.border || 'border-indigo-200'}`}>
-                      <div className="flex items-center justify-between gap-4">
-                        <button
-                          onClick={() => handleNavigateApplication(-1)}
-                          disabled={currentServiceIndex <= 0}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-                        >
-                          <FiChevronDown className="h-3.5 w-3.5 rotate-90" />
-                          Previous
-                        </button>
+          {renderToolbar()}
 
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1 justify-center">
-                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${statusConfig[selectedService.status]?.dot || 'bg-indigo-500'}`} />
-                          <span className="text-sm font-bold text-gray-900 truncate">
-                            {selectedService.customerName}
-                          </span>
-                          <span className="text-xs text-gray-400 flex-shrink-0">·</span>
-                          <span className="text-xs font-mono text-gray-500 truncate flex-shrink-0">
-                            {selectedService.applicationNumber || 'N/A'}
-                          </span>
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0 ${statusConfig[selectedService.status]?.bg} ${statusConfig[selectedService.status]?.color}`}>
-                            {selectedService.status}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-xs font-medium text-gray-400">
-                            {currentServiceIndex + 1}/{services.length}
-                          </span>
-                          <button
-                            onClick={() => handleNavigateApplication(1)}
-                            disabled={currentServiceIndex >= services.length - 1}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 rounded-lg hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                          >
-                            Next
-                            <FiChevronDown className="h-3.5 w-3.5 -rotate-90" />
-                          </button>
-                          <button
-                            onClick={() => setSelectedService(null)}
-                            title="Collapse"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                          >
-                            <FiX className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="p-6">
-                      {renderDetailPane()}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
+          {viewMode === 'queue' ? renderQueue() : viewMode === 'grid' ? renderTable() : renderKanbanBoard()}
         </div>
-        
-        <style>{`
-          .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-          .scrollbar-hide::-webkit-scrollbar {
-            display: none;
-          }
-        `}</style>
+
+        {viewMode !== 'queue' && renderDrawer()}
+
+        <style>{`.scrollbar-hide{-ms-overflow-style:none;scrollbar-width:none}.scrollbar-hide::-webkit-scrollbar{display:none}`}</style>
       </div>
     </ErrorBoundary>
   );
 };
+
+
 
 const StatItem = ({ label, value }) => (
   <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -2343,7 +2741,7 @@ const FormField = ({ label, name, value, onChange, type = 'text', placeholder, m
       onChange={onChange}
       placeholder={placeholder}
       maxLength={maxLength}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]"
     />
   </div>
 );
@@ -2355,7 +2753,7 @@ const FormSelect = ({ label, name, value, onChange, options, placeholder }) => (
       name={name}
       value={value}
       onChange={onChange}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]"
     >
       <option value="">{placeholder}</option>
       {options.map(option => (
@@ -2374,14 +2772,14 @@ const FormTextarea = ({ label, name, value, onChange, placeholder, rows = 4 }) =
       onChange={onChange}
       placeholder={placeholder}
       rows={rows}
-      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]"
     />
   </div>
 );
 
 const ActivityItem = ({ action, description, time, user }) => (
   <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-    <div className="w-2 h-2 bg-indigo-500 rounded-full mt-2"></div>
+    <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
     <div className="flex-1">
       <div className="flex items-center justify-between">
         <p className="text-sm font-medium text-gray-900">{action}</p>
@@ -2398,13 +2796,16 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
     <h3 className="font-semibold text-gray-900">Update Tracking Information</h3>
     <form onSubmit={onSave} className="grid grid-cols-1 md:grid-cols-2 gap-6">
       <div className="space-y-4">
-        <FormField 
-          label="Application Number"
-          name="applicationNumber"
-          value={formData.applicationNumber}
-          onChange={onFormChange}
-          placeholder="Enter application number (optional)"
-        />
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Application Number</label>
+          <ApplicationNumberField
+            mode="form"
+            name="applicationNumber"
+            value={formData.applicationNumber}
+            placeholder="Type or paste the number (optional)"
+            onChange={(v) => onFormChange({ target: { name: 'applicationNumber', value: v } })}
+          />
+        </div>
         <FormSelect
           label="Current Step"
           name="currentStep"
@@ -2480,7 +2881,7 @@ const TrackingView = ({ service, formData, onFormChange, staffList, stepOptions,
         </button>
         <button
           type="submit"
-          className="px-6 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+          className="px-6 py-2.5 bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] transition-colors"
         >
           Save Changes
         </button>
@@ -2547,7 +2948,7 @@ const DocumentRemarkEditor = ({ doc, onSave }) => {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); setEditing(true); }}
-      className="mt-1.5 text-[11px] text-gray-400 hover:text-indigo-600 flex items-center gap-1 transition-colors"
+      className="mt-1.5 text-[11px] text-gray-400 hover:text-[#172a45] flex items-center gap-1 transition-colors"
     >
       <FiPlus className="h-2.5 w-2.5" />
       Add customer remark
@@ -2606,7 +3007,7 @@ const EnhancedDocumentsView = ({
     const name = (doc.file_name || doc.label || '').toLowerCase();
     if (name.endsWith('.pdf')) return { Icon: FiFileText, color: 'text-rose-600', bg: 'bg-rose-50' };
     if (name.match(/\.(jpg|jpeg|png|gif|webp)$/)) return { Icon: FiEye, color: 'text-blue-600', bg: 'bg-blue-50' };
-    if (name.match(/\.(doc|docx)$/)) return { Icon: FiFileText, color: 'text-indigo-600', bg: 'bg-indigo-50' };
+    if (name.match(/\.(doc|docx)$/)) return { Icon: FiFileText, color: 'text-[#172a45]', bg: 'bg-blue-50' };
     return { Icon: FiFileText, color: 'text-gray-600', bg: 'bg-gray-50' };
   };
 
@@ -2616,8 +3017,8 @@ const EnhancedDocumentsView = ({
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center">
-              <FiPaperclip className="h-4 w-4 text-indigo-600" />
+            <div className="w-9 h-9 bg-blue-100 rounded-lg flex items-center justify-center">
+              <FiPaperclip className="h-4 w-4 text-[#172a45]" />
             </div>
             <h3 className="text-lg font-semibold text-gray-900">Customer Documents</h3>
           </div>
@@ -2626,12 +3027,12 @@ const EnhancedDocumentsView = ({
           </p>
         </div>
         <div className="flex items-center gap-2 ml-11 sm:ml-0">
-          <div className="px-3 py-1.5 bg-gray-100 rounded-lg">
+          <div className="px-3 py-1.5 bg-gray-100 rounded-lg whitespace-nowrap">
             <span className="text-xs font-medium text-gray-600">
               {documents.length} {documents.length === 1 ? 'file' : 'files'}
             </span>
           </div>
-          <div className="px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-200">
+          <div className="px-3 py-1.5 bg-emerald-50 rounded-lg whitespace-nowrap border border-emerald-200">
             <span className="text-xs font-medium text-emerald-700">
               {documents.filter(d => d.visible_to_customer).length} visible
             </span>
@@ -2642,13 +3043,14 @@ const EnhancedDocumentsView = ({
       {/* Upload Form */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-          <FiUpload className="h-4 w-4 text-indigo-600" />
+          <FiUpload className="h-4 w-4 text-[#172a45]" />
           <h4 className="text-sm font-semibold text-gray-900">Upload New Document</h4>
         </div>
         <form onSubmit={handleSubmit} className="p-5 space-y-4">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          {/* Wraps by the space it has (not the screen size), so it also fits the drawer */}
+          <div className="flex flex-wrap gap-4">
             {/* Label */}
-            <div className="lg:col-span-4">
+            <div className="flex-[1_1_200px] min-w-0">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
                 Document Label <span className="text-rose-500">*</span>
               </label>
@@ -2657,12 +3059,12 @@ const EnhancedDocumentsView = ({
                 placeholder="e.g. Income Certificate"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
-                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45] transition-all"
               />
             </div>
 
             {/* File Drop Zone */}
-            <div className="lg:col-span-5">
+            <div className="flex-[2_1_260px] min-w-0">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
                 File <span className="text-rose-500">*</span>
               </label>
@@ -2673,10 +3075,10 @@ const EnhancedDocumentsView = ({
                 onClick={() => fileInputRef.current?.click()}
                 className={`relative flex items-center gap-3 px-3 py-2.5 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
                   dragActive
-                    ? 'border-indigo-500 bg-indigo-50'
+                    ? 'border-indigo-500 bg-blue-50'
                     : file
                     ? 'border-emerald-400 bg-emerald-50/40'
-                    : 'border-gray-300 bg-gray-50 hover:border-indigo-400 hover:bg-indigo-50/40'
+                    : 'border-gray-300 bg-gray-50 hover:border-[#172a45] hover:bg-blue-50/40'
                 }`}
               >
                 <input
@@ -2698,14 +3100,14 @@ const EnhancedDocumentsView = ({
                     <span className="text-sm text-gray-500 truncate flex-1">
                       {dragActive ? 'Drop file here' : 'Click or drag file to upload'}
                     </span>
-                    <span className="text-xs text-gray-400 flex-shrink-0 hidden sm:inline">PDF, DOC, IMG</span>
+                    <span className="text-xs text-gray-400 flex-shrink-0">PDF, DOC, IMG</span>
                   </>
                 )}
               </div>
             </div>
 
             {/* Visibility + Button */}
-            <div className="lg:col-span-3 flex flex-col">
+            <div className="flex-[1_1_220px] min-w-0 flex flex-col">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">
                 Visibility
               </label>
@@ -2726,7 +3128,7 @@ const EnhancedDocumentsView = ({
                 <button
                   type="submit"
                   disabled={uploadingDocument || !file || !label.trim()}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-indigo-600 text-white text-xs font-semibold rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                  className="flex-1 whitespace-nowrap flex items-center justify-center gap-1.5 px-3 py-2.5 bg-[#172a45] text-white text-xs font-semibold rounded-lg hover:bg-[#1e3a5f] disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
                 >
                   {uploadingDocument ? (
                     <>
@@ -2766,7 +3168,7 @@ const EnhancedDocumentsView = ({
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
         <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <FiFileText className="h-4 w-4 text-indigo-600" />
+            <FiFileText className="h-4 w-4 text-[#172a45]" />
             <h4 className="text-sm font-semibold text-gray-900">Uploaded Documents</h4>
           </div>
           {documents.length > 0 && (
@@ -2778,7 +3180,7 @@ const EnhancedDocumentsView = ({
 
         {documentsLoading ? (
           <div className="flex items-center justify-center py-12">
-            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-6 h-6 border-2 border-[#172a45] border-t-transparent rounded-full animate-spin"></div>
             <span className="ml-3 text-sm text-gray-500">Loading documents...</span>
           </div>
         ) : documents.length === 0 ? (
@@ -2870,7 +3272,7 @@ const EnhancedDocumentsView = ({
                             href={doc.file_url || doc.url || '#'}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-[#172a45] hover:bg-blue-50 transition-colors"
                             title="View document"
                             onClick={(e) => {
                               if (!doc.file_url && !doc.url) e.preventDefault();
@@ -2908,7 +3310,7 @@ const HistoryView = ({ activityHistory, activityLoading }) => {
         <h3 className="font-semibold text-gray-900">Activity History</h3>
 
         <div className="flex items-center justify-center py-10">
-          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-6 h-6 border-2 border-[#172a45] border-t-transparent rounded-full animate-spin"></div>
           <span className="ml-3 text-sm text-gray-500">
             Loading activity history...
           </span>

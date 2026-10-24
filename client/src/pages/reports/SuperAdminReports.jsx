@@ -112,16 +112,16 @@ const SuperAdminReports = () => {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <FiLoader className="animate-spin h-8 w-8 text-indigo-600" />
+      <div className="flex h-screen items-center justify-center bg-gradient-to-br from-gray-50 to-indigo-50">
+        <FiLoader className="h-8 w-8 animate-spin text-navy-700" />
       </div>
     );
   }
 
   if (centres.length === 0) {
     return (
-      <div className="min-h-screen bg-gray-50 p-6">
-        <div className="max-w-5xl mx-auto bg-white p-6 rounded-xl border text-gray-600">
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+        <div className="w-full rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
           No centres found.
         </div>
       </div>
@@ -129,90 +129,99 @@ const SuperAdminReports = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header with centre switcher */}
-      <div className="bg-white border-b px-6 py-4 sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-bold flex items-center">
-          <FiBarChart2 className="mr-3 text-indigo-600" /> SuperAdmin Reports
-        </h1>
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
+      <div className="w-full">
+        {/* Header with centre switcher */}
+        <div className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-navy-700 text-white">
+              <FiBarChart2 className="h-6 w-6" />
+            </span>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">SuperAdmin Reports</h1>
+              <p className="mt-0.5 text-sm text-slate-500">Financial reports for each centre</p>
+            </div>
+          </div>
 
-        <div className="relative">
-          <FiMapPin className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-          <select
-            value={selectedCentreId ?? ""}
-            onChange={handleCentreChange}
-            className="appearance-none bg-white border border-gray-300 rounded-lg pl-9 pr-10 py-2 text-sm font-medium text-gray-800 min-w-[220px] focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 cursor-pointer"
-            aria-label="Select centre"
-          >
-            {centres.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}{c.location ? ` — ${c.location}` : ""}
-              </option>
-            ))}
-          </select>
-          <FiChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-        </div>
-      </div>
-
-      {/* Section tabs */}
-      <div className="border-b bg-white">
-        <nav className="flex space-x-8 px-6 overflow-x-auto">
-          {SECTIONS.map((id) => (
-            <button
-              key={id}
-              onClick={() => setActiveSection(id)}
-              className={`py-4 border-b-2 text-sm font-medium capitalize whitespace-nowrap ${
-                activeSection === id
-                  ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
+          <div className="relative">
+            <FiMapPin className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <select
+              value={selectedCentreId ?? ""}
+              onChange={handleCentreChange}
+              className="w-full min-w-[240px] cursor-pointer appearance-none rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-10 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40 md:w-auto"
+              aria-label="Select centre"
             >
-              {id}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      {/* Content. key={centre id} remounts each section on switch, so internal
-          state (page number, search, filters, etc.) never leaks between centres. */}
-      <div className="p-6">
-        {selectedCentre && (
-          <>
-            {activeSection === "overview" &&
-              (dataLoading || !data ? (
-                <div className="flex justify-center py-12">
-                  <FiLoader className="animate-spin h-8 w-8 text-indigo-600" />
-                </div>
-              ) : (
-                <OverviewSection
-                  key={selectedCentre.id}
-                  data={data}
-                  stats={stats}
-                  showCharts={true}
-                  timePeriod={timePeriod}
-                  setTimePeriod={setTimePeriod}
-                  setActiveSection={setActiveSection}
-                  readOnly
-                />
+              {centres.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}{c.location ? ` — ${c.location}` : ""}
+                </option>
               ))}
+            </select>
+            <FiChevronDown className="pointer-events-none absolute right-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          </div>
+        </div>
 
-            {activeSection === "wallets" && (
-              <SuperAdminWalletsSection key={selectedCentre.id} centreId={selectedCentre.id} />
-            )}
-            {activeSection === "staff" && (
-              <SuperAdminStaffSection key={selectedCentre.id} centreId={selectedCentre.id} />
-            )}
-            {activeSection === "accounting" && (
-              <SuperAdminAccountingSection key={selectedCentre.id} centreId={selectedCentre.id} readOnly />
-            )}
-            {activeSection === "transactions" && (
-              <SuperAdminTransactionsSection key={selectedCentre.id} centreId={selectedCentre.id} readOnly />
-            )}
-            {activeSection === "pending" && (
-              <SuperAdminPendingPayments key={selectedCentre.id} centreId={selectedCentre.id} readOnly />
-            )}
-          </>
-        )}
+        {/* Section tabs */}
+        <div className="mb-6 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-1.5" role="tablist" aria-label="Report sections">
+          <div className="flex gap-1">
+            {SECTIONS.map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                aria-selected={activeSection === id}
+                onClick={() => setActiveSection(id)}
+                className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-medium capitalize transition ${
+                  activeSection === id ? "bg-navy-700 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {id}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Content. key={centre id} remounts each section on switch, so internal
+            state (page number, search, filters, etc.) never leaks between centres. */}
+        <div>
+          {selectedCentre && (
+            <>
+              {activeSection === "overview" &&
+                (dataLoading || !data ? (
+                  <div className="flex justify-center py-12">
+                    <FiLoader className="h-8 w-8 animate-spin text-navy-700" />
+                  </div>
+                ) : (
+                  <OverviewSection
+                    key={selectedCentre.id}
+                    data={data}
+                    stats={stats}
+                    showCharts={true}
+                    timePeriod={timePeriod}
+                    setTimePeriod={setTimePeriod}
+                    setActiveSection={setActiveSection}
+                    readOnly
+                  />
+                ))}
+
+              {activeSection === "wallets" && (
+                <SuperAdminWalletsSection key={selectedCentre.id} centreId={selectedCentre.id} />
+              )}
+              {activeSection === "staff" && (
+                <SuperAdminStaffSection key={selectedCentre.id} centreId={selectedCentre.id} />
+              )}
+              {activeSection === "accounting" && (
+                <SuperAdminAccountingSection key={selectedCentre.id} centreId={selectedCentre.id} readOnly />
+              )}
+              {activeSection === "transactions" && (
+                <SuperAdminTransactionsSection key={selectedCentre.id} centreId={selectedCentre.id} readOnly />
+              )}
+              {activeSection === "pending" && (
+                <SuperAdminPendingPayments key={selectedCentre.id} centreId={selectedCentre.id} readOnly />
+              )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

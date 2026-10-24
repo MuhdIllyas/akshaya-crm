@@ -36,27 +36,44 @@ ChartJS.register(
   Filler
 );
 
+// Shared chart text style (UI only)
+const TICK = { font: { size: 11 }, color: '#64748b' };
+const GRID = { color: 'rgba(148, 163, 184, 0.18)' };
+
+// Card shell used by every chart (UI only)
+const ChartCard = ({ title, icon: Icon, children }) => (
+  <div className="h-full rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+    <div className="mb-4 flex items-center justify-between">
+      <h3 className="text-sm font-semibold text-slate-900">{title}</h3>
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-navy-700">
+        <Icon className="h-4 w-4" />
+      </span>
+    </div>
+    <div className="relative h-64">{children}</div>
+  </div>
+);
+
 // StatCard Component
 const StatCard = ({ title, value, icon: Icon, color, change, subtitle, onClick }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 hover:shadow-lg transition-all duration-300 cursor-pointer p-6"
+    className="cursor-pointer rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md"
     onClick={onClick}
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-sm">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-2xl">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className="mb-1 truncate text-xl font-bold text-slate-900">{value}</p>
         {change !== undefined && (
-          <p className={`font-medium ${change >= 0 ? 'text-emerald-600' : 'text-rose-600'} text-sm`}>
+          <p className={`text-xs font-medium ${change >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
             {change >= 0 ? `↑ ${change}%` : `↓ ${Math.abs(change)}%`}
-            <span className="text-gray-500 ml-2">{subtitle}</span>
+            <span className="ml-2 text-slate-500">{subtitle}</span>
           </p>
         )}
-        {change === undefined && <p className="text-gray-500 text-sm">{subtitle}</p>}
+        {change === undefined && <p className="truncate text-xs text-slate-500">{subtitle}</p>}
       </div>
-      <div className={`rounded-xl ${color} p-3`}>
-        <Icon className="text-white h-6 w-6" />
+      <div className={`shrink-0 rounded-xl ${color} p-2.5`}>
+        <Icon className="h-5 w-5 text-white" />
       </div>
     </div>
   </motion.div>
@@ -90,25 +107,19 @@ const RevenueTrendChart = ({ data }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'top', labels: { boxWidth: 8, font: { size: 12 } } },
-      title: { display: true, text: 'Revenue vs Expenses', font: { size: 14 } },
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: '#475569' } },
+      title: { display: false },
     },
     scales: {
-      y: { beginAtZero: true, ticks: { font: { size: 12 } } },
-      x: { ticks: { font: { size: 12 } } }
+      y: { beginAtZero: true, ticks: TICK, grid: GRID, border: { display: false } },
+      x: { ticks: TICK, grid: { display: false } }
     },
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 h-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Financial Trends</h3>
-        <FiTrendingUp className="text-indigo-600 h-5 w-5" />
-      </div>
-      <div className="h-64">
-        <Line data={chartData} options={options} />
-      </div>
-    </div>
+    <ChartCard title="Financial Trends" icon={FiTrendingUp}>
+      <Line data={chartData} options={options} />
+    </ChartCard>
   );
 };
 
@@ -130,21 +141,15 @@ const WalletBalanceChart = ({ wallets }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'right', labels: { boxWidth: 8, padding: 10, font: { size: 12 } } },
-      title: { display: true, text: 'Wallet Balance Distribution', font: { size: 14 } },
+      legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 12, font: { size: 11 }, color: '#475569' } },
+      title: { display: false },
     },
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 h-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Wallet Balances</h3>
-        <FiPieChart className="text-indigo-600 h-5 w-5" />
-      </div>
-      <div className="h-64">
-        <Doughnut data={chartData} options={options} />
-      </div>
-    </div>
+    <ChartCard title="Wallet Balances" icon={FiPieChart}>
+      <Doughnut data={chartData} options={options} />
+    </ChartCard>
   );
 };
 
@@ -157,9 +162,10 @@ const StaffPerformanceChart = ({ staffData }) => {
       {
         label: 'Revenue Collected',
         data: safeStaffData.map(s => Number(s.total_revenue || s.revenue || 0)),
-        backgroundColor: 'rgba(99, 102, 241, 0.8)',
-        borderColor: 'rgb(99, 102, 241)',
+        backgroundColor: 'rgba(30, 58, 95, 0.85)',
+        borderColor: 'rgb(30, 58, 95)',
         borderWidth: 1,
+        borderRadius: 6,
       },
     ],
   };
@@ -169,25 +175,19 @@ const StaffPerformanceChart = ({ staffData }) => {
     maintainAspectRatio: false,
     indexAxis: 'y',
     plugins: {
-      legend: { position: 'top', labels: { boxWidth: 8, font: { size: 12 } } },
-      title: { display: true, text: 'Staff Performance', font: { size: 14 } },
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: '#475569' } },
+      title: { display: false },
     },
     scales: {
-      x: { beginAtZero: true, ticks: { font: { size: 12 } } },
-      y: { ticks: { font: { size: 12 } } }
+      x: { beginAtZero: true, ticks: TICK, grid: GRID, border: { display: false } },
+      y: { ticks: TICK, grid: { display: false } }
     },
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 h-full">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-gray-900">Staff Performance</h3>
-        <FiUserCheckIcon className="text-indigo-600 h-5 w-5" />
-      </div>
-      <div className="h-64">
-        <Bar data={chartData} options={options} />
-      </div>
-    </div>
+    <ChartCard title="Staff Performance" icon={FiUserCheckIcon}>
+      <Bar data={chartData} options={options} />
+    </ChartCard>
   );
 };
 
@@ -209,48 +209,48 @@ const OverviewSection = ({
 
   return (
     <>
-      {/* 🌟 NEW: Quick Actions Row */}
-      <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4">
+      {/* Quick Actions Row */}
+      <div className="mb-5 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
         <div>
-          <h2 className="text-xl font-bold text-gray-900">Dashboard Overview</h2>
-          <p className="text-gray-500 text-sm">Here is what's happening at your centre today.</p>
+          <h2 className="text-xl font-bold text-slate-900">Dashboard Overview</h2>
+          <p className="text-sm text-slate-500">Here is what's happening at your centre today.</p>
         </div>
         
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-2">
           <button 
             onClick={() => setActiveSection('accounting')}
-            className="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 rounded-lg font-medium text-sm hover:bg-indigo-100 transition-colors"
+            className="flex items-center rounded-xl bg-navy-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-800"
           >
             <FiPlus className="mr-2 h-4 w-4" /> Add Income
           </button>
           <button 
             onClick={() => setActiveSection('accounting')}
-            className="flex items-center px-4 py-2 bg-rose-50 text-rose-700 rounded-lg font-medium text-sm hover:bg-rose-100 transition-colors"
+            className="flex items-center rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-100"
           >
             <FiMinus className="mr-2 h-4 w-4" /> Record Expense
           </button>
         </div>
       </div>
 
-      {/* 🌟 NEW: Smart Alerts Banner */}
+      {/* Smart Alerts Banner */}
       {(pendingCount > 0 || cashAmount > 50000) && (
         <motion.div 
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
+          className="mb-5 grid grid-cols-1 gap-3 md:grid-cols-2"
         >
           {/* Pending Payments Alert */}
           {pendingCount > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-start">
-              <div className="bg-amber-100 p-2 rounded-lg mr-3">
+            <div className="flex items-start rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="mr-3 rounded-xl bg-amber-100 p-2">
                 <FiAlertCircle className="h-5 w-5 text-amber-600" />
               </div>
               <div>
-                <h4 className="font-bold text-amber-900 text-sm">Action Required: Pending Payments</h4>
-                <p className="text-amber-700 text-xs mt-1">You have {stats.pendingTransactions} transaction(s) waiting for collection.</p>
+                <h4 className="text-sm font-bold text-amber-900">Action Required: Pending Payments</h4>
+                <p className="mt-1 text-xs text-amber-700">You have {stats.pendingTransactions} transaction(s) waiting for collection.</p>
                 <button 
                   onClick={() => setActiveSection('pendingPayments')}
-                  className="text-amber-700 text-xs font-bold mt-2 hover:underline"
+                  className="mt-2 text-xs font-bold text-amber-800 hover:underline"
                 >
                   Review Pending Payments →
                 </button>
@@ -260,16 +260,16 @@ const OverviewSection = ({
 
           {/* High Cash Warning Alert */}
           {cashAmount > 50000 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start">
-              <div className="bg-blue-100 p-2 rounded-lg mr-3">
+            <div className="flex items-start rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <div className="mr-3 rounded-xl bg-blue-100 p-2">
                 <FiShield className="h-5 w-5 text-blue-600" />
               </div>
               <div>
-                <h4 className="font-bold text-blue-900 text-sm">Security Recommendation</h4>
-                <p className="text-blue-700 text-xs mt-1">Your cash in hand is high ({stats.totalCashInHand}). Consider a bank deposit.</p>
+                <h4 className="text-sm font-bold text-blue-900">Security Recommendation</h4>
+                <p className="mt-1 text-xs text-blue-700">Your cash in hand is high ({stats.totalCashInHand}). Consider a bank deposit.</p>
                 <button 
                   onClick={() => setActiveSection('wallets')}
-                  className="text-blue-700 text-xs font-bold mt-2 hover:underline"
+                  className="mt-2 text-xs font-bold text-blue-800 hover:underline"
                 >
                   Manage Wallets →
                 </button>
@@ -280,31 +280,31 @@ const OverviewSection = ({
       )}
 
       {/* Stats Overview */}
-      <div className="grid gap-3 mb-6 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard title="Total Revenue" value={stats.totalRevenue} subtitle="YTD" change={stats.revenueChange} icon={FiTrendingUp} color="bg-gradient-to-br from-emerald-500 to-teal-600" onClick={() => setActiveSection('transactions')} />
-        <StatCard title="Net Profit" value={stats.totalProfit} subtitle="YTD" change={stats.profitChange} icon={FiDollarSign} color="bg-gradient-to-br from-green-500 to-emerald-600" onClick={() => setActiveSection('transactions')} />
-        <StatCard title="Wallet Balance" value={stats.totalWalletBalance} subtitle="Total" icon={FiSmartphone} color="bg-gradient-to-br from-indigo-500 to-purple-600" onClick={() => setActiveSection('wallets')} />
-        <StatCard title="Cash in Hand" value={stats.totalCashInHand} subtitle="Physical" icon={FiHome} color="bg-gradient-to-br from-amber-500 to-orange-600" onClick={() => setActiveSection('wallets')} />
-        <StatCard title="Today's Flow" value={stats.netCashFlowToday} subtitle={`In: ${stats.totalCashInToday}`} icon={FiActivity} color="bg-gradient-to-br from-purple-500 to-pink-600" onClick={() => setActiveSection('accounting')} />
-        <StatCard title="Today's Profit" value={stats.todayProfit} subtitle={`Charge: ${stats.todayServiceCharge}`} icon={FiUserCheck} color="bg-gradient-to-br from-blue-500 to-cyan-600" onClick={() => setActiveSection('accounting')} />
+      <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatCard title="Total Revenue" value={stats.totalRevenue} subtitle="YTD" change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Net Profit" value={stats.totalProfit} subtitle="YTD" change={stats.profitChange} icon={FiDollarSign} color="bg-green-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Wallet Balance" value={stats.totalWalletBalance} subtitle="Total" icon={FiSmartphone} color="bg-navy-700" onClick={() => setActiveSection('wallets')} />
+        <StatCard title="Cash in Hand" value={stats.totalCashInHand} subtitle="Physical" icon={FiHome} color="bg-amber-600" onClick={() => setActiveSection('wallets')} />
+        <StatCard title="Today's Flow" value={stats.netCashFlowToday} subtitle={`In: ${stats.totalCashInToday}`} icon={FiActivity} color="bg-violet-600" onClick={() => setActiveSection('accounting')} />
+        <StatCard title="Today's Profit" value={stats.todayProfit} subtitle={`Charge: ${stats.todayServiceCharge}`} icon={FiUserCheck} color="bg-sky-600" onClick={() => setActiveSection('accounting')} />
       </div>
 
       {/* Main Content Area: Charts (Left) + Recent Activity Sidebar (Right) */}
-      <div className="flex flex-col lg:flex-row gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         
         {/* LEFT COLUMN: Charts Area */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           {showCharts && (
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="mb-6">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                  <FiBarChart2 className="h-5 w-5 mr-2 text-indigo-600" />
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                <h2 className="flex items-center text-lg font-bold text-slate-900">
+                  <FiBarChart2 className="mr-2 h-5 w-5 text-navy-700" />
                   Analytics Dashboard
                 </h2>
-                <div className="flex items-center space-x-2">
-                  <FiCalendar className="h-4 w-4 text-gray-500" />
+                <div className="flex items-center gap-2">
+                  <FiCalendar className="h-4 w-4 text-slate-400" />
                     <select
-                      className="border border-gray-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                      className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-800 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                       value={timePeriod || 'monthly'}
                       onChange={(e) => {
                         if (typeof setTimePeriod === 'function') {
@@ -321,7 +321,7 @@ const OverviewSection = ({
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                 <RevenueTrendChart data={data} />
                 <WalletBalanceChart wallets={data?.lists?.wallets || data?.wallets || []} />
                 <div className="xl:col-span-2">
@@ -333,36 +333,36 @@ const OverviewSection = ({
         </div>
 
         {/* RIGHT COLUMN: Recent Activity Side Menu */}
-        <div className="w-full lg:w-87.5 xl:w-100 shrink-0">
+        <div className="w-full shrink-0 lg:w-[350px] xl:w-[400px]">
           <motion.div
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="bg-white rounded-xl border border-gray-200 overflow-hidden sticky top-24"
+            className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-24"
           >
-            <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50/50">
-              <h3 className="font-bold text-gray-900 flex items-center">
-                <FiActivity className="h-5 w-5 mr-2 text-indigo-600" />
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 p-4 sm:p-5">
+              <h3 className="flex items-center font-bold text-slate-900">
+                <FiActivity className="mr-2 h-5 w-5 text-navy-700" />
                 Recent Activity
               </h3>
               <button 
                 onClick={() => setActiveSection('transactions')}
-                className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg transition-colors"
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-navy-700 transition-colors hover:bg-slate-50"
               >
                 View All
               </button>
             </div>
             
-            {/* Redesigned Compact Feed */}
-            <div className="p-4 space-y-4">
+            {/* Compact Feed */}
+            <div className="space-y-4 p-4">
               {safeTransactions.slice(0, 8).map((tx, idx) => (
-                <div key={idx} className="flex items-center justify-between pb-4 border-b border-gray-50 last:border-0 last:pb-0">
-                  <div className="flex items-center space-x-3">
-                    <div className={`p-2.5 rounded-xl ${(tx.transactionType || tx.type) === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
+                <div key={idx} className="flex items-center justify-between gap-3 border-b border-slate-100 pb-4 last:border-0 last:pb-0">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className={`shrink-0 rounded-xl p-2.5 ${(tx.transactionType || tx.type) === 'credit' ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'}`}>
                       {(tx.transactionType || tx.type) === 'credit' ? <FiArrowDownLeft className="h-4 w-4" /> : <FiArrowUpRight className="h-4 w-4" />}
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-gray-900 truncate max-w-37.5">{tx.category}</p>
-                      <p className="text-xs text-gray-500 font-medium">
+                    <div className="min-w-0">
+                      <p className="max-w-[150px] truncate text-sm font-bold text-slate-900">{tx.category}</p>
+                      <p className="text-xs font-medium text-slate-500">
                         {tx.created_at ? new Date(tx.created_at).toLocaleDateString() : 'Just now'}
                         <span className={`ml-2 ${tx.status === 'Completed' ? 'text-emerald-600' : 'text-amber-500'}`}>
                           • {tx.status}
@@ -370,8 +370,8 @@ const OverviewSection = ({
                       </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-black ${(tx.transactionType || tx.type) === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                  <div className="shrink-0 text-right">
+                    <p className={`text-sm font-extrabold ${(tx.transactionType || tx.type) === 'credit' ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {(tx.transactionType || tx.type) === 'credit' ? '+' : '-'}₹{Number(tx.amount).toLocaleString()}
                     </p>
                   </div>
@@ -380,10 +380,10 @@ const OverviewSection = ({
 
               {safeTransactions.length === 0 && (
                 <div className="py-8 text-center">
-                  <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <FiActivity className="h-5 w-5 text-gray-400" />
+                  <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                    <FiActivity className="h-5 w-5 text-slate-400" />
                   </div>
-                  <p className="text-sm text-gray-500 font-medium">No recent activity</p>
+                  <p className="text-sm font-medium text-slate-500">No recent activity</p>
                 </div>
               )}
             </div>

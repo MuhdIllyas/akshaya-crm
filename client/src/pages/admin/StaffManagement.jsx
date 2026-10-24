@@ -1,9 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "react-toastify";
-import StaffTable from "../../components/StaffTable";
-import AddStaffForm from "../../components/AddStaffForm";
 import { Link } from "react-router-dom";
-import { FiPlus, FiSearch, FiFilter, FiDownload, FiGrid, FiList, FiUser, FiMail, FiPhone, FiCalendar, FiClock, FiRefreshCw, FiX } from "react-icons/fi";
+import {
+  FiPlus, FiSearch, FiDownload, FiGrid, FiList, FiUsers, FiUserCheck,
+  FiClock, FiLayers, FiMail, FiPhone, FiCalendar, FiGift, FiEdit2, FiX,
+} from "react-icons/fi";
+import StaffTable, { StaffAvatar, StatusBadge, RoleBadge, formatDate } from "../../components/StaffTable";
+import AddStaffForm from "../../components/AddStaffForm";
+
+const DEPARTMENTS = ["All", "Accounts", "Reception", "Front Office", "Aadhaar", "Staff Executive", "Customer Relations"];
+const STATUSES = ["All", "Active", "On Leave", "Terminated"];
+
+const getViewMode = () => {
+  try { return localStorage.getItem("staff-view-mode") || "card"; } catch { return "card"; }
+};
 
 const StaffManagement = () => {
   const [staffList, setStaffList] = useState([]);
@@ -12,480 +22,316 @@ const StaffManagement = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("All");
   const [selectedStatus, setSelectedStatus] = useState("All");
-  const [viewMode, setViewMode] = useState("card");
-  const [filterExpanded, setFilterExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState(getViewMode);
 
-  const departments = ["All", "Accounts", "Reception", "Front Office", "Aadhaar", "Staff Executive", "Customer Relations"];
-  const statuses = ["All", "Active", "On Leave", "Terminated"];
+  const changeView = (mode) => {
+    setViewMode(mode);
+    try { localStorage.setItem("staff-view-mode", mode); } catch {}
+  };
 
-  useEffect(() => {
-    const fetchStaff = async () => {
-      setLoading(true);
-      try {
-        const role = localStorage.getItem("role");
-        const centreId = localStorage.getItem("centre_id");
-        const url = role === "superadmin" ? `${import.meta.env.VITE_API_URL}/api/staff/all` : `${import.meta.env.VITE_API_URL}/api/staff/all?centre_id=${centreId}`;
-        const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
-        const data = await response.json();
-        if (response.ok) {
-          setStaffList(data);
-        } else {
-          throw new Error(data.error || "Failed to fetch staff");
-        }
-      } catch (err) {
-        console.error("Error fetching staff:", err);
-        toast.error(err.message, { position: "top-right", autoClose: 5000, theme: "light" });
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchStaff();
-  }, []);
-
-  const handleAddStaff = async () => {
+  const fetchStaff = useCallback(async () => {
+    setLoading(true);
     try {
       const role = localStorage.getItem("role");
       const centreId = localStorage.getItem("centre_id");
-      const url = role === "superadmin" ? `${import.meta.env.VITE_API_URL}/api/staff/all` : `${import.meta.env.VITE_API_URL}/api/staff/all?centre_id=${centreId}`;
+      const url =
+        role === "superadmin"
+          ? `${import.meta.env.VITE_API_URL}/api/staff/all`
+          : `${import.meta.env.VITE_API_URL}/api/staff/all?centre_id=${centreId}`;
       const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
       });
       const data = await response.json();
-      if (response.ok) {
-        setStaffList(data);
-        toast.success("Staff added successfully", { position: "top-right", autoClose: 3000, theme: "light" });
-      } else {
-        throw new Error(data.error || "Failed to refresh staff list");
-      }
-    } catch (error) {
-      console.error("Failed to refresh staff list:", error);
-      toast.error(error.message, { position: "top-right", autoClose: 5000, theme: "light" });
+      if (!response.ok) throw new Error(data.error || "Failed to fetch staff");
+      setStaffList(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error("Error fetching staff:", err);
+      toast.error(err.message);
+    } finally {
+      setLoading(false);
     }
+  }, []);
+
+  useEffect(() => { fetchStaff(); }, [fetchStaff]);
+
+  const handleStaffAdded = () => {
     setShowAddForm(false);
+    fetchStaff();
   };
 
-  const filteredStaff = staffList.filter((staff) => {
-    const matchesSearch =
-      staff.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      staff.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      staff.phone?.includes(searchTerm) ||
-      staff.username.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesDepartment = selectedDepartment === "All" || staff.department === selectedDepartment;
-    const matchesStatus = selectedStatus === "All" || staff.status === selectedStatus;
-    return matchesSearch && matchesDepartment && matchesStatus;
-  });
+  const filteredStaff = useMemo(() => {
+    const q = searchTerm.trim().toLowerCase();
+    return staffList.filter((s) => {
+      const matchesSearch =
+        !q ||
+        s.name?.toLowerCase().includes(q) ||
+        s.email?.toLowerCase().includes(q) ||
+        s.username?.toLowerCase().includes(q) ||
+        s.employeeId?.toLowerCase().includes(q) ||
+        s.phone?.includes(q);
+      const matchesDept = selectedDepartment === "All" || s.department === selectedDepartment;
+      const matchesStatus = selectedStatus === "All" || s.status === selectedStatus;
+      return matchesSearch && matchesDept && matchesStatus;
+    });
+  }, [staffList, searchTerm, selectedDepartment, selectedStatus]);
 
-  const getStatusBadge = (status) => {
-    const statusConfig = {
-      "Active": { bg: "bg-emerald-50", text: "text-emerald-700", dot: "bg-emerald-500" },
-      "On Leave": { bg: "bg-amber-50", text: "text-amber-700", dot: "bg-amber-500" },
-      "Terminated": { bg: "bg-red-50", text: "text-red-700", dot: "bg-red-500" }
-    };
-    
-    const config = statusConfig[status] || statusConfig["Active"];
-    
-    return (
-      <span className={`${config.bg} ${config.text} text-xs font-medium px-3 py-1.5 rounded-full flex items-center w-fit border`}>
-        <span className={`w-2 h-2 ${config.dot} rounded-full mr-2`}></span>
-        {status}
-      </span>
-    );
+  const hasFilters = searchTerm || selectedDepartment !== "All" || selectedStatus !== "All";
+  const resetFilters = () => {
+    setSearchTerm("");
+    setSelectedDepartment("All");
+    setSelectedStatus("All");
   };
 
-  const getRoleBadge = (role) => {
-    const roleColors = {
-      superadmin: "bg-purple-100 text-purple-700 border border-purple-200",
-      admin: "bg-blue-100 text-blue-700 border border-blue-200",
-      staff: "bg-gray-100 text-gray-700 border border-gray-200",
-      supervisor: "bg-amber-100 text-amber-700 border border-amber-200",
-    };
-    return (
-      <span
-        className={`text-xs font-medium px-3 py-1.5 rounded-full ${roleColors[role?.toLowerCase()] || "bg-gray-100 text-gray-700"}`}
-      >
-        {role}
-      </span>
+  const stats = [
+    { label: "Total Staff", value: staffList.length, icon: FiUsers, tone: "bg-slate-100 text-navy-700" },
+    { label: "Active", value: staffList.filter((s) => s.status === "Active").length, icon: FiUserCheck, tone: "bg-emerald-50 text-emerald-600" },
+    { label: "On Leave", value: staffList.filter((s) => s.status === "On Leave").length, icon: FiClock, tone: "bg-amber-50 text-amber-600" },
+    { label: "Departments", value: new Set(staffList.map((s) => s.department).filter(Boolean)).size, icon: FiLayers, tone: "bg-slate-100 text-slate-600" },
+  ];
+
+  const exportCsv = () => {
+    if (!filteredStaff.length) return toast.info("Nothing to export");
+    const cols = [
+      ["Employee ID", "employeeId"], ["Name", "name"], ["Username", "username"], ["Email", "email"],
+      ["Phone", "phone"], ["Role", "role"], ["Department", "department"], ["Status", "status"],
+      ["Join Date", "joinDate"], ["Date of Birth", "dateOfBirth"],
+    ];
+    const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const rows = filteredStaff.map((s) =>
+      cols.map(([, k]) => {
+        if (k === "dateOfBirth") return esc(String(s.dateOfBirth || s.dob || "").slice(0, 10));
+        if (k === "joinDate") return esc(String(s.joinDate || "").slice(0, 10));
+        return esc(s[k]);
+      }).join(",")
     );
-  };
-
-  // Loading skeleton for cards
-  const CardSkeleton = () => (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden animate-pulse">
-      <div className="p-6">
-        <div className="flex items-start gap-4">
-          <div className="flex-shrink-0">
-            <div className="w-16 h-16 bg-gray-200 rounded-full"></div>
-          </div>
-          <div className="flex-1 space-y-3">
-            <div className="h-5 bg-gray-200 rounded w-3/4"></div>
-            <div className="flex gap-2">
-              <div className="h-6 bg-gray-200 rounded w-20"></div>
-              <div className="h-6 bg-gray-200 rounded w-16"></div>
-            </div>
-            <div className="space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-full"></div>
-              <div className="h-4 bg-gray-200 rounded w-5/6"></div>
-              <div className="h-4 bg-gray-200 rounded w-4/6"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-
-  const StaffCardView = ({ staffList }) => {
-    return (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {staffList.length > 0 ? (
-          staffList.map((staff) => (
-            <div
-              key={staff.id}
-              className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-lg hover:scale-[1.02] group"
-            >
-              <div className="p-6">
-                <div className="flex items-start gap-4 mb-4">
-                  <div className="shrink-0 relative">
-                    {staff.photo ? (
-                      <img
-                        // Prepend the backend URL if it's a relative path. 
-                        // The startsWith checks ensure backward compatibility if you still have old Base64 strings in your DB!
-                        src={staff.photo.startsWith('http') || staff.photo.startsWith('data:image') 
-                          ? staff.photo 
-                          : `${import.meta.env.VITE_API_URL}${staff.photo}`}
-                        alt={staff.name}
-                        className="w-16 h-16 rounded-2xl object-cover border-2 border-white shadow-md"
-                      />
-                    ) : (
-                      <div className="bg-blue-100 border-2 border-white rounded-2xl w-16 h-16 flex items-center justify-center shadow-md">
-                        <FiUser className="text-blue-600 text-xl" />
-                      </div>
-                    )}
-                    <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-white border-2 border-white flex items-center justify-center">
-                      {getStatusBadge(staff.status)}
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex justify-between items-start">
-                      <h3 className="font-bold text-gray-900 text-lg truncate group-hover:text-blue-600 transition-colors">
-                        {staff.name}
-                      </h3>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Link
-                          to={`/dashboard/admin/staff/edit/${staff.id}`} 
-                          className="text-gray-400 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-indigo-50 transition-all"
-                          title="Edit staff"
-                        >
-                          <FiSearch className="text-lg" />
-                        </Link>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 mt-2">
-                      {getRoleBadge(staff.role)}
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="space-y-3 mb-4">
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FiMail className="text-gray-400 mr-3 text-lg" />
-                    <span className="truncate">{staff.email}</span>
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FiUser className="text-gray-400 mr-3 text-lg" />
-                    <span className="truncate">@{staff.username}</span>
-                  </div>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <FiPhone className="text-gray-400 mr-3 text-lg" />
-                    <span className="truncate">{staff.phone || "N/A"}</span>
-                  </div>
-                  {staff.department && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <div className="w-5 h-5 flex items-center justify-center mr-3">
-                        <div className="w-2 h-2 bg-gray-400 rounded-full"></div>
-                      </div>
-                      <span className="truncate">{staff.department}</span>
-                    </div>
-                  )}
-                  {staff.joinDate && (
-                    <div className="flex items-center text-sm text-gray-600">
-                      <FiCalendar className="text-gray-400 mr-3 text-lg" />
-                      <span className="truncate">{staff.joinDate.split("T")[0]}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex justify-between items-center pt-4 border-t border-gray-100">
-                  <Link
-                    to={`/dashboard/admin/staff/${staff.id}`} 
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-all"
-                  >
-                    Edit
-                  </Link>
-                  <Link
-                    to={`/dashboard/admin/staff/${staff.id}`} 
-                    className="text-sm text-blue-600 hover:text-blue-800 font-medium px-3 py-2 rounded-lg hover:bg-blue-50 transition-all"
-                  >
-                    View Profile
-                  </Link>
-                </div>
-              </div>
-            </div>
-          ))
-        ) : (
-          <div className="col-span-full bg-white rounded-2xl shadow-sm border border-gray-200 p-12 text-center">
-            <div className="flex flex-col items-center">
-              <div className="bg-gray-100 border-2 border-dashed border-gray-300 rounded-2xl w-20 h-20 flex items-center justify-center mb-6">
-                <FiSearch className="text-gray-400 text-3xl" />
-              </div>
-              <h3 className="text-xl font-semibold text-gray-900 mb-2">No staff members found</h3>
-              <p className="text-gray-600 mb-6">Try adjusting your search or filter criteria</p>
-              <button
-                onClick={() => {
-                  setSearchTerm("");
-                  setSelectedDepartment("All");
-                  setSelectedStatus("All");
-                }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-all"
-              >
-                Reset filters
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
+    const csv = [cols.map(([h]) => esc(h)).join(","), ...rows].join("\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `staff-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 scrollbar-hide">
-      <div className="max-w-7xl mx-auto">
-        {/* Header Section */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8">
-          <div className="mb-6 md:mb-0">
-            <h1 className="text-3xl md:text-4xl font-bold text-gray-900">
-              Staff Management
-            </h1>
-            <p className="text-gray-600 mt-2 text-lg">Manage your team members, roles, and permissions</p>
+    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
+      <div className="w-full">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Staff Management</h1>
+            <p className="text-slate-500 mt-1">Manage your team members, roles and details</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex bg-white rounded-xl p-1 border border-gray-200">
-              <button
-                onClick={() => setViewMode("card")}
-                className={`p-2 rounded-lg flex items-center gap-2 transition-all ${
-                  viewMode === "card" 
-                    ? "bg-blue-50 text-blue-600 border border-blue-200" 
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-                disabled={loading}
-              >
-                <FiGrid className="text-lg" />
-                <span className="text-sm font-medium hidden sm:inline">Cards</span>
-              </button>
-              <button
-                onClick={() => setViewMode("table")}
-                className={`p-2 rounded-lg flex items-center gap-2 transition-all ${
-                  viewMode === "table" 
-                    ? "bg-blue-50 text-blue-600 border border-blue-200" 
-                    : "text-gray-500 hover:text-gray-700"
-                }`}
-                disabled={loading}
-              >
-                <FiList className="text-lg" />
-                <span className="text-sm font-medium hidden sm:inline">Table</span>
-              </button>
-            </div>
-            <button
-              onClick={() => setShowAddForm(true)}
-              className="flex items-center gap-3 px-6 py-3.5 rounded-xl font-semibold text-white bg-navy-700 hover:bg-navy-800 shadow-md hover:shadow-lg transition-all duration-300 group"
-              disabled={loading}
-            >
-              <FiPlus className="text-xl group-hover:scale-110 transition-transform" />
-              <span className="hidden sm:inline">Add Staff Member</span>
-            </button>
-          </div>
+          <button
+            onClick={() => setShowAddForm(true)}
+            className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-white bg-navy-700 hover:bg-navy-800 shadow-sm transition-colors"
+          >
+            <FiPlus size={18} /> Add Staff Member
+          </button>
         </div>
 
-        {/* Search and Filter Bar */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-8">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <FiSearch className="text-gray-400 text-lg" />
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {stats.map(({ label, value, icon: Icon, tone }) => (
+            <div key={label} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">{label}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{loading ? "–" : value}</p>
               </div>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tone}`}>
+                <Icon size={20} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Toolbar */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
+          <div className="flex flex-col lg:flex-row gap-3">
+            <div className="relative flex-1">
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
               <input
                 type="text"
-                placeholder="Search by name, username, email or phone..."
-                className="w-full pl-12 pr-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
+                placeholder="Search name, username, employee ID, email or phone…"
+                className="w-full pl-10 pr-9 py-2.5 border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none text-sm"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                disabled={loading}
               />
+              {searchTerm && (
+                <button onClick={() => setSearchTerm("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <FiX size={16} />
+                </button>
+              )}
             </div>
-            <button
-              onClick={() => setFilterExpanded(!filterExpanded)}
-              className="flex items-center gap-3 px-5 py-3.5 bg-white border border-gray-300 hover:border-gray-400 text-gray-700 rounded-xl transition-all hover:shadow-md"
-              disabled={loading}
-            >
-              <FiFilter className="text-lg" />
-              <span className="font-medium">Filters</span>
-              {filterExpanded && <span className="w-2 h-2 bg-blue-500 rounded-full"></span>}
-            </button>
-            <button
-              onClick={() => {
-                setSearchTerm("");
-                setSelectedDepartment("All");
-                setSelectedStatus("All");
-              }}
-              className="flex items-center gap-3 px-5 py-3.5 bg-white border border-gray-300 hover:border-gray-400 text-gray-700 rounded-xl transition-all hover:shadow-md"
-              disabled={loading}
-            >
-              <FiRefreshCw className={`text-lg ${loading ? 'animate-spin' : ''}`} />
-              <span className="font-medium">Reset</span>
-            </button>
+
+            <div className="flex flex-wrap gap-3">
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 outline-none"
+              >
+                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d === "All" ? "All departments" : d}</option>)}
+              </select>
+              <select
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                className="px-3 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 outline-none"
+              >
+                {STATUSES.map((s) => <option key={s} value={s}>{s === "All" ? "All statuses" : s}</option>)}
+              </select>
+
+              <div className="flex bg-slate-100 rounded-xl p-1">
+                {[["card", FiGrid, "Cards"], ["table", FiList, "Table"]].map(([mode, Icon, label]) => (
+                  <button
+                    key={mode}
+                    onClick={() => changeView(mode)}
+                    className={`px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-sm font-medium transition-colors ${
+                      viewMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    <Icon size={15} /> <span className="hidden sm:inline">{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={exportCsv}
+                className="inline-flex items-center gap-2 px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 hover:bg-slate-50"
+              >
+                <FiDownload size={15} /> Export
+              </button>
+            </div>
           </div>
-          
-          {filterExpanded && (
-            <div className="mt-6 pt-6 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Department</label>
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
-                  disabled={loading}
-                >
-                  {departments.map((dept) => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Status</label>
-                <select
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  className="w-full px-4 py-3.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-white"
-                  disabled={loading}
-                >
-                  {statuses.map((status) => (
-                    <option key={status} value={status}>{status}</option>
-                  ))}
-                </select>
-              </div>
+
+          {hasFilters && (
+            <div className="mt-3 flex items-center gap-3 text-sm text-slate-500">
+              Showing {filteredStaff.length} of {staffList.length}
+              <button onClick={resetFilters} className="text-navy-700 hover:text-navy-800 font-medium">Clear filters</button>
             </div>
           )}
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-medium">Total Staff</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">{staffList.length}</p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <FiUser className="text-blue-600 text-xl" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-medium">Active</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">
-                  {staffList.filter((s) => s.status === "Active").length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-emerald-100 rounded-xl flex items-center justify-center">
-                <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-medium">On Leave</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">
-                  {staffList.filter((s) => s.status === "On Leave").length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-                <FiClock className="text-amber-600 text-xl" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl p-6 border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 text-sm font-medium">Departments</p>
-                <p className="text-2xl font-bold text-gray-800 mt-1">
-                  {[...new Set(staffList.map((s) => s.department))].filter(Boolean).length}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-xl flex items-center justify-center">
-                <FiGrid className="text-purple-600 text-xl" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Content Header */}
-        <div className="mb-6 flex justify-between items-center">
-          <h3 className="text-lg font-semibold text-gray-800">Staff Members</h3>
-          <button className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 hover:border-gray-400 text-gray-700 rounded-xl transition-all hover:shadow-md">
-            <FiDownload className="text-lg" />
-            <span className="font-medium">Export CSV</span>
-          </button>
-        </div>
-
         {/* Content */}
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {Array.from({ length: 8 }).map((_, index) => <CardSkeleton key={index} />)}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse">
+                <div className="flex gap-3">
+                  <div className="w-14 h-14 rounded-full bg-slate-200" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-4 bg-slate-200 rounded w-3/4" />
+                    <div className="h-3 bg-slate-200 rounded w-1/2" />
+                  </div>
+                </div>
+                <div className="mt-5 space-y-2">
+                  <div className="h-3 bg-slate-200 rounded" />
+                  <div className="h-3 bg-slate-200 rounded w-5/6" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filteredStaff.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-4">
+              <FiSearch className="text-slate-400" size={24} />
+            </div>
+            <h3 className="text-lg font-semibold text-slate-900">No staff members found</h3>
+            <p className="text-slate-500 mt-1 mb-5">Try adjusting your search or filters</p>
+            {hasFilters && (
+              <button onClick={resetFilters} className="px-5 py-2.5 bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800">
+                Clear filters
+              </button>
+            )}
           </div>
         ) : viewMode === "table" ? (
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden scrollbar-hide">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <StaffTable staffList={filteredStaff} />
           </div>
         ) : (
-          <StaffCardView staffList={filteredStaff} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
+            {filteredStaff.map((staff) => {
+              const dob = staff.dateOfBirth || staff.dob;
+              return (
+                <div key={staff.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md hover:border-slate-300 transition-all flex flex-col">
+                  <div className="p-5 flex-1">
+                    <div className="flex items-start gap-3">
+                      <StaffAvatar staff={staff} size="w-14 h-14" text="text-base" />
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-slate-900 truncate">{staff.name}</h3>
+                        <p className="text-xs text-slate-500 truncate">
+                          @{staff.username}
+                          {staff.employeeId && <span className="text-slate-400"> · {staff.employeeId}</span>}
+                        </p>
+                        <div className="flex flex-wrap gap-1.5 mt-2">
+                          <RoleBadge role={staff.role} />
+                          <StatusBadge status={staff.status} />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 space-y-2 text-sm text-slate-600">
+                      <p className="flex items-center gap-2.5 min-w-0">
+                        <FiMail className="text-slate-400 shrink-0" size={14} />
+                        <span className="truncate">{staff.email}</span>
+                      </p>
+                      <p className="flex items-center gap-2.5">
+                        <FiPhone className="text-slate-400 shrink-0" size={14} />
+                        {staff.phone || "—"}
+                      </p>
+                      {staff.department && (
+                        <p className="flex items-center gap-2.5">
+                          <FiLayers className="text-slate-400 shrink-0" size={14} />
+                          {staff.department}
+                        </p>
+                      )}
+                      <p className="flex items-center gap-2.5">
+                        <FiCalendar className="text-slate-400 shrink-0" size={14} />
+                        Joined {formatDate(staff.joinDate)}
+                      </p>
+                      {dob && (
+                        <p className="flex items-center gap-2.5">
+                          <FiGift className="text-slate-400 shrink-0" size={14} />
+                          Birthday {formatDate(dob, { day: "2-digit", month: "short" })}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 border-t border-slate-100">
+                    <Link
+                      to={`/dashboard/admin/staff/edit/${staff.id}`}
+                      className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-slate-600 hover:text-navy-700 hover:bg-slate-50 rounded-bl-2xl border-r border-slate-100"
+                    >
+                      <FiEdit2 size={14} /> Edit
+                    </Link>
+                    <Link
+                      to={`/dashboard/admin/staff/${staff.id}`}
+                      className="flex items-center justify-center gap-1.5 py-3 text-sm font-medium text-navy-700 hover:text-navy-800 hover:bg-slate-50 rounded-br-2xl"
+                    >
+                      View Profile
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {/* Add Staff Modal */}
         {showAddForm && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn scrollbar-hide">
-            <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200 scrollbar-hide">
-              <div className="p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-2xl font-bold text-gray-900">
-                    Add New Staff
-                  </h2>
-                  <button
-                    onClick={() => setShowAddForm(false)}
-                    className="text-gray-400 hover:text-gray-500 text-2xl p-2 hover:bg-gray-100 rounded-xl transition-all"
-                  >
-                    <FiX />
-                  </button>
-                </div>
-                <AddStaffForm onAdd={handleAddStaff} onClose={() => setShowAddForm(false)} />
-              </div>
+          <div
+            className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+            onClick={() => setShowAddForm(false)}
+          >
+            <div
+              className="bg-white rounded-2xl w-full max-w-3xl max-h-[92vh] overflow-y-auto shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <AddStaffForm onAdd={handleStaffAdded} onClose={() => setShowAddForm(false)} />
             </div>
           </div>
         )}
       </div>
-
-      <style jsx>{`
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-      `}</style>
     </div>
   );
 };

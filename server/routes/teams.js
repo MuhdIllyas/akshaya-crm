@@ -1,6 +1,13 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
+import {
+  ensureTeamChat,
+  findTeamChat,
+  removeMemberFromTeamChat,
+  archiveTeamChat,
+  safely,
+} from "../utils/teamChatService.js";
 
 const router = express.Router();
 
@@ -119,6 +126,354 @@ router.get("/", async (req, res) => {
 });
 
 /* =========================================================
+   SHARED HELPERS (service charges + targets)
+
+   Everything here measures SERVICE CHARGES: the sum of
+   service_entries.service_charges on COMPLETED services.
+   This is the same definition the staff targets, the staff
+   dashboard and the admin/superadmin dashboards use.
+========================================================= */
+
+const num = (v) => parseFloat(v) || 0;
+
+const YMD = /^\d{4}-\d{2}-\d{2}$/;
+const cleanDate = (v) => (typeof v === "string" && YMD.test(v) ? v : null);
+
+// Admin: own centre's (non-global) teams. Staff: teams they belong to. Superadmin: all.
+const checkTeamAccess = async (client, user, teamId) => {
+  if (!/^\d+$/.test(String(teamId))) {
+    return { ok: false, status: 400, error: "Invalid team id" };
+  }
+
+  const { rows } = await client.query(
+    `SELECT id, centre_id, is_global FROM teams WHERE id = $1`,
+    [teamId]
+  );
+
+  const team = rows[0];
+
+  if (!team) return { ok: false, status: 404, error: "Team not found" };
+  if (user.role === "superadmin") return { ok: true, team };
+
+  if (user.role === "admin") {
+    if (team.is_global || team.centre_id !== user.centre_id) {
+      return { ok: false, status: 403, error: "Access denied" };
+    }
+    return { ok: true, team };
+  }
+
+  const member = await client.query(
+    `SELECT 1 FROM team_members
+     WHERE team_id = $1 AND staff_id = $2 AND is_active = true`,
+    [teamId, user.id]
+  );
+
+  if (member.rows.length === 0) {
+    return { ok: false, status: 403, error: "Access denied" };
+  }
+
+  return { ok: true, team };
+};
+
+/* ---------------------------------------------------------
+   TEAM TARGETS
+
+   Two ways to set a team's monthly target (team_targets.target_mode):
+
+   'staff'  (default) the sum of its members' individual targets,
+            measured on those members' completed service charges
+   'manual' a figure typed in for the team (team_targets.monthly_target),
+            measured on the completed service charges of the services
+            done for this team this month
+
+   Needs: ALTER TABLE team_targets
+            ADD COLUMN IF NOT EXISTS target_mode VARCHAR(10) NOT NULL DEFAULT 'staff';
+   Until that is run every team simply behaves as 'staff'.
+
+   The 'staff' maths:
+
+   - monthly target  = SUM(staff_monthly_targets.target_amount)
+                       for the current month, members with a target
+   - achieved        = those members' completed service charges
+                       this month (exactly what each staff sees)
+   - daily target    = SUM of each member's ROUND(monthly / days)
+   Members without a target this month are listed but add nothing
+   to the target or to the achieved amount, so progress stays fair.
+   Works for global teams: it goes through staff, not centre.
+--------------------------------------------------------- */
+const fetchTeamTargets = async (client, teamIds, { photos = false } = {}) => {
+  const out = new Map();
+  if (!teamIds.length) return out;
+
+  const { rows } = await client.query(
+    `
+    WITH cal AS (
+      SELECT
+        date_trunc('month', CURRENT_DATE)::date AS month_start,
+        EXTRACT(DAY FROM CURRENT_DATE)::int AS day_of_month,
+        EXTRACT(DAY FROM (
+          date_trunc('month', CURRENT_DATE) + INTERVAL '1 month' - INTERVAL '1 day'
+        ))::int AS days_in_month
+    ),
+    roster AS (
+      SELECT tm.team_id, tm.staff_id, tm.is_primary
+      FROM team_members tm
+      WHERE tm.team_id = ANY($1::bigint[])
+        AND tm.is_active = true
+    ),
+    daily AS (
+      SELECT se.staff_id, se.created_at::date AS day, SUM(se.service_charges) AS sc
+      FROM service_entries se
+      WHERE se.status = 'completed'
+        AND se.created_at >= date_trunc('month', CURRENT_DATE)
+        AND se.staff_id IN (SELECT staff_id FROM roster)
+      GROUP BY se.staff_id, se.created_at::date
+    )
+    SELECT
+      r.team_id,
+      r.is_primary,
+      s.id   AS staff_id,
+      s.name AS staff_name,
+      s.role AS staff_role,
+      CASE WHEN $2::boolean THEN s.photo END AS staff_photo,
+      c.name AS centre_name,
+      COALESCE(t.target_amount, 0) AS target_amount,
+      cal.day_of_month,
+      cal.days_in_month,
+      ROUND(COALESCE(t.target_amount, 0) / cal.days_in_month) AS daily_target,
+      COALESCE((SELECT SUM(d.sc) FROM daily d WHERE d.staff_id = s.id), 0) AS month_achieved,
+      COALESCE((SELECT SUM(d.sc) FROM daily d
+                WHERE d.staff_id = s.id AND d.day = CURRENT_DATE), 0) AS today_achieved,
+      (SELECT COUNT(*) FROM daily d
+        WHERE d.staff_id = s.id
+          AND d.day < CURRENT_DATE
+          AND COALESCE(t.target_amount, 0) > 0
+          AND d.sc >= ROUND(t.target_amount / cal.days_in_month))::int AS days_met
+    FROM roster r
+    CROSS JOIN cal
+    JOIN staff s ON s.id = r.staff_id
+    LEFT JOIN centres c ON c.id = s.centre_id
+    LEFT JOIN staff_monthly_targets t
+      ON t.staff_id = s.id AND t.month = cal.month_start
+    ORDER BY s.name
+    `,
+    [teamIds, photos]
+  );
+
+  for (const id of teamIds) {
+    out.set(Number(id), {
+      dayOfMonth: null,
+      daysInMonth: null,
+      memberCount: 0,
+      membersWithTarget: 0,
+      target: 0,
+      achieved: 0,
+      progress: 0,
+      dailyTarget: 0,
+      today: 0,
+      metToday: 0,
+      onPace: false,
+      mode: "staff",
+      staffTarget: 0,
+      manualTarget: 0,
+      members: [],
+    });
+  }
+
+  for (const r of rows) {
+    const t = out.get(Number(r.team_id));
+    if (!t) continue;
+
+    t.dayOfMonth = r.day_of_month;
+    t.daysInMonth = r.days_in_month;
+
+    const target = num(r.target_amount);
+    const achieved = num(r.month_achieved);
+    const dailyTarget = num(r.daily_target);
+    const today = num(r.today_achieved);
+    const hasTarget = target > 0;
+    const expected = hasTarget ? target * (r.day_of_month / r.days_in_month) : 0;
+
+    t.memberCount += 1;
+
+    if (hasTarget) {
+      t.membersWithTarget += 1;
+      t.target += target;
+      t.achieved += achieved;
+      t.dailyTarget += dailyTarget;
+      t.today += today;
+      if (today >= dailyTarget && dailyTarget > 0) t.metToday += 1;
+    }
+
+    t.members.push({
+      staff_id: r.staff_id,
+      name: r.staff_name,
+      role: r.staff_role,
+      photo: r.staff_photo || null,
+      centre_name: r.centre_name,
+      is_primary: r.is_primary,
+      has_target: hasTarget,
+      target,
+      achieved,
+      progress: hasTarget ? (achieved / target) * 100 : 0,
+      daily_target: dailyTarget,
+      today,
+      today_met: hasTarget && dailyTarget > 0 && today >= dailyTarget,
+      days_met: r.days_met || 0,
+      complete_days: Math.max(r.day_of_month - 1, 0),
+      on_pace: hasTarget && achieved >= expected,
+    });
+  }
+
+  for (const t of out.values()) {
+    t.staffTarget = t.target;
+  }
+
+  // Teams whose target is typed in instead of summed from staff
+  let manual = [];
+
+  try {
+    const settings = await client.query(
+      `SELECT team_id, target_mode, monthly_target
+       FROM team_targets
+       WHERE team_id = ANY($1::bigint[])`,
+      [teamIds]
+    );
+    manual = settings.rows.filter(
+      (r) => r.target_mode === "manual" && num(r.monthly_target) > 0
+    );
+  } catch (err) {
+    console.warn("team_targets.target_mode missing? Run the migration. ", err.message);
+  }
+
+  if (manual.length) {
+    const done = await client.query(
+      `
+      SELECT se.team_id,
+             COALESCE(SUM(se.service_charges), 0) AS month_sc,
+             COALESCE(SUM(CASE WHEN se.created_at::date = CURRENT_DATE
+                               THEN se.service_charges ELSE 0 END), 0) AS today_sc
+      FROM service_entries se
+      WHERE se.team_id = ANY($1::bigint[])
+        AND se.status = 'completed'
+        AND se.created_at >= date_trunc('month', CURRENT_DATE)
+      GROUP BY se.team_id
+      `,
+      [manual.map((r) => r.team_id)]
+    );
+
+    const doneBy = new Map(done.rows.map((r) => [Number(r.team_id), r]));
+
+    for (const r of manual) {
+      const t = out.get(Number(r.team_id));
+      if (!t) continue;
+
+      const d = doneBy.get(Number(r.team_id));
+      const target = num(r.monthly_target);
+      const days = t.daysInMonth || 30;
+
+      t.mode = "manual";
+      t.manualTarget = target;
+      t.target = target;
+      t.achieved = d ? num(d.month_sc) : 0;
+      t.dailyTarget = Math.round(target / days);
+      t.today = d ? num(d.today_sc) : 0;
+    }
+  }
+
+  for (const t of out.values()) {
+    t.progress = t.target > 0 ? (t.achieved / t.target) * 100 : 0;
+    t.onPace =
+      t.target > 0 &&
+      t.dayOfMonth !== null &&
+      t.achieved >= t.target * (t.dayOfMonth / t.daysInMonth);
+  }
+
+  return out;
+};
+
+/* ---------------------------------------------------------
+   PER-TEAM SERIES for the sparklines on the Teams screen
+   Daily buckets up to 60 days, monthly beyond that.
+   Empty buckets are filled with zero so the line is honest.
+--------------------------------------------------------- */
+const fetchTeamSeries = async (client, teamIds, from, to) => {
+  const out = new Map();
+  if (!teamIds.length || !from || !to) return out;
+
+  const DAY = 86400000;
+  const start = Date.parse(from);
+  const end = Date.parse(to);
+
+  if (!(end >= start) || (end - start) / DAY > 800) return out;
+
+  const days = Math.round((end - start) / DAY) + 1;
+  const monthly = days > 60;
+  const fmt = monthly ? "YYYY-MM" : "YYYY-MM-DD";
+
+  const labels = [];
+
+  if (monthly) {
+    const d = new Date(start);
+    d.setUTCDate(1);
+    while (d.getTime() <= end) {
+      labels.push(d.toISOString().slice(0, 7));
+      d.setUTCMonth(d.getUTCMonth() + 1);
+    }
+  } else {
+    for (let t = start; t <= end; t += DAY) {
+      labels.push(new Date(t).toISOString().slice(0, 10));
+    }
+  }
+
+  const [svc, exp] = await Promise.all([
+    client.query(
+      `
+      SELECT se.team_id, TO_CHAR(se.created_at, '${fmt}') AS bucket,
+             SUM(se.service_charges) AS total
+      FROM service_entries se
+      WHERE se.team_id = ANY($1::bigint[])
+        AND se.status = 'completed'
+        AND se.created_at >= $2::date
+        AND se.created_at < ($3::date + INTERVAL '1 day')
+      GROUP BY se.team_id, TO_CHAR(se.created_at, '${fmt}')
+      `,
+      [teamIds, from, to]
+    ),
+    client.query(
+      `
+      SELECT e.team_id, TO_CHAR(e.expense_date, '${fmt}') AS bucket,
+             SUM(e.amount) AS total
+      FROM expenses e
+      WHERE e.team_id = ANY($1::bigint[])
+        AND e.status IN ('approved', 'auto_approved')
+        AND COALESCE(e.is_reversal, FALSE) = FALSE
+        AND e.expense_date >= $2::date
+        AND e.expense_date <= $3::date
+      GROUP BY e.team_id, TO_CHAR(e.expense_date, '${fmt}')
+      `,
+      [teamIds, from, to]
+    ),
+  ]);
+
+  const sc = new Map(svc.rows.map((r) => [`${r.team_id}|${r.bucket}`, num(r.total)]));
+  const ex = new Map(exp.rows.map((r) => [`${r.team_id}|${r.bucket}`, num(r.total)]));
+
+  for (const id of teamIds) {
+    out.set(
+      Number(id),
+      labels.map((label) => ({
+        label,
+        service_charges: sc.get(`${id}|${label}`) || 0,
+        expense: ex.get(`${id}|${label}`) || 0,
+      }))
+    );
+  }
+
+  return out;
+};
+
+/* =========================================================
    TEAM FINANCIAL SUMMARY
 ========================================================= */
 
@@ -126,12 +481,9 @@ router.get("/analytics/summary", async (req, res) => {
   const client = await pool.connect();
 
   try {
-
-    const {
-      from,
-      to,
-      team_id,
-    } = req.query;
+    const { team_id } = req.query;
+    const from = cleanDate(req.query.from);
+    const to = cleanDate(req.query.to);
 
     let params = [];
     let paramIndex = 1;
@@ -141,39 +493,34 @@ router.get("/analytics/summary", async (req, res) => {
     let paymentDateFilter = "";
     let expenseDateFilter = "";
 
-    /* =====================================================
-       TEAM FILTER
-    ===================================================== */
+    /* TEAM FILTER */
 
     if (team_id) {
+      if (!/^\d+$/.test(String(team_id))) {
+        return res.status(400).json({ error: "Invalid team id" });
+      }
 
       teamWhere += `
         AND t.id = $${paramIndex}
       `;
 
       params.push(team_id);
-
       paramIndex++;
     }
 
-    /* =====================================================
-       ROLE FILTERS
-    ===================================================== */
+    /* ROLE FILTERS */
 
     if (req.user.role === "admin") {
-
       teamWhere += `
         AND t.centre_id = $${paramIndex}
         AND t.is_global = false
       `;
 
       params.push(req.user.centre_id);
-
       paramIndex++;
     }
 
     if (req.user.role === "staff") {
-
       teamWhere += `
         AND EXISTS (
           SELECT 1
@@ -184,16 +531,12 @@ router.get("/analytics/summary", async (req, res) => {
       `;
 
       params.push(req.user.id);
-
       paramIndex++;
     }
 
-    /* =====================================================
-       DATE FILTERS
-    ===================================================== */
+    /* DATE FILTERS (inclusive of both days) */
 
     if (from) {
-
       serviceDateFilter += `
         AND se.created_at >= $${paramIndex}::date
       `;
@@ -203,33 +546,27 @@ router.get("/analytics/summary", async (req, res) => {
       `;
 
       expenseDateFilter += `
-        AND e.created_at >= $${paramIndex}::date
+        AND e.expense_date >= $${paramIndex}::date
       `;
 
       params.push(from);
-
       paramIndex++;
     }
 
     if (to) {
-
       serviceDateFilter += `
-        AND se.created_at <
-        ($${paramIndex}::date + INTERVAL '1 day')
+        AND se.created_at < ($${paramIndex}::date + INTERVAL '1 day')
       `;
 
       paymentDateFilter += `
-        AND p.created_at <
-        ($${paramIndex}::date + INTERVAL '1 day')
+        AND p.created_at < ($${paramIndex}::date + INTERVAL '1 day')
       `;
 
       expenseDateFilter += `
-        AND e.created_at <
-        ($${paramIndex}::date + INTERVAL '1 day')
+        AND e.expense_date <= $${paramIndex}::date
       `;
 
       params.push(to);
-
       paramIndex++;
     }
 
@@ -251,95 +588,84 @@ router.get("/analytics/summary", async (req, res) => {
           AND tm.is_active = true
         ) AS member_count,
 
-        /* =========================================
-           EXPECTED REVENUE
-        ========================================= */
+        /* SERVICE CHARGES (completed services) - the headline number */
+
+        COALESCE((
+          SELECT SUM(se.service_charges)
+          FROM service_entries se
+          WHERE se.team_id = t.id
+            AND se.status = 'completed'
+          ${serviceDateFilter}
+        ), 0) AS service_charges,
+
+        COALESCE((
+          SELECT COUNT(*)
+          FROM service_entries se
+          WHERE se.team_id = t.id
+            AND se.status = 'completed'
+          ${serviceDateFilter}
+        ), 0) AS services_completed,
+
+        /* BILLED to customers (completed services) */
 
         COALESCE((
           SELECT SUM(se.total_charges)
-
           FROM service_entries se
-
           WHERE se.team_id = t.id
-
+            AND se.status = 'completed'
           ${serviceDateFilter}
+        ), 0) AS revenue_billed,
 
+        /* EXPENSES (approved, not reversals) */
+
+        COALESCE((
+          SELECT SUM(e.amount)
+          FROM expenses e
+          WHERE e.team_id = t.id
+            AND e.status IN ('approved', 'auto_approved')
+            AND COALESCE(e.is_reversal, FALSE) = FALSE
+          ${expenseDateFilter}
+        ), 0) AS expense,
+
+        /* LEGACY FIELDS - still returned for any other screen using them */
+
+        COALESCE((
+          SELECT SUM(se.total_charges)
+          FROM service_entries se
+          WHERE se.team_id = t.id
+          ${serviceDateFilter}
         ), 0) AS expected_revenue,
-
-        /* =========================================
-           COLLECTED REVENUE
-        ========================================= */
 
         COALESCE((
           SELECT SUM(p.amount)
-
           FROM payments p
-
           JOIN service_entries se
             ON se.id = p.service_entry_id
-
           WHERE se.team_id = t.id
             AND p.status = 'received'
-
             AND COALESCE(p.is_reversal, FALSE) = FALSE
-
             AND NOT EXISTS (
               SELECT 1
               FROM wallet_transactions wt
               WHERE wt.reference_payment_id = p.id
               AND COALESCE(wt.is_reversal, FALSE) = TRUE
             )
-
             ${paymentDateFilter}
-
         ), 0) AS collected_revenue,
-
-        /* =========================================
-           DEPARTMENT CHARGES
-        ========================================= */
 
         COALESCE((
           SELECT SUM(se.department_charges)
-
           FROM service_entries se
-
           WHERE se.team_id = t.id
-
           ${serviceDateFilter}
-
         ), 0) AS department_charges,
-
-        /* =========================================
-           SERVICE PROFIT
-        ========================================= */
 
         COALESCE((
           SELECT SUM(se.service_charges)
-
           FROM service_entries se
-
           WHERE se.team_id = t.id
-
           ${serviceDateFilter}
-
-        ), 0) AS service_profit,
-
-        /* =========================================
-           EXPENSES
-        ========================================= */
-
-        COALESCE((
-
-        SELECT SUM(e.amount)
-
-        FROM expenses e
-
-        WHERE e.team_id = t.id
-        AND e.status IN ('approved', 'auto_approved')
-
-          ${expenseDateFilter}
-
-        ), 0) AS expense
+        ), 0) AS service_profit
 
       FROM teams t
 
@@ -347,71 +673,85 @@ router.get("/analytics/summary", async (req, res) => {
 
       ${teamWhere}
 
-      ORDER BY collected_revenue DESC
+      ORDER BY service_charges DESC, t.name
       `,
       params
     );
 
+    const targetMap = await fetchTeamTargets(
+      client,
+      result.rows.map((r) => r.id)
+    );
+
+    const seriesMap = await fetchTeamSeries(
+      client,
+      result.rows.map((r) => r.id),
+      from,
+      to
+    );
+
     const teams = result.rows.map((team) => {
+      const serviceCharges = num(team.service_charges);
+      const expense = num(team.expense);
+      const expectedRevenue = num(team.expected_revenue);
+      const collectedRevenue = num(team.collected_revenue);
 
-      const expectedRevenue =
-        Number(team.expected_revenue || 0);
-
-      const collectedRevenue =
-        Number(team.collected_revenue || 0);
-
-      const departmentCharges =
-        Number(team.department_charges || 0);
-
-      const serviceProfit =
-        Number(team.service_profit || 0);
-
-      const expense =
-        Number(team.expense || 0);
+      // targets: strip the member list, the list screen only needs the totals
+      const { members, ...targets } = targetMap.get(Number(team.id)) || {};
 
       return {
         ...team,
 
-        expected_revenue: expectedRevenue,
-        collected_revenue: collectedRevenue,
-        pending_revenue:
-          expectedRevenue - collectedRevenue,
-
-        department_charges: departmentCharges,
-
-        service_profit: serviceProfit,
-
+        service_charges: serviceCharges,
+        services_completed: Number(team.services_completed || 0),
+        revenue_billed: num(team.revenue_billed),
         expense,
 
-        net_profit:
-          collectedRevenue
-          - departmentCharges
-          - expense,
+        // net profit = service charges earned less approved expenses
+        net_profit: serviceCharges - expense,
+
+        targets,
+        series: seriesMap.get(Number(team.id)) || [],
+
+        expected_revenue: expectedRevenue,
+        collected_revenue: collectedRevenue,
+        pending_revenue: expectedRevenue - collectedRevenue,
+        department_charges: num(team.department_charges),
+        service_profit: num(team.service_profit),
       };
     });
 
     const totals = teams.reduce(
       (acc, row) => {
+        acc.service_charges += row.service_charges;
+        acc.services_completed += row.services_completed;
+        acc.revenue_billed += row.revenue_billed;
+        acc.expense += row.expense;
+        acc.net_profit += row.net_profit;
+        acc.target += row.targets.target || 0;
+        acc.target_achieved += row.targets.achieved || 0;
 
         acc.expected_revenue += row.expected_revenue;
         acc.collected_revenue += row.collected_revenue;
         acc.pending_revenue += row.pending_revenue;
         acc.department_charges += row.department_charges;
         acc.service_profit += row.service_profit;
-        acc.expense += row.expense;
-        acc.net_profit += row.net_profit;
 
         return acc;
-
       },
       {
+        service_charges: 0,
+        services_completed: 0,
+        revenue_billed: 0,
+        expense: 0,
+        net_profit: 0,
+        target: 0,
+        target_achieved: 0,
         expected_revenue: 0,
         collected_revenue: 0,
         pending_revenue: 0,
         department_charges: 0,
         service_profit: 0,
-        expense: 0,
-        net_profit: 0,
       }
     );
 
@@ -422,14 +762,10 @@ router.get("/analytics/summary", async (req, res) => {
 
   } catch (err) {
 
-    console.error(
-      "Team analytics error:",
-      err
-    );
+    console.error("Team analytics error:", err);
 
     res.status(500).json({
-      error:
-        "Failed to load team analytics",
+      error: "Failed to load team analytics",
     });
 
   } finally {
@@ -440,381 +776,268 @@ router.get("/analytics/summary", async (req, res) => {
 });
 
 /* =========================================================
-   TEAM MEMBER CONTRIBUTION
+   TEAM TARGETS (sum of members' individual targets)
 ========================================================= */
 
-router.get(
-  "/:teamId/contribution",
-  async (req, res) => {
+router.get("/:id/targets", async (req, res) => {
+  const client = await pool.connect();
 
-    const client = await pool.connect();
+  try {
+    const access = await checkTeamAccess(client, req.user, req.params.id);
 
-    try {
-
-      const { teamId } = req.params;
-
-      const result = await client.query(
-        `
-        WITH payment_agg AS (
-
-          SELECT
-            se.staff_id,
-
-            SUM(p.amount)
-            FILTER (
-              WHERE p.status = 'received'
-            ) AS collected_revenue
-
-          FROM payments p
-
-          JOIN service_entries se
-            ON se.id = p.service_entry_id
-
-          WHERE se.team_id = $1
-
-            AND COALESCE(p.is_reversal, FALSE) = FALSE
-
-            AND NOT EXISTS (
-              SELECT 1
-              FROM wallet_transactions wt
-              WHERE wt.reference_payment_id = p.id
-              AND COALESCE(wt.is_reversal, FALSE) = TRUE
-            )
-
-          GROUP BY se.staff_id
-        )
-
-        SELECT
-
-          s.id,
-          s.name,
-          s.role,
-
-          tm.is_primary,
-
-          /* =====================================
-             EXPECTED REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.total_charges)
-
-            FROM service_entries se
-
-            WHERE se.staff_id = s.id
-            AND se.team_id = $1
-          ), 0) AS expected_revenue,
-
-          /* =====================================
-             COLLECTED REVENUE
-          ===================================== */
-
-          COALESCE(pa.collected_revenue, 0)
-          AS collected_revenue,
-
-          /* =====================================
-             DEPARTMENT CHARGES
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.department_charges)
-
-            FROM service_entries se
-
-            WHERE se.staff_id = s.id
-            AND se.team_id = $1
-          ), 0) AS department_charges,
-
-          /* =====================================
-             SERVICE PROFIT
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.service_charges)
-
-            FROM service_entries se
-
-            WHERE se.staff_id = s.id
-            AND se.team_id = $1
-          ), 0) AS service_profit,
-
-          /* =====================================
-             EXPENSE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(e.amount)
-
-            FROM expenses e
-
-            WHERE e.staff_id = s.id
-            AND e.team_id = $1
-            AND e.status IN ('approved', 'auto_approved')
-          ), 0) AS expense
-
-        FROM team_members tm
-
-        JOIN staff s
-          ON s.id = tm.staff_id
-
-        LEFT JOIN payment_agg pa
-          ON pa.staff_id = s.id
-
-        WHERE tm.team_id = $1
-
-        ORDER BY collected_revenue DESC
-        `,
-        [teamId]
-      );
-
-      const rows = result.rows.map((member) => {
-
-        const expectedRevenue =
-          Number(member.expected_revenue || 0);
-
-        const collectedRevenue =
-          Number(member.collected_revenue || 0);
-
-        const departmentCharges =
-          Number(member.department_charges || 0);
-
-        const serviceProfit =
-          Number(member.service_profit || 0);
-
-        const expense =
-          Number(member.expense || 0);
-
-        return {
-          ...member,
-
-          expected_revenue: expectedRevenue,
-
-          collected_revenue: collectedRevenue,
-
-          pending_revenue:
-            expectedRevenue - collectedRevenue,
-
-          department_charges: departmentCharges,
-
-          service_profit: serviceProfit,
-
-          expense,
-
-          net_profit:
-            collectedRevenue
-            - departmentCharges
-            - expense,
-        };
-      });
-
-      res.json(rows);
-
-    } catch (err) {
-
-      console.error(
-        "Contribution error:",
-        err
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to load contribution",
-      });
-
-    } finally {
-
-      client.release();
-
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
     }
+
+    const map = await fetchTeamTargets(client, [Number(req.params.id)], {
+      photos: req.query.photos === "1",
+    });
+
+    res.json(map.get(Number(req.params.id)));
+
+  } catch (err) {
+
+    console.error("Team targets error:", err);
+
+    res.status(500).json({
+      error: "Failed to load team targets",
+    });
+
+  } finally {
+
+    client.release();
+
   }
-);
+});
 
 /* =========================================================
-   TEAM MONTHLY TREND
+   TEAM MEMBER CONTRIBUTION (service charges per member)
+   Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD
 ========================================================= */
 
-router.get(
-  "/:teamId/trend",
-  async (req, res) => {
+router.get("/:teamId/contribution", async (req, res) => {
+  const client = await pool.connect();
 
-    const client = await pool.connect();
+  try {
+    const { teamId } = req.params;
 
-    try {
+    const access = await checkTeamAccess(client, req.user, teamId);
 
-      const { teamId } = req.params;
-
-      const year =
-        Number(req.query.year) ||
-        new Date().getFullYear();
-
-      const result = await client.query(
-        `
-        WITH months AS (
-          SELECT generate_series(1, 12) AS month
-        )
-
-        SELECT
-
-          m.month,
-
-          /* =====================================
-             EXPECTED REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.total_charges)
-
-            FROM service_entries se
-
-            WHERE se.team_id = $1
-
-            AND EXTRACT(MONTH FROM se.created_at) = m.month
-            AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS expected_revenue,
-
-          /* =====================================
-             COLLECTED REVENUE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(p.amount)
-
-            FROM payments p
-
-            JOIN service_entries se
-              ON se.id = p.service_entry_id
-
-            WHERE se.team_id = $1
-
-              AND p.status = 'received'
-
-              AND COALESCE(p.is_reversal, FALSE) = FALSE
-
-              AND NOT EXISTS (
-                SELECT 1
-                FROM wallet_transactions wt
-                WHERE wt.reference_payment_id = p.id
-                AND COALESCE(wt.is_reversal, FALSE) = TRUE
-              )
-
-              AND EXTRACT(MONTH FROM p.created_at) = m.month
-              AND EXTRACT(YEAR FROM p.created_at) = $2
-          ), 0) AS collected_revenue,
-
-          /* =====================================
-             DEPARTMENT CHARGES
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.department_charges)
-
-            FROM service_entries se
-
-            WHERE se.team_id = $1
-
-            AND EXTRACT(MONTH FROM se.created_at) = m.month
-            AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS department_charges,
-
-          /* =====================================
-             SERVICE PROFIT
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(se.service_charges)
-
-            FROM service_entries se
-
-            WHERE se.team_id = $1
-
-            AND EXTRACT(MONTH FROM se.created_at) = m.month
-            AND EXTRACT(YEAR FROM se.created_at) = $2
-          ), 0) AS service_profit,
-
-          /* =====================================
-             EXPENSE
-          ===================================== */
-
-          COALESCE((
-            SELECT SUM(e.amount)
-
-            FROM expenses e
-
-            WHERE e.team_id = $1
-            AND e.status IN ('approved', 'auto_approved')
-
-            AND EXTRACT(MONTH FROM e.created_at) = m.month
-            AND EXTRACT(YEAR FROM e.created_at) = $2
-          ), 0) AS expense
-
-        FROM months m
-
-        ORDER BY m.month
-        `,
-        [teamId, year]
-      );
-
-      const rows = result.rows.map((row) => {
-
-        const expectedRevenue =
-          Number(row.expected_revenue || 0);
-
-        const collectedRevenue =
-          Number(row.collected_revenue || 0);
-
-        const departmentCharges =
-          Number(row.department_charges || 0);
-
-        const serviceProfit =
-          Number(row.service_profit || 0);
-
-        const expense =
-          Number(row.expense || 0);
-
-        return {
-          month: Number(row.month),
-
-          expected_revenue: expectedRevenue,
-
-          collected_revenue: collectedRevenue,
-
-          pending_revenue:
-            expectedRevenue - collectedRevenue,
-
-          department_charges: departmentCharges,
-
-          service_profit: serviceProfit,
-
-          expense,
-
-          net_profit:
-            collectedRevenue
-            - departmentCharges
-            - expense,
-        };
-      });
-
-      res.json(rows);
-
-    } catch (err) {
-
-      console.error(
-        "Trend analytics error:",
-        err
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to load trend analytics",
-      });
-
-    } finally {
-
-      client.release();
-
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
     }
+
+    const from = cleanDate(req.query.from);
+    const to = cleanDate(req.query.to);
+
+    const params = [teamId];
+    let seDates = "";
+    let expDates = "";
+
+    if (from) {
+      params.push(from);
+      seDates += ` AND se.created_at >= $${params.length}::date`;
+      expDates += ` AND e.expense_date >= $${params.length}::date`;
+    }
+
+    if (to) {
+      params.push(to);
+      seDates += ` AND se.created_at < ($${params.length}::date + INTERVAL '1 day')`;
+      expDates += ` AND e.expense_date <= $${params.length}::date`;
+    }
+
+    const result = await client.query(
+      `
+      SELECT
+
+        s.id,
+        s.name,
+        s.role,
+        s.photo,
+        TO_CHAR(s.dob::date, 'MM-DD') AS birthday,
+        c.name AS centre_name,
+
+        tm.is_primary,
+
+        COALESCE((
+          SELECT SUM(se.service_charges)
+          FROM service_entries se
+          WHERE se.staff_id = s.id
+            AND se.team_id = $1
+            AND se.status = 'completed'
+            ${seDates}
+        ), 0) AS service_charges,
+
+        COALESCE((
+          SELECT COUNT(*)
+          FROM service_entries se
+          WHERE se.staff_id = s.id
+            AND se.team_id = $1
+            AND se.status = 'completed'
+            ${seDates}
+        ), 0) AS services_completed,
+
+        COALESCE((
+          SELECT SUM(e.amount)
+          FROM expenses e
+          WHERE e.staff_id = s.id
+            AND e.team_id = $1
+            AND e.status IN ('approved', 'auto_approved')
+            AND COALESCE(e.is_reversal, FALSE) = FALSE
+            ${expDates}
+        ), 0) AS expense
+
+      FROM team_members tm
+
+      JOIN staff s
+        ON s.id = tm.staff_id
+
+      LEFT JOIN centres c
+        ON c.id = s.centre_id
+
+      WHERE tm.team_id = $1
+
+      ORDER BY service_charges DESC, s.name
+      `,
+      params
+    );
+
+    const targets = await fetchTeamTargets(client, [Number(teamId)]);
+    const byStaff = new Map(
+      (targets.get(Number(teamId))?.members || []).map((m) => [Number(m.staff_id), m])
+    );
+
+    const rows = result.rows.map((member) => {
+      const serviceCharges = num(member.service_charges);
+      const expense = num(member.expense);
+      const tgt = byStaff.get(Number(member.id));
+
+      return {
+        ...member,
+
+        service_charges: serviceCharges,
+        services_completed: Number(member.services_completed || 0),
+        expense,
+        net_profit: serviceCharges - expense,
+
+        // this month's individual target (independent of the date range above)
+        target: tgt ? tgt.target : 0,
+        month_achieved: tgt ? tgt.achieved : 0,
+        target_progress: tgt ? tgt.progress : 0,
+        has_target: tgt ? tgt.has_target : false,
+        on_pace: tgt ? tgt.on_pace : false,
+      };
+    });
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error("Contribution error:", err);
+
+    res.status(500).json({
+      error: "Failed to load contribution",
+    });
+
+  } finally {
+
+    client.release();
+
   }
-);
+});
+
+/* =========================================================
+   TEAM MONTHLY TREND (service charges by month)
+========================================================= */
+
+router.get("/:teamId/trend", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const { teamId } = req.params;
+
+    const access = await checkTeamAccess(client, req.user, teamId);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const year = Number(req.query.year) || new Date().getFullYear();
+
+    const result = await client.query(
+      `
+      WITH months AS (
+        SELECT generate_series(1, 12) AS month
+      )
+
+      SELECT
+
+        m.month,
+
+        COALESCE((
+          SELECT SUM(se.service_charges)
+          FROM service_entries se
+          WHERE se.team_id = $1
+            AND se.status = 'completed'
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+        ), 0) AS service_charges,
+
+        COALESCE((
+          SELECT COUNT(*)
+          FROM service_entries se
+          WHERE se.team_id = $1
+            AND se.status = 'completed'
+            AND EXTRACT(MONTH FROM se.created_at) = m.month
+            AND EXTRACT(YEAR FROM se.created_at) = $2
+        ), 0) AS services_completed,
+
+        COALESCE((
+          SELECT SUM(e.amount)
+          FROM expenses e
+          WHERE e.team_id = $1
+            AND e.status IN ('approved', 'auto_approved')
+            AND COALESCE(e.is_reversal, FALSE) = FALSE
+            AND EXTRACT(MONTH FROM e.expense_date) = m.month
+            AND EXTRACT(YEAR FROM e.expense_date) = $2
+        ), 0) AS expense
+
+      FROM months m
+
+      ORDER BY m.month
+      `,
+      [teamId, year]
+    );
+
+    const rows = result.rows.map((row) => {
+      const serviceCharges = num(row.service_charges);
+      const expense = num(row.expense);
+
+      return {
+        month: Number(row.month),
+        service_charges: serviceCharges,
+        services_completed: Number(row.services_completed || 0),
+        expense,
+        net_profit: serviceCharges - expense,
+      };
+    });
+
+    res.json(rows);
+
+  } catch (err) {
+
+    console.error("Trend analytics error:", err);
+
+    res.status(500).json({
+      error: "Failed to load trend analytics",
+    });
+
+  } finally {
+
+    client.release();
+
+  }
+});
 
 /* =========================================================
    CREATE TEAM
@@ -973,6 +1196,11 @@ router.post("/", async (req, res) => {
 
     await client.query("COMMIT");
 
+    // every team gets a Messenger group chat with its members
+    await safely("create", () =>
+      ensureTeamChat(team.id, { createdBy: req.user.id, io: req.io })
+    );
+
     res.status(201).json(team);
 
   } catch (err) {
@@ -1007,6 +1235,7 @@ router.get("/:id/members", async (req, res) => {
 
         s.name,
         s.role,
+        s.photo,
         s.centre_id,
 
         c.name AS centre_name
@@ -1151,6 +1380,11 @@ router.post("/:id/members", async (req, res) => {
 
     await client.query("COMMIT");
 
+    // put the new member into the team's chat
+    await safely("add member", () =>
+      ensureTeamChat(Number(id), { createdBy: req.user.id, io: req.io })
+    );
+
     res.status(201).json(result.rows[0]);
 
   } catch (err) {
@@ -1191,6 +1425,11 @@ router.delete("/:id/members/:staffId", async (req, res) => {
       AND staff_id = $2
       `,
       [id, staffId]
+    );
+
+    // and take them out of the team's chat
+    await safely("remove member", () =>
+      removeMemberFromTeamChat(Number(id), Number(staffId), { io: req.io })
     );
 
     res.json({
@@ -1361,6 +1600,9 @@ router.delete("/:id", async (req, res) => {
 
     await client.query("COMMIT");
 
+    // the chat is hidden (its history is kept)
+    await safely("archive", () => archiveTeamChat(Number(id), { io: req.io }));
+
     res.json({
       success: true,
     });
@@ -1381,25 +1623,47 @@ router.delete("/:id", async (req, res) => {
 });
 
 /* =========================================================
-   TEAM SETTINGS & TARGETS
+   TEAM SETTINGS
+
+   targets_enabled  whether the team is measured against targets
+   target_mode      'staff' = sum of members' targets (default)
+                    'manual' = monthly_target typed in for the team
 ========================================================= */
 
 // GET Team Settings
 router.get("/:id/settings", async (req, res) => {
   const client = await pool.connect();
   try {
-    const { id } = req.params;
-    const result = await client.query(
-      `SELECT targets_enabled, monthly_target FROM team_targets WHERE team_id = $1`,
-      [id]
-    );
-    
-    // If no settings exist yet, return the defaults
-    if (result.rows.length === 0) {
-      return res.json({ targets_enabled: false, monthly_target: 250000 });
+    const access = await checkTeamAccess(client, req.user, req.params.id);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
     }
-    
-    res.json(result.rows[0]);
+
+    let row = null;
+
+    try {
+      const result = await client.query(
+        `SELECT targets_enabled, target_mode, monthly_target
+         FROM team_targets WHERE team_id = $1`,
+        [req.params.id]
+      );
+      row = result.rows[0] || null;
+    } catch (err) {
+      // target_mode column not added yet: fall back to the old shape
+      console.warn("team_targets.target_mode missing? Run the migration. ", err.message);
+      const result = await client.query(
+        `SELECT targets_enabled, monthly_target FROM team_targets WHERE team_id = $1`,
+        [req.params.id]
+      );
+      row = result.rows[0] || null;
+    }
+
+    res.json({
+      targets_enabled: row ? !!row.targets_enabled : false,
+      target_mode: row && row.target_mode === "manual" ? "manual" : "staff",
+      monthly_target: row ? num(row.monthly_target) : 0,
+    });
   } catch (error) {
     console.error("Error fetching team settings:", error);
     res.status(500).json({ error: "Failed to fetch settings" });
@@ -1414,54 +1678,233 @@ router.post("/:id/settings", async (req, res) => {
   try {
     if (!isAdmin(req.user.role)) return res.status(403).json({ error: "Access denied" });
 
-    const { id } = req.params;
-    const { targets_enabled, monthly_target } = req.body;
+    const access = await checkTeamAccess(client, req.user, req.params.id);
 
-    // Upsert (Insert or Update) the settings
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const { id } = req.params;
+    const targetsEnabled = !!req.body.targets_enabled;
+    const mode = req.body.target_mode === "manual" ? "manual" : "staff";
+    const monthly = Number(req.body.monthly_target);
+
+    if (mode === "manual" && !(Number.isFinite(monthly) && monthly > 0)) {
+      return res.status(400).json({
+        error: "Enter a monthly target above 0, or switch to the sum of staff targets",
+      });
+    }
+
+    // In 'staff' mode a previously typed amount is kept on the row, untouched,
+    // so switching back and forth does not lose it.
     await client.query(
-      `INSERT INTO team_targets (team_id, targets_enabled, monthly_target, updated_at) 
-       VALUES ($1, $2, $3, NOW())
-       ON CONFLICT (team_id) 
-       DO UPDATE SET targets_enabled = $2, monthly_target = $3, updated_at = NOW()`,
-      [id, targets_enabled, monthly_target]
+      `INSERT INTO team_targets (team_id, targets_enabled, monthly_target, target_mode, updated_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       ON CONFLICT (team_id)
+       DO UPDATE SET
+         targets_enabled = $2,
+         target_mode = $4,
+         monthly_target = CASE WHEN $4 = 'manual' THEN $3 ELSE team_targets.monthly_target END,
+         updated_at = NOW()`,
+      [id, targetsEnabled, mode === "manual" ? monthly : 0, mode]
     );
 
     res.json({ success: true, message: "Settings saved successfully" });
   } catch (error) {
     console.error("Error saving team settings:", error);
-    res.status(500).json({ error: "Failed to save settings" });
+    res.status(500).json({
+      error:
+        error.code === "42703"
+          ? "Run the team_targets.target_mode migration first"
+          : "Failed to save settings",
+    });
   } finally {
     client.release();
   }
 });
 
 /* =========================================================
-   SERVICE MIX (For Doughnut Chart)
+   SERVICE MIX (for the doughnut): service charges by service
+   Optional ?from=YYYY-MM-DD&to=YYYY-MM-DD
 ========================================================= */
 
 router.get("/:id/service-mix", async (req, res) => {
   const client = await pool.connect();
   try {
-    const { id } = req.params;
-    
-    // Grabs the top 6 most popular services completed by this team
+    const access = await checkTeamAccess(client, req.user, req.params.id);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const params = [req.params.id];
+    let dates = "";
+
+    const from = cleanDate(req.query.from);
+    const to = cleanDate(req.query.to);
+
+    if (from) {
+      params.push(from);
+      dates += ` AND se.created_at >= $${params.length}::date`;
+    }
+
+    if (to) {
+      params.push(to);
+      dates += ` AND se.created_at < ($${params.length}::date + INTERVAL '1 day')`;
+    }
+
+    // Every service with charges in the period; the chart groups the small ones itself
     const result = await client.query(
-      `SELECT s2.name as service_type, COUNT(*) as count 
+      `SELECT s2.name AS service_type,
+              SUM(se.service_charges) AS total,
+              COUNT(*)::int AS count
        FROM service_entries se
        JOIN services s2 ON se.category_id = s2.id
        WHERE se.team_id = $1 AND se.status = 'completed'
-       GROUP BY s2.name 
-       ORDER BY count DESC
-       LIMIT 6`,
-      [id]
+       ${dates}
+       GROUP BY s2.name
+       HAVING SUM(se.service_charges) > 0
+       ORDER BY total DESC`,
+      params
     );
-    
-    res.json(result.rows);
+
+    res.json(
+      result.rows.map((r) => ({
+        service_type: r.service_type,
+        total: num(r.total),
+        count: r.count,
+      }))
+    );
   } catch (error) {
     console.error("Error fetching service mix:", error);
     res.status(500).json({ error: "Failed to load service mix" });
   } finally {
     client.release();
+  }
+});
+
+/* =========================================================
+   TEAM CHAT (Messenger group for the team)
+
+   GET  /:id/chat   -> { conversation_id, unread }   conversation_id is null
+                       until the chat exists (it never creates anything)
+   POST /:id/chat   -> { conversation_id }           creates the chat on first
+                       use (teams that existed before get one this way) and
+                       makes sure every member is in it
+
+   Members of the team can use it; so can the centre admin (own centre's
+   teams) and the superadmin, who are added to the chat when they open it.
+========================================================= */
+
+const requireTeamMember = async (client, user, teamId) => {
+  const access = await checkTeamAccess(client, user, teamId);
+  if (!access.ok) return access;
+
+  // Admin (own centre's teams) and superadmin (all teams) can open the chat
+  // too; checkTeamAccess has already scoped them.
+  if (user.role === "admin" || user.role === "superadmin") {
+    return { ...access, viewer: true };
+  }
+
+  const member = await client.query(
+    `SELECT 1 FROM team_members
+     WHERE team_id = $1 AND staff_id = $2 AND is_active = true`,
+    [teamId, user.id]
+  );
+
+  if (member.rows.length === 0) {
+    return { ok: false, status: 403, error: "Only members of this team can use the team chat" };
+  }
+
+  return access;
+};
+
+router.get("/:id/chat", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const access = await requireTeamMember(client, req.user, req.params.id);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const conv = await findTeamChat(client, req.params.id);
+
+    if (!conv || conv.status !== "active") {
+      return res.json({ conversation_id: null, unread: 0 });
+    }
+
+    const inChat = await client.query(
+      `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+      [conv.id, req.user.id]
+    );
+
+    if (inChat.rows.length === 0) {
+      // member of the team but not in the chat yet: POST adds them
+      return res.json({ conversation_id: null, unread: 0 });
+    }
+
+    const unread = await client.query(
+      `SELECT COUNT(*)::int AS count
+       FROM chat_messages m
+       WHERE m.conversation_id = $1
+         AND (m.sender_id IS NULL OR m.sender_id <> $2)
+         AND m.is_deleted = false
+         AND NOT EXISTS (
+           SELECT 1 FROM chat_message_reads r
+           WHERE r.message_id = m.id AND r.staff_id = $2
+         )`,
+      [conv.id, req.user.id]
+    );
+
+    res.json({ conversation_id: conv.id, unread: unread.rows[0].count });
+
+  } catch (err) {
+
+    console.error("Team chat lookup error:", err);
+
+    res.status(500).json({ error: "Failed to load the team chat" });
+
+  } finally {
+
+    client.release();
+
+  }
+});
+
+router.post("/:id/chat", async (req, res) => {
+  const client = await pool.connect();
+
+  try {
+    const access = await requireTeamMember(client, req.user, req.params.id);
+
+    if (!access.ok) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
+    const conversationId = await ensureTeamChat(Number(req.params.id), {
+      createdBy: req.user.id,
+      io: req.io,
+      joinStaffId: access.viewer ? req.user.id : null,
+    });
+
+    if (!conversationId) {
+      return res.status(404).json({ error: "This team has no active members yet" });
+    }
+
+    return res.json({ conversation_id: conversationId });
+
+  } catch (err) {
+
+    console.error("Open team chat error:", err);
+
+    res.status(500).json({ error: "Failed to open the team chat" });
+
+  } finally {
+
+    client.release();
+
   }
 });
 

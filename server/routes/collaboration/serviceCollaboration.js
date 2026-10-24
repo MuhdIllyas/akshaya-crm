@@ -6,6 +6,7 @@ import fs from 'fs';
 import pool from '../../db.js';
 import { sendSystemMessage } from '../../utils/messageRouter.js';
 import { logActivity } from '../../utils/activityLogger.js';
+import { createTask } from '../../services/taskService.js';
 
 const router = express.Router();
 
@@ -76,7 +77,7 @@ async function getOrCreateServiceConversation(serviceEntryId, serviceName, custo
   if (!centreId) throw new Error('Centre not found for service entry');
 
   const convRes = await pool.query(
-    `SELECT * FROM chat_conversations 
+    `SELECT * FROM chat_conversations
      WHERE context_type = 'service_entry' AND context_id = $1`,
     [serviceEntryId]
   );
@@ -149,6 +150,22 @@ async function canAccessService(serviceEntryId, userId, userRole) {
   return false;
 }
 
+// Roll back an open transaction before sending an early response,
+// so the pooled connection is never returned mid-transaction.
+async function bail(client, res, status, body) {
+  await client.query('ROLLBACK').catch(() => {});
+  return res.status(status).json(body);
+}
+
+// Errors thrown by createTask() that are the user's fault, not the server's
+const TASK_VALIDATION_ERRORS = [
+  'Title required',
+  'assigned_to required',
+  'Assigned staff not found',
+  'Staff must belong to the same centre',
+  'Permission denied',
+];
+
 // ==================== ROUTES ====================
 
 // GET /api/servicecollaboration/:serviceEntryId/participants
@@ -213,14 +230,14 @@ router.post('/:serviceEntryId/participants', authenticateToken, async (req, res)
       [serviceEntryId]
     );
     if (!ownerRes.rows.length) {
-      return res.status(404).json({ error: 'Service not found' });
+      return bail(client, res, 404, { error: 'Service not found' });
     }
     const service = ownerRes.rows[0];
     const isOwner = service.staff_id === req.user.id;
     const isAdmin = req.user.role === 'admin' && service.centre_id === req.user.centre_id;
     const isSuperadmin = req.user.role === 'superadmin';
     if (!isOwner && !isAdmin && !isSuperadmin) {
-      return res.status(403).json({ error: 'Not authorized to add participants' });
+      return bail(client, res, 403, { error: 'Not authorized to add participants' });
     }
 
     // Check if staff exists and is in same centre (if not superadmin)
@@ -229,11 +246,11 @@ router.post('/:serviceEntryId/participants', authenticateToken, async (req, res)
       [staffId]
     );
     if (!staffRes.rows.length) {
-      return res.status(400).json({ error: 'Staff not found' });
+      return bail(client, res, 400, { error: 'Staff not found' });
     }
     const staff = staffRes.rows[0];
     if (!isSuperadmin && staff.centre_id !== service.centre_id) {
-      return res.status(400).json({ error: 'Staff must belong to the same centre' });
+      return bail(client, res, 400, { error: 'Staff must belong to the same centre' });
     }
 
     // Insert into service_participants
@@ -281,7 +298,7 @@ router.post('/:serviceEntryId/participants', authenticateToken, async (req, res)
     await client.query('COMMIT');
     res.json({ message: 'Participant added successfully' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to add participant' });
   } finally {
@@ -304,13 +321,13 @@ router.delete('/:serviceEntryId/participants/:staffId', authenticateToken, async
        WHERE se.id = $1`,
       [serviceEntryId]
     );
-    if (!ownerRes.rows.length) return res.status(404).json({ error: 'Service not found' });
+    if (!ownerRes.rows.length) return bail(client, res, 404, { error: 'Service not found' });
     const service = ownerRes.rows[0];
     const isOwner = service.staff_id === req.user.id;
     const isAdmin = req.user.role === 'admin' && service.centre_id === req.user.centre_id;
     const isSuperadmin = req.user.role === 'superadmin';
     if (!isOwner && !isAdmin && !isSuperadmin) {
-      return res.status(403).json({ error: 'Not authorized to remove participants' });
+      return bail(client, res, 403, { error: 'Not authorized to remove participants' });
     }
 
     await client.query(
@@ -334,7 +351,7 @@ router.delete('/:serviceEntryId/participants/:staffId', authenticateToken, async
     await client.query('COMMIT');
     res.json({ message: 'Participant removed' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to remove participant' });
   } finally {
@@ -368,17 +385,24 @@ router.get('/:serviceEntryId/documents', authenticateToken, async (req, res) => 
 router.post('/:serviceEntryId/documents', authenticateToken, upload.single('file'), async (req, res) => {
   const { serviceEntryId } = req.params;
   const { document_type, document_name, description, expiry_date, document_number } = req.body;
+
+  // Remove an uploaded file we are not going to keep
+  const discardUpload = () => {
+    if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+  };
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
     const allowed = await canAccessService(serviceEntryId, req.user.id, req.user.role);
     if (!allowed) {
-      return res.status(403).json({ error: 'Not authorized to upload documents' });
+      discardUpload();
+      return bail(client, res, 403, { error: 'Not authorized to upload documents' });
     }
 
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return bail(client, res, 400, { error: 'No file uploaded' });
     }
 
     // Get service details
@@ -391,7 +415,8 @@ router.post('/:serviceEntryId/documents', authenticateToken, upload.single('file
       [serviceEntryId]
     );
     if (!serviceRes.rows.length) {
-      return res.status(404).json({ error: 'Service not found' });
+      discardUpload();
+      return bail(client, res, 404, { error: 'Service not found' });
     }
     const service = serviceRes.rows[0];
 
@@ -446,11 +471,9 @@ router.post('/:serviceEntryId/documents', authenticateToken, upload.single('file
     await client.query('COMMIT');
     res.status(201).json(newDoc);
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
-    }
+    discardUpload();
     res.status(500).json({ error: 'Failed to upload document' });
   } finally {
     client.release();
@@ -466,7 +489,7 @@ router.delete('/:serviceEntryId/documents/:docId', authenticateToken, async (req
 
     const allowed = await canAccessService(serviceEntryId, req.user.id, req.user.role);
     if (!allowed) {
-      return res.status(403).json({ error: 'Not authorized to delete documents' });
+      return bail(client, res, 403, { error: 'Not authorized to delete documents' });
     }
 
     const docRes = await client.query(
@@ -474,7 +497,7 @@ router.delete('/:serviceEntryId/documents/:docId', authenticateToken, async (req
       [docId, serviceEntryId]
     );
     if (!docRes.rows.length) {
-      return res.status(404).json({ error: 'Document not found' });
+      return bail(client, res, 404, { error: 'Document not found' });
     }
     const doc = docRes.rows[0];
 
@@ -482,10 +505,6 @@ router.delete('/:serviceEntryId/documents/:docId', authenticateToken, async (req
       `UPDATE customer_documents SET is_latest = false WHERE id = $1`,
       [docId]
     );
-
-    if (doc.file_url && fs.existsSync(doc.file_url)) {
-      fs.unlinkSync(doc.file_url);
-    }
 
     const serviceInfo = await client.query(
       `SELECT se.id, s.name as service_name, se.customer_name, staff.centre_id
@@ -508,9 +527,19 @@ router.delete('/:serviceEntryId/documents/:docId', authenticateToken, async (req
     );
 
     await client.query('COMMIT');
+
+    // Only remove the file from disk once the database change is committed
+    if (doc.file_url && fs.existsSync(doc.file_url)) {
+      try {
+        fs.unlinkSync(doc.file_url);
+      } catch (e) {
+        console.error('Non-fatal: could not delete document file:', e.message);
+      }
+    }
+
     res.json({ message: 'Document deleted' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to delete document' });
   } finally {
@@ -543,21 +572,21 @@ router.get('/:serviceEntryId/tasks', authenticateToken, async (req, res) => {
 });
 
 // POST /api/servicecollaboration/:serviceEntryId/tasks
+// Uses the shared createTask() so service tasks get the same chat bubble,
+// notification, calendar entry and activity log as every other task.
 router.post('/:serviceEntryId/tasks', authenticateToken, async (req, res) => {
   const { serviceEntryId } = req.params;
   const { title, description, assigned_to, due_date, priority = 'medium' } = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
 
+  try {
     const allowed = await canAccessService(serviceEntryId, req.user.id, req.user.role);
     if (!allowed) {
       return res.status(403).json({ error: 'Not authorized to create tasks' });
     }
 
-    // Get service info including centre_id from staff
-    const serviceRes = await client.query(
-      `SELECT se.id, staff.centre_id, s.name as service_name, se.customer_name
+    // Get service info including centre_id from the owner
+    const serviceRes = await pool.query(
+      `SELECT se.id, se.category_id, staff.centre_id, s.name as service_name, se.customer_name
        FROM service_entries se
        JOIN services s ON se.category_id = s.id
        JOIN staff ON se.staff_id = staff.id
@@ -569,68 +598,53 @@ router.post('/:serviceEntryId/tasks', authenticateToken, async (req, res) => {
     }
     const service = serviceRes.rows[0];
 
-    const insertRes = await client.query(
-      `INSERT INTO tasks
-       (related_service_entry_id, title, description, assigned_to, assigned_by, assigned_by_role,
-        priority, due_date, centre_id, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', NOW())
-       RETURNING *`,
-      [
-        serviceEntryId,
-        title,
-        description || null,
-        assigned_to,
-        req.user.id,
-        req.user.role,
-        priority,
-        due_date || null,
-        service.centre_id
-      ]
-    );
-    const newTask = insertRes.rows[0];
-
-    if (due_date) {
-      await client.query(
-        `INSERT INTO calendar_events (date, title, type, description, centre_id, related_task_id, created_by, created_at)
-         VALUES ($1, $2, 'task', $3, $4, $5, $6, NOW())`,
-        [due_date, title, description, service.centre_id, newTask.id, req.user.id]
-      );
-    }
-
-    const conversation = await getOrCreateServiceConversation(
+    // Make sure the service chat exists and the creator is in it,
+    // so createTask() posts into this same chat.
+    await getOrCreateServiceConversation(
       serviceEntryId,
       service.service_name,
       service.customer_name,
       req.user.id
     );
 
-    const assigneeName = await client.query(`SELECT name FROM staff WHERE id = $1`, [assigned_to]);
-    const assigneeText = assigneeName.rows[0]?.name || 'staff';
-    await sendSystemMessage(
-      conversation.id,
-      `📋 Task created: "${title}" assigned to ${assigneeText}. ${due_date ? `Due: ${due_date}` : ''}`,
-      req.io,
-      newTask.id   // Pass the task ID to store in the message
-    );
+    // The task belongs to the service's centre (superadmin is resolved from the assignee)
+    const actor =
+      req.user.role === 'superadmin' ? req.user : { ...req.user, centre_id: service.centre_id };
 
-    await logActivity({
-      centre_id: service.centre_id,
-      related_type: 'service_entry',
-      related_id: serviceEntryId,
-      action: 'Task Created',
-      description: `Task "${title}" created for service ${service.service_name}`,
-      performed_by: req.user.id,
-      performed_by_role: req.user.role
+    const { task } = await createTask({
+      actor,
+      title,
+      description: description || null,
+      assigned_to: assigned_to || null,
+      due_date: due_date || null,
+      priority,
+      related_service_id: service.category_id || null,
+      related_service_entry_id: parseInt(serviceEntryId, 10),
+      source: 'manual',
     });
 
-    await client.query('COMMIT');
-    res.status(201).json(newTask);
+    // Service timeline entry (createTask also logs a task-level activity)
+    try {
+      await logActivity({
+        centre_id: service.centre_id,
+        related_type: 'service_entry',
+        related_id: serviceEntryId,
+        action: 'Task Created',
+        description: `Task "${task.title}" created for service ${service.service_name}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role
+      });
+    } catch (e) {
+      console.error('Non-fatal: service activity log failed:', e.message);
+    }
+
+    res.status(201).json(task);
   } catch (err) {
-    await client.query('ROLLBACK');
     console.error(err);
+    if (TASK_VALIDATION_ERRORS.includes(err.message)) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(500).json({ error: 'Failed to create task' });
-  } finally {
-    client.release();
   }
 });
 
@@ -644,7 +658,7 @@ router.patch('/:serviceEntryId/tasks/:taskId', authenticateToken, async (req, re
 
     const allowed = await canAccessService(serviceEntryId, req.user.id, req.user.role);
     if (!allowed) {
-      return res.status(403).json({ error: 'Not authorized to update tasks' });
+      return bail(client, res, 403, { error: 'Not authorized to update tasks' });
     }
 
     const taskRes = await client.query(
@@ -652,7 +666,7 @@ router.patch('/:serviceEntryId/tasks/:taskId', authenticateToken, async (req, re
       [taskId, serviceEntryId]
     );
     if (!taskRes.rows.length) {
-      return res.status(404).json({ error: 'Task not found' });
+      return bail(client, res, 404, { error: 'Task not found' });
     }
     const task = taskRes.rows[0];
 
@@ -662,6 +676,9 @@ router.patch('/:serviceEntryId/tasks/:taskId', authenticateToken, async (req, re
     if (status !== undefined) {
       updates.push(`status = $${idx++}`);
       values.push(status);
+      // Keep completed_at in step with status (same as /api/tasks/:id/status)
+      updates.push(`completed_at = $${idx++}`);
+      values.push(status === 'completed' ? new Date() : null);
     }
     if (title !== undefined) {
       updates.push(`title = $${idx++}`);
@@ -684,7 +701,7 @@ router.patch('/:serviceEntryId/tasks/:taskId', authenticateToken, async (req, re
       values.push(priority);
     }
     if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
+      return bail(client, res, 400, { error: 'No fields to update' });
     }
     updates.push(`updated_at = NOW()`);
     values.push(taskId);
@@ -701,8 +718,19 @@ router.patch('/:serviceEntryId/tasks/:taskId', authenticateToken, async (req, re
       );
     }
 
-    if (status === 'completed' && task.status !== 'completed') {
-      const serviceInfo = await client.query(
+    // A completed task no longer belongs on the calendar
+    if (status === 'completed') {
+      await client.query(`DELETE FROM calendar_events WHERE related_task_id = $1`, [taskId]);
+    }
+
+    await client.query('COMMIT');
+
+    const needsChat =
+      (status === 'completed' && task.status !== 'completed') ||
+      (assigned_to && String(assigned_to) !== String(task.assigned_to));
+
+    if (needsChat) {
+      const serviceInfo = await pool.query(
         `SELECT se.id, s.name as service_name, se.customer_name
          FROM service_entries se
          JOIN services s ON se.category_id = s.id
@@ -715,17 +743,24 @@ router.patch('/:serviceEntryId/tasks/:taskId', authenticateToken, async (req, re
         serviceInfo.rows[0].customer_name,
         req.user.id
       );
-      await sendSystemMessage(
-        conversation.id,
-        `✅ Task completed: "${task.title}".`,
-        req.io
-      );
+
+      // A newly assigned staff member must be able to see the service chat
+      if (assigned_to && String(assigned_to) !== String(task.assigned_to)) {
+        await addStaffToConversation(conversation.id, assigned_to);
+      }
+
+      if (status === 'completed' && task.status !== 'completed') {
+        await sendSystemMessage(
+          conversation.id,
+          `✅ Task completed: "${task.title}".`,
+          req.io
+        );
+      }
     }
 
-    await client.query('COMMIT');
     res.json({ message: 'Task updated' });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to update task' });
   } finally {
@@ -785,7 +820,7 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
 
     // 2. Fetch all necessary details safely using exact schema mapping
     const query = `
-      SELECT 
+      SELECT
         se.id,
         se.customer_name,
         se.phone,
@@ -812,7 +847,7 @@ router.get('/:serviceEntryId/summary', authenticateToken, async (req, res) => {
       WHERE se.id = $1
     `;
     const result = await pool.query(query, [serviceEntryId]);
-    
+
     if (!result.rows.length) {
       return res.status(404).json({ error: 'Service not found' });
     }
@@ -869,6 +904,7 @@ router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
   let filesToDelete = [];
   let notifyStaffIds = [];
   let convIds = [];
+  let cancelledReminders = 0;
 
   try {
     await client.query('BEGIN');
@@ -920,6 +956,20 @@ router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
       await client.query(`DELETE FROM tasks WHERE id = ANY($1::int[])`, [taskIds]);
     }
 
+    // ---- Scheduled staff reminders ----
+    // Staff tasks would re-open a chat for a closed workspace, so cancel them.
+    // Customer WhatsApp reminders (e.g. passport appointment) are kept.
+    const cancelRes = await client.query(
+      `UPDATE scheduled_actions
+          SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = $2,
+              last_error = 'Workspace closed', updated_at = NOW()
+        WHERE service_entry_id = $1
+          AND action_type = 'staff_task'
+          AND status IN ('pending', 'failed')`,
+      [serviceEntryId, req.user.id]
+    );
+    cancelledReminders = cancelRes.rowCount;
+
     // ---- Collaborators ----
     await client.query(`DELETE FROM service_participants WHERE service_entry_id = $1`, [serviceEntryId]);
 
@@ -931,7 +981,7 @@ router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
 
     await client.query('COMMIT');
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     client.release();
     console.error('Close workspace error:', err);
     return res.status(500).json({ error: 'Failed to close workspace', details: err.message });
@@ -962,7 +1012,9 @@ router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
       related_type: 'service_entry',
       related_id: serviceEntryId,
       action: 'Workspace Closed',
-      description: `Workspace for ${service.service_name || 'service'} closed; chat and tasks removed`,
+      description: `Workspace for ${service.service_name || 'service'} closed; chat and tasks removed${
+        cancelledReminders ? `, ${cancelledReminders} scheduled staff reminder(s) cancelled` : ''
+      }`,
       performed_by: req.user.id,
       performed_by_role: req.user.role
     });
@@ -970,7 +1022,7 @@ router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
     console.error('Non-fatal: activity log failed', e.message);
   }
 
-  res.json({ success: true });
+  res.json({ success: true, cancelled_reminders: cancelledReminders });
 });
 
 export default router;

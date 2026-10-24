@@ -24,6 +24,7 @@ import {
   FiMapPin,
   FiChevronRight,
   FiAlertCircle,
+  FiUsers,
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoCheckmark, IoCheckmarkDone } from "react-icons/io5";
@@ -343,6 +344,8 @@ const Chat = ({
   onDeleteConversation = null,
   onOpenDetails = null,
   isDetailsOpen = false,
+  initialDraft = null,
+  onDraftConsumed = null,
 }) => {
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
@@ -449,6 +452,24 @@ const Chat = ({
     setIsMoreMenuOpen(false);
     setMentionQuery(null);
   }, [activeConversation?.id]);
+
+  // Pre-fill a draft passed in from another page (e.g. birthday wishes)
+  useEffect(() => {
+    if (!initialDraft || !activeConversation) return;
+    if (String(initialDraft.conversationId) !== String(activeConversation.id)) return;
+
+    setNewMessage(initialDraft.text);
+    onDraftConsumed?.();
+
+    const t = setTimeout(() => {
+      const el = chatInputRef.current;
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }, 150);
+    return () => clearTimeout(t);
+  }, [initialDraft, activeConversation?.id]);
 
   // Mark messages as read
   useEffect(() => {
@@ -808,6 +829,7 @@ const Chat = ({
   const others = getOtherParticipants(activeConversation, currentUser.id);
   const isFunctionallyGroup = isGroupConversation(activeConversation, currentUser.id);
   const isWhatsApp = activeConversation.channel === "whatsapp";
+  const isTeamChat = activeConversation.context_type === "team";
   const avatarPhoto = getConversationPhoto(activeConversation, currentUser.id);
   const singleOther = !isFunctionallyGroup && !isWhatsApp ? others[0] : null;
   const isParticipantOnline = singleOther ? isUserOnline(singleOther.staff_id) : false;
@@ -879,14 +901,19 @@ const Chat = ({
             name={displayName}
             photo={avatarPhoto}
             size="md"
-            color={isWhatsApp ? "bg-emerald-600" : activeConversation.avatarColor || getAvatarColor(activeConversation.id)}
-            isGroup={isFunctionallyGroup}
-            icon={isWhatsApp ? FiSmartphone : undefined}
+            color={isWhatsApp ? "bg-emerald-600" : isTeamChat ? "bg-navy-700" : activeConversation.avatarColor || getAvatarColor(activeConversation.id)}
+            isGroup={isFunctionallyGroup && !isTeamChat}
+            icon={isWhatsApp ? FiSmartphone : isTeamChat ? FiUsers : undefined}
             online={singleOther ? isParticipantOnline : undefined}
           />
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <h2 className="text-[15px] font-semibold text-slate-900 truncate">{displayName}</h2>
+              {isTeamChat && (
+                <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-navy-700">
+                  Team
+                </span>
+              )}
               {activeConversation.context_type === "service_entry" && (
                 <FiBriefcase className="shrink-0 text-violet-600" size={12} title="Service" />
               )}

@@ -1,415 +1,497 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  FiX, FiPaperclip, FiUpload, FiUser, FiAtSign, FiMapPin, 
-  FiGlobe, FiLock, FiCheck, FiCalendar, FiAlertCircle
+import {
+  FiX, FiUpload, FiUser, FiUsers, FiAtSign, FiMapPin, FiLock, FiCheck, FiCheckCircle,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { createNote, updateNote } from '@/services/noteService';
-import { getStaff } from '@/services/serviceService';
 import { MentionsInput, Mention } from 'react-mentions';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
-import api from '@/services/serviceService';
+import { createNote, updateNote } from '@/services/noteService';
+import api, { getStaff } from '@/services/serviceService';
+import { colorOf, ColorRow, rememberNoteColor, resolveNoteColor, loadColors } from './noteColors';
 
-const NoteEditorModal = ({ 
+const DEFAULT_TITLE = 'General Note';
+const ALL_STAFF = { id: 'all', display: 'All Staff' };
+const MENTION_RE = /@\[(.*?)\]\((\w+)\)/g;
+
+const VISIBILITY_OPTIONS = [
+  { value: 'private', label: 'Private', icon: FiLock, desc: 'Only you' },
+  { value: 'centre', label: 'Centre', icon: FiMapPin, desc: 'All staff in your centre' },
+  { value: 'mentioned_only', label: 'Mentions', icon: FiAtSign, desc: 'You + mentioned' },
+];
+
+const inputCls =
+  'w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20';
+
+// Local calendar date -> "YYYY-MM-DD" (toISOString would shift it a day back in IST).
+const toYmd = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const contextTitle = (contextType, contextId) => {
+  if (contextType === 'service_entry' && contextId) return `Note for Service Entry #${contextId}`;
+  if (contextType === 'customer' && contextId) return 'Customer Note';
+  return DEFAULT_TITLE;
+};
+
+const NoteEditorModal = ({
   note = null,
   contextType,
   contextId,
   onClose,
   onSave,
-  showTaskConversion = true
+  showTaskConversion = true,
 }) => {
-  const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
-  const [visibility, setVisibility] = useState('centre');
-  const [attachments, setAttachments] = useState([]);
-  const [uploading, setUploading] = useState(false);
-  const [mentions, setMentions] = useState([]);
+  const fallbackTitle = contextTitle(contextType, contextId);
+  const initialTitle = note ? note.title || '' : fallbackTitle;
+  const initialColor = note ? resolveNoteColor(note, loadColors()) : 'default';
+  const hasTask = Boolean(note?.task_id || note?.task);
+
+  const [title, setTitle] = useState(initialTitle);
+  const [content, setContent] = useState(note?.content || '');
+  const [visibility, setVisibility] = useState(note?.visibility || (contextType === 'service_entry' ? 'private' : 'centre'));
+  const [color, setColor] = useState(initialColor);
   const [createTask, setCreateTask] = useState(false);
   const [taskTitle, setTaskTitle] = useState('');
   const [taskAssignee, setTaskAssignee] = useState('');
   const [taskDueDate, setTaskDueDate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [staffList, setStaffList] = useState([]);
+  const [staffFailed, setStaffFailed] = useState(false);
+  const textRef = useRef(null);
 
+  const palette = colorOf(color);
+  const dirty =
+    content !== (note?.content || '') ||
+    title !== initialTitle ||
+    visibility !== (note?.visibility || 'centre') ||
+    color !== initialColor ||
+    createTask;
+
+  /* ---- staff for @mentions and task assignee ---- */
   useEffect(() => {
-    const loadStaffForMentions = async () => {
+    let cancelled = false;
+    (async () => {
       try {
-        const centreId = localStorage.getItem('centre_id');
-        const response = await getStaff(centreId);
-        
-        const formattedStaff = response.data.map(staff => ({
-          id: staff.id,
-          display: staff.name
-        }));
-        
-        setStaffList(formattedStaff);
+        const response = await getStaff(localStorage.getItem('centre_id'));
+        const rows = Array.isArray(response?.data) ? response.data : [];
+        if (!cancelled) setStaffList(rows.map((s) => ({ id: s.id, display: s.name })));
       } catch (error) {
         console.error('Failed to load staff for mentions', error);
+        if (!cancelled) setStaffFailed(true);
       }
+    })();
+    return () => {
+      cancelled = true;
     };
-
-    loadStaffForMentions();
   }, []);
 
+  /* ---- Esc closes (unless there are unsaved edits, or a popup is open) ---- */
   useEffect(() => {
-    if (note) {
-      setTitle(note.title || '');
-      setContent(note.content || '');
-      setVisibility(note.visibility || 'centre');
-      setMentions(note.mentions?.map(m => m.staff_id) || []);
-      
-      if (note.task && showTaskConversion) {
-        setCreateTask(true);
-        setTaskTitle(note.task.title);
-        setTaskAssignee(String(note.task.assigned_to));
-        setTaskDueDate(note.task.due_date ? new Date(note.task.due_date) : null);
-      }
-    } else {
-      if (contextType === 'service_entry' && contextId) {
-        setTitle(`Note for Service Entry #${contextId}`);
-      } else if (contextType === 'customer' && contextId) {
-        setTitle(`Customer Note`);
-      }
-    }
-  }, [note, contextType, contextId]);
+    const onKey = (e) => {
+      if (e.key !== 'Escape' || loading || dirty) return;
+      if (document.querySelector('.react-datepicker-popper, .mentions-input__suggestions')) return;
+      onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [loading, dirty, onClose]);
 
-  const handleFileChange = async (e) => {
-    toast.info("Attachments will be available in the next update!");
-  };
+  useEffect(() => {
+    textRef.current?.focus();
+  }, []);
 
-  const removeAttachment = (index) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const handleMentionChange = (event, newValue, newPlainTextValue, mentionsArray) => {
-    setContent(newValue);
-    const mentionedIds = mentionsArray.map(m => parseInt(m.id));
-    setMentions(mentionedIds);
-  };
+  const mentionOptions = useMemo(() => [ALL_STAFF, ...staffList], [staffList]);
 
   const fetchStaffSuggestions = (query, callback) => {
-      if (query.length === 0) {
-        return callback(staffList);
-      }
-      
-      const filtered = staffList.filter(s => 
-        s.display.toLowerCase().includes(query.toLowerCase())
-      );
-      
-      callback(filtered);
-    };
+    if (!query) return callback(mentionOptions);
+    const q = query.toLowerCase();
+    return callback(mentionOptions.filter((s) => s.display.toLowerCase().includes(q)));
+  };
+
+  // Read mentions straight from the text so the list can never drift out of sync.
+  const mentionedStaffIds = (text) => {
+    const ids = new Set();
+    const re = new RegExp(MENTION_RE.source, 'g');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      if (m[2] === 'all') staffList.forEach((s) => ids.add(Number(s.id)));
+      else if (Number.isFinite(Number(m[2]))) ids.add(Number(m[2]));
+    }
+    return [...ids];
+  };
+
+  const toggleTask = (checked) => {
+    setCreateTask(checked);
+    if (checked && !taskTitle.trim()) {
+      const t = title.trim();
+      if (t && t !== DEFAULT_TITLE && t !== fallbackTitle) setTaskTitle(t);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     if (!content.trim()) {
       toast.error('Please enter some content');
+      return;
+    }
+    const wantsTask = createTask && showTaskConversion && !hasTask;
+    if (wantsTask && (!taskTitle.trim() || !taskAssignee)) {
+      toast.error('Add a task title and choose who to assign it to');
       return;
     }
 
     setLoading(true);
 
     const payload = {
-      title: title.trim(),
+      title: title.trim() || fallbackTitle,
       content: content.trim(),
       visibility,
-      mentions
+      color,
+      mentions: mentionedStaffIds(content),
     };
+    if (contextType === 'service_entry' && contextId) payload.related_service_entry_id = parseInt(contextId, 10);
+    if (contextType === 'customer' && contextId) payload.related_customer_id = parseInt(contextId, 10);
+    if (contextType === 'tracking' && contextId) payload.related_service_tracking_id = parseInt(contextId, 10);
 
-    if (contextType === 'service_entry' && contextId) payload.related_service_entry_id = parseInt(contextId);
-    if (contextType === 'customer' && contextId) payload.related_customer_id = parseInt(contextId);
-    if (contextType === 'tracking' && contextId) payload.related_service_tracking_id = parseInt(contextId);
-
+    let savedNoteId = null;
     try {
-      let savedNoteId = null;
-
       if (note) {
         await updateNote(note.id, payload);
         savedNoteId = note.id;
-        toast.success('Note updated');
       } else {
         const response = await createNote(payload);
-        // Safely extract the new note ID
-        savedNoteId = response?.data?.id || response?.id || response?.data?.note?.id;
-        toast.success('Note created');
+        savedNoteId = response?.data?.id || response?.id || response?.data?.note?.id || null;
       }
-
-      // 🔥 Trigger the Task System via your existing tasks.js endpoint
-      if (createTask && taskTitle && taskAssignee && savedNoteId && !note?.task_id) {
-        const taskPayload = {
-          title: taskTitle.trim(),
-          description: content.trim(), 
-          assigned_to: parseInt(taskAssignee),
-          due_date: taskDueDate ? taskDueDate.toISOString().split('T')[0] : null,
-          priority: 'medium',
-          note_id: savedNoteId,
-        };
-
-        if (contextType === 'service_entry') taskPayload.related_service_entry_id = parseInt(contextId);
-        if (contextType === 'customer') taskPayload.related_customer_id = parseInt(contextId);
-
-        // 🔥 EXACT FIX: Swap the Base URL from /servicemanagement to /tasks for this request
-        const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-        
-        await api.post('/add', taskPayload, { baseURL: taskBaseUrl });
-        toast.success('Task created & linked to chat!');
-      }
-
-      onSave();
     } catch (err) {
       console.error(err);
       toast.error(err.response?.data?.error || 'Failed to save');
-    } finally {
       setLoading(false);
+      return;
     }
+
+    // The note is saved from here on. Whatever happens with the task, don't make
+    // the user save again (that would create the note twice).
+    rememberNoteColor(savedNoteId, color);
+    let taskFailed = false;
+
+    if (wantsTask && savedNoteId) {
+      try {
+        const taskPayload = {
+          title: taskTitle.trim(),
+          description: content.trim(),
+          assigned_to: parseInt(taskAssignee, 10),
+          due_date: taskDueDate ? toYmd(taskDueDate) : null,
+          priority: 'medium',
+          note_id: savedNoteId,
+        };
+        if (contextType === 'service_entry') taskPayload.related_service_entry_id = parseInt(contextId, 10);
+        if (contextType === 'customer') taskPayload.related_customer_id = parseInt(contextId, 10);
+
+        const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+        await api.post('/add', taskPayload, { baseURL: taskBaseUrl });
+      } catch (err) {
+        console.error(err);
+        taskFailed = true;
+      }
+    }
+
+    if (taskFailed) toast.warning(`Note ${note ? 'updated' : 'saved'}, but the task could not be created. Add it from the Tasks page.`);
+    else toast.success(wantsTask ? 'Note saved and task created' : note ? 'Note updated' : 'Note saved');
+
+    setLoading(false);
+    onSave();
   };
 
-  // Visibility options with labels and icons
-  const visibilityOptions = [
-    { value: 'private', label: 'Private', icon: FiLock, desc: 'Only you' },
-    { value: 'centre', label: 'Centre', icon: FiMapPin, desc: 'All staff in your centre' },
-    { value: 'mentioned_only', label: 'Mentions', icon: FiAtSign, desc: 'You + mentioned' },
-  ];
-
   return (
-    <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-navy-800/40 p-4 backdrop-blur-sm"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget && !loading && !dirty) onClose();
+      }}
+    >
       <motion.div
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        exit={{ opacity: 0, scale: 0.95 }}
-        className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="note-editor-title"
+        initial={{ opacity: 0, scale: 0.96, y: 8 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.96, y: 8 }}
+        transition={{ duration: 0.15 }}
+        className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
       >
-        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-10">
-          <h2 className="text-xl font-bold">{note ? 'Edit Note' : 'New Note'}</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            <FiX className="h-6 w-6" />
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <h2 id="note-editor-title" className="text-lg font-semibold text-navy-800">
+            {note ? 'Edit note' : 'New note'}
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+          >
+            <FiX className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Title */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Title (Optional)</label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500"
-              placeholder="Short summary..."
-            />
-          </div>
-
-          {/* Content with mentions */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Note *</label>
-            <MentionsInput
-              value={content}
-              onChange={handleMentionChange}
-              className="mentions-input"
-              style={{
-                control: {
-                  backgroundColor: '#fff',
-                  fontSize: 14,
-                  fontWeight: 'normal',
-                  width: '100%',
-                  border: '1px solid #e2e8f0', // <-- MOVED HERE
-                  borderRadius: '0.75rem',     // <-- MOVED HERE
-                  minHeight: '100px',          // <-- MOVED HERE
-                  lineHeight: '1.5',
-                  overflow: 'hidden',          // Prevents inner absolute elements from spilling
-                },
-                highlighter: { 
-                  padding: '0.85rem', 
-                  boxSizing: 'border-box',
-                  lineHeight: '1.5',
-                  margin: 0,
-                },
-                input: { 
-                  padding: '0.85rem', 
-                  border: 'none',              // <-- REMOVED (handled by control)
-                  outline: 'none',
-                  lineHeight: '1.5', 
-                  boxSizing: 'border-box',
-                  width: '100%',
-                  height: '100%',              // Tells it to fill the control box
-                  margin: 0,
-                  color: '#333',
-                },
-                suggestions: {
-                  list: { 
-                    backgroundColor: 'white', 
-                    border: '1px solid #e2e8f0', 
-                    borderRadius: '0.5rem',
-                    fontSize: 13, 
-                    zIndex: 100,
-                    boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
-                    maxHeight: '200px',
-                    overflowY: 'auto'
-                  },
-                  item: { 
-                    padding: '8px 12px', 
-                    borderBottom: '1px solid #f1f5f9',
-                    '&focused': { backgroundColor: '#eef2ff' } 
-                  },
-                },
-              }}
-            >
-              <Mention
-                trigger="@"
-                data={fetchStaffSuggestions}
-                markup="@[__display__](__id__)"
-                displayTransform={(id, display) => `@${display}`}
-                renderSuggestion={(suggestion, search, highlightedDisplay) => (
-                  <div className="flex items-center gap-2">
-                    <FiUser className="h-3 w-3 text-gray-500" />
-                    {highlightedDisplay}
-                  </div>
-                )}
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+            <div>
+              <label htmlFor="note-title" className="mb-1 block text-sm font-medium text-slate-700">
+                Title <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <input
+                id="note-title"
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className={inputCls}
+                placeholder="Short summary..."
               />
-            </MentionsInput>
-            <p className="text-xs text-gray-500 mt-1">Type @ to mention staff members</p>
-          </div>
+            </div>
 
-          {/* Visibility Options - FIXED with inline grid to guarantee no overlap */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Visibility</label>
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', 
-              gap: '0.75rem'
-            }}>
-              {visibilityOptions.map((opt) => {
-                const Icon = opt.icon;
-                const isSelected = visibility === opt.value;
-                return (
-                  <label
-                    key={opt.value}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '0.5rem',
-                      padding: '0.75rem',
-                      borderRadius: '0.75rem',
-                      border: `1px solid ${isSelected ? '#6366f1' : '#e5e7eb'}`,
-                      backgroundColor: isSelected ? '#eef2ff' : 'white',
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                    }}
-                  >
-                    <input
-                      type="radio"
-                      name="visibility"
-                      value={opt.value}
-                      checked={isSelected}
-                      onChange={(e) => setVisibility(e.target.value)}
-                      style={{ marginTop: '0.25rem' }}
-                    />
-                    <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.875rem', fontWeight: 500, color: '#111827' }}>
-                        <Icon style={{ width: '1rem', height: '1rem', color: isSelected ? '#4f46e5' : '#6b7280' }} />
-                        {opt.label}
-                      </div>
-                      <p style={{ fontSize: '0.6875rem', color: '#6b7280', marginTop: '0.125rem' }}>{opt.desc}</p>
+            <div>
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <label className="block text-sm font-medium text-slate-700">Note *</label>
+                <ColorRow value={color} onChange={setColor} />
+              </div>
+              <MentionsInput
+                value={content}
+                onChange={(ev, newValue) => setContent(newValue)}
+                className="mentions-input"
+                inputRef={textRef}
+                placeholder="Write your note. Type @ to mention staff..."
+                style={{
+                  control: {
+                    backgroundColor: palette.hex,
+                    fontSize: 14,
+                    width: '100%',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '0.75rem',
+                    minHeight: '120px',
+                    lineHeight: '1.5',
+                    overflow: 'hidden',
+                    transition: 'background-color .15s',
+                  },
+                  highlighter: { padding: '0.85rem', boxSizing: 'border-box', lineHeight: '1.5', margin: 0 },
+                  input: {
+                    padding: '0.85rem',
+                    border: 'none',
+                    outline: 'none',
+                    lineHeight: '1.5',
+                    boxSizing: 'border-box',
+                    width: '100%',
+                    height: '100%',
+                    margin: 0,
+                    color: '#1e293b',
+                  },
+                  suggestions: {
+                    list: {
+                      backgroundColor: 'white',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '0.5rem',
+                      fontSize: 13,
+                      zIndex: 100,
+                      boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+                      maxHeight: '200px',
+                      overflowY: 'auto',
+                    },
+                    item: {
+                      padding: '8px 12px',
+                      borderBottom: '1px solid #f1f5f9',
+                      '&focused': { backgroundColor: '#eaf0f8' },
+                    },
+                  },
+                }}
+              >
+                <Mention
+                  trigger="@"
+                  data={fetchStaffSuggestions}
+                  markup="@[__display__](__id__)"
+                  displayTransform={(id, display) => `@${display}`}
+                  style={{ backgroundColor: 'rgba(30,58,95,0.14)', borderRadius: 4 }}
+                  renderSuggestion={(suggestion, search, highlightedDisplay) => (
+                    <div className="flex items-center gap-2">
+                      {suggestion.id === 'all' ? (
+                        <FiUsers className="h-3 w-3 text-rose-500" />
+                      ) : (
+                        <FiUser className="h-3 w-3 text-slate-500" />
+                      )}
+                      {highlightedDisplay}
                     </div>
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Attachments - UI preserved but disabled for V1 */}
-          <div className="opacity-60 relative group">
-            <div className="absolute inset-0 z-10" onClick={() => toast.info("Attachments coming in V2")} />
-            <label className="block text-sm font-medium text-gray-700 mb-2">Attachments (Coming Soon)</label>
-            <div className="flex items-center gap-2 flex-wrap">
-              <label className="cursor-not-allowed bg-gray-100 rounded-lg px-3 py-2 text-sm flex items-center gap-2 text-gray-500">
-                <FiUpload className="h-4 w-4" /> Upload Files
-              </label>
-            </div>
-          </div>
-
-          {/* Create Task Checkbox */}
-          {showTaskConversion && !note?.task && (
-            <div className="border-t border-gray-200 pt-4 mt-2">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={createTask}
-                  onChange={(e) => setCreateTask(e.target.checked)}
-                  className="rounded text-indigo-600 focus:ring-indigo-500 mt-0.5"
+                  )}
                 />
-                <span className="text-sm font-medium text-gray-800">Create a task from this note</span>
-              </label>
+              </MentionsInput>
+              <p className="mt-1 text-xs text-slate-500">
+                {staffFailed ? 'Could not load staff, so @mentions and task assignment are unavailable.' : 'Type @ to mention staff members, or @All Staff to notify everyone.'}
+              </p>
+            </div>
 
-              {createTask && (
-                <div className="mt-4 ml-6 space-y-4 border-l-2 border-indigo-200 pl-4 py-1">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Task Title *</label>
-                    <input
-                      type="text"
-                      value={taskTitle}
-                      onChange={(e) => setTaskTitle(e.target.value)}
-                      required={createTask}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                      placeholder="e.g., Collect missing document"
-                    />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {contextType === 'service_entry' && !note ? (
+              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                <FiLock className="h-3.5 w-3.5" /> Private note: only you can see it.
+              </p>
+            ) : (
+            <fieldset>
+              <legend className="mb-2 text-sm font-medium text-slate-700">Visibility</legend>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {VISIBILITY_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const selected = visibility === opt.value;
+                  return (
+                    <label
+                      key={opt.value}
+                      className={`flex cursor-pointer items-start gap-2 rounded-xl border p-3 transition-colors focus-within:ring-2 focus-within:ring-navy-500/30 ${
+                        selected ? 'border-navy-500 bg-navy-500/5' : 'border-slate-200 bg-white hover:border-slate-300'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="note-visibility"
+                        value={opt.value}
+                        checked={selected}
+                        onChange={(e) => setVisibility(e.target.value)}
+                        className="mt-0.5 accent-navy-700"
+                      />
+                      <div>
+                        <div className="flex items-center gap-1.5 text-sm font-medium text-slate-800">
+                          <Icon className={`h-4 w-4 ${selected ? 'text-navy-700' : 'text-slate-500'}`} />
+                          {opt.label}
+                        </div>
+                        <p className="mt-0.5 text-[11px] text-slate-500">{opt.desc}</p>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            )}
+
+            <div>
+              <span className="mb-2 block text-sm font-medium text-slate-700">Attachments</span>
+              <span
+                aria-disabled="true"
+                className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-sm text-slate-400"
+              >
+                <FiUpload className="h-4 w-4" /> Upload files <span className="text-xs">(coming soon)</span>
+              </span>
+            </div>
+
+            {showTaskConversion && hasTask && (
+              <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+                <FiCheckCircle className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 truncate">Linked task: {note.task_title || note.task?.title || 'Task'}</span>
+              </div>
+            )}
+
+            {showTaskConversion && !hasTask && (
+              <div className="border-t border-slate-200 pt-4">
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={createTask}
+                    onChange={(e) => toggleTask(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 accent-navy-700"
+                  />
+                  <span className="text-sm font-medium text-slate-800">Create a task from this note</span>
+                </label>
+
+                {createTask && (
+                  <div className="ml-1 mt-4 space-y-4 border-l-2 border-navy-500/30 pl-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Assign To *</label>
-                      <select
-                        value={taskAssignee}
-                        onChange={(e) => setTaskAssignee(e.target.value)}
-                        required={createTask}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                      >
-                        <option value="">Select staff</option>
-                        {staffList.map(staff => (
-                          <option key={staff.id} value={staff.id}>
-                            {staff.display}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Due Date (Optional)</label>
-                      <DatePicker
-                        selected={taskDueDate}
-                        onChange={(date) => setTaskDueDate(date)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholderText="Select date"
-                        dateFormat="dd/MM/yyyy"
-                        minDate={new Date()}
+                      <label htmlFor="task-title" className="mb-1 block text-sm font-medium text-slate-700">
+                        Task title *
+                      </label>
+                      <input
+                        id="task-title"
+                        type="text"
+                        value={taskTitle}
+                        onChange={(e) => setTaskTitle(e.target.value)}
+                        className={inputCls}
+                        placeholder="e.g., Collect missing document"
                       />
                     </div>
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                      <div>
+                        <label htmlFor="task-assignee" className="mb-1 block text-sm font-medium text-slate-700">
+                          Assign to *
+                        </label>
+                        <select
+                          id="task-assignee"
+                          value={taskAssignee}
+                          onChange={(e) => setTaskAssignee(e.target.value)}
+                          className={`${inputCls} bg-white`}
+                        >
+                          <option value="">Select staff</option>
+                          {staffList.map((staff) => (
+                            <option key={staff.id} value={staff.id}>
+                              {staff.display}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label htmlFor="task-due" className="mb-1 block text-sm font-medium text-slate-700">
+                          Due date <span className="font-normal text-slate-400">(optional)</span>
+                        </label>
+                        <DatePicker
+                          id="task-due"
+                          selected={taskDueDate}
+                          onChange={(date) => setTaskDueDate(date)}
+                          className={inputCls}
+                          wrapperClassName="block w-full"
+                          popperClassName="!z-[70]"
+                          popperProps={{ strategy: 'fixed' }}
+                          placeholderText="Select date"
+                          dateFormat="dd/MM/yyyy"
+                          minDate={startOfToday()}
+                          isClearable
+                          autoComplete="off"
+                        />
+                      </div>
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+              </div>
+            )}
+          </div>
 
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-3 pt-4 border-t border-gray-200 mt-6">
-            <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition">
+          <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 disabled:opacity-50"
+            >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 disabled:opacity-50 transition"
+              className="flex items-center gap-2 rounded-lg bg-navy-700 px-4 py-2 text-sm font-medium text-white transition hover:bg-navy-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 disabled:opacity-50"
             >
               {loading ? (
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
                 <FiCheck className="h-4 w-4" />
               )}
-              {note ? 'Update Note' : 'Save Note'}
+              {note ? 'Update note' : 'Save note'}
             </button>
           </div>
         </form>
       </motion.div>
-    </div>
+    </motion.div>
   );
 };
 

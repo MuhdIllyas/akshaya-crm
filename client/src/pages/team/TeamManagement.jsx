@@ -1,22 +1,272 @@
 // TeamManagement.jsx
 import React, { useState, useEffect, useMemo, Fragment } from "react";
 import {
-  FiUsers, FiGlobe, FiHome, FiBarChart2, FiSearch, FiPlus, FiX,
-  FiUser, FiUserPlus, FiCheck, FiEdit, FiTrash2, FiStar, FiChevronDown, FiChevronUp, FiLoader,
-  FiTrendingUp, FiPieChart, FiCalendar, FiTarget, FiDollarSign, FiBriefcase
-} from "react-icons/fi";
+  PieChart, Pie, Cell, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer
+} from "recharts";
 import {
-  Chart as ChartJS, CategoryScale, LinearScale, BarElement,
-  LineElement, PointElement, Title, Tooltip, Legend, Filler, ArcElement
-} from "chart.js";
-import { Line, Doughnut } from "react-chartjs-2";
+  FiGlobe, FiUsers, FiHome, FiUserCheck, FiBarChart2, FiSearch, FiPlus, FiX, FiStar, FiTrash2,
+  FiChevronRight, FiLoader, FiMapPin, FiArrowUp, FiArrowDown, FiMessageSquare
+} from "react-icons/fi";
 import { toast } from "react-toastify";
+import { useNavigate } from "react-router-dom";
 
-ChartJS.register(
-  CategoryScale, LinearScale, BarElement, LineElement, PointElement,
-  Title, Tooltip, Legend, Filler, ArcElement
+// ==========================================
+// SHARED PRIMITIVES (same look as the dashboards)
+// ==========================================
+const money = (n) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(n || 0);
+
+const shortINR = (v) => {
+  const n = Number(v) || 0;
+  const s = n < 0 ? "-" : "";
+  const a = Math.abs(n);
+  if (a >= 10000000) return `${s}₹${(a / 10000000).toFixed(1)}Cr`;
+  if (a >= 100000) return `${s}₹${(a / 100000).toFixed(1)}L`;
+  if (a >= 1000) return `${s}₹${(a / 1000).toFixed(0)}k`;
+  return `${s}₹${a}`;
+};
+
+const Panel = ({ title, hint, summary, action, children, className = "" }) => (
+  <section className={`flex h-full flex-col rounded-xl border border-slate-200 bg-white ${className}`}>
+    <div className="flex flex-wrap items-start justify-between gap-3 px-5 pt-4">
+      <div className="min-w-0">
+        <h2 className="text-[15px] font-semibold text-slate-900">{title}</h2>
+        {hint && <p className="mt-0.5 text-xs text-slate-500">{hint}</p>}
+      </div>
+      {action}
+    </div>
+    {summary && <div className="px-5 pt-3">{summary}</div>}
+    <div className="flex-1 px-5 pb-5 pt-3">{children}</div>
+  </section>
 );
 
+const Segmented = ({ options, value, onChange }) => (
+  <div className="inline-flex max-w-full overflow-x-auto rounded-lg bg-slate-100 p-0.5" role="tablist">
+    {options.map((o) => (
+      <button
+        key={o.value}
+        role="tab"
+        aria-selected={value === o.value}
+        onClick={() => onChange(o.value)}
+        className={`whitespace-nowrap rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600 ${
+          value === o.value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+        }`}
+      >
+        {o.label}
+      </button>
+    ))}
+  </div>
+);
+
+const Sparkline = ({ data = [], color = "#4f46e5" }) => {
+  const pts = data.map(Number).filter(Number.isFinite);
+  if (pts.length < 2) return null;
+  const w = 104, h = 36;
+  const max = Math.max(...pts), min = Math.min(...pts), span = max - min || 1;
+  const xy = pts.map((v, i) => [(i / (pts.length - 1)) * w, h - 3 - ((v - min) / span) * (h - 6)]);
+  const line = xy.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(" ");
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" className="flex-shrink-0">
+      <polygon points={`0,${h} ${line} ${w},${h}`} fill={color} opacity="0.12" />
+      <polyline points={line} fill="none" stroke={color} strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+};
+
+const MiniStat = ({ label, value, hint }) => (
+  <div className="rounded-lg border border-slate-200 bg-white px-3.5 py-2.5">
+    <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+    <p className="mt-0.5 text-lg font-semibold tabular-nums leading-tight tracking-tight text-slate-900">
+      {value}
+    </p>
+    {hint && <p className="mt-0.5 truncate text-[11px] text-slate-500">{hint}</p>}
+  </div>
+);
+
+const Kpi = ({ label, value, delta, goodWhen = "up", compareLabel, note, context, spark, sparkColor, bar, tone = "text-slate-900" }) => {
+  const v = delta === null || delta === undefined ? NaN : Number(delta);
+  const hasDelta = Number.isFinite(v);
+  const isGood = goodWhen === "down" ? v < 0 : v > 0;
+  const badgeTone = v === 0 ? "bg-slate-100 text-slate-600" : isGood ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700";
+  const shown = Math.abs(v) > 999 ? "999%+" : `${Math.abs(v)}%`;
+  return (
+    <div className="flex flex-col rounded-xl border border-slate-200 bg-white p-5">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+        {hasDelta && (
+          <span
+            title={v === 0 ? `Same as ${compareLabel || "the previous period"}` : `${shown} ${v > 0 ? "higher" : "lower"} than ${compareLabel || "the previous period"}`}
+            className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${badgeTone}`}
+          >
+            {v > 0 && <FiArrowUp className="h-3 w-3" aria-hidden="true" />}
+            {v < 0 && <FiArrowDown className="h-3 w-3" aria-hidden="true" />}
+            {shown}
+          </span>
+        )}
+      </div>
+      <p className={`mt-2 text-3xl font-semibold tabular-nums tracking-tight ${tone}`}>{value}</p>
+      {context && <p className="mt-1 text-xs text-slate-500">{context}</p>}
+      {bar && <div className="mt-3">{bar}</div>}
+      <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-100 pt-3">
+        <p className="text-xs text-slate-500">{note}</p>
+        {spark && <Sparkline data={spark} color={sparkColor} />}
+      </div>
+    </div>
+  );
+};
+
+const TargetBar = ({ value, max, tone }) => (
+  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+    <div className={`h-full rounded-full ${tone}`} style={{ width: `${max > 0 ? Math.min((value / max) * 100, 100) : 0}%` }} />
+  </div>
+);
+
+// Photos can be a full URL, a data URL, or a path on the API server (like on the staff dashboard)
+const photoSrc = (raw) => {
+  if (!raw || raw === "null" || raw === "undefined") return null;
+  if (/^(https?:|data:image|blob:)/i.test(raw)) return raw;
+  const base = import.meta.env.VITE_API_URL || "";
+  return `${base}${raw.startsWith("/") ? "" : "/"}${raw}`;
+};
+
+const Avatar = ({ name, photo, size = 36 }) => {
+  const [failed, setFailed] = useState(false);
+  const src = photoSrc(photo);
+  const initials = (name || "?").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+  const dim = { width: size, height: size };
+  return src && !failed ? (
+    <img src={src} alt="" onError={() => setFailed(true)} style={dim} className="flex-shrink-0 rounded-full border border-slate-200 object-cover" />
+  ) : (
+    <span style={dim} className="flex flex-shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold text-blue-700" aria-hidden="true">{initials}</span>
+  );
+};
+
+const TREND_COLORS = { revenue: "#4f46e5", serviceCharges: "#059669", profit: "#059669", expenses: "#e11d48" };
+const TREND_LABELS = { revenue: "Revenue", serviceCharges: "Service charges", profit: "Profit", expenses: "Expenses" };
+
+const RevenueChart = ({ data, view, height = 280 }) => {
+  if (!data || data.length === 0) {
+    return <div className="flex h-[240px] items-center justify-center text-sm text-slate-500">No data for this period</div>;
+  }
+
+  const fmt = (amount) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(amount || 0);
+
+  const formatLabel = (label) => {
+    if (!label) return '';
+    if (label.length === 7) {
+      return new Date(label + '-01').toLocaleString('default', { month: 'short', year: '2-digit' });
+    }
+    if (label.length === 10) return label.slice(5);
+    return label;
+  };
+
+  const short = (v) => shortINR(v);
+  const color = TREND_COLORS[view] || TREND_COLORS.revenue;
+  const seriesName = TREND_LABELS[view] || "Revenue";
+  const gid = `fill-${view}`;
+
+  const Tip = ({ active, payload }) =>
+    active && payload?.length ? (
+      <div className="rounded-lg bg-slate-900 p-3 text-xs text-white shadow-xl">
+        <p className="text-slate-300">{formatLabel(payload[0].payload.label)}</p>
+        <p className="mt-0.5 text-base font-semibold">{fmt(payload[0].payload.value)}</p>
+        <p className="text-slate-400">{seriesName}</p>
+      </div>
+    ) : null;
+
+  return (
+    <ResponsiveContainer width="100%" height={height}>
+      <BarChart data={data} margin={{ top: 10, right: 8, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={color} stopOpacity={0.55} />
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+        <XAxis dataKey="label" tickFormatter={formatLabel} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} minTickGap={16} />
+        <YAxis tickFormatter={short} tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} tickLine={false} width={52} />
+        <Tooltip content={<Tip />} cursor={{ fill: 'rgba(100,116,139,0.08)' }} />
+        <Bar dataKey="value" fill={`url(#${gid})`} radius={[4, 4, 0, 0]} maxBarSize={36} animationDuration={600} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+};
+
+const MIX_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
+const MIX_OTHER = "#94a3b8";
+
+const MixDonut = ({ rows, totalLabel, emptyText }) => {
+  const [open, setOpen] = useState(null);
+  const clean = (rows || [])
+    .map((r) => ({ name: r.category || "Uncategorised", amount: Number(r.amount) || 0, subs: r.subcategories || [] }))
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  if (clean.length === 0) return <p className="py-10 text-center text-sm text-slate-500">{emptyText}</p>;
+  const total = clean.reduce((a, r) => a + r.amount, 0);
+  const rest = clean.slice(6).reduce((a, r) => a + r.amount, 0);
+  const list = [
+    ...clean.slice(0, 6).map((r, i) => ({ ...r, color: MIX_COLORS[i] })),
+    ...(rest > 0 ? [{ name: `Other (${clean.length - 6})`, amount: rest, subs: [], color: MIX_OTHER }] : []),
+  ];
+  return (
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+      <div className="relative h-40 w-40 flex-shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie data={list} dataKey="amount" nameKey="name" innerRadius="64%" outerRadius="100%" paddingAngle={list.length > 1 ? 2 : 0} stroke="none" isAnimationActive={false}>
+              {list.map((r) => <Cell key={r.name} fill={r.color} />)}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <span className="text-base font-semibold tabular-nums text-slate-900">{money(total)}</span>
+          <span className="text-[11px] text-slate-500">{totalLabel}</span>
+        </div>
+      </div>
+      <ul className="w-full min-w-0 flex-1 space-y-1">
+        {list.map((r) => {
+          const expandable = r.subs.length > 0 && !(r.subs.length === 1 && r.subs[0].name === "No subcategory");
+          const isOpen = open === r.name;
+          const Row = expandable ? "button" : "div";
+          return (
+            <li key={r.name}>
+              <Row
+                {...(expandable ? { type: "button", onClick: () => setOpen(isOpen ? null : r.name), "aria-expanded": isOpen } : {})}
+                className={`flex w-full items-center gap-2 rounded px-1 py-1 text-left text-sm ${expandable ? "hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-600" : ""}`}
+              >
+                <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center">
+                  {expandable && <FiChevronRight className={`h-3.5 w-3.5 text-slate-400 transition-transform ${isOpen ? "rotate-90" : ""}`} />}
+                </span>
+                <span className="h-2.5 w-2.5 flex-shrink-0 rounded-sm" style={{ backgroundColor: r.color }} />
+                <span className="min-w-0 flex-1 truncate text-slate-800" title={r.name}>{r.name}</span>
+                <span className="whitespace-nowrap font-medium tabular-nums text-slate-900">{money(r.amount)}</span>
+                <span className="w-9 text-right text-xs tabular-nums text-slate-500">{Math.round((r.amount / total) * 100)}%</span>
+              </Row>
+              {isOpen && (
+                <ul className="mb-1 ml-[34px] space-y-1 border-l-2 border-slate-100 pl-3">
+                  {r.subs.map((sub) => (
+                    <li key={sub.name} className="flex items-baseline justify-between gap-3 text-xs">
+                      <span className="truncate text-slate-600" title={sub.name}>{sub.name}</span>
+                      <span className="whitespace-nowrap tabular-nums text-slate-700">
+                        {money(sub.amount)} <span className="text-slate-400">{Math.round((sub.amount / r.amount) * 100)}% · {sub.services}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+};
+
+// ==========================================
+// TEAMS
+// ==========================================
 // ----------------------------------------------------------------------
 // JWT helper – exactly as in CalendarPage.jsx
 // ----------------------------------------------------------------------
@@ -39,50 +289,62 @@ function getTokenClaims() {
 
 const API_BASE = import.meta.env.VITE_API_URL || "";
 
-/* ---------- SUB-COMPONENTS ---------- */
-const StatCard = ({ title, value, icon: Icon, color, subtitle }) => (
-  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-500 mb-1 text-xs uppercase tracking-wider">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-2xl">{value}</p>
-        {subtitle && <p className="text-gray-400 text-xs font-medium">{subtitle}</p>}
-      </div>
-      <div className={`rounded-xl ${color} p-3`}><Icon className="text-white h-6 w-6" /></div>
+
+// Stat tile with a coloured icon chip, same as the tiles on Staff Management
+const GlanceTile = ({ label, value, icon: Icon, chip }) => (
+  <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
+    <div>
+      <p className="text-xs font-medium text-slate-500">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900">{value}</p>
     </div>
+    <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${chip}`}><Icon className="h-5 w-5" aria-hidden="true" /></span>
   </div>
 );
 
-const TargetProgressBar = ({ label, current, target }) => {
-  const safeTarget = target || 1;
-  const percentage = Math.min((current / safeTarget) * 100, 100).toFixed(0);
-  
-  const formatCurrency = (val) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val || 0);
-
+// Compact "₹a / ₹t  42%" bar, same look as the staff-targets rows on the dashboards
+const MiniTargetBar = ({ achieved, target, onPace }) => {
+  if (!target) return <span className="text-xs text-slate-400">No target set</span>;
+  const raw = (achieved / target) * 100;
+  const tone = raw >= 100 ? "bg-emerald-500" : onPace ? "bg-blue-500" : "bg-amber-500";
   return (
-    <div className="mb-4">
-      <div className="flex justify-between text-sm mb-1">
-        <span className="font-medium text-gray-700">{label}</span>
-        <span className="text-gray-600 font-semibold">{formatCurrency(current)} / {formatCurrency(target)} ({percentage}%)</span>
+    <div className="min-w-[150px]">
+      <div className="mb-1 flex items-baseline justify-between gap-2 text-xs">
+        <span className="tabular-nums text-slate-700">{money(achieved)} / {money(target)}</span>
+        <span className="font-semibold tabular-nums text-slate-900">{Math.round(raw)}%</span>
       </div>
-      <div className="w-full bg-gray-100 rounded-full h-2.5">
-        <div className={`h-2.5 rounded-full ${percentage >= 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${percentage}%` }}></div>
-      </div>
+      <TargetBar value={achieved} max={target} tone={tone} />
     </div>
   );
 };
 
+// ---- Period filter (same options and IST day boundaries as the dashboards) ----
+const PERIOD_OPTIONS = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This Week" },
+  { value: "month", label: "This Month" },
+  { value: "3months", label: "Last 3 Months" },
+  { value: "6months", label: "Last 6 Months" },
+  { value: "year", label: "This Year" },
+];
+
 const getDatesFromPeriod = (period) => {
-  const toDate = new Date();
-  let fromDate = new Date();
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const [y, m, d] = today.split("-").map(Number);
+  let start;
   switch (period) {
-    case 'week': fromDate.setDate(fromDate.getDate() - fromDate.getDay()); break;
-    case 'month': fromDate.setDate(1); break;
-    case 'quarter': fromDate.setMonth(Math.floor(fromDate.getMonth() / 3) * 3); fromDate.setDate(1); break;
-    case 'year': fromDate.setMonth(0); fromDate.setDate(1); break;
-    default: fromDate.setDate(1);
+    case "today": start = new Date(Date.UTC(y, m - 1, d)); break;
+    case "week": {
+      const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+      start = new Date(Date.UTC(y, m - 1, d - (dow === 0 ? 6 : dow - 1)));
+      break;
+    }
+    case "3months": start = new Date(Date.UTC(y, m - 3, 1)); break;
+    case "6months": start = new Date(Date.UTC(y, m - 6, 1)); break;
+    case "year": start = new Date(Date.UTC(y, 0, 1)); break;
+    case "month":
+    default: start = new Date(Date.UTC(y, m - 1, 1));
   }
-  return { from: fromDate.toISOString().split('T')[0], to: toDate.toISOString().split('T')[0] };
+  return { from: start.toISOString().split("T")[0], to: today };
 };
 
 // ----------------------------------------------------------------------
@@ -106,7 +368,7 @@ const TeamManagement = () => {
     members: 0,
   });
 
-  // Financial data from analytics endpoint
+  // Service-charge data from the analytics endpoint
   const [financialData, setFinancialData] = useState({ teams: [], totals: {} });
 
   // Filters
@@ -131,13 +393,49 @@ const TeamManagement = () => {
   const [contributionData, setContributionData] = useState([]);
   const [trendData, setTrendData] = useState([]);
   const [serviceMix, setServiceMix] = useState([]);
+  const [teamTargets, setTeamTargets] = useState(null); // sum of members' targets, this month
   const [trendYear, setTrendYear] = useState(new Date().getFullYear());
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // --- EXPANDABLE ROW STATE (Replaces the Manage Members Modal) ---
   const [expandedTeamId, setExpandedTeamId] = useState(null);
   const [teamMembersMap, setTeamMembersMap] = useState({});
+  const [teamTargetsMap, setTeamTargetsMap] = useState({});
   const [membersLoading, setMembersLoading] = useState(false);
+
+  const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+
+  // Opens (or creates) the team's Messenger group. The admin / superadmin is added to it.
+  const navigate = useNavigate();
+  const [chatOpeningId, setChatOpeningId] = useState(null);
+  const MESSENGER_PATH = user.role === "superadmin" ? "/dashboard/superadmin/messenger" : "/dashboard/admin/messenger"; // assumed routes; confirm
+  const openTeamChat = async (team) => {
+    setChatOpeningId(team.id);
+    try {
+      const res = await fetch(`${API_BASE}/api/teams/${team.id}/chat`, { method: "POST", headers: authHeaders() });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Could not open the team chat");
+      navigate(MESSENGER_PATH, { state: { openConversationId: data.conversation_id } });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setChatOpeningId(null);
+    }
+  };
+
+  // Roster + this month's targets for one team (members and targets are fetched together)
+  const loadTeamExtras = async (teamId) => {
+    const [membersRes, targetsRes] = await Promise.all([
+      fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: authHeaders() }),
+      fetch(`${API_BASE}/api/teams/${teamId}/targets`, { headers: authHeaders() }).catch(() => ({ ok: false })),
+    ]);
+    const membersData = await membersRes.json();
+    setTeamMembersMap((prev) => ({ ...prev, [teamId]: Array.isArray(membersData) ? membersData : [] }));
+    if (targetsRes.ok) {
+      const targetsData = await targetsRes.json();
+      setTeamTargetsMap((prev) => ({ ...prev, [teamId]: targetsData }));
+    }
+  };
 
   const toggleTeamExpand = async (team) => {
     if (expandedTeamId === team.id) {
@@ -147,11 +445,7 @@ const TeamManagement = () => {
     setExpandedTeamId(team.id);
     setMembersLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/api/teams/${team.id}/members`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      });
-      const membersData = await response.json();
-      setTeamMembersMap(prev => ({ ...prev, [team.id]: membersData }));
+      await loadTeamExtras(team.id);
     } catch (error) {
       console.error("Fetch members failed:", error);
     } finally {
@@ -166,15 +460,12 @@ const TeamManagement = () => {
     try {
       const response = await fetch(`${API_BASE}/api/teams/${teamId}/members`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: { "Content-Type": "application/json", ...authHeaders() },
         body: JSON.stringify({ staff_id: staffId, is_primary: false }),
       });
       if (!response.ok) throw new Error("Failed to add member");
 
-      // Refresh just this row
-      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
-      const updatedMembers = await updatedRes.json();
-      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+      await loadTeamExtras(teamId); // refresh just this row, targets included
       setAddMemberValue("");
       fetchTeams(); fetchFinancials();
     } catch (error) { toast.error(error.message); } finally { setSubmitting(false); }
@@ -186,11 +477,9 @@ const TeamManagement = () => {
     try {
       await fetch(`${API_BASE}/api/teams/${teamId}/members/${staffId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+        headers: authHeaders(),
       });
-      const updatedRes = await fetch(`${API_BASE}/api/teams/${teamId}/members`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }});
-      const updatedMembers = await updatedRes.json();
-      setTeamMembersMap(prev => ({ ...prev, [teamId]: updatedMembers }));
+      await loadTeamExtras(teamId);
       fetchTeams(); fetchFinancials();
     } catch (error) { console.error(error); } finally { setSubmitting(false); }
   };
@@ -208,28 +497,44 @@ const TeamManagement = () => {
     } catch (error) { console.error(error); } finally { setSubmitting(false); }
   };
 
-  // Targets Settings State
+  // Targets switch (the amount itself is the sum of members' individual targets)
   const [targetsEnabled, setTargetsEnabled] = useState(false);
-  const [monthlyTarget, setMonthlyTarget] = useState(250000);
+  const [targetMode, setTargetMode] = useState("staff"); // "staff" = sum of members, "manual" = typed for the team
+  const [manualTarget, setManualTarget] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
 
   const handleSaveSettings = async () => {
     if (!analyticsTeam) return;
+    const amount = Number(manualTarget);
+    if (targetMode === "manual" && !(Number.isFinite(amount) && amount > 0)) {
+      toast.error("Enter a monthly target above 0, or use the sum of staff targets");
+      return;
+    }
     setSavingSettings(true);
     try {
       const response = await fetch(`${API_BASE}/api/teams/${analyticsTeam.id}/settings`, {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          Authorization: `Bearer ${localStorage.getItem("token")}` 
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("token")}`
         },
         body: JSON.stringify({
           targets_enabled: targetsEnabled,
-          monthly_target: monthlyTarget
+          target_mode: targetMode,
+          monthly_target: targetMode === "manual" ? amount : undefined,
         }),
       });
-      if (!response.ok) throw new Error("Failed to save settings");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || "Failed to save settings");
       toast.success("Team settings saved successfully!");
+
+      // the target figures change with the mode, so reload them here and in the table
+      const targetsRes = await fetch(`${API_BASE}/api/teams/${analyticsTeam.id}/targets?photos=1`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+      });
+      if (targetsRes.ok) setTeamTargets(await targetsRes.json());
+      fetchFinancials();
+      if (expandedTeamId === analyticsTeam.id) loadTeamExtras(analyticsTeam.id);
     } catch (error) {
       toast.error(error.message);
     } finally {
@@ -375,30 +680,15 @@ const TeamManagement = () => {
   // ------------------------------------------------------------------
   const mergedTeams = useMemo(() => {
     return teams.map((team) => {
-      const fin = financialData.teams.find((t) => t.id === team.id);
+      const fin = (financialData.teams || []).find((t) => t.id === team.id);
       return {
         ...team,
-
-        expected_revenue:
-          fin ? fin.expected_revenue : 0,
-
-        collected_revenue:
-          fin ? fin.collected_revenue : 0,
-
-        pending_revenue:
-          fin ? fin.pending_revenue : 0,
-
-        department_charges:
-          fin ? fin.department_charges : 0,
-
-        service_profit:
-          fin ? fin.service_profit : 0,
-
-        expense:
-          fin ? fin.expense : 0,
-
-        net_profit:
-          fin ? fin.net_profit : 0,
+        service_charges: fin ? fin.service_charges : 0,
+        services_completed: fin ? fin.services_completed : 0,
+        revenue_billed: fin ? fin.revenue_billed : 0,
+        expense: fin ? fin.expense : 0,
+        net_profit: fin ? fin.net_profit : 0,
+        targets: fin ? fin.targets : null,
       };
     });
   }, [teams, financialData]);
@@ -418,19 +708,8 @@ const TeamManagement = () => {
       const matchesCentre =
         centreFilter === "all" || String(team.centre_id) === centreFilter;
       return matchesSearch && matchesType && matchesCentre;
-    });
+    }).sort((a, b) => (Number(b.service_charges) || 0) - (Number(a.service_charges) || 0) || a.name.localeCompare(b.name));
   }, [mergedTeams, searchTerm, typeFilter, centreFilter]);
-
-  // ------------------------------------------------------------------
-  // Currency formatter
-  // ------------------------------------------------------------------
-  const formatCurrency = (value) => {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
 
   // ------------------------------------------------------------------
   // Create team modal helpers
@@ -616,33 +895,32 @@ const TeamManagement = () => {
     setAnalyticsLoading(true);
     try {
       const headers = { Authorization: `Bearer ${localStorage.getItem("token")}` };
-      
-      // Fetch all 4 endpoints at the same time
-      const [contribRes, trendRes, mixRes, settingsRes] = await Promise.all([
-        fetch(`${API_BASE}/api/teams/${teamId}/contribution`, { headers }),
+      const { from, to } = getDatesFromPeriod(period);
+      const range = `from=${from}&to=${to}`;
+
+      // Fetch everything at the same time
+      const [contribRes, trendRes, mixRes, settingsRes, targetsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/teams/${teamId}/contribution?${range}`, { headers }),
         fetch(`${API_BASE}/api/teams/${teamId}/trend?year=${trendYear}`, { headers }),
-        fetch(`${API_BASE}/api/teams/${teamId}/service-mix`, { headers }).catch(() => ({ ok: false })),
-        fetch(`${API_BASE}/api/teams/${teamId}/settings`, { headers }).catch(() => ({ ok: false }))
+        fetch(`${API_BASE}/api/teams/${teamId}/service-mix?${range}`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/teams/${teamId}/settings`, { headers }).catch(() => ({ ok: false })),
+        fetch(`${API_BASE}/api/teams/${teamId}/targets?photos=1`, { headers }).catch(() => ({ ok: false })),
       ]);
 
-      if (contribRes.ok) setContributionData(await contribRes.json());
-      if (trendRes.ok) setTrendData(await trendRes.json());
-      
-      // Handle Service Mix
-      if (mixRes.ok) {
-        setServiceMix(await mixRes.json());
-      } else {
-        setServiceMix([{ service_type: 'Passport', count: 45 }, { service_type: 'PAN Card', count: 30 }, { service_type: 'Certificate', count: 15 }]);
-      }
+      setContributionData(contribRes.ok ? await contribRes.json() : []);
+      setTrendData(trendRes.ok ? await trendRes.json() : []);
+      setServiceMix(mixRes.ok ? await mixRes.json() : []);
+      setTeamTargets(targetsRes.ok ? await targetsRes.json() : null);
 
-      // Handle Target Settings
       if (settingsRes.ok) {
         const settingsData = await settingsRes.json();
-        setTargetsEnabled(settingsData.targets_enabled || false);
-        setMonthlyTarget(settingsData.monthly_target || 250000);
+        setTargetsEnabled(!!settingsData.targets_enabled);
+        setTargetMode(settingsData.target_mode === "manual" ? "manual" : "staff");
+        setManualTarget(settingsData.monthly_target > 0 ? String(settingsData.monthly_target) : "");
       } else {
         setTargetsEnabled(false);
-        setMonthlyTarget(250000);
+        setTargetMode("staff");
+        setManualTarget("");
       }
 
     } catch (err) {
@@ -659,443 +937,413 @@ const TeamManagement = () => {
     fetchAnalyticsData(team.id);
   };
 
-  // Analytics Calculations for Admin Overview
+  // Analytics calculations for the team dashboard
   const activeTeamStats = useMemo(() => mergedTeams.find(t => t.id === analyticsTeam?.id), [analyticsTeam, mergedTeams]);
-  const actualProfit = activeTeamStats ? (activeTeamStats.collected_revenue || 0) - (activeTeamStats.department_charges || 0) - (activeTeamStats.expense || 0) : 0;
-  const profitMargin = activeTeamStats && activeTeamStats.collected_revenue > 0 ? ((actualProfit / activeTeamStats.collected_revenue) * 100).toFixed(1) : 0;
+  const netMargin = activeTeamStats && activeTeamStats.service_charges > 0
+    ? ((activeTeamStats.net_profit / activeTeamStats.service_charges) * 100).toFixed(1)
+    : 0;
+  const periodLabel = PERIOD_OPTIONS.find((o) => o.value === period)?.label || "";
 
-  const trendChartData = useMemo(() => {
-    if (!trendData.length) return null;
-    return {
-      labels: trendData.map(t => ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][t.month - 1]),
-      datasets: [{ label: 'Revenue (₹)', data: trendData.map(t => t.collected_revenue), borderColor: '#10B981', backgroundColor: 'rgba(16, 185, 129, 0.1)', fill: true }]
-    };
-  }, [trendData]);
+  // Service charges by month for the chart (months that have not happened yet are left out)
+  const monthlyChartData = useMemo(() => {
+    const lastMonth = trendYear === new Date().getFullYear() ? new Date().getMonth() + 1 : 12;
+    return trendData
+      .filter((t) => t.month <= lastMonth)
+      .map((t) => ({ label: `${trendYear}-${String(t.month).padStart(2, "0")}`, value: Number(t.service_charges) || 0 }));
+  }, [trendData, trendYear]);
 
-  const doughnutData = {
-    labels: serviceMix.map(s => s.service_type),
-    datasets: [{ data: serviceMix.map(s => s.count), backgroundColor: ["#3B82F6", "#10B981", "#EF4444", "#F59E0B", "#8B5CF6", "#64748B"], borderWidth: 0 }]
-  };
+  // Rows for the service-charges donut
+  const mixRows = useMemo(
+    () => serviceMix.map((s) => ({ category: s.service_type, amount: Number(s.total) || 0, subcategories: [] })),
+    [serviceMix]
+  );
 
   // ------------------------------------------------------------------
   // Render
   // ------------------------------------------------------------------
+  const btnPrimary =
+    "inline-flex items-center gap-1.5 rounded-lg bg-navy-700 px-3.5 py-2 text-sm font-semibold text-white shadow-sm hover:bg-navy-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 disabled:opacity-60";
+  const btnGhost =
+    "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-60";
+  const selectCls =
+    "rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500";
+  const inputCls =
+    "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:bg-slate-50";
+  const thCls = "px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500";
+
+  // Totals for the teams currently shown
+  const sumTotals = filteredTeams.reduce(
+    (a, t) => ({
+      charges: a.charges + (Number(t.service_charges) || 0),
+      expense: a.expense + (Number(t.expense) || 0),
+      net: a.net + (Number(t.net_profit) || 0),
+      target: a.target + (Number(t.targets?.target) || 0),
+      achieved: a.achieved + (Number(t.targets?.achieved) || 0),
+    }),
+    { charges: 0, expense: 0, net: 0, target: 0, achieved: 0 }
+  );
+  // Per-day (or per-month) totals across the teams shown, for the sparklines
+  const seriesLen = Math.max(0, ...filteredTeams.map((t) => (t.series || []).length));
+  const sumSeries = (key) =>
+    Array.from({ length: seriesLen }, (_, i) =>
+      filteredTeams.reduce((a, t) => a + (Number(t.series?.[i]?.[key]) || 0), 0)
+    );
+  const chargesSpark = sumSeries("service_charges");
+  const expenseSpark = sumSeries("expense");
+  const netSpark = chargesSpark.map((v, i) => v - expenseSpark[i]);
+  const targetPct = sumTotals.target > 0 ? Math.round((sumTotals.achieved / sumTotals.target) * 100) : 0;
+
+  // Monthly values (this year, up to now) behind the sparklines in the team popup
+  const modalSpark = (key) => {
+    const lastMonth = trendYear === new Date().getFullYear() ? new Date().getMonth() + 1 : 12;
+    const pts = trendData.filter((t) => t.month <= lastMonth).map((t) => Number(t[key]) || 0);
+    return pts.length > 1 ? pts : undefined;
+  };
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-              Teams Management
-            </h1>
-            <p className="text-gray-600 mt-1">
-              Organize finance ownership, centre vs global teams
-            </p>
-          </div>
-          <div className="flex gap-3 mt-4 md:mt-0">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search teams..."
-                className="pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            {isAdmin && (
-              <button
-                onClick={openCreateModal}
-                disabled={submitting}
-                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all shadow-md hover:shadow-lg"
-              >
-                <FiPlus className="mr-2" /> Create Team
-              </button>
-            )}
-          </div>
+    <div className="h-full overflow-y-auto bg-slate-50 p-4 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-900">Teams</h1>
+          <p className="text-sm text-slate-500">Service charges and monthly targets · {periodLabel}</p>
         </div>
-
-        {/* Top Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Total Teams</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {totalStats.total}
-                </p>
-              </div>
-              <div className="bg-indigo-100 p-3 rounded-xl">
-                <FiUsers className="text-indigo-600 text-xl" />
-              </div>
-            </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative">
+            <FiSearch className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden="true" />
+            <input
+              type="text"
+              placeholder="Search teams"
+              aria-label="Search teams"
+              className="w-44 rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Global Teams</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {totalStats.global}
-                </p>
-              </div>
-              <div className="bg-purple-100 p-3 rounded-xl">
-                <FiGlobe className="text-purple-600 text-xl" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Centre Teams</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {totalStats.centre}
-                </p>
-              </div>
-              <div className="bg-blue-100 p-3 rounded-xl">
-                <FiHome className="text-blue-600 text-xl" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Total Members</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {totalStats.members}
-                </p>
-              </div>
-              <div className="bg-green-100 p-3 rounded-xl">
-                <FiBarChart2 className="text-green-600 text-xl" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters */}
-        <div className="flex flex-wrap items-center gap-4 mb-6 bg-white p-4 rounded-2xl shadow-sm border border-gray-100">
-          
-          {/* NEW DATE FILTER */}
-          <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-sm">
-            <FiCalendar className="text-gray-500" />
-            <select 
-              value={period} 
-              onChange={(e) => setPeriod(e.target.value)} 
-              className="bg-transparent focus:outline-none text-gray-700 font-semibold cursor-pointer"
-            >
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="quarter">This Quarter</option>
-              <option value="year">This Year</option>
-            </select>
-          </div>
-
-          {/* Existing Filters */}
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          >
-            <option value="all">All Types</option>
-            <option value="centre">Centre Teams</option>
-            <option value="global">Global Teams</option>
+          <select value={period} onChange={(e) => setPeriod(e.target.value)} className={selectCls} aria-label="Select period">
+            {PERIOD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
           </select>
-          
+          <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className={selectCls} aria-label="Team type">
+            <option value="all">All types</option>
+            <option value="centre">Centre teams</option>
+            <option value="global">Global teams</option>
+          </select>
           {isSuperAdmin && (
-            <select
-              value={centreFilter}
-              onChange={(e) => setCentreFilter(e.target.value)}
-              className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-            >
-              <option value="all">All Centres</option>
+            <select value={centreFilter} onChange={(e) => setCentreFilter(e.target.value)} className={selectCls} aria-label="Centre">
+              <option value="all">All centres</option>
               {centres.map((centre) => (
-                <option key={centre.id} value={centre.id}>
-                  {centre.name}
-                </option>
+                <option key={centre.id} value={centre.id}>{centre.name}</option>
               ))}
             </select>
           )}
+          {isAdmin && (
+            <button onClick={openCreateModal} disabled={submitting} className={btnPrimary}>
+              <FiPlus className="h-4 w-4" aria-hidden="true" /> New team
+            </button>
+          )}
         </div>
+      </div>
 
-        {/* Teams Table */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-200">
-                  <th className="py-4 px-5 text-left text-sm font-semibold text-gray-600">
-                    Team
-                  </th>
-                  <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
-                    Type
-                  </th>
-                  <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
-                    Members
-                  </th>
-                  <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
-                    Collected Revenue
-                  </th>
-                  <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
-                    Expense
-                  </th>
-                  <th className="py-4 px-5 text-right text-sm font-semibold text-gray-600">
-                    Net Profit
-                  </th>
-                  <th className="py-4 px-5 text-center text-sm font-semibold text-gray-600">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredTeams.map((team) => (
-                  <Fragment key={team.id}>
-                    
-                    {/* --- MAIN ROW --- */}
-                    <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                      <td className="py-4 px-5">
-                        <div className="flex items-center">
-                          {/* The Arrow */}
-                          <button onClick={() => toggleTeamExpand(team)} className="mr-3 p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition">
-                             {expandedTeamId === team.id ? <FiChevronUp size={20}/> : <FiChevronDown size={20}/>}
-                          </button>
-                          
-                          <div className={`p-2 rounded-lg mr-3 ${team.is_global ? "bg-purple-100 text-purple-800" : "bg-indigo-100 text-indigo-800"}`}>
-                            {team.is_global ? <FiGlobe /> : <FiHome />}
-                          </div>
-                          <div>
-                            <p className="font-bold text-gray-800 cursor-pointer hover:text-indigo-600 transition" onClick={() => toggleTeamExpand(team)}>
-                              {team.name}
-                            </p>
-                            <p className="text-xs text-gray-500">{team.centre_id ? getCentreName(team.centre_id) : "Cross-Centre"}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-4 px-5 text-center"><span className="px-2 py-1 text-xs rounded-full bg-blue-100 text-blue-800">{team.is_global ? "Global" : "Centre"}</span></td>
-                      <td className="py-4 px-5 text-center font-bold text-gray-700">{team.member_count}</td>
-                      <td className="py-4 px-5 text-right text-emerald-600 font-medium">{formatCurrency(team.collected_revenue)}</td>
-                      <td className="py-4 px-5 text-right text-red-500 font-medium">{formatCurrency(team.expense)}</td>
-                      
-                      <td className="py-4 px-5 text-right font-bold text-indigo-600">{formatCurrency(team.net_profit)}</td>
-                      <td className="py-4 px-5 text-center">
-                        <div className="flex justify-center gap-2">
-                          <button onClick={() => openAnalyticsModal(team)} className="text-teal-600 hover:text-teal-800 p-1.5 rounded-lg hover:bg-teal-50" title="View Dashboard">
-                            <FiBarChart2 size={18} />
-                          </button>
-                          {isAdmin && (
-                            <button onClick={() => handleDeleteTeam(team.id)} disabled={submitting} className="text-red-600 hover:text-red-800 p-1.5 rounded-lg hover:bg-red-50 disabled:opacity-50" title="Delete">
-                              <FiTrash2 size={18} />
+      {/* Glance strip */}
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <GlanceTile label="Teams" value={totalStats.total} icon={FiUsers} chip="bg-blue-50 text-blue-600" />
+        <GlanceTile label="Global teams" value={totalStats.global} icon={FiGlobe} chip="bg-purple-50 text-purple-600" />
+        <GlanceTile label="Centre teams" value={totalStats.centre} icon={FiHome} chip="bg-amber-50 text-amber-600" />
+        <GlanceTile label="Members" value={totalStats.members} icon={FiUserCheck} chip="bg-emerald-50 text-emerald-600" />
+      </div>
+
+      {/* KPIs: green for what the team earns, red for what it spends */}
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi
+          label="Service charges"
+          value={money(sumTotals.charges)}
+          tone="text-emerald-600"
+          context={periodLabel}
+          note="Completed services"
+          spark={chargesSpark}
+          sparkColor="#059669"
+        />
+        <Kpi
+          label="Expenses"
+          value={money(sumTotals.expense)}
+          tone="text-rose-600"
+          context={periodLabel}
+          note="Approved expenses"
+          spark={expenseSpark}
+          sparkColor="#e11d48"
+        />
+        <Kpi
+          label="Net profit"
+          value={money(sumTotals.net)}
+          tone={sumTotals.net < 0 ? "text-rose-600" : "text-emerald-600"}
+          context="Service charges less expenses"
+          note={sumTotals.charges > 0 ? `${Math.round((sumTotals.net / sumTotals.charges) * 100)}% of service charges` : "No service charges yet"}
+          spark={netSpark}
+          sparkColor={sumTotals.net < 0 ? "#e11d48" : "#059669"}
+        />
+        <Kpi
+          label="Monthly target"
+          value={`${targetPct}%`}
+          tone={targetPct >= 100 ? "text-emerald-600" : "text-slate-900"}
+          context={`${money(sumTotals.achieved)} of ${money(sumTotals.target)}`}
+          note="Team targets, this month"
+          bar={<TargetBar value={sumTotals.achieved} max={sumTotals.target} tone={targetPct >= 100 ? "bg-emerald-500" : "bg-blue-500"} />}
+        />
+      </div>
+
+      {/* Teams table */}
+      <div className="mt-4">
+        <Panel title="All teams" hint={`Ranked by service charges · ${periodLabel}. Targets are always this month`}>
+          {loading ? (
+            <div className="flex justify-center py-10"><FiLoader className="h-6 w-6 animate-spin text-navy-700" /></div>
+          ) : filteredTeams.length === 0 ? (
+            <p className="py-10 text-center text-sm text-slate-500">No teams match these filters.</p>
+          ) : (
+            <div className="-mx-5 overflow-x-auto">
+              <table className="w-full min-w-[940px]">
+                <thead>
+                  <tr className="border-y border-slate-100 bg-slate-50/70 text-left">
+                    <th className={thCls}>Team</th>
+                    <th className={`${thCls} text-center`}>Members</th>
+                    <th className={`${thCls} text-right`}>Service charges</th>
+                    <th className={`${thCls} text-right`}>Expense</th>
+                    <th className={`${thCls} text-right`}>Net profit</th>
+                    <th className={thCls}>Trend</th>
+                    <th className={thCls}>Monthly target</th>
+                    <th className={`${thCls} text-right`}><span className="sr-only">Actions</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredTeams.map((team) => (
+                    <Fragment key={team.id}>
+                      <tr className="hover:bg-slate-50/70">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={() => toggleTeamExpand(team)}
+                              aria-expanded={expandedTeamId === team.id}
+                              aria-label={`${expandedTeamId === team.id ? "Hide" : "Show"} ${team.name} members`}
+                              className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+                            >
+                              <FiChevronRight className={`h-4 w-4 transition-transform ${expandedTeamId === team.id ? "rotate-90" : ""}`} />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
+                            <div className="min-w-0">
+                              <button type="button" onClick={() => toggleTeamExpand(team)} className="block max-w-[260px] truncate text-left text-sm font-medium text-slate-900 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500">
+                                {team.name}
+                              </button>
+                              {team.is_global ? (
+                                <span className="mt-0.5 flex items-center gap-1 text-xs font-medium text-indigo-700">
+                                  <FiGlobe className="h-3 w-3 flex-shrink-0" aria-hidden="true" /> Global
+                                </span>
+                              ) : (
+                                <span className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                                  <FiMapPin className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
+                                  <span className="truncate">{getCentreName(team.centre_id)}</span>
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm tabular-nums text-slate-700">{team.member_count}</td>
+                        <td className="px-4 py-3 text-right text-sm font-semibold tabular-nums text-emerald-700">{money(team.service_charges)}</td>
+                        <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-rose-600">{money(team.expense)}</td>
+                        <td className={`px-4 py-3 text-right text-sm font-semibold tabular-nums ${team.net_profit < 0 ? "text-rose-600" : "text-emerald-700"}`}>{money(team.net_profit)}</td>
+                        <td className="px-4 py-3">
+                          <Sparkline data={(team.series || []).map((p) => p.service_charges)} color="#059669" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <MiniTargetBar achieved={team.targets?.achieved || 0} target={team.targets?.target || 0} onPace={team.targets?.onPace} />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex justify-end gap-1">
+                            <button onClick={() => openTeamChat(team)} disabled={chatOpeningId === team.id} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-50" title="Team chat" aria-label={`Open ${team.name} chat`}>
+                              {chatOpeningId === team.id ? <FiLoader className="h-4 w-4 animate-spin" /> : <FiMessageSquare className="h-4 w-4" />}
+                            </button>
+                            <button onClick={() => openAnalyticsModal(team)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Team dashboard" aria-label={`Open ${team.name} dashboard`}>
+                              <FiBarChart2 className="h-4 w-4" />
+                            </button>
+                            {isAdmin && (
+                              <button onClick={() => handleDeleteTeam(team.id)} disabled={submitting} className="rounded-md p-1.5 text-slate-500 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 disabled:opacity-50" title="Delete team" aria-label={`Delete ${team.name}`}>
+                                <FiTrash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
 
-                    {/* --- EXPANDED ROW (STAFF DETAILS) --- */}
-                    {expandedTeamId === team.id && (
-                      <tr className="bg-slate-50 border-b-2 border-indigo-100 shadow-inner">
-                         <td colSpan="6" className="p-0">
-                           <div className="px-14 py-6">
-                             {membersLoading ? (
-                                <div className="text-gray-500 text-sm py-4 flex items-center"><FiLoader className="animate-spin mr-2"/> Loading members...</div>
-                             ) : (
-                                <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
-                                  
-                                  {/* Expanded Header & Add Member */}
-                                  <div className="flex justify-between items-center mb-5 border-b border-gray-100 pb-4">
-                                    <h4 className="font-bold text-gray-800 flex items-center gap-2">
-                                       <FiUsers className="text-indigo-600"/> Team Roster
-                                    </h4>
+                      {expandedTeamId === team.id && (
+                        <tr className="bg-slate-50/70">
+                          <td colSpan="8" className="px-5 py-4">
+                            {membersLoading ? (
+                              <div className="flex items-center py-4 text-sm text-slate-500"><FiLoader className="mr-2 animate-spin" /> Loading members</div>
+                            ) : (
+                              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                  <h3 className="text-[15px] font-semibold text-slate-900">Team roster</h3>
+                                  {isAdmin && (
                                     <div className="flex gap-2">
-                                       <select 
-                                         className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-indigo-500 bg-gray-50 outline-none"
-                                         value={addMemberValue} onChange={(e) => setAddMemberValue(e.target.value)}
-                                       >
-                                          <option value="">+ Add Staff to {team.name}</option>
-                                          {availableStaff.filter(s => !teamMembersMap[team.id]?.some(m => m.staff_id === s.id)).map(staff => (
-                                             <option key={staff.id} value={staff.id}>{staff.name} ({staff.role})</option>
-                                          ))}
-                                       </select>
-                                       <button onClick={() => handleInlineAddMember(team.id)} disabled={!addMemberValue || submitting} className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-lg text-sm disabled:opacity-50 font-medium shadow-sm transition">Add</button>
+                                      <select
+                                        className={selectCls}
+                                        aria-label={`Add staff to ${team.name}`}
+                                        value={addMemberValue}
+                                        onChange={(e) => setAddMemberValue(e.target.value)}
+                                      >
+                                        <option value="">Add staff</option>
+                                        {availableStaff.filter((s) => !teamMembersMap[team.id]?.some((m) => m.staff_id === s.id)).map((staff) => (
+                                          <option key={staff.id} value={staff.id}>{staff.name} ({staff.role})</option>
+                                        ))}
+                                      </select>
+                                      <button onClick={() => handleInlineAddMember(team.id)} disabled={!addMemberValue || submitting} className={btnPrimary}>Add</button>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {teamTargetsMap[team.id] && (
+                                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                    <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Team target this month{teamTargetsMap[team.id].mode === "manual" ? " · set for team" : ""}</p>
+                                      {teamTargetsMap[team.id].target > 0 ? (
+                                        <>
+                                          <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+                                            {Math.round(teamTargetsMap[team.id].progress)}% <span className="text-sm font-normal text-slate-500">of target</span>
+                                          </p>
+                                          <p className="text-xs text-slate-500">{money(teamTargetsMap[team.id].achieved)} of {money(teamTargetsMap[team.id].target)}</p>
+                                        </>
+                                      ) : (
+                                        <p className="mt-1 text-sm text-slate-500">No member has a target this month</p>
+                                      )}
+                                    </div>
+                                    <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Met today's target</p>
+                                      <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+                                        {teamTargetsMap[team.id].metToday} <span className="text-sm font-normal text-slate-500">of {teamTargetsMap[team.id].membersWithTarget} members</span>
+                                      </p>
+                                      <p className="text-xs text-slate-500">{money(teamTargetsMap[team.id].today)} of {money(teamTargetsMap[team.id].dailyTarget)} today</p>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                                      <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Targets set</p>
+                                      <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+                                        {teamTargetsMap[team.id].membersWithTarget} <span className="text-sm font-normal text-slate-500">of {teamTargetsMap[team.id].memberCount} members</span>
+                                      </p>
+                                      <p className="text-xs text-slate-500">Members without one are left out</p>
                                     </div>
                                   </div>
-                                  
-                                  {/* Staff Grid */}
-                                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                     {teamMembersMap[team.id]?.map(member => (
-                                       <div key={member.id} className="flex items-center justify-between p-3 border border-gray-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50/50 transition">
-                                          <div className="flex items-center gap-3">
-                                             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 text-indigo-700 flex items-center justify-center font-bold text-sm shadow-sm">
-                                               {member.name.charAt(0)}
-                                             </div>
-                                             <div>
-                                                <p className="text-sm font-bold text-gray-800">{member.name} {member.is_primary && <FiStar className="inline text-amber-500 ml-1 mb-0.5"/>}</p>
-                                                <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mt-0.5">{member.role} • {member.centre_name}</p>
-                                             </div>
-                                          </div>
-                                          <div className="flex gap-1">
-                                            {isAdmin && !member.is_primary && (
-                                               <button onClick={() => handleInlineSetPrimary(team.id, member.id)} className="text-amber-500 hover:bg-amber-50 p-1.5 rounded-lg transition" title="Make Primary"><FiStar size={16}/></button>
-                                            )}
-                                            {isAdmin && (
-                                               <button onClick={() => handleInlineRemoveMember(team.id, member.staff_id)} className="text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition" title="Remove"><FiTrash2 size={16}/></button>
-                                            )}
-                                          </div>
-                                       </div>
-                                     ))}
-                                     {teamMembersMap[team.id]?.length === 0 && <p className="text-sm text-gray-500 col-span-3 py-4 text-center italic">No members assigned to this team yet.</p>}
-                                  </div>
-                                  
-                                </div>
-                             )}
-                           </div>
-                         </td>
-                      </tr>
-                    )}
+                                )}
 
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                                <ul className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                                  {teamMembersMap[team.id]?.map((member) => {
+                                    const t = teamTargetsMap[team.id]?.members?.find((x) => x.staff_id === member.staff_id);
+                                    return (
+                                      <li key={member.id} className="rounded-lg border border-slate-200 p-3">
+                                        <div className="flex items-start justify-between gap-2">
+                                          <Avatar name={member.name} photo={member.photo} size={40} />
+                                          <div className="min-w-0 flex-1">
+                                            <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-900">
+                                              {member.name}
+                                              {member.is_primary && <FiStar className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" title="Primary team" aria-label="Primary team" />}
+                                            </p>
+                                            <p className="truncate text-xs text-slate-500">{member.role}{member.centre_name ? ` · ${member.centre_name}` : ""}</p>
+                                          </div>
+                                          {isAdmin && (
+                                            <div className="flex flex-shrink-0 gap-0.5">
+                                              {!member.is_primary && (
+                                                <button onClick={() => handleInlineSetPrimary(team.id, member.id)} className="rounded-md p-1.5 text-slate-400 hover:bg-amber-50 hover:text-amber-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Make primary team" aria-label={`Make ${team.name} the primary team of ${member.name}`}><FiStar className="h-4 w-4" /></button>
+                                              )}
+                                              <button onClick={() => handleInlineRemoveMember(team.id, member.staff_id)} className="rounded-md p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" title="Remove from team" aria-label={`Remove ${member.name}`}><FiTrash2 className="h-4 w-4" /></button>
+                                            </div>
+                                          )}
+                                        </div>
+                                        {t && <div className="mt-2.5"><MiniTargetBar achieved={t.achieved} target={t.target} onPace={t.on_pace} /></div>}
+                                      </li>
+                                    );
+                                  })}
+                                </ul>
+                                {teamMembersMap[team.id]?.length === 0 && (
+                                  <p className="py-6 text-center text-sm text-slate-500">No members assigned to this team yet.</p>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Panel>
       </div>
 
       {/* ---- CREATE TEAM MODAL ---- */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200">
-            <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 sticky top-0 rounded-t-2xl">
-              <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-white">
-                  Create New Team
-                </h2>
-                <button
-                  onClick={() => setShowCreateModal(false)}
-                  className="text-white hover:text-gray-200"
-                >
-                  <FiX size={20} />
-                </button>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label="New team">
+          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl">
+            <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-4">
+              <h2 className="text-[15px] font-semibold text-slate-900">New team</h2>
+              <button onClick={() => setShowCreateModal(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label="Close">
+                <FiX className="h-5 w-5" />
+              </button>
             </div>
-            <form onSubmit={handleCreateTeam} className="p-6 space-y-5">
+            <form onSubmit={handleCreateTeam} className="space-y-4 p-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Team Name *
-                </label>
-                <input
-                  type="text"
-                  value={teamForm.name}
-                  onChange={(e) =>
-                    setTeamForm({ ...teamForm, name: e.target.value })
-                  }
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  required
-                  disabled={submitting}
-                />
+                <label htmlFor="team-name" className="mb-1 block text-sm font-medium text-slate-700">Team name</label>
+                <input id="team-name" type="text" value={teamForm.name} onChange={(e) => setTeamForm({ ...teamForm, name: e.target.value })} className={inputCls} required disabled={submitting} />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
-                </label>
-                <textarea
-                  value={teamForm.description}
-                  onChange={(e) =>
-                    setTeamForm({
-                      ...teamForm,
-                      description: e.target.value,
-                    })
-                  }
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  rows={2}
-                  disabled={submitting}
-                />
+                <label htmlFor="team-desc" className="mb-1 block text-sm font-medium text-slate-700">Description</label>
+                <textarea id="team-desc" value={teamForm.description} onChange={(e) => setTeamForm({ ...teamForm, description: e.target.value })} className={inputCls} rows={2} disabled={submitting} />
               </div>
 
               {isSuperAdmin && (
-                <div className="flex items-center gap-3">
+                <label htmlFor="is_global" className="flex items-center gap-2.5 text-sm font-medium text-slate-700">
                   <input
                     type="checkbox"
                     id="is_global"
                     checked={teamForm.is_global}
-                    onChange={(e) => {
-                      setTeamForm({
-                        ...teamForm,
-                        is_global: e.target.checked,
-                        centre_id: e.target.checked
-                          ? null
-                          : teamForm.centre_id,
-                      });
-                    }}
-                    className="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500"
+                    onChange={(e) => setTeamForm({ ...teamForm, is_global: e.target.checked, centre_id: e.target.checked ? null : teamForm.centre_id })}
+                    className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-indigo-600"
                     disabled={submitting}
                   />
-                  <label
-                    htmlFor="is_global"
-                    className="text-sm font-medium text-gray-700"
-                  >
-                    Global (Cross-Centre) Team
-                  </label>
-                </div>
+                  Global team (members from different centres)
+                </label>
               )}
 
               {!teamForm.is_global && isSuperAdmin && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Centre
-                  </label>
-                  <select
-                    value={teamForm.centre_id || ""}
-                    onChange={(e) =>
-                      setTeamForm({
-                        ...teamForm,
-                        centre_id: e.target.value
-                          ? Number(e.target.value)
-                          : null,
-                      })
-                    }
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    disabled={submitting}
-                  >
+                  <label htmlFor="team-centre" className="mb-1 block text-sm font-medium text-slate-700">Centre</label>
+                  <select id="team-centre" value={teamForm.centre_id || ""} onChange={(e) => setTeamForm({ ...teamForm, centre_id: e.target.value ? Number(e.target.value) : null })} className={inputCls} disabled={submitting}>
                     <option value="">Select centre</option>
                     {centres.map((centre) => (
-                      <option key={centre.id} value={centre.id}>
-                        {centre.name}
-                      </option>
+                      <option key={centre.id} value={centre.id}>{centre.name}</option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* Member selector – dropdown style */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Initial Members
-                </label>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {teamForm.members.map((staffId) => {
-                    const staff = availableStaff.find(
-                      (s) => s.id === staffId
-                    );
-                    return (
-                      <span
-                        key={staffId}
-                        className="inline-flex items-center bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-sm"
-                      >
-                        {staff?.name || `ID ${staffId}`}
-                        <button
-                          type="button"
-                          onClick={() => removeMemberFromForm(staffId)}
-                          className="ml-2 text-indigo-600 hover:text-indigo-800"
-                          disabled={submitting}
-                        >
-                          <FiX size={14} />
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
+                <label htmlFor="team-members" className="mb-1 block text-sm font-medium text-slate-700">Initial members</label>
+                {teamForm.members.length > 0 && (
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {teamForm.members.map((staffId) => {
+                      const staff = availableStaff.find((s) => s.id === staffId);
+                      return (
+                        <span key={staffId} className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                          {staff?.name || `ID ${staffId}`}
+                          <button type="button" onClick={() => removeMemberFromForm(staffId)} className="rounded-full p-0.5 hover:bg-blue-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label={`Remove ${staff?.name || staffId}`} disabled={submitting}>
+                            <FiX className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
                 <select
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  id="team-members"
+                  className={inputCls}
                   value=""
                   onChange={(e) => {
                     const staffId = Number(e.target.value);
@@ -1103,53 +1351,18 @@ const TeamManagement = () => {
                   }}
                   disabled={submitting}
                 >
-                  <option value="">-- Add a staff --</option>
-                  {availableStaff
-                    .filter((s) => !teamForm.members.includes(s.id))
-                    .map((staff) => (
-                      <option key={staff.id} value={staff.id}>
-                        {staff.name} {staff.role ? `(${staff.role})` : ""}
-                      </option>
-                    ))}
+                  <option value="">Add a staff member</option>
+                  {availableStaff.filter((s) => !teamForm.members.includes(s.id)).map((staff) => (
+                    <option key={staff.id} value={staff.id}>{staff.name} {staff.role ? `(${staff.role})` : ""}</option>
+                  ))}
                 </select>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 disabled:opacity-50"
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-60 flex items-center"
-                >
-                  {submitting ? (
-                    <svg
-                      className="animate-spin h-4 w-4 mr-2"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle
-                        className="opacity-25"
-                        cx="12"
-                        cy="12"
-                        r="10"
-                        stroke="currentColor"
-                        strokeWidth="4"
-                        fill="none"
-                      />
-                      <path
-                        className="opacity-75"
-                        fill="currentColor"
-                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                      />
-                    </svg>
-                  ) : null}
-                  Create Team
+              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                <button type="button" onClick={() => setShowCreateModal(false)} className={btnGhost} disabled={submitting}>Cancel</button>
+                <button type="submit" disabled={submitting} className={btnPrimary}>
+                  {submitting && <FiLoader className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                  Create team
                 </button>
               </div>
             </form>
@@ -1157,168 +1370,311 @@ const TeamManagement = () => {
         </div>
       )}
 
-      {/* ---- ENTERPRISE ANALYTICS MODAL ---- */}
+      {/* ---- TEAM DASHBOARD MODAL ---- */}
       {showAnalyticsModal && analyticsTeam && activeTeamStats && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-50 transition-all duration-300">
-          <div className="bg-white rounded-2xl w-full max-w-6xl max-h-[95vh] overflow-y-auto shadow-2xl border border-gray-200 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            
-            {/* Modal Header */}
-            <div className="bg-white border-b border-gray-200 p-6 sticky top-0 z-10 flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <FiBarChart2 className="text-indigo-600" /> {analyticsTeam.name} Dashboard
-                </h2>
-                <p className="text-gray-500 text-sm mt-1">Admin Performance Overview</p>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4" role="dialog" aria-modal="true" aria-label={`${analyticsTeam.name} dashboard`}>
+          <div className="flex max-h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-xl">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-4">
+              <div className="min-w-0">
+                <h2 className="truncate text-xl font-semibold tracking-tight text-slate-900">{analyticsTeam.name}</h2>
+                <p className="text-sm text-slate-500">
+                  {analyticsTeam.is_global ? "Global team" : getCentreName(analyticsTeam.centre_id)} · {periodLabel}
+                </p>
               </div>
-              <button onClick={() => setShowAnalyticsModal(false)} className="bg-gray-100 p-2 rounded-full text-gray-500 hover:bg-gray-200 transition">
-                <FiX size={24} />
-              </button>
+              <div className="flex items-center gap-3">
+                <Segmented
+                  value={analyticsTab}
+                  onChange={setAnalyticsTab}
+                  options={[
+                    { value: "overview", label: "Overview" },
+                    { value: "leaderboard", label: "Leaderboard" },
+                    { value: "settings", label: "Targets" },
+                  ]}
+                />
+                <button onClick={() => setShowAnalyticsModal(false)} className="rounded-md p-1.5 text-slate-500 hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500" aria-label="Close">
+                  <FiX className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
-            {/* Modal Tabs */}
-            <div className="flex border-b border-gray-200 px-6 bg-gray-50">
-              <button onClick={() => setAnalyticsTab("overview")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "overview" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
-                Live Overview
-              </button>
-              <button onClick={() => setAnalyticsTab("leaderboard")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "leaderboard" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
-                Staff Leaderboard
-              </button>
-              <button onClick={() => setAnalyticsTab("settings")} className={`px-6 py-4 text-sm font-semibold transition ${analyticsTab === "settings" ? "text-indigo-600 border-b-2 border-indigo-600 bg-white" : "text-gray-500 hover:text-gray-700"}`}>
-                Culture & Targets
-              </button>
-            </div>
-
-            <div className="p-6 bg-gray-50 min-h-[500px]">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
               {analyticsLoading ? (
-                <div className="flex justify-center py-20"><div className="animate-spin h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full"></div></div>
+                <div className="flex justify-center py-20"><FiLoader className="h-8 w-8 animate-spin text-navy-700" /></div>
               ) : (
                 <>
-                  {/* TAB 1: OVERVIEW */}
+                  {/* OVERVIEW */}
                   {analyticsTab === "overview" && (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-4 gap-4">
-                        <StatCard title="Total Expected" value={formatCurrency(activeTeamStats.expected_revenue)} icon={FiTarget} color="bg-indigo-600" />
-                        <StatCard title="Collected Revenue" value={formatCurrency(activeTeamStats.collected_revenue)} icon={FiDollarSign} color="bg-emerald-600" />
-                        <StatCard title="Net Generated" value={formatCurrency(actualProfit)} subtitle={`Expenses: ${formatCurrency(activeTeamStats.expense)}`} icon={FiTrendingUp} color="bg-blue-600" />
-                        <StatCard title="Profit Margin" value={`${profitMargin}%`} subtitle="After dept charges & expenses" icon={FiPieChart} color="bg-amber-500" />
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                        <Kpi
+                          label="Service charges"
+                          value={money(activeTeamStats.service_charges)}
+                          tone="text-emerald-600"
+                          context={periodLabel}
+                          note={`${activeTeamStats.services_completed} completed ${activeTeamStats.services_completed === 1 ? "service" : "services"}`}
+                          spark={modalSpark("service_charges")}
+                          sparkColor="#059669"
+                        />
+                        <Kpi
+                          label="Expenses"
+                          value={money(activeTeamStats.expense)}
+                          tone="text-rose-600"
+                          context={periodLabel}
+                          note="Approved expenses"
+                          spark={modalSpark("expense")}
+                          sparkColor="#e11d48"
+                        />
+                        <Kpi
+                          label="Net profit"
+                          value={money(activeTeamStats.net_profit)}
+                          tone={activeTeamStats.net_profit < 0 ? "text-rose-600" : "text-emerald-600"}
+                          context={`${netMargin}% of service charges`}
+                          note="Service charges less expenses"
+                          spark={modalSpark("net_profit")}
+                          sparkColor={activeTeamStats.net_profit < 0 ? "#e11d48" : "#059669"}
+                        />
+                        <Kpi
+                          label="Monthly target"
+                          value={teamTargets && teamTargets.target > 0 ? `${Math.round(teamTargets.progress)}%` : "Not set"}
+                          tone={teamTargets && teamTargets.progress >= 100 ? "text-emerald-600" : "text-slate-900"}
+                          context={teamTargets && teamTargets.target > 0 ? `${money(teamTargets.achieved)} of ${money(teamTargets.target)}` : "No member targets this month"}
+                          note={teamTargets?.mode === "manual" ? "Set for the team" : "Sum of members' targets"}
+                          bar={teamTargets && teamTargets.target > 0 ? (
+                            <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={teamTargets.progress >= 100 ? "bg-emerald-500" : teamTargets.onPace ? "bg-blue-500" : "bg-amber-500"} />
+                          ) : null}
+                        />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-6">
-                        <div className="col-span-2 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                          <h3 className="font-bold text-gray-900 mb-6 flex items-center">
-                            <FiTrendingUp className="mr-2 text-indigo-600" /> Monthly Trajectory
-                          </h3>
-                          
-                          {targetsEnabled ? (
-                            <div className="space-y-6">
-                              <TargetProgressBar label="Revenue Target" current={activeTeamStats.collected_revenue} target={monthlyTarget} />
-                            </div>
-                          ) : (
-                            <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl text-center">
-                              <div className="inline-block p-4 bg-indigo-100 rounded-full mb-4">
-                                <FiTrendingUp className="text-3xl text-indigo-600" />
-                              </div>
-                              <h4 className="text-lg font-bold text-indigo-900">Growth Mindset Active</h4>
-                              <p className="text-indigo-700 mt-2 max-w-md mx-auto text-sm">
-                                Strict targets are disabled for this team. This dashboard encourages natural MoM momentum and quality service over quotas.
-                              </p>
-                              <div className="mt-6 flex justify-center gap-6">
-                                <div>
-                                  <p className="text-xs text-indigo-500 uppercase tracking-wider font-bold">Current Pace</p>
-                                  <p className="text-xl font-bold text-indigo-700 mt-1">{formatCurrency(activeTeamStats.collected_revenue)}</p>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="mt-8 h-[200px]">
-                            {trendChartData && <Line data={trendChartData} options={{ maintainAspectRatio: false, plugins: { legend: { display: false } } }} />}
-                          </div>
+                      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
+                        <div className="xl:col-span-7">
+                          <Panel title="Service charges by month" hint={`${trendYear}, completed services`}>
+                            <RevenueChart data={monthlyChartData} view="serviceCharges" />
+                          </Panel>
                         </div>
-
-                        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex flex-col">
-                          <h3 className="font-bold text-gray-900 mb-4 flex items-center">
-                            <FiPieChart className="mr-2 text-blue-600" /> Service Mix
-                          </h3>
-                          <div className="flex-1 relative">
-                            {serviceMix.length > 0 ? (
-                              <Doughnut data={doughnutData} options={{ maintainAspectRatio: false, cutout: '75%', plugins: { legend: { position: 'bottom', labels: { boxWidth: 10 } } } }} />
-                            ) : (
-                              <div className="absolute inset-0 flex items-center justify-center text-gray-400 text-sm">No service data</div>
-                            )}
-                          </div>
+                        <div className="xl:col-span-5">
+                          <Panel title="Service charges by service" hint={periodLabel}>
+                            <MixDonut rows={mixRows} totalLabel="earned" emptyText="No completed services in this period." />
+                          </Panel>
                         </div>
                       </div>
-                    </div>
-                  )}
 
-                  {/* TAB 2: LEADERBOARD */}
-                  {analyticsTab === "leaderboard" && (
-                    <div className="grid grid-cols-3 gap-4">
-                      {contributionData.map((member, idx) => (
-                        <div key={member.id} className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm relative overflow-hidden">
-                          {idx === 0 && <div className="absolute top-0 right-0 bg-yellow-400 text-yellow-900 text-[10px] font-bold px-3 py-1 rounded-bl-lg">MVP</div>}
-                          <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold">
-                              {member.name.charAt(0)}
-                            </div>
-                            <div>
-                              <h4 className="font-bold text-gray-900">{member.name}</h4>
-                              <p className="text-xs text-gray-500">{member.role}</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div className="bg-gray-50 p-2 rounded">
-                              <p className="text-[10px] text-gray-500 uppercase font-semibold">Collected</p>
-                              <p className="font-bold text-emerald-600">{formatCurrency(member.collected_revenue)}</p>
-                            </div>
-                            <div className="bg-gray-50 p-2 rounded">
-                              <p className="text-[10px] text-gray-500 uppercase font-semibold">Profit Added</p>
-                              <p className="font-bold text-indigo-600">{formatCurrency(member.net_profit)}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* TAB 3: SETTINGS */}
-                  {analyticsTab === "settings" && (
-                    <div className="max-w-2xl mx-auto space-y-6">
-                      <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
-                        <h3 className="text-lg font-bold text-gray-900 mb-2">Team Culture & Targets</h3>
-                        <p className="text-sm text-gray-500 mb-6">Determine how this team is measured on their dashboard.</p>
-                        
-                        <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 mb-6">
+                      <Panel title="Monthly target" hint={teamTargets?.mode === "manual" ? "Target set for the team, this month" : "Sum of members' individual targets, this month"}>
+                        {!targetsEnabled ? (
+                          <p className="py-6 text-center text-sm text-slate-500">
+                            Targets are switched off for this team, so it is not measured against them. Turn them on in the Targets tab.
+                          </p>
+                        ) : teamTargets && teamTargets.target > 0 ? (
                           <div>
-                            <p className="font-bold text-gray-900">Enable Strict Targets</p>
-                            <p className="text-sm text-gray-500 mt-1">If disabled, the team will see a "Growth Mindset" dashboard instead.</p>
+                            <div className="mb-1 flex items-baseline justify-between text-xs">
+                              <span className="text-slate-500">
+                                Month <span className={teamTargets.progress >= 100 ? "text-emerald-700" : teamTargets.onPace ? "text-slate-500" : "text-amber-700"}>
+                                  {teamTargets.progress >= 100 ? "· reached" : teamTargets.onPace ? "· on pace" : "· behind pace"}
+                                </span>
+                              </span>
+                              <span className="tabular-nums text-slate-700">
+                                {money(teamTargets.achieved)} / {money(teamTargets.target)} <span className="font-semibold text-slate-900">{Math.round(teamTargets.progress)}%</span>
+                              </span>
+                            </div>
+                            <TargetBar value={teamTargets.achieved} max={teamTargets.target} tone={teamTargets.progress >= 100 ? "bg-emerald-500" : teamTargets.onPace ? "bg-blue-500" : "bg-amber-500"} />
+                            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Today</p>
+                                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">{money(teamTargets.today)}</p>
+                                <p className="text-xs text-slate-500">of {money(teamTargets.dailyTarget)} daily target</p>
+                              </div>
+                              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Met today's target</p>
+                                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+                                  {teamTargets.metToday} <span className="text-sm font-normal text-slate-500">of {teamTargets.membersWithTarget} members</span>
+                                </p>
+                              </div>
+                              <div className="rounded-lg border border-slate-100 bg-slate-50/70 p-3">
+                                <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Month progress</p>
+                                <p className="mt-1 text-xl font-semibold tabular-nums text-slate-900">
+                                  Day {teamTargets.dayOfMonth} <span className="text-sm font-normal text-slate-500">of {teamTargets.daysInMonth}</span>
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <label className="relative inline-flex items-center cursor-pointer">
-                            <input type="checkbox" className="sr-only peer" checked={targetsEnabled} onChange={(e) => setTargetsEnabled(e.target.checked)} />
-                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                        ) : (
+                          <p className="py-6 text-center text-sm text-slate-500">
+                            None of this team's members has a target for this month. Set them on the staff profiles and the team target adds up by itself, or set a target for the whole team in the Targets tab.
+                          </p>
+                        )}
+                      </Panel>
+                    </div>
+                  )}
+
+                  {/* LEADERBOARD */}
+                  {analyticsTab === "leaderboard" && (
+                    <Panel title="Staff leaderboard" hint={`Ranked by service charges · ${periodLabel}. Target bars show this month`}>
+                      {contributionData.length === 0 ? (
+                        <p className="py-10 text-center text-sm text-slate-500">This team has no members yet.</p>
+                      ) : (
+                        <ul className="space-y-5">
+                          {contributionData.map((member, idx) => {
+                            const max = Math.max(1, ...contributionData.map((m) => m.service_charges));
+                            return (
+                              <li key={member.id} className="grid grid-cols-1 gap-x-8 gap-y-2 md:grid-cols-2 md:items-center">
+                                <div>
+                                  <div className="flex items-baseline justify-between gap-3">
+                                    <span className="flex min-w-0 items-center gap-3">
+                                      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">{idx + 1}</span>
+                                      <Avatar name={member.name} photo={member.photo} size={40} />
+                                      <span className="min-w-0">
+                                        <span className="block truncate text-sm font-medium text-slate-900">{member.name}</span>
+                                        <span className="block truncate text-xs text-slate-500">{member.role}{member.centre_name ? ` · ${member.centre_name}` : ""}</span>
+                                      </span>
+                                    </span>
+                                    <span className="text-sm font-semibold tabular-nums text-emerald-700">{money(member.service_charges)}</span>
+                                  </div>
+                                  <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
+                                    <div className="h-full rounded-full bg-emerald-500" style={{ width: `${(member.service_charges / max) * 100}%` }} />
+                                  </div>
+                                  <p className="mt-1 text-xs text-slate-500">{member.services_completed} {member.services_completed === 1 ? "service" : "services"}</p>
+                                </div>
+                                <div>
+                                  <p className="mb-1 text-xs text-slate-500">This month's target</p>
+                                  <MiniTargetBar achieved={member.month_achieved} target={member.target} onPace={member.on_pace} />
+                                </div>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </Panel>
+                  )}
+
+                  {/* TARGETS */}
+                  {analyticsTab === "settings" && (
+                    <Panel
+                      title="Team targets"
+                      hint="Choose how this team's monthly target is set"
+                    >
+                      <label className="flex items-center justify-between gap-4 rounded-lg border border-slate-200 bg-slate-50/70 p-4">
+                        <span>
+                          <span className="block text-sm font-medium text-slate-900">Measure this team against targets</span>
+                          <span className="block text-xs text-slate-500">When off, the target section is hidden on this team's dashboard</span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-slate-300 text-navy-700 focus:ring-navy-500"
+                          checked={targetsEnabled}
+                          onChange={(e) => setTargetsEnabled(e.target.checked)}
+                          disabled={!isAdmin}
+                        />
+                      </label>
+
+                      <fieldset className="mt-4" disabled={!isAdmin}>
+                        <legend className="mb-2 text-sm font-medium text-slate-900">How is the monthly target set?</legend>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                          <label className={`cursor-pointer rounded-lg border p-4 ${targetMode === "staff" ? "border-navy-700 bg-blue-50/40 ring-1 ring-navy-700" : "border-slate-200 hover:bg-slate-50"}`}>
+                            <span className="flex items-start gap-3">
+                              <input type="radio" name="target-mode" value="staff" checked={targetMode === "staff"} onChange={() => setTargetMode("staff")} className="mt-0.5 h-4 w-4 border-slate-300 text-navy-700 focus:ring-navy-500" />
+                              <span>
+                                <span className="block text-sm font-medium text-slate-900">Sum of staff targets</span>
+                                <span className="mt-0.5 block text-xs text-slate-500">
+                                  Adds up each member's own target. Change one on a staff profile and the team figure follows.
+                                </span>
+                                <span className="mt-2 block text-sm font-semibold tabular-nums text-slate-900">
+                                  {money(teamTargets?.staffTarget || 0)} <span className="text-xs font-normal text-slate-500">right now</span>
+                                </span>
+                              </span>
+                            </span>
+                          </label>
+
+                          <label className={`cursor-pointer rounded-lg border p-4 ${targetMode === "manual" ? "border-navy-700 bg-blue-50/40 ring-1 ring-navy-700" : "border-slate-200 hover:bg-slate-50"}`}>
+                            <span className="flex items-start gap-3">
+                              <input type="radio" name="target-mode" value="manual" checked={targetMode === "manual"} onChange={() => setTargetMode("manual")} className="mt-0.5 h-4 w-4 border-slate-300 text-navy-700 focus:ring-navy-500" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium text-slate-900">Set a target for the team</span>
+                                <span className="mt-0.5 block text-xs text-slate-500">
+                                  One figure for the whole team, measured on the service charges of services done for this team this month.
+                                </span>
+                                <span className="mt-2 flex items-center gap-2">
+                                  <span className="text-sm text-slate-500" aria-hidden="true">₹</span>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    inputMode="numeric"
+                                    aria-label="Monthly team target in rupees"
+                                    value={manualTarget}
+                                    onChange={(e) => { setManualTarget(e.target.value); setTargetMode("manual"); }}
+                                    placeholder="e.g. 250000"
+                                    className={inputCls}
+                                  />
+                                </span>
+                              </span>
+                            </span>
                           </label>
                         </div>
+                      </fieldset>
 
-                        {targetsEnabled && (
-                          <div className="space-y-4 animate-fade-in-up mb-6">
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-1">Monthly Revenue Target (₹)</label>
-                              <input type="number" value={monthlyTarget} onChange={(e) => setMonthlyTarget(Number(e.target.value))} className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none" />
-                            </div>
-                          </div>
-                        )}
-
-                        <button 
-                          onClick={handleSaveSettings} 
-                          disabled={savingSettings} 
-                          className="bg-indigo-600 text-white px-6 py-2.5 rounded-xl font-medium hover:bg-indigo-700 transition w-full disabled:opacity-50 flex justify-center items-center"
-                        >
-                          {savingSettings ? <FiLoader className="animate-spin mr-2" /> : null}
-                          {savingSettings ? "Saving Settings..." : "Save Settings"}
-                        </button>
+                      <h3 className="mt-6 text-sm font-medium text-slate-900">Member targets</h3>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {targetMode === "manual"
+                          ? "Shown for reference. With a team target set, the team is measured on its own figure, not on these."
+                          : "These add up to the team target. Members without a target are left out."}
+                      </p>
+                      <div className="-mx-5 mt-2 overflow-x-auto">
+                        <table className="w-full min-w-[560px]">
+                          <thead>
+                            <tr className="border-y border-slate-100 bg-slate-50/70 text-left">
+                              <th className={thCls}>Member</th>
+                              <th className={`${thCls} text-right`}>Monthly target</th>
+                              <th className={`${thCls} text-right`}>Achieved</th>
+                              <th className={`${thCls} text-right`}>Daily target</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 text-sm">
+                            {(teamTargets?.members || []).map((m) => (
+                              <tr key={m.staff_id}>
+                                <td className="px-4 py-3">
+                                  <div className="flex items-center gap-3">
+                                    <Avatar name={m.name} photo={m.photo} size={32} />
+                                    <div className="min-w-0">
+                                      <p className="truncate font-medium text-slate-900">{m.name}</p>
+                                      <p className="truncate text-xs text-slate-500">{m.centre_name || m.role}</p>
+                                    </div>
+                                  </div>
+                                </td>
+                                {m.has_target ? (
+                                  <>
+                                    <td className="px-4 py-3 text-right tabular-nums text-slate-900">{money(m.target)}</td>
+                                    <td className="px-4 py-3 text-right tabular-nums"><span className="text-emerald-700">{money(m.achieved)}</span> <span className="text-xs text-slate-500">{Math.round(m.progress)}%</span></td>
+                                    <td className="px-4 py-3 text-right tabular-nums text-slate-700">{money(m.daily_target)}</td>
+                                  </>
+                                ) : (
+                                  <td colSpan="3" className="px-4 py-3 text-right text-xs text-slate-500">No target set this month</td>
+                                )}
+                              </tr>
+                            ))}
+                            {teamTargets && teamTargets.members.length > 0 && (
+                              <tr className="bg-slate-50/70 font-semibold text-slate-900">
+                                <td className="px-4 py-3">Sum of staff targets</td>
+                                <td className="px-4 py-3 text-right tabular-nums">{money(teamTargets.staffTarget)}</td>
+                                <td className="px-4 py-3 text-right tabular-nums" colSpan="2" />
+                              </tr>
+                            )}
+                            {(!teamTargets || teamTargets.members.length === 0) && (
+                              <tr><td colSpan="4" className="px-4 py-8 text-center text-sm text-slate-500">This team has no members yet.</td></tr>
+                            )}
+                          </tbody>
+                        </table>
                       </div>
-                    </div>
+                      <p className="mt-3 text-xs text-slate-500">
+                        Staff achieved is each member's completed service charges this month, the same figure they see on their own dashboard.
+                      </p>
+
+                      {isAdmin && (
+                        <div className="mt-4 flex justify-end">
+                          <button onClick={handleSaveSettings} disabled={savingSettings} className={btnPrimary}>
+                            {savingSettings && <FiLoader className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                            {savingSettings ? "Saving" : "Save"}
+                          </button>
+                        </div>
+                      )}
+                    </Panel>
                   )}
 
                 </>

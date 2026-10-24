@@ -1,5 +1,5 @@
 import pool from "../../db.js";
-
+import { todayIST, addDays, istParts } from "../../utils/dates.js";
 /**
  * UTILS
  * Standardizes date filters for all SQL queries.
@@ -7,69 +7,60 @@ import pool from "../../db.js";
 const IST_OFFSET = '+05:30';
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
+// IST calendar day of "now" and day maths on "YYYY-MM-DD" strings, so every period runs
+// midnight-to-midnight India time. (The old code used setHours()/getMonth() on the server
+// clock, which is UTC: "today" ran from 05:30 to 05:30 IST.)
+const ymdUTC = (y, m, d) => new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10); // m is 1-based; rolls over
+const istStart = (ymd) => new Date(`${ymd}T00:00:00.000${IST_OFFSET}`);
+const istEnd = (ymd) => new Date(`${ymd}T23:59:59.999${IST_OFFSET}`);
+
 function getDateContext(filters = {}) {
     const { timeframe = 'today', customStartDate, customEndDate } = filters;
-    const now = new Date();
-    let startDate = new Date();
-    let endDate = new Date();
+    const today = todayIST();
+    const [y, m] = today.split('-').map(Number);
+    let from = today;
+    let to = today;
 
     switch (timeframe) {
         case 'today':
-            startDate.setHours(0, 0, 0, 0);
-            endDate.setHours(23, 59, 59, 999);
             break;
         case 'yesterday':
-            startDate.setDate(now.getDate() - 1);
-            startDate.setHours(0, 0, 0, 0);
-            endDate = new Date(startDate);
-            endDate.setHours(23, 59, 59, 999);
+            from = to = addDays(today, -1);
             break;
         case 'last7days':
-            startDate.setDate(now.getDate() - 7);
-            startDate.setHours(0, 0, 0, 0);
-            endDate.setHours(23, 59, 59, 999);
+            from = addDays(today, -7);
             break;
         case 'last30days':
-            startDate.setDate(now.getDate() - 30);
-            startDate.setHours(0, 0, 0, 0);
-            endDate.setHours(23, 59, 59, 999);
+            from = addDays(today, -30);
             break;
         case 'month':
-            startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-            endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            from = ymdUTC(y, m, 1);
+            to = ymdUTC(y, m + 1, 0);
             break;
         case 'previousMonth':
-            startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-            endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+            from = ymdUTC(y, m - 1, 1);
+            to = ymdUTC(y, m, 0);
             break;
-        case 'financialYear':
-            const startYear = now.getMonth() >= 3 ? now.getFullYear() : now.getFullYear() - 1;
-            startDate = new Date(startYear, 3, 1); 
-            endDate = new Date(startYear + 1, 2, 31, 23, 59, 59, 999); 
+        case 'financialYear': {
+            const startYear = m >= 4 ? y : y - 1; // Indian FY: 1 Apr – 31 Mar
+            from = `${startYear}-04-01`;
+            to = `${startYear + 1}-03-31`;
             break;
+        }
         case 'allTime':
-            startDate = new Date(2000, 0, 1);
-            endDate.setHours(23, 59, 59, 999);
+            from = '2000-01-01';
             break;
         case 'custom':
             if (!customStartDate || !customEndDate) throw new Error("Missing custom dates");
-            if (YMD.test(customStartDate) && YMD.test(customEndDate)) {
-                // "YYYY-MM-DD" => IST day boundaries, whatever timezone the server runs in
-                startDate = new Date(`${customStartDate}T00:00:00.000${IST_OFFSET}`);
-                endDate = new Date(`${customEndDate}T23:59:59.999${IST_OFFSET}`);
-            } else {
-                startDate = new Date(customStartDate);
-                startDate.setHours(0, 0, 0, 0);
-                endDate = new Date(customEndDate);
-                endDate.setHours(23, 59, 59, 999);
-            }
+            from = YMD.test(customStartDate) ? customStartDate : istParts(new Date(customStartDate)).ymd;
+            to = YMD.test(customEndDate) ? customEndDate : istParts(new Date(customEndDate)).ymd;
+            if (from > to) [from, to] = [to, from];
             break;
         default:
-            startDate.setHours(0, 0, 0, 0);
-            endDate.setHours(23, 59, 59, 999);
+            break;
     }
 
-    return { startDate: startDate.toISOString(), endDate: endDate.toISOString() };
+    return { startDate: istStart(from).toISOString(), endDate: istEnd(to).toISOString() };
 }
 
 /**

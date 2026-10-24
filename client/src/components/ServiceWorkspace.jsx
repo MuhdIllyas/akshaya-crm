@@ -13,29 +13,27 @@ import {
   FiDownload,
   FiUpload,
   FiX,
-  FiUser,
-  FiFile,
-  FiClock,
   FiCalendar,
   FiArrowRight,
   FiRefreshCw,
   FiAlertCircle,
   FiFlag,
-  FiTrendingUp,
-  FiAward,
-  FiBarChart2,
   FiCheckCircle,
-  FiTarget,
+  FiHash,
+  FiPhone,
+  FiRotateCcw,
+  FiExternalLink,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import Chat from '@/components/Chat';
 import { useServiceChat } from '/src/hooks/useServiceChat';
 import { socket } from '@/services/socket';
+import { AppNoDisplay } from './tracking/ApplicationNumberField';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
 /* ══════════════════════════════════════════════════════════════════
-   ERROR BOUNDARY (matches TrackServicePage)
+   ERROR BOUNDARY
    ══════════════════════════════════════════════════════════════════ */
 class WorkspaceErrorBoundary extends React.Component {
   constructor(props) {
@@ -53,18 +51,16 @@ class WorkspaceErrorBoundary extends React.Component {
       return (
         <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
           <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center shadow-sm">
-            <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FiAlertCircle className="h-8 w-8 text-rose-600" />
+            <div className="w-14 h-14 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FiAlertCircle className="h-7 w-7 text-rose-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Something went wrong</h2>
-            <p className="text-gray-600 mb-4">
-              There was an error loading the workspace. Please try refreshing the page.
-            </p>
+            <h2 className="text-lg font-bold text-gray-900 mb-2">Something went wrong</h2>
+            <p className="text-sm text-gray-600 mb-5">The workspace could not load. Refresh the page to try again.</p>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="px-5 py-2 text-sm font-semibold bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f]"
             >
-              Refresh Page
+              Refresh page
             </button>
           </div>
         </div>
@@ -118,76 +114,51 @@ const initials = (name) =>
     .join('')
     .toUpperCase();
 
-/* ══════════════════════════════════════════════════════════════════
-   DESIGN TOKENS (matched to TrackServicePage)
-   ══════════════════════════════════════════════════════════════════ */
+
+/** Same as TrackServicePage: API status -> label */
+const TRACKING_STATUS = {
+  pending: { label: 'Pending', bg: 'bg-amber-100', color: 'text-amber-800', border: 'border-amber-300', dot: 'bg-amber-600' },
+  in_progress: { label: 'In Progress', bg: 'bg-blue-100', color: 'text-blue-800', border: 'border-blue-300', dot: 'bg-blue-600' },
+  completed: { label: 'Completed', bg: 'bg-emerald-100', color: 'text-emerald-800', border: 'border-emerald-300', dot: 'bg-emerald-600' },
+  rejected: { label: 'Delayed', bg: 'bg-rose-100', color: 'text-rose-800', border: 'border-rose-300', dot: 'bg-rose-600' },
+  resubmit: { label: 'Resubmit', bg: 'bg-orange-100', color: 'text-orange-800', border: 'border-orange-300', dot: 'bg-orange-600' },
+  paid: { label: 'Paid', bg: 'bg-green-100', color: 'text-green-800', border: 'border-green-300', dot: 'bg-green-600' },
+};
+
 const PRIORITY_CONFIG = {
-  high: {
-    color: 'text-rose-600',
-    bg: 'bg-rose-50',
-    border: 'border-rose-200',
-    dot: 'bg-rose-600',
-    label: 'High',
-  },
-  medium: {
-    color: 'text-amber-600',
-    bg: 'bg-amber-50',
-    border: 'border-amber-200',
-    dot: 'bg-amber-600',
-    label: 'Medium',
-  },
-  low: {
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
-    border: 'border-emerald-200',
-    dot: 'bg-emerald-600',
-    label: 'Low',
-  },
+  high: { color: 'text-rose-700', bg: 'bg-rose-50', border: 'border-rose-200', dot: 'bg-rose-600', label: 'High' },
+  medium: { color: 'text-amber-700', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500', label: 'Medium' },
+  low: { color: 'text-emerald-700', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-600', label: 'Low' },
 };
 
+/** Task statuses */
 const STATUS_CONFIG = {
-  pending: {
-    color: 'text-amber-800',
-    bg: 'bg-amber-100',
-    border: 'border-amber-300',
-    dot: 'bg-amber-600',
-    label: 'To Do',
-  },
-  in_progress: {
-    color: 'text-blue-800',
-    bg: 'bg-blue-100',
-    border: 'border-blue-300',
-    dot: 'bg-blue-600',
-    label: 'In Progress',
-  },
-  completed: {
-    color: 'text-emerald-800',
-    bg: 'bg-emerald-100',
-    border: 'border-emerald-300',
-    dot: 'bg-emerald-600',
-    label: 'Done',
-  },
+  pending: { color: 'text-amber-800', bg: 'bg-amber-50', border: 'border-amber-200', dot: 'bg-amber-500', label: 'To do' },
+  in_progress: { color: 'text-blue-800', bg: 'bg-blue-50', border: 'border-blue-200', dot: 'bg-blue-600', label: 'In progress' },
+  completed: { color: 'text-emerald-800', bg: 'bg-emerald-50', border: 'border-emerald-200', dot: 'bg-emerald-600', label: 'Done' },
 };
+const TASK_STATUSES = ['pending', 'in_progress', 'completed'];
 
-const STATUS_OPTIONS = [
-  { value: 'pending', label: 'To-do' },
-  { value: 'in_progress', label: 'In Progress' },
-  { value: 'completed', label: 'Done' },
-];
+const todayKeyIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const dateKeyIST = (d) => {
+  const dt = new Date(d);
+  return isNaN(dt.getTime()) ? null : dt.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+};
+const isTaskOverdue = (t) => t.due_date && t.status !== 'completed' && dateKeyIST(t.due_date) < todayKeyIST();
+const shortDate = (d) =>
+  new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+
+const fieldCls =
+  'w-full px-3 py-2 text-sm bg-white border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#172a45] focus:border-[#172a45]';
 
 /* ══════════════════════════════════════════════════════════════════
    PRIMITIVES
    ══════════════════════════════════════════════════════════════════ */
 const Avatar = ({ name, size = 'md', className = '' }) => {
-  const sizes = {
-    xs: 'w-6 h-6 text-[10px]',
-    sm: 'w-7 h-7 text-[11px]',
-    md: 'w-8 h-8 text-xs',
-    lg: 'w-10 h-10 text-sm',
-  };
+  const sizes = { xs: 'w-5 h-5 text-[9px]', sm: 'w-7 h-7 text-[10px]', md: 'w-8 h-8 text-xs', lg: 'w-10 h-10 text-sm' };
   return (
     <div
-      className={`${sizes[size]} shrink-0 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white font-semibold shadow-sm ${className}`}
+      className={`${sizes[size]} shrink-0 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center font-bold ${className}`}
       title={name}
     >
       {initials(name)}
@@ -198,54 +169,25 @@ const Avatar = ({ name, size = 'md', className = '' }) => {
 const PriorityBadge = ({ priority = 'medium' }) => {
   const p = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG.medium;
   return (
-    <span
-      className={`px-2 py-0.5 rounded-full text-xs font-medium flex items-center space-x-1 border ${p.bg} ${p.border}`}
-    >
-      <FiFlag className={`h-3 w-3 ${p.color}`} />
-      <span className={p.color}>{p.label}</span>
+    <span className={`shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold border ${p.bg} ${p.border} ${p.color}`}>
+      <FiFlag className="h-3 w-3" /> {p.label}
     </span>
   );
 };
 
-const KPIStat = ({ title, value, subtitle, trend, icon: Icon, color }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group"
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-        <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
-        <div className="flex items-center space-x-2">
-          {trend !== undefined && (
-            <span className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {trend > 0 ? '+' : ''}
-              {trend}%
-            </span>
-          )}
-          {subtitle && <span className="text-xs text-gray-500">{subtitle}</span>}
-        </div>
-      </div>
-      <div className={`p-3 rounded-xl ${color} transition-colors group-hover:scale-110`}>
-        <Icon className="h-6 w-6 text-white" />
-      </div>
-    </div>
-  </motion.div>
-);
-
 const EmptyState = ({ icon: Icon, title, description, action }) => (
-  <div className="text-center py-16 bg-white rounded-xl border border-gray-200 shadow-sm">
-    {Icon && <Icon className="mx-auto h-10 w-10 text-gray-300 mb-3" />}
-    <p className="text-base font-medium text-gray-900">{title}</p>
+  <div className="text-center py-14 px-6">
+    {Icon && <Icon className="mx-auto h-9 w-9 text-gray-300 mb-3" />}
+    <p className="text-sm font-semibold text-gray-900">{title}</p>
     {description && <p className="text-sm text-gray-500 mt-1 max-w-sm mx-auto">{description}</p>}
-    {action && <div className="mt-5">{action}</div>}
+    {action && <div className="mt-4 flex justify-center">{action}</div>}
   </div>
 );
 
 const SectionHeader = ({ title, subtitle, action }) => (
-  <div className="flex items-start justify-between gap-4 mb-4">
+  <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
     <div>
-      <h3 className="font-semibold text-gray-900">{title}</h3>
+      <h3 className="text-base font-semibold text-gray-900">{title}</h3>
       {subtitle && <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>}
     </div>
     {action && <div className="shrink-0">{action}</div>}
@@ -255,10 +197,20 @@ const SectionHeader = ({ title, subtitle, action }) => (
 const PrimaryButton = ({ icon: Icon, children, className = '', ...rest }) => (
   <button
     {...rest}
-    className={`flex items-center space-x-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all duration-200 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed ${className}`}
+    className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold bg-[#172a45] text-white rounded-lg hover:bg-[#1e3a5f] transition shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
   >
     {Icon && <Icon className="h-4 w-4" />}
-    {children && <span>{children}</span>}
+    {children}
+  </button>
+);
+
+const SecondaryButton = ({ icon: Icon, children, className = '', ...rest }) => (
+  <button
+    {...rest}
+    className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition ${className}`}
+  >
+    {Icon && <Icon className="h-4 w-4" />}
+    {children}
   </button>
 );
 
@@ -352,7 +304,7 @@ const ServiceWorkspace = () => {
 
   /* ----------------------------- socket --------------------------- */
   useEffect(() => {
-    if (!socket?.connected || !serviceEntryId) return;
+    if (!socket || !serviceEntryId) return;
 
     const handleTaskUpdated = (data) => {
       setTasks((prev) =>
@@ -472,7 +424,7 @@ const ServiceWorkspace = () => {
       setTasks((prev) =>
         prev.map((t) => (String(t.id) === String(taskId) ? { ...t, status: newStatus } : t))
       );
-      toast.success(`Task marked as ${STATUS_CONFIG[newStatus]?.label || newStatus}`);
+      toast.success(`Task moved to ${STATUS_CONFIG[newStatus]?.label || newStatus}`);
     } catch (err) {
       console.error(err);
       toast.error(err.message);
@@ -622,22 +574,25 @@ const ServiceWorkspace = () => {
 
   const navItems = useMemo(
     () => [
-      { id: 'board', label: 'Board', icon: FiGrid, count: tasks.length },
+      { id: 'board', label: 'Board', icon: FiGrid, count: null },
       { id: 'chat', label: 'Chat', icon: FiMessageSquare, count: null },
       { id: 'tasks', label: 'Tasks', icon: FiCheckSquare, count: tasks.length },
-      { id: 'participants', label: 'Participants', icon: FiUsers, count: participants.length },
-      { id: 'documents', label: 'Documents', icon: FiFileText, count: documents.length },
+      { id: 'participants', label: 'People', icon: FiUsers, count: participants.length },
+      { id: 'documents', label: 'Files', icon: FiFileText, count: documents.length },
     ],
     [tasks.length, participants.length, documents.length]
   );
 
+
   /* ----------------------------- loading -------------------------- */
+  const trackingPath = `/dashboard/staff/track_service/${service?.id || selectedServiceId}`;
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[60vh] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading service workspace...</p>
+          <div className="w-10 h-10 border-4 border-[#172a45] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-600 font-medium">Loading workspace…</p>
         </div>
       </div>
     );
@@ -645,328 +600,210 @@ const ServiceWorkspace = () => {
 
   if (workspaceClosed) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+      <div className="min-h-[60vh] flex items-center justify-center p-6">
         <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center shadow-sm">
-          <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <FiCheckCircle className="h-8 w-8 text-gray-500" />
+          <div className="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <FiCheckCircle className="h-7 w-7 text-gray-500" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900 mb-2">Workspace closed</h2>
-          <p className="text-gray-600 mb-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-2">Workspace closed</h2>
+          <p className="text-sm text-gray-600 mb-6">
             The chat and tasks for this service were removed when the workspace was closed.
             Service tracking and documents are still available.
           </p>
-          <button
-            onClick={() => navigate('/dashboard/staff/track_service')}
-            className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
-          >
-            Back to Track Service
-          </button>
+          <PrimaryButton icon={FiArrowLeft} onClick={() => navigate(trackingPath)}>
+            Back to the application
+          </PrimaryButton>
         </div>
       </div>
     );
   }
 
+  const trackingStatus = TRACKING_STATUS[service?.status] || null;
+  const overdueCount = tasks.filter(isTaskOverdue).length;
+
   /* ------------------------------ render -------------------------- */
   return (
     <WorkspaceErrorBoundary>
       <div className="min-h-screen bg-gray-50">
-        <div className="flex min-h-screen">
-          {/* ═══════════════════════ SIDEBAR ═══════════════════════ */}
-          <aside className="hidden lg:flex w-64 shrink-0 flex-col bg-white border-r border-gray-200">
-            {/* Brand block */}
-            <div className="px-5 py-5 border-b border-gray-200">
-              <div className="flex items-center space-x-3">
-                <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shrink-0">
-                  <FiTarget className="h-5 w-5 text-white" />
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-5 space-y-4">
+          {/* Top bar: same as the single application page */}
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => navigate(trackingPath)}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-600 hover:text-[#172a45]"
+            >
+              <FiArrowLeft className="h-4 w-4" /> Back to the application
+            </button>
+            <SecondaryButton icon={FiRefreshCw} onClick={() => window.location.reload()}>
+              <span className="hidden sm:inline">Refresh</span>
+            </SecondaryButton>
+          </div>
+
+          {/* Header card: matches the tracking detail header */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
+              <div className="flex items-start gap-4 min-w-0">
+                <div className="w-12 h-12 rounded-xl bg-[#172a45] text-white flex items-center justify-center flex-shrink-0">
+                  <FiGrid className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="text-sm font-bold text-gray-900 leading-tight">Workspace</p>
-                  <p className="text-[11px] text-gray-500">Service Operations</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h1 className="text-xl font-bold text-gray-900 truncate">{service?.customer_name || 'Workspace'}</h1>
+                    {trackingStatus && (
+                      <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold border ${trackingStatus.bg} ${trackingStatus.color} ${trackingStatus.border}`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${trackingStatus.dot}`} /> {trackingStatus.label}
+                      </span>
+                    )}
+                    <span className="px-2 py-0.5 text-[11px] font-semibold rounded-full border bg-gray-50 text-gray-700 border-gray-200">
+                      Workspace
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-700 mt-1 font-medium">
+                    {service?.service_name || 'Service'}
+                    {service?.subcategory_name && service.subcategory_name !== 'N/A' && (
+                      <span className="text-gray-500 font-normal"> · {service.subcategory_name}</span>
+                    )}
+                  </p>
+                  <div className="flex items-center gap-x-4 gap-y-1 mt-2 flex-wrap text-xs text-gray-600">
+                    <button
+                      onClick={() => navigate(trackingPath)}
+                      className="inline-flex items-center gap-1 font-mono font-semibold text-gray-800 hover:text-[#172a45]"
+                      title="Open service tracking"
+                    >
+                      <FiHash className="h-3.5 w-3.5 text-[#172a45]" />TR-{service?.id}
+                    </button>
+                    <span className="inline-flex items-center gap-1 text-gray-800">
+                      <span className="text-gray-500 whitespace-nowrap">App no.</span>
+                      <AppNoDisplay value={service?.application_number} className="font-semibold" empty="Not added yet" />
+                    </span>
+                    {service?.phone && (
+                      <a href={`tel:${service.phone}`} className="inline-flex items-center gap-1 hover:text-[#172a45]">
+                        <FiPhone className="h-3.5 w-3.5" />{service.phone}
+                      </a>
+                    )}
+                    {service?.estimated_delivery && (
+                      <span className="inline-flex items-center gap-1">
+                        <FiCalendar className="h-3.5 w-3.5" /> Due {shortDate(service.estimated_delivery)}
+                      </span>
+                    )}
+                  </div>
                 </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                {participants.length > 0 && (
+                  <button
+                    onClick={() => setActiveTab('participants')}
+                    className="hidden sm:flex items-center -space-x-1.5 mr-1"
+                    title={participants.map((p) => p.name).join(', ')}
+                  >
+                    {participants.slice(0, 4).map((p) => (
+                      <Avatar key={p.staff_id} name={p.name} size="sm" className="ring-2 ring-white" />
+                    ))}
+                    {participants.length > 4 && (
+                      <span className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white">
+                        +{participants.length - 4}
+                      </span>
+                    )}
+                  </button>
+                )}
+                <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>New task</PrimaryButton>
+                {canCloseWorkspace && (
+                  <button
+                    onClick={() => { setCloseConfirmText(''); setShowCloseModal(true); }}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-sm font-medium bg-white text-rose-700 border border-rose-200 rounded-lg hover:bg-rose-50"
+                  >
+                    <FiX className="h-4 w-4" /> Close workspace
+                  </button>
+                )}
               </div>
             </div>
 
-            {/* Service card */}
-            <div className="px-4 pt-5 pb-4">
-              <div className="rounded-xl bg-gray-50 border border-gray-200 p-3">
-                <div className="flex items-center space-x-2.5">
-                  <div className="w-8 h-8 shrink-0 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center text-white text-[11px] font-bold shadow-sm">
-                    {(service?.service_name || 'S').charAt(0).toUpperCase()}
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-semibold text-gray-900 truncate">
-                      {service?.service_name || 'Service'}
-                    </p>
-                    <p className="text-[11px] text-gray-500 truncate">
-                      App #{service?.application_number || '—'}
-                    </p>
-                  </div>
-                </div>
+            {/* Task progress: one line instead of four KPI cards */}
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 text-xs mb-2">
+                <span className="text-sm font-semibold text-gray-900">
+                  {stats.total === 0 ? 'No tasks yet' : `${stats.completed} of ${stats.total} tasks done`}
+                </span>
+                <span className="flex flex-wrap items-center gap-x-4 gap-y-1 text-gray-600">
+                  {TASK_STATUSES.map((s) => (
+                    <span key={s} className="inline-flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${STATUS_CONFIG[s].dot}`} />
+                      {STATUS_CONFIG[s].label}
+                      <span className="font-semibold text-gray-900 tabular-nums">{tasksByStatus[s].length}</span>
+                    </span>
+                  ))}
+                  {overdueCount > 0 && (
+                    <span className="inline-flex items-center gap-1 font-semibold text-rose-700">
+                      <FiAlertCircle className="h-3.5 w-3.5" /> {overdueCount} overdue
+                    </span>
+                  )}
+                </span>
+              </div>
+              <div className="flex h-2 w-full rounded-full overflow-hidden bg-gray-100">
+                {stats.total > 0 && TASK_STATUSES.slice().reverse().map((s) => (
+                  <div
+                    key={s}
+                    className={`${STATUS_CONFIG[s].dot} h-full`}
+                    style={{ width: `${(tasksByStatus[s].length / stats.total) * 100}%` }}
+                  />
+                ))}
               </div>
             </div>
+          </div>
 
-            {/* Navigation */}
-            <nav className="flex-1 px-3 overflow-y-auto">
-              <p className="px-3 mb-2 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
-                Navigation
-              </p>
-              <ul className="space-y-1">
-                {navItems.map((item) => {
-                  const isActive = activeTab === item.id;
-                  return (
-                    <li key={item.id}>
-                      <button
-                        onClick={() => setActiveTab(item.id)}
-                        className={`group w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-                          isActive
-                            ? 'bg-indigo-600 text-white shadow-sm'
-                            : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
-                        }`}
-                      >
-                        <item.icon
-                          className={`h-4 w-4 shrink-0 ${
-                            isActive ? 'text-white' : 'text-gray-400 group-hover:text-indigo-600'
-                          }`}
-                        />
-                        <span className="flex-1 text-left">{item.label}</span>
-                        {item.count !== null && item.count > 0 && (
-                          <span
-                            className={`min-w-[20px] h-5 px-1.5 rounded-full text-[11px] font-semibold flex items-center justify-center ${
-                              isActive ? 'bg-white/20 text-white' : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {item.count}
-                          </span>
-                        )}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+          {/* Tabs + content: same card + tab bar style as the tracking page */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <nav className="flex overflow-x-auto border-b border-gray-200 bg-gray-50/60 hide-scrollbar">
+              {navItems.map((item) => {
+                const isActive = activeTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setActiveTab(item.id)}
+                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                      isActive ? 'border-[#172a45] text-[#172a45] bg-white' : 'border-transparent text-gray-500 hover:text-gray-800'
+                    }`}
+                  >
+                    <item.icon className="h-4 w-4" /> {item.label}
+                    {item.count > 0 && (
+                      <span className="ml-0.5 text-[10px] bg-gray-200 text-gray-700 px-1.5 rounded-full">{item.count}</span>
+                    )}
+                  </button>
+                );
+              })}
             </nav>
 
-            {/* Progress footer */}
-            <div className="p-4 border-t border-gray-200">
-              <div className="rounded-xl bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
-                    Progress
-                  </span>
-                  <span className="text-sm font-bold text-indigo-700">
-                    {stats.progress}%
-                  </span>
-                </div>
-                <div className="h-1.5 rounded-full bg-white overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 transition-all duration-700"
-                    style={{ width: `${stats.progress}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-indigo-600 mt-2 font-medium">
-                  {stats.completed} of {stats.total} tasks complete
-                </p>
-              </div>
-            </div>
-          </aside>
-
-          {/* ═══════════════════════ MAIN AREA ═══════════════════════ */}
-          <div className="flex-1 flex flex-col min-w-0">
-            {/* ─────────── HEADER ─────────── */}
-            <header className="bg-white border-b border-gray-200 sticky top-0 z-20">
-              <div className="px-6 py-4">
-                {/* Title row */}
-                <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="flex items-center space-x-4 min-w-0">
-                    <button
-                      onClick={() => navigate('/dashboard/staff/track_service')}
-                      className="p-2 rounded-lg hover:bg-gray-100 transition-colors shrink-0"
-                      title="Back to Track Service"
-                    >
-                      <FiArrowLeft className="h-5 w-5 text-gray-600" />
-                    </button>
-
-                    <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg shrink-0">
-                      <FiGrid className="h-5 w-5 text-white" />
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h1 className="text-xl font-bold text-gray-900 truncate">
-                          {service?.service_name || 'Service Workspace'}
-                        </h1>
-                        <span className="px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-700 rounded-full border border-green-200">
-                          Active
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-1 flex-wrap">
-                        <span className="flex items-center gap-1">
-                          <FiUser className="h-3 w-3" /> {service?.customer_name || '—'}
-                        </span>
-                        <span className="hidden sm:flex items-center gap-1">
-                          <FiFile className="h-3 w-3" /> App #{service?.application_number || '—'}
-                        </span>
-                        <span className="hidden md:flex items-center gap-1">
-                          <FiClock className="h-3 w-3" /> Created{' '}
-                          {formatDate(service?.created_at || service?.createdAt)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0">
-                    {participants.length > 0 && (
-                      <div className="hidden xl:flex items-center -space-x-1.5 mr-2">
-                        {participants.slice(0, 4).map((p) => (
-                          <Avatar key={p.staff_id} name={p.name} size="sm" className="ring-2 ring-white" />
-                        ))}
-                        {participants.length > 4 && (
-                          <div className="w-7 h-7 rounded-lg bg-gray-100 text-gray-600 text-[10px] font-semibold flex items-center justify-center ring-2 ring-white">
-                            +{participants.length - 4}
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    <button
-                      onClick={() => window.location.reload()}
-                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-all duration-200 shadow-sm"
-                    >
-                      <FiRefreshCw className="h-4 w-4" />
-                      <span className="hidden sm:inline">Refresh</span>
-                    </button>
-
-                    <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
-                      <span className="hidden sm:inline">New Task</span>
-                    </PrimaryButton>
-
-                    {canCloseWorkspace && (
-                      <button
-                        onClick={() => { setCloseConfirmText(''); setShowCloseModal(true); }}
-                        className="flex items-center space-x-2 px-4 py-2 bg-white text-rose-600 border border-rose-200 rounded-lg hover:bg-rose-50 transition-all duration-200 shadow-sm"
-                      >
-                        <FiX className="h-4 w-4" />
-                        <span className="hidden sm:inline">Close Workspace</span>
-                      </button>
-                    )}
-
-                  </div>
-                </div>
-
-                {/* Mobile nav (sidebar fallback) */}
-                <nav className="lg:hidden flex mt-4 -mb-px overflow-x-auto hide-scrollbar">
-                  {navItems.map((item) => {
-                    const isActive = activeTab === item.id;
-                    return (
-                      <button
-                        key={item.id}
-                        onClick={() => setActiveTab(item.id)}
-                        className={`flex items-center gap-2 py-2.5 px-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                          isActive
-                            ? 'border-indigo-500 text-indigo-600'
-                            : 'border-transparent text-gray-500'
-                        }`}
-                      >
-                        <item.icon className="h-4 w-4" />
-                        {item.label}
-                        {item.count > 0 && (
-                          <span
-                            className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ${
-                              isActive ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-100 text-gray-600'
-                            }`}
-                          >
-                            {item.count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </nav>
-              </div>
-            </header>
-
-            {/* ─────────── CONTENT ─────────── */}
-            <div className={`flex-1 ${activeTab === 'chat' ? '' : 'px-6 py-8'}`}>
-              {/* KPI strip (hidden on chat tab to give chat full space) */}
-              {activeTab !== 'chat' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
-                  <KPIStat
-                    title="Total Tasks"
-                    value={stats.total}
-                    subtitle="In this workspace"
-                    trend={0}
-                    icon={FiBarChart2}
-                    color="bg-gradient-to-br from-blue-500 to-blue-600"
-                  />
-                  <KPIStat
-                    title="In Progress"
-                    value={stats.inProgress}
-                    subtitle="Active now"
-                    trend={0}
-                    icon={FiTrendingUp}
-                    color="bg-gradient-to-br from-amber-500 to-amber-600"
-                  />
-                  <KPIStat
-                    title="Completed"
-                    value={stats.completed}
-                    subtitle="Successfully done"
-                    trend={0}
-                    icon={FiCheckCircle}
-                    color="bg-gradient-to-br from-emerald-500 to-emerald-600"
-                  />
-                  <KPIStat
-                    title="Collaborators"
-                    value={participants.length}
-                    subtitle="Working on this"
-                    trend={0}
-                    icon={FiAward}
-                    color="bg-gradient-to-br from-purple-500 to-purple-600"
-                  />
-                </div>
-              )}
-
-              <AnimatePresence mode="wait">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.12 }}
+                className={activeTab === 'chat' ? '' : 'p-5'}
+              >
                 {/* ══════ BOARD ══════ */}
                 {activeTab === 'board' && (
-                  <motion.div
-                    key="board"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <BoardColumn
-                        title="To Do"
-                        status="pending"
-                        tasks={tasksByStatus.pending}
-                        onTaskMove={handleTaskStatusUpdate}
-                      />
-                      <BoardColumn
-                        title="In Progress"
-                        status="in_progress"
-                        tasks={tasksByStatus.in_progress}
-                        onTaskMove={handleTaskStatusUpdate}
-                      />
-                      <BoardColumn
-                        title="Done"
-                        status="completed"
-                        tasks={tasksByStatus.completed}
-                        onTaskMove={handleTaskStatusUpdate}
-                      />
+                  tasks.length === 0 ? (
+                    <EmptyState
+                      icon={FiCheckSquare}
+                      title="No tasks yet"
+                      description="Break this service into tasks and assign them to your team."
+                      action={<PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>Create the first task</PrimaryButton>}
+                    />
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {TASK_STATUSES.map((s) => (
+                        <BoardColumn key={s} status={s} tasks={tasksByStatus[s]} onTaskMove={handleTaskStatusUpdate} />
+                      ))}
                     </div>
-                  </motion.div>
+                  )
                 )}
 
                 {/* ══════ CHAT ══════ */}
                 {activeTab === 'chat' && (
-                  <motion.div
-                    key="chat"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                    className="h-[calc(100vh-120px)] bg-white border-t border-gray-200"
-                  >
+                  <div className="h-[calc(100vh-330px)] min-h-[480px]">
                     <Chat
                       activeConversation={conversation}
                       messages={{ [conversation?.id]: messages }}
@@ -983,217 +820,138 @@ const ServiceWorkspace = () => {
                       serviceEntryId={serviceEntryId}
                       onTaskStatusUpdate={handleTaskStatusUpdate}
                     />
-                  </motion.div>
+                  </div>
                 )}
 
                 {/* ══════ TASKS ══════ */}
                 {activeTab === 'tasks' && (
-                  <motion.div
-                    key="tasks"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                      <SectionHeader
-                        title="All Tasks"
-                        subtitle={`${stats.completed} of ${stats.total} completed`}
-                        action={
-                          <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
-                            New Task
-                          </PrimaryButton>
-                        }
-                      />
-
-                      {tasks.length === 0 ? (
-                        <EmptyState
-                          icon={FiCheckSquare}
-                          title="No tasks yet"
-                          description="Break this service down into tasks and assign them to your team."
-                          action={
-                            <PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>
-                              Create your first task
-                            </PrimaryButton>
-                          }
-                        />
-                      ) : (
-                        <div className="space-y-3">
-                          {tasks.map((task) => (
-                            <TaskCard
-                              key={task.id}
-                              task={task}
-                              onStatusUpdate={handleTaskStatusUpdate}
-                            />
+                  <>
+                    <SectionHeader
+                      title="All tasks"
+                      subtitle={`${stats.completed} of ${stats.total} done`}
+                      action={<PrimaryButton icon={FiPlus} onClick={() => setShowTaskModal(true)}>New task</PrimaryButton>}
+                    />
+                    {tasks.length === 0 ? (
+                      <EmptyState icon={FiCheckSquare} title="No tasks yet" description="Tasks you create here also show in Messenger → Tasks." />
+                    ) : (
+                      <ul className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+                        {[...tasks]
+                          .sort((a, b) => (a.status === 'completed') - (b.status === 'completed'))
+                          .map((task) => (
+                            <TaskRow key={task.id} task={task} onStatusUpdate={handleTaskStatusUpdate} />
                           ))}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
+                      </ul>
+                    )}
+                  </>
                 )}
 
                 {/* ══════ PARTICIPANTS ══════ */}
                 {activeTab === 'participants' && (
-                  <motion.div
-                    key="participants"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                      <SectionHeader
-                        title="Collaborators"
-                        subtitle="People with access to this service workspace."
-                        action={
-                          <PrimaryButton
-                            icon={FiPlus}
-                            onClick={() => setShowParticipantModal(true)}
-                          >
-                            Add Participant
-                          </PrimaryButton>
-                        }
-                      />
-
-                      {participants.length === 0 ? (
-                        <EmptyState
-                          icon={FiUsers}
-                          title="No collaborators"
-                          description="Invite team members to collaborate on this service."
-                          action={
-                            <PrimaryButton
-                              icon={FiPlus}
-                              onClick={() => setShowParticipantModal(true)}
-                            >
-                              Add a participant
-                            </PrimaryButton>
-                          }
-                        />
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                          {participants.map((p) => (
-                            <div
-                              key={p.staff_id}
-                              className="group bg-gray-50 rounded-xl border border-gray-200 p-4 flex items-center justify-between hover:shadow-md transition-all"
-                            >
-                              <div className="flex items-center space-x-3 min-w-0">
-                                <Avatar name={p.name} size="lg" />
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-gray-900 truncate">
-                                    {p.name}
-                                  </p>
-                                  <p className="text-xs text-gray-500 capitalize truncate mt-0.5">
-                                    {p.role} · {p.staff_role}
-                                  </p>
-                                </div>
+                  <>
+                    <SectionHeader
+                      title="People"
+                      subtitle="Staff who can see this workspace's chat and tasks."
+                      action={<PrimaryButton icon={FiPlus} onClick={() => setShowParticipantModal(true)}>Add person</PrimaryButton>}
+                    />
+                    {participants.length === 0 ? (
+                      <EmptyState icon={FiUsers} title="No one added yet" description="Add staff to work on this service together." />
+                    ) : (
+                      <ul className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+                        {participants.map((p) => (
+                          <li key={p.staff_id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Avatar name={p.name} size="md" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{p.name}</p>
+                                <p className="text-xs text-gray-500 capitalize truncate">
+                                  {p.role}{p.staff_role ? ` · ${p.staff_role}` : ''}
+                                </p>
                               </div>
-                              {p.staff_id !== service?.assignedToId && (
-                                <button
-                                  onClick={() => handleRemoveParticipant(p.staff_id)}
-                                  title="Remove"
-                                  className="shrink-0 p-2 rounded-lg text-gray-400 hover:text-rose-600 hover:bg-rose-50 opacity-0 group-hover:opacity-100 transition-all"
-                                >
-                                  <FiTrash2 className="h-4 w-4" />
-                                </button>
-                              )}
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
+                            {p.role !== 'owner' && String(p.staff_id) !== String(service?.assigned_to) && (
+                              <button
+                                onClick={() => handleRemoveParticipant(p.staff_id)}
+                                className="shrink-0 inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-medium text-gray-500 hover:text-rose-700 hover:bg-rose-50"
+                              >
+                                <FiTrash2 className="h-3.5 w-3.5" /> Remove
+                              </button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 )}
 
                 {/* ══════ DOCUMENTS ══════ */}
                 {activeTab === 'documents' && (
-                  <motion.div
-                    key="documents"
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6">
-                      <SectionHeader
-                        title="Shared Documents"
-                        subtitle="Files attached to this service workspace."
-                        action={
-                          <>
-                            <input
-                              type="file"
-                              id="doc-upload"
-                              className="hidden"
-                              onChange={handleDocumentUpload}
-                              accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-                            />
-                            <PrimaryButton
-                              icon={FiUpload}
-                              onClick={() => document.getElementById('doc-upload').click()}
-                              disabled={uploadingDoc}
-                            >
-                              {uploadingDoc ? 'Uploading…' : 'Upload Document'}
-                            </PrimaryButton>
-                          </>
-                        }
-                      />
-
-                      {documents.length === 0 ? (
-                        <EmptyState
-                          icon={FiFileText}
-                          title="No documents yet"
-                          description="Upload files to share them with everyone in this workspace."
-                        />
-                      ) : (
-                        <div className="rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
-                          {documents.map((doc) => (
-                            <div
-                              key={doc.id}
-                              className="group flex items-center justify-between gap-4 px-4 py-3 hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex items-center space-x-3 min-w-0">
-                                <div className="shrink-0 w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                                  <FiFileText className="h-4 w-4" />
-                                </div>
-                                <div className="min-w-0">
-                                  <p className="text-sm font-medium text-gray-900 truncate">
-                                    {doc.document_name}
-                                  </p>
-                                  <p className="text-xs text-gray-500 truncate mt-0.5">
-                                    {doc.uploaded_by_name || 'Staff'} ·{' '}
-                                    {new Date(doc.created_at).toLocaleDateString()}
-                                    {doc.file_size
-                                      ? ` · ${(doc.file_size / 1024).toFixed(1)} KB`
-                                      : ''}
-                                  </p>
-                                </div>
+                  <>
+                    <SectionHeader
+                      title="Shared files"
+                      subtitle="Internal files for staff. Customer documents are on the application's Documents tab."
+                      action={
+                        <>
+                          <input
+                            type="file"
+                            id="doc-upload"
+                            className="hidden"
+                            onChange={handleDocumentUpload}
+                            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+                          />
+                          <PrimaryButton
+                            icon={FiUpload}
+                            onClick={() => document.getElementById('doc-upload').click()}
+                            disabled={uploadingDoc}
+                          >
+                            {uploadingDoc ? 'Uploading…' : 'Upload file'}
+                          </PrimaryButton>
+                        </>
+                      }
+                    />
+                    {documents.length === 0 ? (
+                      <EmptyState icon={FiFileText} title="No files yet" description="Upload files to share them with everyone in this workspace." />
+                    ) : (
+                      <ul className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+                        {documents.map((doc) => (
+                          <li key={doc.id} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-gray-50">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="shrink-0 w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-[#172a45]">
+                                <FiFileText className="h-4 w-4" />
                               </div>
-                              <div className="flex items-center gap-1 shrink-0">
-                                <a
-                                  href={`${API_BASE_URL}/api/files/version/${doc.id}/download?token=${token}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  title="Download"
-                                  className="p-2 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                                >
-                                  <FiDownload className="h-4 w-4" />
-                                </a>
-                                <button
-                                  onClick={() => handleDeleteDocument(doc.id)}
-                                  title="Delete"
-                                  className="p-2 rounded-lg text-gray-500 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                                >
-                                  <FiTrash2 className="h-4 w-4" />
-                                </button>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium text-gray-900 truncate">{doc.document_name}</p>
+                                <p className="text-xs text-gray-500 truncate">
+                                  {doc.uploaded_by_name || 'Staff'} · {shortDate(doc.created_at)}
+                                  {doc.file_size ? ` · ${(doc.file_size / 1024).toFixed(1)} KB` : ''}
+                                </p>
                               </div>
                             </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <a
+                                href={`${API_BASE_URL}/api/files/version/${doc.id}/download?token=${token}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Download"
+                                className="p-2 rounded-lg text-gray-500 hover:text-[#172a45] hover:bg-blue-50"
+                              >
+                                <FiDownload className="h-4 w-4" />
+                              </a>
+                              <button
+                                onClick={() => handleDeleteDocument(doc.id)}
+                                title="Delete"
+                                className="p-2 rounded-lg text-gray-500 hover:text-rose-700 hover:bg-rose-50"
+                              >
+                                <FiTrash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </>
                 )}
-              </AnimatePresence>
-            </div>
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
 
@@ -1201,40 +959,42 @@ const ServiceWorkspace = () => {
         <AnimatePresence>
           {showParticipantModal && (
             <Modal
-              title="Add Participant"
+              title="Add person"
               onClose={() => setShowParticipantModal(false)}
               onSubmit={handleAddParticipant}
-              submitLabel="Add Participant"
+              submitLabel="Add"
+              submitDisabled={!newParticipant.staffId}
             >
               <div className="space-y-4">
-                <FormField label="Staff Member" required>
+                <FormField label="Staff member" required>
                   <select
                     value={newParticipant.staffId}
-                    onChange={(e) =>
-                      setNewParticipant({ ...newParticipant, staffId: e.target.value })
-                    }
-                    className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    onChange={(e) => setNewParticipant({ ...newParticipant, staffId: e.target.value })}
+                    className={fieldCls}
                   >
                     <option value="">Select staff…</option>
-                    {staffList.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.role})
-                      </option>
-                    ))}
+                    {staffList
+                      .filter((s) => !participants.some((p) => String(p.staff_id) === String(s.id)))
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+                      ))}
                   </select>
                 </FormField>
-
                 <FormField label="Role" required>
-                  <select
-                    value={newParticipant.role}
-                    onChange={(e) =>
-                      setNewParticipant({ ...newParticipant, role: e.target.value })
-                    }
-                    className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                  >
-                    <option value="collaborator">Collaborator</option>
-                    <option value="reviewer">Reviewer</option>
-                  </select>
+                  <div className="flex bg-gray-100 p-1 rounded-lg">
+                    {[{ v: 'collaborator', l: 'Collaborator' }, { v: 'reviewer', l: 'Reviewer' }].map((r) => (
+                      <button
+                        key={r.v}
+                        type="button"
+                        onClick={() => setNewParticipant({ ...newParticipant, role: r.v })}
+                        className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition ${
+                          newParticipant.role === r.v ? 'bg-white shadow-sm text-[#172a45]' : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                      >
+                        {r.l}
+                      </button>
+                    ))}
+                  </div>
                 </FormField>
               </div>
             </Modal>
@@ -1242,76 +1002,66 @@ const ServiceWorkspace = () => {
 
           {showTaskModal && (
             <Modal
-              title="Create New Task"
+              title="New task"
               onClose={() => setShowTaskModal(false)}
               onSubmit={handleCreateTask}
-              submitLabel="Create Task"
+              submitLabel="Create task"
+              submitDisabled={!newTask.title.trim()}
             >
               <div className="space-y-4">
                 <FormField label="Title" required>
                   <input
                     type="text"
+                    autoFocus
                     value={newTask.title}
                     onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
                     placeholder="e.g. Verify customer documents"
-                    className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                    className={fieldCls}
                   />
                 </FormField>
-
                 <FormField label="Description">
                   <textarea
                     value={newTask.description}
                     onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
                     rows={3}
-                    placeholder="Add any details the assignee should know…"
-                    className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all resize-none"
+                    placeholder="Anything the assignee should know"
+                    className={`${fieldCls} resize-none`}
                   />
                 </FormField>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <FormField label="Assign To">
+                  <FormField label="Assign to">
                     <select
                       value={newTask.assignedTo}
                       onChange={(e) => setNewTask({ ...newTask, assignedTo: e.target.value })}
-                      className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className={fieldCls}
                     >
                       <option value="">Unassigned</option>
-                      {staffList.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
+                      {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </FormField>
-
-                  <FormField label="Due Date">
+                  <FormField label="Due date">
                     <input
                       type="date"
                       value={newTask.dueDate}
                       onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                      className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
+                      className={fieldCls}
                     />
                   </FormField>
                 </div>
-
                 <FormField label="Priority">
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="flex bg-gray-100 p-1 rounded-lg">
                     {['low', 'medium', 'high'].map((p) => {
                       const active = newTask.priority === p;
-                      const meta = PRIORITY_CONFIG[p];
                       return (
                         <button
                           key={p}
                           type="button"
                           onClick={() => setNewTask({ ...newTask, priority: p })}
-                          className={`flex items-center justify-center gap-2 py-2.5 rounded-xl border text-xs font-medium capitalize transition-all ${
-                            active
-                              ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500/20'
-                              : 'border-gray-200 text-gray-600 hover:bg-gray-50'
+                          className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition ${
+                            active ? `bg-white shadow-sm ${PRIORITY_CONFIG[p].color}` : 'text-gray-500 hover:text-gray-700'
                           }`}
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-                          {meta.label}
+                          {PRIORITY_CONFIG[p].label}
                         </button>
                       );
                     })}
@@ -1323,19 +1073,22 @@ const ServiceWorkspace = () => {
 
           {showCloseModal && (
             <Modal
-              title="Close Workspace"
+              title="Close workspace"
               onClose={() => !closing && setShowCloseModal(false)}
               onSubmit={handleCloseWorkspace}
               submitLabel={closing ? 'Closing…' : 'Close permanently'}
+              submitDisabled={closing || closeConfirmText !== 'CLOSE'}
+              danger
             >
               <div className="space-y-4">
-                <div className="flex gap-3 p-3 rounded-xl bg-rose-50 border border-rose-200">
+                <div className="flex gap-3 p-3 rounded-lg bg-rose-50 border border-rose-200">
                   <FiAlertCircle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
                   <div className="text-sm text-rose-800">
                     <p className="font-semibold mb-1">This cannot be undone.</p>
                     <p>
-                      All chat messages, chat files, {stats.total} task{stats.total === 1 ? '' : 's'} and
-                      the collaborator list will be permanently deleted. Service tracking and documents are kept.
+                      All chat messages, chat files, {stats.total} task{stats.total === 1 ? '' : 's'} and the people list
+                      will be permanently deleted. Pending scheduled staff reminders are cancelled. Service tracking and
+                      customer documents are kept.
                     </p>
                   </div>
                 </div>
@@ -1345,7 +1098,7 @@ const ServiceWorkspace = () => {
                     value={closeConfirmText}
                     onChange={(e) => setCloseConfirmText(e.target.value)}
                     placeholder="CLOSE"
-                    className="w-full px-3 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 transition-all"
+                    className={`${fieldCls} focus:ring-rose-500 focus:border-rose-500`}
                   />
                 </FormField>
               </div>
@@ -1366,157 +1119,132 @@ const ServiceWorkspace = () => {
    SUB-COMPONENTS
    ══════════════════════════════════════════════════════════════════ */
 
-const BoardColumn = ({ title, tasks, status, onTaskMove }) => {
+// Move buttons are always visible (hover-only buttons don't work on touch screens)
+const MOVES = {
+  pending: [{ to: 'in_progress', label: 'Start', icon: FiArrowRight }],
+  in_progress: [
+    { to: 'pending', label: 'Back', icon: FiRotateCcw, subtle: true },
+    { to: 'completed', label: 'Done', icon: FiCheckCircle },
+  ],
+  completed: [{ to: 'in_progress', label: 'Reopen', icon: FiRotateCcw, subtle: true }],
+};
+
+const BoardColumn = ({ status, tasks, onTaskMove }) => {
   const meta = STATUS_CONFIG[status];
-  const nextStatus =
-    status === 'pending' ? 'in_progress' : status === 'in_progress' ? 'completed' : null;
-  const nextLabel = status === 'pending' ? 'Start' : status === 'in_progress' ? 'Complete' : null;
-
   return (
-    <div className="bg-white rounded-xl border border-gray-200 shadow-sm flex flex-col min-h-[420px]">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
-          <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-        </div>
-        <span className="min-w-[24px] h-6 px-2 rounded-full bg-gray-100 text-xs font-semibold text-gray-600 flex items-center justify-center">
-          {tasks.length}
+    <div className="bg-gray-50 rounded-xl border border-gray-200 flex flex-col md:min-h-[260px]">
+      <div className="flex items-center justify-between px-3 py-2.5 border-b border-gray-200">
+        <span className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+          <span className={`w-2 h-2 rounded-full ${meta.dot}`} /> {meta.label}
         </span>
+        <span className="text-xs font-semibold text-gray-500 tabular-nums">{tasks.length}</span>
       </div>
-
-      <div className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div className="flex-1 p-2.5 space-y-2.5">
         {tasks.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-400 mb-2">
-              <FiCheckSquare className="h-5 w-5" />
-            </div>
-            <p className="text-xs text-gray-400">No tasks</p>
-          </div>
+          <p className="text-xs text-gray-400 text-center py-8">Nothing here</p>
         ) : (
-          tasks.map((task) => (
-            <BoardTaskCard
-              key={task.id}
-              task={task}
-              nextStatus={nextStatus}
-              nextLabel={nextLabel}
-              onMove={onTaskMove}
-            />
-          ))
+          tasks.map((task) => <BoardTaskCard key={task.id} task={task} onMove={onTaskMove} />)
         )}
       </div>
     </div>
   );
 };
 
-const BoardTaskCard = ({ task, nextStatus, nextLabel, onMove }) => {
-  const priority = PRIORITY_CONFIG[task.priority] || PRIORITY_CONFIG.medium;
-
+const BoardTaskCard = ({ task, onMove }) => {
+  const overdue = isTaskOverdue(task);
+  const done = task.status === 'completed';
   return (
-    <div className="group bg-gray-50 rounded-xl border border-gray-200 p-3.5 hover:shadow-md hover:border-gray-300 transition-all">
-      <div className="flex items-start justify-between gap-2.5 mb-2">
-        <p className="text-sm font-semibold text-gray-900 leading-snug line-clamp-2 flex-1">
+    <div className={`bg-white rounded-lg border p-3 shadow-sm ${overdue ? 'border-rose-200' : 'border-gray-200'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className={`text-sm font-semibold leading-snug line-clamp-2 ${done ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
           {task.title}
         </p>
         <PriorityBadge priority={task.priority} />
       </div>
+      {task.description && <p className="text-xs text-gray-500 mt-1 line-clamp-2">{task.description}</p>}
 
-      {task.description && (
-        <p className="text-xs text-gray-500 mt-1 line-clamp-2 leading-relaxed">
-          {task.description}
-        </p>
-      )}
-
-      <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200">
-        <div className="flex items-center gap-3 text-xs text-gray-500 min-w-0">
-          {task.assigned_to_name && (
-            <span className="inline-flex items-center gap-1.5 min-w-0">
-              <Avatar name={task.assigned_to_name} size="xs" />
-              <span className="truncate max-w-[80px]">{task.assigned_to_name}</span>
-            </span>
-          )}
+      <div className="flex items-center justify-between gap-2 mt-2.5 pt-2.5 border-t border-gray-100">
+        <div className="flex items-center gap-2.5 text-[11px] text-gray-500 min-w-0">
+          <span className="inline-flex items-center gap-1 min-w-0">
+            <Avatar name={task.assigned_to_name || '?'} size="xs" />
+            <span className="truncate max-w-[90px]">{task.assigned_to_name || 'Unassigned'}</span>
+          </span>
           {task.due_date && (
-            <span className="inline-flex items-center gap-1 shrink-0">
+            <span className={`inline-flex items-center gap-1 shrink-0 ${overdue ? 'text-rose-700 font-semibold' : ''}`}>
               <FiCalendar className="h-3 w-3" />
-              {new Date(task.due_date).toLocaleDateString('en-IN', {
-                day: 'numeric',
-                month: 'short',
-              })}
+              {overdue ? 'Overdue ' : ''}{shortDate(task.due_date)}
             </span>
           )}
         </div>
-
-        {nextStatus && (
-          <button
-            onClick={() => onMove(task.id, nextStatus)}
-            className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 opacity-0 group-hover:opacity-100 transition-opacity"
-          >
-            {nextLabel}
-            <FiArrowRight className="h-3 w-3" />
-          </button>
-        )}
+        <div className="flex items-center gap-1 shrink-0">
+          {MOVES[task.status]?.map((m) => (
+            <button
+              key={m.to}
+              onClick={() => onMove(task.id, m.to).catch(() => {})}
+              title={m.label}
+              className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-semibold transition ${
+                m.subtle ? 'text-gray-500 hover:bg-gray-100' : 'text-[#172a45] bg-blue-50 hover:bg-blue-100'
+              }`}
+            >
+              <m.icon className="h-3 w-3" /> {m.subtle ? '' : m.label}
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 };
 
-const TaskCard = ({ task, onStatusUpdate }) => {
-  const status = STATUS_CONFIG[task.status] || STATUS_CONFIG.pending;
-
+const TaskRow = ({ task, onStatusUpdate }) => {
+  const overdue = isTaskOverdue(task);
+  const done = task.status === 'completed';
   return (
-    <div className="bg-gray-50 rounded-xl border border-gray-200 p-4 hover:shadow-md transition-all">
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap mb-1">
-            <h3 className="text-sm font-semibold text-gray-900">{task.title}</h3>
-            <PriorityBadge priority={task.priority} />
-          </div>
-
-          {task.description && (
-            <p className="text-xs text-gray-600 mt-1 leading-relaxed">{task.description}</p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mt-3 text-xs text-gray-500">
-            {task.assigned_to_name && (
-              <span className="inline-flex items-center gap-1.5">
-                <Avatar name={task.assigned_to_name} size="xs" />
-                {task.assigned_to_name}
-              </span>
-            )}
-            {task.due_date && (
-              <span className="inline-flex items-center gap-1.5">
-                <FiCalendar className="h-3 w-3" />
-                {new Date(task.due_date).toLocaleDateString('en-IN', {
-                  day: 'numeric',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </span>
-            )}
-          </div>
+    <li className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3 hover:bg-gray-50">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className={`text-sm font-semibold ${done ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{task.title}</p>
+          <PriorityBadge priority={task.priority} />
+          {overdue && <span className="text-[11px] font-semibold text-rose-700">Overdue</span>}
         </div>
-
-        <div className="shrink-0">
-          <select
-            value={task.status}
-            onChange={(e) => onStatusUpdate(task.id, e.target.value)}
-            className={`text-xs font-bold rounded-md px-2.5 py-1.5 border outline-none shadow-sm cursor-pointer transition-all ${status.bg} ${status.color} ${status.border}`}
-          >
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+        {task.description && <p className="text-xs text-gray-600 mt-0.5">{task.description}</p>}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-500">
+          <span className="inline-flex items-center gap-1.5">
+            <Avatar name={task.assigned_to_name || '?'} size="xs" />
+            {task.assigned_to_name || 'Unassigned'}
+          </span>
+          {task.due_date && (
+            <span className={`inline-flex items-center gap-1 ${overdue ? 'text-rose-700 font-semibold' : ''}`}>
+              <FiCalendar className="h-3 w-3" />
+              {new Date(task.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}
+            </span>
+          )}
         </div>
       </div>
-    </div>
+      {/* Status: one click, same pattern as the tracking page's priority switch */}
+      <div className="flex bg-gray-100 p-1 rounded-lg shrink-0 self-start sm:self-center">
+        {TASK_STATUSES.map((s) => {
+          const active = task.status === s;
+          return (
+            <button
+              key={s}
+              onClick={() => !active && onStatusUpdate(task.id, s).catch(() => {})}
+              className={`px-2.5 py-1 rounded-md text-xs font-semibold whitespace-nowrap transition ${
+                active ? `bg-white shadow-sm ${STATUS_CONFIG[s].color}` : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {STATUS_CONFIG[s].label}
+            </button>
+          );
+        })}
+      </div>
+    </li>
   );
 };
 
 /* ------------------------------ Modal ------------------------------ */
 const FormField = ({ label, required, children }) => (
   <div>
-    <label className="block text-sm font-medium text-gray-700 mb-2">
+    <label className="block text-xs font-medium text-gray-600 mb-1.5">
       {label}
       {required && <span className="text-rose-500 ml-0.5">*</span>}
     </label>
@@ -1524,7 +1252,7 @@ const FormField = ({ label, required, children }) => (
   </div>
 );
 
-const Modal = ({ title, children, onClose, onSubmit, submitLabel = 'Save' }) => (
+const Modal = ({ title, children, onClose, onSubmit, submitLabel = 'Save', submitDisabled = false, danger = false }) => (
   <motion.div
     initial={{ opacity: 0 }}
     animate={{ opacity: 1 }}
@@ -1534,39 +1262,42 @@ const Modal = ({ title, children, onClose, onSubmit, submitLabel = 'Save' }) => 
     onClick={onClose}
   >
     <motion.div
-      initial={{ y: 16, opacity: 0, scale: 0.98 }}
-      animate={{ y: 0, opacity: 1, scale: 1 }}
-      exit={{ y: 16, opacity: 0, scale: 0.98 }}
-      transition={{ duration: 0.2, ease: 'easeOut' }}
+      initial={{ y: 12, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      exit={{ y: 12, opacity: 0 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
       className="bg-white rounded-xl w-full max-w-lg shadow-xl"
       onClick={(e) => e.stopPropagation()}
     >
-      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-        <h3 className="text-lg font-bold text-gray-900">{title}</h3>
-        <button
-          onClick={onClose}
-          className="p-2 rounded-lg hover:bg-gray-100 transition-colors"
-        >
+      <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+        <h3 className="text-base font-bold text-gray-900">{title}</h3>
+        <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100" aria-label="Close">
           <FiX className="h-4 w-4 text-gray-500" />
         </button>
       </div>
-
-      <div className="px-6 py-5 max-h-[65vh] overflow-y-auto">{children}</div>
-
-      <div className="flex justify-end gap-3 px-6 py-4 bg-gray-50 border-t border-gray-200 rounded-b-xl">
-        <button
-          onClick={onClose}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={onSubmit}
-          className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-        >
-          {submitLabel}
-        </button>
-      </div>
+      <form
+        onSubmit={(e) => { e.preventDefault(); if (!submitDisabled) onSubmit(); }}
+      >
+        <div className="px-5 py-4 max-h-[65vh] overflow-y-auto">{children}</div>
+        <div className="flex justify-end gap-2 px-5 py-3 bg-gray-50 border-t border-gray-200 rounded-b-xl">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitDisabled}
+            className={`px-4 py-2 text-sm font-semibold text-white rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed ${
+              danger ? 'bg-rose-600 hover:bg-rose-700' : 'bg-[#172a45] hover:bg-[#1e3a5f]'
+            }`}
+          >
+            {submitLabel}
+          </button>
+        </div>
+      </form>
     </motion.div>
   </motion.div>
 );

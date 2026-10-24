@@ -7,8 +7,56 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
+import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
+
+const httpErr = (status, message) => Object.assign(new Error(message), { status });
+
+/* Department fee wallet for an entry = the wallet THIS centre connected to the service
+   (subcategory configuration first, then the service configuration).
+   Never a wallet sent by the browser, never another centre's wallet. Before this, an old
+   configuration that pointed at another centre's wallet took the fee from that centre silently. */
+async function deptWalletFor(client, { centreId, categoryId, subcategoryId, sentWalletId, deptCharge, label }) {
+  const cat = parseInt(categoryId, 10);
+  const sub = parseInt(subcategoryId, 10);
+  let walletId = null;
+  if (!Number.isInteger(cat)) {
+    walletId = parseInt(sentWalletId, 10) || null; // quick service: no configuration to look up
+  } else {
+    if (Number.isInteger(sub)) {
+      const r = await client.query(
+        'SELECT wallet_id FROM subcategory_configurations WHERE subcategory_id = $1 AND centre_id = $2',
+        [sub, centreId]
+      );
+      walletId = r.rows[0]?.wallet_id ?? null;
+    }
+    if (!walletId) {
+      const r = await client.query(
+        'SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2',
+        [cat, centreId]
+      );
+      walletId = r.rows[0]?.wallet_id ?? null;
+    }
+  }
+  if (!(Number(deptCharge) > 0)) return walletId;
+  if (!walletId) {
+    throw httpErr(400, `${label}: no wallet is connected to this service for your centre. Ask the admin to connect one in Service Management.`);
+  }
+  const w = await client.query('SELECT centre_id FROM wallets WHERE id = $1', [walletId]);
+  if (!w.rows.length || Number(w.rows[0].centre_id) !== Number(centreId)) {
+    throw httpErr(409, `${label}: the wallet connected to this service belongs to another centre. Ask the admin to connect this centre's own wallet in Service Management.`);
+  }
+  return Number(walletId);
+}
+
+// Payment wallets must belong to the entry's centre too.
+async function assertOwnWallets(client, walletIds, centreId) {
+  const ids = [...new Set(walletIds.map((w) => parseInt(w, 10)).filter(Number.isInteger))];
+  if (!ids.length) return;
+  const r = await client.query('SELECT id FROM wallets WHERE id = ANY($1::int[]) AND centre_id = $2', [ids, centreId]);
+  if (r.rows.length !== ids.length) throw httpErr(403, 'A payment wallet does not belong to your centre');
+}
 
 // Middleware to verify token and role
 const authenticateToken = (req, res, next) => {
@@ -190,6 +238,7 @@ router.get('/services', authenticateToken, async (req, res) => {
     let query = `
       SELECT 
         s.id, s.name, s.description, s.website, s.status, s.requires_workflow, s.has_expiry,
+        s.requires_wallet AS master_requires_wallet, -- set by the superadmin
         sc.wallet_id,
         COALESCE(sc.department_charge, 0) AS department_charges,
         COALESCE(sc.service_charge, 0) AS service_charges,
@@ -515,6 +564,11 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
     const serviceCheck = await client.query('SELECT * FROM services WHERE id = $1', [id]);
     if (serviceCheck.rows.length === 0) throw new Error('Service not found');
 
+    // the superadmin decides whether a service needs a wallet; a centre admin can't switch it off
+    if (req.user.role !== 'superadmin' && serviceCheck.rows[0].requires_wallet && !requires_wallet) {
+      throw new Error('This service requires a wallet (set by the superadmin). Choose one of your wallets.');
+    }
+
     let finalWalletId = null;
     if (req.user.role === 'superadmin') {
       if (wallet_id) throw new Error('Superadmins cannot set wallet_id for services');
@@ -549,9 +603,14 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
       const serviceResult = await client.query(serviceQuery, serviceValues);
       updatedService = serviceResult.rows[0];
     } else {
-      // Centre Admins cannot alter the Global Master Name/Description. 
-      // We just fetch the existing data to return to the frontend.
-      const serviceResult = await client.query('SELECT * FROM services WHERE id = $1', [id]);
+      // Centre admins keep the shared details current too (a department website or the way a
+      // service is done changes for every centre). Name, description and website are shared by
+      // all centres; status, wallet requirement and charges stay with the superadmin / the centre.
+      const serviceResult = await client.query(
+        `UPDATE services SET name = $1, description = $2, website = $3, updated_at = NOW()
+         WHERE id = $4 RETURNING *`,
+        [String(name).trim(), String(description).trim(), String(website).trim(), id]
+      );
       updatedService = serviceResult.rows[0];
     }
 
@@ -591,7 +650,12 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const auditDetails = `Updated service ${name} by ${req.user.role}`;
+    // record what changed in the shared details, so other centres / the superadmin can see who changed it
+    const before = serviceCheck.rows[0];
+    const changed = ['name', 'description', 'website']
+      .filter((k) => String(before[k] ?? '').trim() !== String(req.body[k] ?? '').trim())
+      .map((k) => `${k}: "${String(before[k] ?? '').slice(0, 120)}" → "${String(req.body[k] ?? '').slice(0, 120)}"`);
+    const auditDetails = `Updated service ${name} by ${req.user.role}` + (changed.length ? ` (shared: ${changed.join('; ')})` : '');
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Updated', req.user.username, auditDetails, req.user.centre_id]
@@ -821,6 +885,7 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
         VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
         ON CONFLICT (centre_id, subcategory_id)
         DO UPDATE SET 
+            wallet_id = EXCLUDED.wallet_id,
             service_charge = EXCLUDED.service_charge,
             department_charge = EXCLUDED.department_charge,
             requires_wallet = EXCLUDED.requires_wallet,
@@ -1038,11 +1103,18 @@ router.get('/entries', authenticateToken, async (req, res) => {
     const entriesResult = await client.query(query, values);
     const entries = [];
 
-    for (const entry of entriesResult.rows) {
+    // PERFORMANCE: fetch payments and charge transactions for ALL entries in 3 queries,
+    // instead of 3 queries per entry (300 round trips for 100 entries).
+    const entryIds = entriesResult.rows.map(r => Number(r.id));
+    const paymentsByEntry = new Map();
+    const deptTxByEntry = new Map();
+    const serviceTxByEntry = new Map();
 
-      // 🔥 ✅ ALL UNIQUE PAYMENTS (FIXED UUID CASTING)
-      const paymentsResult = await client.query(`
-        SELECT DISTINCT ON (COALESCE(p.correction_group_id::text, p.id::text))
+    if (entryIds.length > 0) {
+      // ALL UNIQUE PAYMENTS (latest of each correction group, reversals excluded)
+      const paymentsAll = await client.query(`
+        SELECT DISTINCT ON (p.service_entry_id, COALESCE(p.correction_group_id::text, p.id::text))
+          p.service_entry_id,
           p.id,
           p.wallet_id,
           p.amount,
@@ -1066,45 +1138,52 @@ router.get('/entries', authenticateToken, async (req, res) => {
         FROM payments p
         JOIN wallets w ON p.wallet_id = w.id
 
-        WHERE p.service_entry_id = $1
+        WHERE p.service_entry_id = ANY($1::int[])
           AND COALESCE(p.is_reversal, FALSE) = FALSE
           AND NOT EXISTS (
             SELECT 1 FROM wallet_transactions wt 
             WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
           )
 
-        ORDER BY COALESCE(p.correction_group_id::text, p.id::text), p.created_at DESC
-      `, [entry.id]);
+        ORDER BY p.service_entry_id, COALESCE(p.correction_group_id::text, p.id::text), p.created_at DESC
+      `, [entryIds]);
 
-      // 🔥 Department Charge (latest only)
-      const deptTxResult = await client.query(`
-        SELECT DISTINCT ON (wt.correction_group_id)
-          wt.id, wt.amount, wt.wallet_id,
-          w.name AS wallet_name,
-          wt.correction_group_id
-        FROM wallet_transactions wt
-        JOIN wallets w ON wt.wallet_id = w.id
-        WHERE wt.reference_id = $1
-          AND wt.category = 'Department Payment'
-          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-        ORDER BY wt.correction_group_id, wt.created_at DESC
-      `, [entry.id]);
+      for (const row of paymentsAll.rows) {
+        const key = Number(row.service_entry_id);
+        if (!paymentsByEntry.has(key)) paymentsByEntry.set(key, []);
+        paymentsByEntry.get(key).push(row);
+      }
 
-      // 🔥 Service Charge (latest only)
-      const serviceChargeTxResult = await client.query(`
-        SELECT DISTINCT ON (wt.correction_group_id)
-          wt.id, wt.amount, wt.wallet_id,
-          w.name AS wallet_name,
-          wt.correction_group_id
-        FROM wallet_transactions wt
-        JOIN wallets w ON wt.wallet_id = w.id
-        WHERE wt.reference_id = $1
-          AND wt.category = 'Service Charge'
-          AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
-        ORDER BY wt.correction_group_id, wt.created_at DESC
-      `, [entry.id]);
+      // Department / Service charge: latest transaction of each correction group, first group wins
+      const loadChargeTx = async (category, target) => {
+        const res = await client.query(`
+          SELECT DISTINCT ON (wt.reference_id, wt.correction_group_id)
+            wt.reference_id,
+            wt.id, wt.amount, wt.wallet_id,
+            w.name AS wallet_name,
+            wt.correction_group_id
+          FROM wallet_transactions wt
+          JOIN wallets w ON wt.wallet_id = w.id
+          WHERE wt.reference_id = ANY($1::int[])
+            AND wt.category = $2
+            AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
+          ORDER BY wt.reference_id, wt.correction_group_id, wt.created_at DESC
+        `, [entryIds, category]);
+        for (const row of res.rows) {
+          const key = Number(row.reference_id);
+          if (!target.has(key)) target.set(key, row);
+        }
+      };
+      await loadChargeTx('Department Payment', deptTxByEntry);
+      await loadChargeTx('Service Charge', serviceTxByEntry);
+    }
 
-      const latestPayments = paymentsResult.rows;
+    for (const entry of entriesResult.rows) {
+      const entryKey = Number(entry.id);
+      const deptTx = deptTxByEntry.get(entryKey);
+      const serviceChargeTx = serviceTxByEntry.get(entryKey);
+
+      const latestPayments = paymentsByEntry.get(entryKey) || [];
 
       const paidAmount = latestPayments
         .filter(p => p.status === 'received')
@@ -1163,20 +1242,20 @@ router.get('/entries', authenticateToken, async (req, res) => {
           correction_group_id: p.correction_group_id,
         })),
 
-        departmentChargeTransaction: deptTxResult.rows[0] ? {
-          id: deptTxResult.rows[0].id,
-          amount: parseFloat(deptTxResult.rows[0].amount),
-          wallet_id: deptTxResult.rows[0].wallet_id,
-          wallet_name: deptTxResult.rows[0].wallet_name,
-          correction_group_id: deptTxResult.rows[0].correction_group_id,
+        departmentChargeTransaction: deptTx ? {
+          id: deptTx.id,
+          amount: parseFloat(deptTx.amount),
+          wallet_id: deptTx.wallet_id,
+          wallet_name: deptTx.wallet_name,
+          correction_group_id: deptTx.correction_group_id,
         } : null,
 
-        serviceChargeTransaction: serviceChargeTxResult.rows[0] ? {
-          id: serviceChargeTxResult.rows[0].id,
-          amount: parseFloat(serviceChargeTxResult.rows[0].amount),
-          wallet_id: serviceChargeTxResult.rows[0].wallet_id,
-          wallet_name: serviceChargeTxResult.rows[0].wallet_name,
-          correction_group_id: serviceChargeTxResult.rows[0].correction_group_id,
+        serviceChargeTransaction: serviceChargeTx ? {
+          id: serviceChargeTx.id,
+          amount: parseFloat(serviceChargeTx.amount),
+          wallet_id: serviceChargeTx.wallet_id,
+          wallet_name: serviceChargeTx.wallet_name,
+          correction_group_id: serviceChargeTx.correction_group_id,
         } : null,
 
         workSource: entry.work_source,
@@ -1517,7 +1596,18 @@ router.post('/entry', authenticateToken, async (req, res) => {
       );
     }
 
-    const debitWalletId = serviceWalletId || resolvedServiceWalletId;
+    // Department fee: only this centre's own configured wallet (see deptWalletFor)
+    const debitWalletId = await deptWalletFor(client, {
+      centreId: req.user.centre_id,
+      categoryId: isQuickEntry ? null : finalCategoryId,
+      subcategoryId: isQuickEntry ? null : finalSubcategoryId,
+      sentWalletId: serviceWalletId,
+      deptCharge: finalDepartmentCharge,
+      label: serviceName,
+    });
+    if (req.user.role !== 'superadmin') {
+      await assertOwnWallets(client, payments.map((p) => p.wallet), req.user.centre_id);
+    }
 
     if (debitWalletId && Number(finalDepartmentCharge) > 0) {
       const deptGroupId = crypto.randomUUID();
@@ -1586,7 +1676,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('servicemanagement.js error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -1630,6 +1720,10 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       tokenCentreId = centreId;
     }
 
+    if (req.user.role !== 'superadmin') {
+      await assertOwnWallets(client, payments.map((p) => p.wallet), req.user.centre_id);
+    }
+
     // 3. Setup the Payment Pool (The "Waterfall" Source)
     let paymentPool = payments.map(p => ({
       wallet: parseInt(p.wallet),
@@ -1641,6 +1735,20 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
 
     const results = [];
     let allServicesCompleted = true;
+
+    // PERFORMANCE: look service names and wallet types up once, not once per service/payment.
+    const categoryIds = [...new Set(services.map(sv => parseInt(sv.categoryId)).filter(Number.isInteger))];
+    const serviceNameById = new Map();
+    if (categoryIds.length > 0) {
+      const nameRows = await client.query('SELECT id, name FROM services WHERE id = ANY($1::int[])', [categoryIds]);
+      nameRows.rows.forEach(r => serviceNameById.set(Number(r.id), r.name));
+    }
+    const walletIds = [...new Set(paymentPool.map(p => p.wallet).filter(Number.isInteger))];
+    const walletTypeById = new Map();
+    if (walletIds.length > 0) {
+      const walletRows = await client.query('SELECT id, wallet_type FROM wallets WHERE id = ANY($1::int[])', [walletIds]);
+      walletRows.rows.forEach(r => walletTypeById.set(Number(r.id), r.wallet_type));
+    }
 
     // 4. Loop through the Cart
     for (let i = 0; i < services.length; i++) {
@@ -1683,6 +1791,16 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       // Online Booking is only attached to the first item in the cart
       const currentCustomerServiceId = (i === 0 && customerServiceId) ? customerServiceId : null;
 
+      // Department fee wallet: this centre's own configured wallet, not the one the browser sent
+      const deptWalletId = await deptWalletFor(client, {
+        centreId: req.user.centre_id,
+        categoryId: svc.categoryId,
+        subcategoryId: svc.subcategoryId,
+        sentWalletId: svc.serviceWalletId,
+        deptCharge: svcDept,
+        label: serviceNameById.get(Number(svc.categoryId)) || 'Service',
+      });
+
       // --- DATABASE INSERTIONS ---
       // A. Insert Service Entry
       const insertRes = await client.query(`
@@ -1697,7 +1815,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
         svcService, svcDept, svcTotal, svcStatus, svc.expiryDate || null, staffId, 
         currentCustomerServiceId, currentCustomerServiceId ? 'online' : 'offline', 
         resolvedTeamId, 
-        svc.serviceWalletId || null 
+        deptWalletId
       ]);
       const newEntryId = insertRes.rows[0].id;
 
@@ -1708,17 +1826,16 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       `, [newEntryId, req.user.id]);
 
       // Fetch Service Name for Logging
-      const nameRes = await client.query('SELECT name FROM services WHERE id = $1', [svc.categoryId]);
-      const serviceName = nameRes.rows[0]?.name || 'Service';
+      const serviceName = serviceNameById.get(Number(svc.categoryId)) || 'Service';
 
       // C. Process Department Charges (Deduction)
-      if (svc.serviceWalletId && svcDept > 0) {
+      if (deptWalletId && svcDept > 0) {
         const deptGroupId = crypto.randomUUID();
-        await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [svcDept, svc.serviceWalletId]);
+        await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [svcDept, deptWalletId]);
         await client.query(`
           INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, team_id, created_at)
           VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, $7, NOW())
-        `, [svc.serviceWalletId, staffId, svcDept, `Department charge for ${serviceName} (#${newEntryId})`, newEntryId, deptGroupId, resolvedTeamId]);
+        `, [deptWalletId, staffId, svcDept, `Department charge for ${serviceName} (#${newEntryId})`, newEntryId, deptGroupId, resolvedTeamId]);
       }
 
       // D. Process Applied Payments (Additions)
@@ -1733,8 +1850,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
         await client.query('UPDATE payments SET original_payment_id = $1 WHERE id = $1', [newPmtId]);
 
         if (pmt.status === 'received') {
-          const walletRes = await client.query('SELECT wallet_type FROM wallets WHERE id = $1', [pmt.wallet]);
-          const walletType = walletRes.rows[0]?.wallet_type || 'digital';
+          const walletType = walletTypeById.get(Number(pmt.wallet)) || 'digital';
           
           await client.query('UPDATE wallets SET balance = balance + $1 WHERE id = $2', [pmt.amount, pmt.wallet]);
           await client.query(`
@@ -1798,7 +1914,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Bulk Entry Error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -3005,7 +3121,7 @@ router.get('/campaigns/reports', authenticateToken, async (req, res) => {
 router.get('/campaigns/stats', authenticateToken, async (req, res) => {
   const client = await pool.connect();
   try {
-    const { centre_id, campaign_id } = req.query;
+    const { centre_id, campaign_id, live_only, campaign_state } = req.query;
     const userRole = req.user.role;
     const userId = req.user.id;
 
@@ -3047,8 +3163,19 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
       queryParams.push(targetCentreId);
     }
     if (campaign_id) {
-      tokenQuery += ` AND t.campaign_id = $${idx++}`;
-      queryParams.push(parseInt(campaign_id));
+      // accepts one id or a comma-separated list (a campaign created for several centres has one id per centre)
+      const campaignIds = String(campaign_id).split(',').map((v) => parseInt(v, 10)).filter((v) => !isNaN(v));
+      if (campaignIds.length > 0) {
+        tokenQuery += ` AND t.campaign_id = ANY($${idx++}::int[])`;
+        queryParams.push(campaignIds);
+      }
+    }
+    // live_only=1 -> only campaigns that are running today
+    if (live_only === '1' || live_only === 'true' || campaign_state === 'live') {
+      tokenQuery += ` AND t.campaign_id IN (SELECT id FROM campaigns WHERE start_date <= CURRENT_DATE AND end_date >= CURRENT_DATE)`;
+    } else if (campaign_state === 'ended') {
+      // campaign_state=ended -> only campaigns whose end date has passed
+      tokenQuery += ` AND t.campaign_id IN (SELECT id FROM campaigns WHERE end_date < CURRENT_DATE)`;
     }
 
     const tokensResult = await client.query(tokenQuery, queryParams);
@@ -3136,7 +3263,7 @@ router.get('/campaigns/stats', authenticateToken, async (req, res) => {
 
 // GET /api/servicemanagement/campaign-tokens/table
 router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
-  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search, staff_id } = req.query;
+  const { page = 1, limit = 20, from, to, status, centre_id, campaign_id, search, staff_id, live_only, campaign_state } = req.query;
   const client = await pool.connect();
   try {
     let centreId = req.user.centre_id;
@@ -3168,6 +3295,12 @@ router.get('/campaign-tokens/table', authenticateToken, async (req, res) => {
     if (staff_id && staff_id !== 'all') {
       whereClause += ` AND t.staff_id = $${idx++}`;
       values.push(staff_id.toString());
+    }
+    // live_only=1 -> only tokens of campaigns that are running today
+    if (live_only === '1' || live_only === 'true' || campaign_state === 'live') {
+      whereClause += ` AND c.start_date <= CURRENT_DATE AND c.end_date >= CURRENT_DATE`;
+    } else if (campaign_state === 'ended') {
+      whereClause += ` AND c.end_date < CURRENT_DATE`;
     }
 
     // --- ADD THIS NEW SEARCH BLOCK ---
@@ -3425,7 +3558,7 @@ const generateTokenId = async (db, centreId) => {
     [centreId]
   );
   const count = parseInt(result.rows[0].count) + 1;
-  return `TKN-${centreId}-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${count.toString().padStart(2, '0')}`;
+    return `TKN-${centreId}-${todayIST().replace(/-/g, '')}-${count.toString().padStart(2, '0')}`;
 };
 
 // Generate campaign-specific token ID
@@ -4813,7 +4946,7 @@ router.post("/pending-payments/:id/send-whatsapp",
           serviceName: entry.service_name,
           subcategoryName: entry.subcategory_name,
           pendingAmount,
-          dueDate: new Date().toLocaleDateString("en-IN"),
+          dueDate: new Date().toLocaleDateString("en-IN", { timeZone: "Asia/Kolkata" }),
           phone: entry.phone,
           centreId: access.centre_id
         });

@@ -1,10 +1,382 @@
-import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
-import { FiPlus, FiCalendar, FiTarget, FiCheckCircle, FiTrendingUp, FiEdit2, FiX, FiRefreshCw } from 'react-icons/fi';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import axios from 'axios';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  FiPlus, FiCalendar, FiTarget, FiCheckCircle, FiTrendingUp, FiEdit2, FiTrash2,
+  FiRefreshCw, FiChevronDown, FiClock, FiArchive, FiX, FiPackage, FiAward
+} from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import { getServices, getCampaigns, createCampaign, updateCampaign, deleteCampaign } from '/src/services/serviceService';
+
+// ---------- date helpers (all in IST, whole days) ----------
+const IST = 'Asia/Kolkata';
+const DAY_MS = 86400000;
+
+// Accepts 'YYYY-MM-DD' or a full ISO timestamp and returns the IST calendar day as 'YYYY-MM-DD'.
+const toYmd = (value) => {
+  if (!value) return '';
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: IST });
+};
+const todayYmd = () => new Date().toLocaleDateString('en-CA', { timeZone: IST });
+const dayNumber = (ymd) => Math.round(Date.parse(`${ymd}T00:00:00Z`) / DAY_MS);
+
+const formatDate = (value) => {
+  const ymd = toYmd(value);
+  if (!ymd) return '-';
+  return new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+};
+
+const startOf = (c) => toYmd(c.start_date || c.startDate);
+const endOf = (c) => toYmd(c.end_date || c.endDate);
+const generatedOf = (c) => Number(c.tokens_generated ?? c.tokenCount ?? 0) || 0;
+const targetOf = (c) => Number(c.target_tokens ?? c.targetTokens ?? 0) || 0;
+const serviceNameOf = (c) => c.service_name || c.serviceName || '';
+
+// 'active' = running today, 'upcoming' = not started, 'expired' = ended before today.
+const getStatus = (c) => {
+  const today = todayYmd();
+  const start = startOf(c);
+  const end = endOf(c);
+  if (end && end < today) return 'expired';
+  if (start && start > today) return 'upcoming';
+  return 'active';
+};
+
+const timelineProgress = (c) => {
+  const s = dayNumber(startOf(c));
+  const e = dayNumber(endOf(c));
+  const t = dayNumber(todayYmd());
+  if (t >= e) return 100;
+  if (t < s) return 0;
+  return Math.min(100, Math.round(((t - s + 1) / (e - s + 1)) * 100));
+};
+
+const tokenProgress = (generated, target) => (target > 0 ? Math.min(100, Math.round((generated / target) * 100)) : 0);
+
+const daysLabel = (c, status) => {
+  const t = dayNumber(todayYmd());
+  if (status === 'active') {
+    const left = dayNumber(endOf(c)) - t;
+    return left === 0 ? 'Ends today' : `${left} day${left === 1 ? '' : 's'} left`;
+  }
+  if (status === 'upcoming') {
+    const to = dayNumber(startOf(c)) - t;
+    return to === 1 ? 'Starts tomorrow' : `Starts in ${to} days`;
+  }
+  const ago = t - dayNumber(endOf(c));
+  return ago === 1 ? 'Ended yesterday' : `Ended ${ago} days ago`;
+};
+
+const STATUS_STYLE = {
+  active: { label: 'Running', chip: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', bar: 'bg-emerald-500' },
+  upcoming: { label: 'Upcoming', chip: 'bg-sky-50 text-sky-700 border-sky-200', dot: 'bg-sky-500', bar: 'bg-sky-500' },
+  expired: { label: 'Expired', chip: 'bg-slate-100 text-slate-600 border-slate-200', dot: 'bg-slate-400', bar: 'bg-slate-400' },
+};
+
+const StatusChip = ({ status }) => {
+  const s = STATUS_STYLE[status];
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium ${s.chip}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+};
+
+const Bar = ({ pct, className }) => (
+  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+    <div className={`h-2 rounded-full transition-all ${className}`} style={{ width: `${pct}%` }} />
+  </div>
+);
+
+// ---------- shared details body ----------
+const CampaignDetails = ({ campaign, status, onEdit, onDelete }) => {
+  const generated = generatedOf(campaign);
+  const target = targetOf(campaign);
+  const tPct = timelineProgress(campaign);
+  const kPct = tokenProgress(generated, target);
+  const style = STATUS_STYLE[status];
+  return (
+    <div className="space-y-5">
+      {campaign.description ? (
+        <p className="text-sm leading-relaxed text-slate-600">{campaign.description}</p>
+      ) : (
+        <p className="text-sm italic text-slate-400">No description provided</p>
+      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="rounded-xl border border-slate-200 p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Timeline</span>
+            <span className="text-sm font-semibold tabular-nums text-slate-800">{tPct}%</span>
+          </div>
+          <Bar pct={tPct} className={style.bar} />
+          <p className="mt-2 text-xs text-slate-500">{daysLabel(campaign, status)}</p>
+        </div>
+        <div className="rounded-xl border border-slate-200 p-4">
+          <div className="mb-2 flex items-baseline justify-between">
+            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Tokens</span>
+            <span className="text-sm font-semibold tabular-nums text-slate-800">{kPct}%</span>
+          </div>
+          <Bar pct={kPct} className="bg-navy-500" />
+          <p className="mt-2 text-xs text-slate-500">
+            <span className="font-semibold tabular-nums text-slate-700">{generated}</span> of {target} target
+            {status === 'expired' && target > 0 && (generated >= target ? ' · target met' : ' · target missed')}
+          </p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onEdit(campaign)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+        >
+          <FiEdit2 className="h-3.5 w-3.5" /> Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete(campaign)}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm font-medium text-rose-600 hover:bg-rose-50"
+        >
+          <FiTrash2 className="h-3.5 w-3.5" /> Delete
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// ---------- staff performance ----------
+// Uses the existing GET /api/servicemanagement/campaigns/stats route (campaign_id optional = all campaigns).
+const fetchCampaignStats = async (centreId, campaignId) => {
+  const res = await axios.get(`${import.meta.env.VITE_API_URL}/api/servicemanagement/campaigns/stats`, {
+    params: { centre_id: centreId, ...(campaignId ? { campaign_id: campaignId } : {}) },
+    headers: { Authorization: `Bearer ${(localStorage.getItem('token') || '').trim()}` },
+  });
+  return res.data || {};
+};
+
+const StaffPerformance = ({ campaigns, centreId }) => {
+  const [scope, setScope] = useState('all');
+  const [state, setState] = useState({ loading: true, error: false, data: null });
+  const scopeInit = useRef(false);
+  const reqRef = useRef(0);
+
+  // Default to the first running campaign once the list has loaded
+  useEffect(() => {
+    if (scopeInit.current || campaigns.length === 0) return;
+    scopeInit.current = true;
+    const running = campaigns.find((c) => getStatus(c) === 'active');
+    if (running) setScope(String(running.id));
+  }, [campaigns]);
+
+  const load = async () => {
+    const req = ++reqRef.current;
+    setState((p) => ({ ...p, loading: true, error: false }));
+    try {
+      const data = await fetchCampaignStats(centreId, scope === 'all' ? null : scope);
+      if (req === reqRef.current) setState({ loading: false, error: false, data });
+    } catch (err) {
+      console.error('CampaignManagement.jsx: staff performance failed:', err);
+      if (req === reqRef.current) setState({ loading: false, error: true, data: null });
+    }
+  };
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scope, centreId]);
+
+  const { staff, summary, assignedTotal, total } = useMemo(() => {
+    const d = state.data || {};
+    const rows = (d.staff_contributions || []).map((r) => {
+      const totalTokens = Number(r.total_tokens) || 0;
+      const completed = Number(r.completed_tokens) || 0;
+      return {
+        id: r.staff_id,
+        name: r.staff_name || `Staff ${r.staff_id}`,
+        total: totalTokens,
+        completed,
+        inProgress: Number(r.in_progress_tokens) || 0,
+        pending: Number(r.pending_tokens) || 0,
+        rate: totalTokens ? Math.round((completed / totalTokens) * 100) : 0,
+      };
+    });
+    rows.sort((a, b) => b.completed - a.completed || b.rate - a.rate || b.total - a.total || a.name.localeCompare(b.name));
+    const ss = d.status_summary || {};
+    const t = Number(d.total_tokens) || 0;
+    const done = Number(ss.completed) || 0;
+    return {
+      staff: rows,
+      assignedTotal: rows.reduce((n, r) => n + r.total, 0),
+      total: t,
+      summary: {
+        completed: done,
+        inProgress: (Number(ss.in_progress) || 0) + (Number(ss.processed) || 0),
+        pending: Number(ss.pending) || 0,
+        rate: t ? Math.round((done / t) * 100) : 0,
+      },
+    };
+  }, [state.data]);
+
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => { setShowAll(false); }, [scope]);
+
+  const leader = staff.length && staff[0].completed > 0 ? staff[0] : null;
+  const unassigned = Math.max(0, total - assignedTotal);
+  const LIMIT = 6;
+  const rows = showAll ? staff : staff.slice(0, LIMIT);
+  const maxTotal = Math.max(1, ...staff.map((r) => r.total));
+
+  // donut segments (percent of the circle, circumference = 100)
+  const other = Math.max(0, total - summary.completed - summary.inProgress - summary.pending);
+  const segments = [
+    { key: 'completed', label: 'Completed', value: summary.completed, color: '#10b981', text: 'text-emerald-600' },
+    { key: 'inProgress', label: 'In progress', value: summary.inProgress, color: '#38bdf8', text: 'text-sky-600' },
+    { key: 'pending', label: 'Pending', value: summary.pending, color: '#fbbf24', text: 'text-amber-600' },
+    ...(other > 0 ? [{ key: 'other', label: 'Other', value: other, color: '#cbd5e1', text: 'text-slate-500' }] : []),
+  ];
+  let acc = 0;
+  const arcs = segments.map((seg) => {
+    const pct = total ? (seg.value / total) * 100 : 0;
+    const arc = { ...seg, pct, offset: 25 - acc };
+    acc += pct;
+    return arc;
+  });
+
+  return (
+    <section aria-labelledby="perf-heading" className="mb-10">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 id="perf-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-500">Staff performance</h2>
+        <select
+          value={scope}
+          onChange={(e) => setScope(e.target.value)}
+          aria-label="Campaign to show staff performance for"
+          className="max-w-[15rem] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
+        >
+          <option value="all">All campaigns</option>
+          {campaigns.map((c) => (
+            <option key={c.id} value={String(c.id)}>
+              {c.name} ({STATUS_STYLE[getStatus(c)].label})
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {state.loading && !state.data ? (
+        <div className="grid gap-4 lg:grid-cols-5">
+          <div className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white lg:col-span-2" />
+          <div className="h-56 animate-pulse rounded-2xl border border-slate-200 bg-white lg:col-span-3" />
+        </div>
+      ) : state.error ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm text-rose-700">
+          <span>Could not load staff performance.</span>
+          <button type="button" onClick={load} className="inline-flex items-center gap-1.5 font-medium hover:text-rose-900">
+            <FiRefreshCw className="h-3.5 w-3.5" /> Retry
+          </button>
+        </div>
+      ) : total === 0 ? (
+        <div className="rounded-2xl border border-slate-200 bg-white px-6 py-8 text-center text-sm text-slate-500">
+          No applications recorded for {scope === 'all' ? 'any campaign' : 'this campaign'} yet.
+        </div>
+      ) : (
+        <div className={`grid gap-4 transition-opacity lg:grid-cols-5 ${state.loading ? 'opacity-60' : ''}`}>
+          {/* Graph 1: status split */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-2">
+            <h3 className="text-sm font-semibold text-slate-800">Application status</h3>
+            <div className="mt-4 flex items-center gap-5">
+              <div className="relative h-32 w-32 shrink-0">
+                <svg viewBox="0 0 36 36" className="h-full w-full" role="img" aria-label={`${summary.completed} of ${total} applications completed`}>
+                  <circle cx="18" cy="18" r="15.9155" fill="none" stroke="#f1f5f9" strokeWidth="4.5" />
+                  {arcs.filter((a) => a.pct > 0).map((a) => (
+                    <circle
+                      key={a.key}
+                      cx="18" cy="18" r="15.9155" fill="none"
+                      stroke={a.color} strokeWidth="4.5"
+                      strokeDasharray={`${Math.max(0, a.pct - (arcs.filter((x) => x.pct > 0).length > 1 ? 0.6 : 0))} ${100 - a.pct + (arcs.filter((x) => x.pct > 0).length > 1 ? 0.6 : 0)}`}
+                      strokeDashoffset={a.offset}
+                    />
+                  ))}
+                </svg>
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <span className="text-2xl font-bold tabular-nums text-slate-900">{summary.rate}%</span>
+                  <span className="text-[11px] text-slate-500">completed</span>
+                </div>
+              </div>
+              <ul className="min-w-0 flex-1 space-y-2">
+                {segments.map((seg) => (
+                  <li key={seg.key} className="flex items-center justify-between gap-2 text-sm">
+                    <span className="flex items-center gap-2 text-slate-600">
+                      <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: seg.color }} />
+                      {seg.label}
+                    </span>
+                    <span className={`font-semibold tabular-nums ${seg.text}`}>{seg.value}</span>
+                  </li>
+                ))}
+                <li className="flex items-center justify-between gap-2 border-t border-slate-100 pt-2 text-sm">
+                  <span className="text-slate-500">Total</span>
+                  <span className="font-semibold tabular-nums text-slate-800">{total}</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Graph 2: staff bars */}
+          <div className="rounded-2xl border border-slate-200 bg-white p-5 lg:col-span-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-800">Applications by staff</h3>
+              {leader && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
+                  <FiAward className="h-3.5 w-3.5" /> Leader
+                  <span className="max-w-[9rem] truncate font-bold">{leader.name}</span>
+                </span>
+              )}
+            </div>
+            {staff.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">No applications have been assigned to staff yet.</p>
+            ) : (
+              <ol className="mt-4 space-y-3">
+                {rows.map((r, i) => (
+                  <li key={r.id} className="grid grid-cols-[1.25rem_minmax(0,6.5rem)_minmax(0,1fr)_2.5rem] items-center gap-x-3 sm:grid-cols-[1.25rem_minmax(0,8rem)_minmax(0,1fr)_2.5rem]">
+                    <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold ${i === 0 && leader ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{i + 1}</span>
+                    <span className="truncate text-sm font-medium text-slate-800" title={r.name}>{r.name}</span>
+                    <div
+                      className="flex h-3 overflow-hidden rounded-full bg-slate-100"
+                      role="img"
+                      aria-label={`${r.completed} completed, ${r.inProgress} in progress, ${r.pending} pending`}
+                      title={`${r.completed} completed · ${r.inProgress} in progress · ${r.pending} pending`}
+                    >
+                      <div className="flex h-full overflow-hidden rounded-full" style={{ width: `${(r.total / maxTotal) * 100}%` }}>
+                        <div className="bg-emerald-500" style={{ width: `${r.total ? (r.completed / r.total) * 100 : 0}%` }} />
+                        <div className="bg-sky-400" style={{ width: `${r.total ? (r.inProgress / r.total) * 100 : 0}%` }} />
+                        <div className="bg-amber-400" style={{ width: `${r.total ? (r.pending / r.total) * 100 : 0}%` }} />
+                      </div>
+                    </div>
+                    <span className="text-right text-sm font-semibold tabular-nums text-slate-700">{r.total}</span>
+                  </li>
+                ))}
+              </ol>
+            )}
+            {(staff.length > LIMIT || unassigned > 0) && (
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                <span>{unassigned > 0 ? `${unassigned} not assigned to staff yet` : ''}</span>
+                {staff.length > LIMIT && (
+                  <button type="button" onClick={() => setShowAll((v) => !v)} className="font-medium text-navy-700 hover:text-navy-800">
+                    {showAll ? `Show top ${LIMIT}` : `Show all ${staff.length}`}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+};
+
+const emptyForm = { name: '', description: '', serviceId: '', startDate: '', endDate: '', targetTokens: '' };
 
 const CampaignManagement = ({ centreId: propCentreId }) => {
   const navigate = useNavigate();
@@ -13,23 +385,25 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    serviceId: '',
-    startDate: '',
-    endDate: '',
-    targetTokens: ''
-  });
+  const [formData, setFormData] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [servicesLoading, setServicesLoading] = useState(false);
   const [servicesError, setServicesError] = useState(null);
+  const [view, setView] = useState('expired'); // which list sits under "Running now"
+  const [openId, setOpenId] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const centreId = propCentreId || localStorage.getItem('centre_id');
   const userRole = localStorage.getItem('role');
   const token = localStorage.getItem('token');
 
+  const sessionExpired = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('role');
+    localStorage.removeItem('centre_id');
+    navigate('/login');
+  };
+
   useEffect(() => {
-    console.log('CampaignManagement.jsx: Initial values:', { token, userRole, centreId });
     if (!token) {
       toast.error('No authentication token found. Please log in.');
       navigate('/login');
@@ -51,16 +425,13 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
       setServicesLoading(true);
       try {
         const servicesRes = await getServices();
-        console.log('CampaignManagement.jsx: Services fetched:', servicesRes.data);
         if (!servicesRes.data || servicesRes.data.length === 0) {
           setServicesError('No services found in the database. Contact superadmin to add services.');
         } else {
           setServices(servicesRes.data);
           setServicesError(null);
         }
-
         const campaignsRes = await getCampaigns(centreId);
-        console.log('CampaignManagement.jsx: Campaigns fetched:', campaignsRes.data);
         setCampaigns(campaignsRes.data || []);
       } catch (err) {
         console.error('CampaignManagement.jsx: Error fetching data:', err);
@@ -69,25 +440,51 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
           : err.response?.data?.error || 'Failed to load data. Please try again.';
         setServicesError(errorMessage);
         toast.error(errorMessage);
-        if (err.response?.status === 401) {
-          localStorage.removeItem('token');
-          localStorage.removeItem('role');
-          localStorage.removeItem('centre_id');
-          navigate('/login');
-        }
+        if (err.response?.status === 401) sessionExpired();
       } finally {
         setLoading(false);
         setServicesLoading(false);
       }
     };
-
-    console.log('CampaignManagement.jsx: Fetching data for centreId:', centreId);
     fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centreId, navigate, userRole, token]);
+
+  // Close dialogs with Esc
+  useEffect(() => {
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return;
+      if (deleteTarget) setDeleteTarget(null);
+      else if (showModal && !loading) resetForm();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deleteTarget, showModal, loading]);
+
+  const grouped = useMemo(() => {
+    const g = { active: [], upcoming: [], expired: [] };
+    campaigns.forEach((c) => g[getStatus(c)].push(c));
+    g.active.sort((a, b) => endOf(a).localeCompare(endOf(b)));          // ending soonest first
+    g.upcoming.sort((a, b) => startOf(a).localeCompare(startOf(b)));    // starting soonest first
+    g.expired.sort((a, b) => endOf(b).localeCompare(endOf(a)));         // most recently ended first
+    return g;
+  }, [campaigns]);
+
+  const runningTokens = useMemo(
+    () => grouped.active.reduce((acc, c) => ({ gen: acc.gen + generatedOf(c), target: acc.target + targetOf(c) }), { gen: 0, target: 0 }),
+    [grouped.active]
+  );
+
+  const listed = useMemo(() => {
+    if (view === 'upcoming') return grouped.upcoming;
+    if (view === 'expired') return grouped.expired;
+    return [...grouped.active, ...grouped.upcoming, ...grouped.expired];
+  }, [view, grouped]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleCreateOrUpdateCampaign = async (e) => {
@@ -96,11 +493,11 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
       toast.error('Please fill all required fields');
       return;
     }
-    if (new Date(formData.endDate) < new Date(formData.startDate)) {
+    if (formData.endDate < formData.startDate) {
       toast.error('End date must be on or after start date');
       return;
     }
-    if (parseInt(formData.targetTokens) < 0) {
+    if (parseInt(formData.targetTokens, 10) < 0) {
       toast.error('Target tokens must be a non-negative number');
       return;
     }
@@ -108,37 +505,29 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
     const campaignData = {
       name: formData.name,
       description: formData.description,
-      service_id: parseInt(formData.serviceId),
+      service_id: parseInt(formData.serviceId, 10),
       start_date: formData.startDate,
       end_date: formData.endDate,
-      centre_id: parseInt(centreId),
-      target_tokens: parseInt(formData.targetTokens)
+      centre_id: parseInt(centreId, 10),
+      target_tokens: parseInt(formData.targetTokens, 10),
     };
+    const serviceName = services.find((s) => s.id === parseInt(formData.serviceId, 10))?.name;
 
-    console.log('CampaignManagement.jsx: Submitting campaign:', campaignData);
     try {
       setLoading(true);
       if (isEditing) {
         await updateCampaign(selectedCampaign.id, campaignData);
         toast.success('Campaign updated successfully');
-        setCampaigns(campaigns.map(c => (c.id === selectedCampaign.id ? { 
-          ...c, 
-          ...campaignData, 
-          service_name: services.find(s => s.id === parseInt(formData.serviceId))?.name,
-          startDate: campaignData.start_date,
-          endDate: campaignData.end_date,
-          target_tokens: campaignData.target_tokens
+        setCampaigns((prev) => prev.map((c) => (c.id === selectedCampaign.id ? {
+          ...c, ...campaignData, service_name: serviceName,
+          startDate: campaignData.start_date, endDate: campaignData.end_date, target_tokens: campaignData.target_tokens,
         } : c)));
       } else {
         const res = await createCampaign(campaignData);
         toast.success('Campaign created successfully');
-        setCampaigns([...campaigns, { 
-          ...campaignData, 
-          id: res.data.id, 
-          service_name: services.find(s => s.id === parseInt(formData.serviceId))?.name,
-          startDate: campaignData.start_date,
-          endDate: campaignData.end_date,
-          target_tokens: campaignData.target_tokens
+        setCampaigns((prev) => [...prev, {
+          ...campaignData, id: res.data.id, service_name: serviceName,
+          startDate: campaignData.start_date, endDate: campaignData.end_date, target_tokens: campaignData.target_tokens,
         }]);
       }
       resetForm();
@@ -148,12 +537,7 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
         ? 'Session expired. Please log in again.'
         : err.response?.data?.error || 'Failed to save campaign. Please try again.';
       toast.error(errorMessage);
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('role');
-        localStorage.removeItem('centre_id');
-        navigate('/login');
-      }
+      if (err.response?.status === 401) sessionExpired();
     } finally {
       setLoading(false);
     }
@@ -165,34 +549,31 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
     setFormData({
       name: campaign.name,
       description: campaign.description || '',
-      serviceId: String(campaign.service_id || campaign.serviceId),
-      startDate: campaign.start_date || campaign.startDate,
-      endDate: campaign.end_date || campaign.endDate,
-      targetTokens: String(campaign.target_tokens || 0)
+      serviceId: String(campaign.service_id || campaign.serviceId || ''),
+      startDate: startOf(campaign),
+      endDate: endOf(campaign),
+      targetTokens: String(targetOf(campaign)),
     });
     setShowModal(true);
   };
 
-  const handleDeleteCampaign = async (campaignId) => {
-    if (!window.confirm('Are you sure you want to delete this campaign?')) return;
-    console.log('CampaignManagement.jsx: Deleting campaign:', campaignId);
+  const confirmDelete = async () => {
+    const campaign = deleteTarget;
+    if (!campaign) return;
     try {
       setLoading(true);
-      await deleteCampaign(campaignId);
+      await deleteCampaign(campaign.id);
       toast.success('Campaign deleted successfully');
-      setCampaigns(campaigns.filter(c => c.id !== campaignId));
+      setCampaigns((prev) => prev.filter((c) => c.id !== campaign.id));
+      if (openId === campaign.id) setOpenId(null);
+      setDeleteTarget(null);
     } catch (err) {
       console.error('CampaignManagement.jsx: Error deleting campaign:', err);
       const errorMessage = err.response?.status === 401
         ? 'Session expired. Please log in again.'
         : err.response?.data?.error || 'Failed to delete campaign. Please try again.';
       toast.error(errorMessage);
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('role');
-        localStorage.removeItem('centre_id');
-        navigate('/login');
-      }
+      if (err.response?.status === 401) sessionExpired();
     } finally {
       setLoading(false);
     }
@@ -201,10 +582,8 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
   const handleRetryFetchServices = async () => {
     setServicesLoading(true);
     setServicesError(null);
-    console.log('CampaignManagement.jsx: Retrying services fetch');
     try {
       const servicesRes = await getServices();
-      console.log('CampaignManagement.jsx: Services fetched on retry:', servicesRes.data);
       if (!servicesRes.data || servicesRes.data.length === 0) {
         setServicesError('No services found in the database. Contact superadmin to add services.');
       } else {
@@ -217,374 +596,331 @@ const CampaignManagement = ({ centreId: propCentreId }) => {
         : err.response?.data?.error || 'Failed to load services. Please try again.';
       setServicesError(errorMessage);
       toast.error(errorMessage);
-      if (err.response?.status === 401) {
-        localStorage.removeItem('token');
-        localStorage.removeItem('role');
-        localStorage.removeItem('centre_id');
-        navigate('/login');
-      }
+      if (err.response?.status === 401) sessionExpired();
     } finally {
       setServicesLoading(false);
     }
   };
 
   const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      serviceId: '',
-      startDate: '',
-      endDate: '',
-      targetTokens: ''
-    });
+    setFormData(emptyForm);
     setShowModal(false);
     setIsEditing(false);
     setSelectedCampaign(null);
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const openCreate = () => {
+    setIsEditing(false);
+    setSelectedCampaign(null);
+    setFormData(emptyForm);
+    setShowModal(true);
   };
 
-  const getStatus = (startDate, endDate) => {
-    const today = new Date();
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (end < today) return 'completed';
-    if (start <= today && today <= end) return 'active';
-    return 'upcoming';
-  };
+  const createDisabled = loading || servicesLoading || Boolean(servicesError);
+  const nextUp = grouped.upcoming[0];
 
-  const getStatusColor = (status) => {
-    if (status === 'completed') return 'bg-purple-100 text-purple-800';
-    if (status === 'active') return 'bg-green-100 text-green-800';
-    return 'bg-blue-100 text-blue-800';
-  };
+  const stats = [
+    { label: 'Running now', value: grouped.active.length, icon: FiTrendingUp, tone: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Upcoming', value: grouped.upcoming.length, icon: FiClock, tone: 'bg-sky-50 text-sky-600' },
+    { label: 'Expired', value: grouped.expired.length, icon: FiArchive, tone: 'bg-slate-100 text-slate-500' },
+    {
+      label: 'Tokens now',
+      value: grouped.active.length ? `${runningTokens.gen}${runningTokens.target ? ` / ${runningTokens.target}` : ''}` : '-',
+      icon: FiCheckCircle,
+      tone: 'bg-navy-500/10 text-navy-700',
+    },
+  ];
 
-  const getStatusIcon = (status) => {
-    const statusClass = status === 'completed' ? 'bg-purple-500' : 
-                       status === 'active' ? 'bg-green-500' : 'bg-blue-500';
-    return <div className={`w-2 h-2 rounded-full ${statusClass} mr-2`}></div>;
-  };
-
-  const calculateTimelineProgress = (startDate, endDate) => {
-    const today = new Date();
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    if (today >= end) return 100;
-    if (today < start) return 0;
-    const totalDuration = end - start;
-    const elapsed = today - start;
-    return Math.min(Math.round((elapsed / totalDuration) * 100), 100);
-  };
-
-  const calculateTokenProgress = (tokensGenerated, targetTokens) => {
-    if (!targetTokens || targetTokens <= 0) return 0;
-    return Math.min(Math.round((tokensGenerated / targetTokens) * 100), 100);
-  };
+  const tabs = [
+    { key: 'expired', label: 'Expired', count: grouped.expired.length },
+    { key: 'upcoming', label: 'Upcoming', count: grouped.upcoming.length },
+    { key: 'all', label: 'All campaigns', count: campaigns.length },
+  ];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-indigo-50 p-4 sm:p-6">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+      <div className="w-full">
+        {/* Header */}
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-gray-800">Campaign Management</h1>
-            <p className="text-gray-600 mt-1">Create and manage service campaigns for your centre</p>
+            <h1 className="text-2xl font-bold text-slate-900 md:text-3xl">Campaigns</h1>
+            <p className="mt-1 text-sm text-slate-500">Create and track service campaigns for your centre</p>
           </div>
-          <motion.button
-            whileHover={{ scale: 1.03 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => { setIsEditing(false); setShowModal(true); }}
-            className="mt-4 md:mt-0 bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2.5 rounded-xl flex items-center transition-all duration-300 shadow-md hover:shadow-lg"
-            disabled={loading || servicesLoading || servicesError}
+          <button
+            type="button"
+            onClick={openCreate}
+            disabled={createDisabled}
+            className="inline-flex items-center justify-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <FiPlus className="mr-2" />
-            Create Campaign
-          </motion.button>
+            <FiPlus /> Create Campaign
+          </button>
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Total Campaigns</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">{campaigns.length}</p>
-              </div>
-              <div className="bg-indigo-100 p-3 rounded-xl">
-                <FiTarget className="text-indigo-600 text-xl" />
+        {/* Stats */}
+        <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+          {stats.map(({ label, value, icon: Icon, tone }) => (
+            <div key={label} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
+              <div className={`rounded-lg p-2.5 ${tone}`}><Icon className="h-5 w-5" /></div>
+              <div className="min-w-0">
+                <p className="truncate text-xs text-slate-500">{label}</p>
+                <p className="truncate text-xl font-bold tabular-nums text-slate-900">{value}</p>
               </div>
             </div>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Active Campaigns</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {campaigns.filter(c => getStatus(c.start_date || c.startDate, c.end_date || c.endDate) === 'active').length}
-                </p>
-              </div>
-              <div className="bg-green-100 p-3 rounded-xl">
-                <FiTrendingUp className="text-green-600 text-xl" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Total Tokens Generated</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {campaigns.reduce((sum, campaign) => sum + (campaign.tokens_generated || campaign.tokenCount || 0), 0)}
-                </p>
-              </div>
-              <div className="bg-amber-100 p-3 rounded-xl">
-                <FiCheckCircle className="text-amber-600 text-xl" />
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-2xl shadow-sm p-5 border border-gray-100">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-gray-600">Completed Campaigns</p>
-                <p className="text-2xl font-bold text-gray-900 mt-1">
-                  {campaigns.filter(c => getStatus(c.start_date || c.startDate, c.end_date || c.endDate) === 'completed').length}
-                </p>
-              </div>
-              <div className="bg-purple-100 p-3 rounded-xl">
-                <FiCheckCircle className="text-purple-600 text-xl" />
-              </div>
-            </div>
-          </div>
+          ))}
         </div>
 
-        {/* Campaigns Grid */}
-        {campaigns.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-sm p-8 text-center">
-            <FiTarget className="mx-auto text-4xl text-gray-400 mb-4" />
-            <h3 className="text-lg font-medium text-gray-700">No campaigns found</h3>
-            <p className="text-gray-500 mt-1">This centre doesn't have any campaigns yet.</p>
-            <button 
-              onClick={() => setShowModal(true)} 
-              className="mt-4 text-indigo-600 hover:text-indigo-800 font-medium"
-              disabled={servicesLoading || servicesError}
-            >
-              Create your first campaign
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {campaigns.map((campaign) => {
-              const status = getStatus(campaign.start_date || campaign.startDate, campaign.end_date || campaign.endDate);
-              const timelineProgress = calculateTimelineProgress(campaign.start_date || campaign.startDate, campaign.end_date || campaign.endDate);
-              const tokenProgress = calculateTokenProgress(campaign.tokens_generated || campaign.tokenCount || 0, campaign.target_tokens || 0);
-              return (
-                <div key={campaign.id} className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100 transition-all hover:shadow-md">
-                  <div className="p-5">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <div className="flex items-center">
-                          <div className="bg-indigo-100 text-indigo-800 p-2 rounded-lg mr-3">
-                            <FiTarget />
-                          </div>
-                          <div>
-                            <h3 className="font-bold text-gray-900">{campaign.name}</h3>
-                            <div className={`mt-1 inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(status)}`}>
-                              {getStatusIcon(status)}
-                              {status.charAt(0).toUpperCase() + status.slice(1)}
-                            </div>
-                          </div>
-                        </div>
-                        <p className="text-gray-600 text-sm mt-3">{campaign.description || 'No description provided'}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleEditCampaign(campaign)} className="text-gray-400 hover:text-indigo-600">
-                          <FiEdit2 />
-                        </button>
-                        <button onClick={() => handleDeleteCampaign(campaign.id)} className="text-gray-400 hover:text-red-600">
-                          <FiX />
-                        </button>
+        {/* Running now */}
+        <section aria-labelledby="running-heading" className="mb-10">
+          <h2 id="running-heading" className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-500">Running now</h2>
+          {loading && campaigns.length === 0 ? (
+            <div className="h-40 animate-pulse rounded-2xl border border-slate-200 bg-white" />
+          ) : grouped.active.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
+              <FiTarget className="mx-auto mb-3 h-8 w-8 text-slate-300" />
+              <h3 className="text-base font-semibold text-slate-800">No campaign is currently running</h3>
+              <p className="mt-1 text-sm text-slate-500">
+                {nextUp
+                  ? `Next up: ${nextUp.name}, starting ${formatDate(startOf(nextUp))}.`
+                  : 'Create a campaign to start tracking tokens for a service.'}
+              </p>
+              <button
+                type="button"
+                onClick={openCreate}
+                disabled={createDisabled}
+                className="mt-4 text-sm font-medium text-navy-700 hover:text-navy-800 disabled:opacity-50"
+              >
+                Create a campaign
+              </button>
+            </div>
+          ) : (
+            <div className={`grid gap-5 ${grouped.active.length > 1 ? 'lg:grid-cols-2' : ''}`}>
+              {grouped.active.map((campaign) => (
+                <article key={campaign.id} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <div className="mb-4 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate text-lg font-semibold text-slate-900">{campaign.name}</h3>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-500">
+                        <span className="inline-flex items-center gap-1.5"><FiCalendar className="h-3.5 w-3.5" />{formatDate(startOf(campaign))} – {formatDate(endOf(campaign))}</span>
+                        {serviceNameOf(campaign) && <span className="inline-flex items-center gap-1.5"><FiPackage className="h-3.5 w-3.5" />{serviceNameOf(campaign)}</span>}
                       </div>
                     </div>
-                    <div className="mt-5 flex items-center justify-between">
-                      <div className="flex items-center">
-                        <FiCalendar className="text-gray-500 mr-2" />
-                        <span className="text-sm text-gray-600">{formatDate(campaign.start_date || campaign.startDate)} - {formatDate(campaign.end_date || campaign.endDate)}</span>
-                      </div>
-                      <div className="flex items-center">
-                        <FiCheckCircle className="text-gray-500 mr-2" />
-                        <span className="text-sm text-gray-600">{campaign.service_name || campaign.serviceName}</span>
-                      </div>
-                    </div>
-                    <div className="mt-5 grid grid-cols-1 gap-3">
-                      <div className="bg-gray-50 p-4 rounded-xl">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs text-gray-500">Timeline Progress</p>
-                            <p className="text-sm font-medium">{timelineProgress}%</p>
-                          </div>
-                          <div className="w-2/3">
-                            <div className="bg-gray-200 rounded-full h-2.5">
-                              <div 
-                                className={`h-2.5 rounded-full ${status === 'completed' ? 'bg-purple-500' : status === 'active' ? 'bg-green-500' : 'bg-blue-500'}`} 
-                                style={{ width: `${timelineProgress}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="bg-gray-50 p-4 rounded-xl">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <p className="text-xs text-gray-600">Token Progress</p>
-                            <p className="text-sm font-medium">{campaign.tokens_generated || campaign.tokenCount || 0}/{campaign.target_tokens || 0} ({tokenProgress}%)</p>
-                          </div>
-                          <div className="w-2/3">
-                            <div className="bg-gray-200 rounded-full h-2.5">
-                              <div 
-                                className="h-2.5 rounded-full bg-blue-500" 
-                                style={{ width: `${tokenProgress}%` }}
-                              ></div>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <StatusChip status="active" />
                   </div>
-                </div>
-              );
-            })}
+                  <CampaignDetails campaign={campaign} status="active" onEdit={handleEditCampaign} onDelete={setDeleteTarget} />
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Staff performance */}
+        {campaigns.length > 0 && <StaffPerformance campaigns={campaigns} centreId={centreId} />}
+
+        {/* History / upcoming list */}
+        <section aria-labelledby="history-heading">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+            <h2 id="history-heading" className="text-sm font-semibold uppercase tracking-wide text-slate-500">Campaign history</h2>
+            <div role="tablist" aria-label="Filter campaigns" className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+              {tabs.map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={view === t.key}
+                  onClick={() => { setView(t.key); setOpenId(null); }}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                    view === t.key ? 'bg-navy-700 text-white' : 'text-slate-600 hover:bg-slate-50'
+                  }`}
+                >
+                  {t.label}
+                  <span className={`ml-1.5 text-xs tabular-nums ${view === t.key ? 'text-white/70' : 'text-slate-400'}`}>{t.count}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        )}
+
+          {listed.length === 0 ? (
+            <div className="rounded-2xl border border-slate-200 bg-white px-6 py-10 text-center text-sm text-slate-500">
+              {view === 'expired' ? 'No expired campaigns yet.' : view === 'upcoming' ? 'No upcoming campaigns.' : 'No campaigns yet.'}
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+              {listed.map((campaign) => {
+                const status = getStatus(campaign);
+                const open = openId === campaign.id;
+                const generated = generatedOf(campaign);
+                const target = targetOf(campaign);
+                return (
+                  <li key={campaign.id}>
+                    <button
+                      type="button"
+                      onClick={() => setOpenId(open ? null : campaign.id)}
+                      aria-expanded={open}
+                      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-slate-50"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="truncate font-medium text-slate-900">{campaign.name}</span>
+                          {view === 'all' && <StatusChip status={status} />}
+                        </div>
+                        <p className="mt-0.5 truncate text-sm text-slate-500">
+                          {formatDate(startOf(campaign))} – {formatDate(endOf(campaign))}
+                          {serviceNameOf(campaign) ? ` · ${serviceNameOf(campaign)}` : ''}
+                        </p>
+                      </div>
+                      <div className="hidden w-40 shrink-0 sm:block">
+                        <p className="mb-1 text-right text-xs tabular-nums text-slate-500">{generated} / {target} tokens</p>
+                        <Bar pct={tokenProgress(generated, target)} className="bg-navy-500" />
+                      </div>
+                      <FiChevronDown className={`h-4 w-4 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {open && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="border-t border-slate-100 bg-slate-50/60 px-5 py-5">
+                            <CampaignDetails campaign={campaign} status={status} onEdit={handleEditCampaign} onDelete={setDeleteTarget} />
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+
+        {/* Delete confirmation */}
+        <AnimatePresence>
+          {deleteTarget && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
+              onMouseDown={(e) => { if (e.target === e.currentTarget && !loading) setDeleteTarget(null); }}
+            >
+              <div role="alertdialog" aria-modal="true" aria-label="Delete campaign" className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                <h3 className="text-lg font-semibold text-slate-900">Delete this campaign?</h3>
+                <p className="mt-2 text-sm text-slate-600">
+                  <span className="font-medium">{deleteTarget.name}</span> will be removed permanently.
+                </p>
+                <div className="mt-6 flex justify-end gap-3">
+                  <button type="button" onClick={() => setDeleteTarget(null)} disabled={loading} className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-200">Cancel</button>
+                  <button type="button" onClick={confirmDelete} disabled={loading} className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60">
+                    {loading ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* Create/Edit Campaign Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
+            onMouseDown={(e) => { if (e.target === e.currentTarget && !loading) resetForm(); }}
+          >
             <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label={isEditing ? 'Edit campaign' : 'Create campaign'}
+              initial={{ opacity: 0, scale: 0.97 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-200"
+              className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-2xl"
             >
-              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 sticky top-0">
-                <h2 className="text-xl font-bold text-white">{isEditing ? 'Edit Campaign' : 'Create New Campaign'}</h2>
+              <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-white px-6 py-4">
+                <h2 className="text-lg font-semibold text-slate-900">{isEditing ? 'Edit Campaign' : 'New Campaign'}</h2>
+                <button type="button" onClick={resetForm} disabled={loading} aria-label="Close" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600">
+                  <FiX />
+                </button>
               </div>
               <form onSubmit={handleCreateOrUpdateCampaign} className="p-6">
                 <div className="space-y-5">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Campaign Name *</label>
+                    <label htmlFor="cm-name" className="mb-1.5 block text-sm font-medium text-slate-700">Campaign name *</label>
                     <input
-                      type="text"
-                      name="name"
-                      value={formData.name}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                      placeholder="e.g., Summer Promotion 2023"
-                      required
+                      id="cm-name" type="text" name="name" value={formData.name} onChange={handleInputChange} required
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
+                      placeholder="e.g., Diwali Offer"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
+                    <label htmlFor="cm-desc" className="mb-1.5 block text-sm font-medium text-slate-700">Description</label>
                     <textarea
-                      name="description"
-                      value={formData.description}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      id="cm-desc" name="description" value={formData.description} onChange={handleInputChange} rows={3}
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                       placeholder="Describe the campaign goals..."
-                      rows={3}
-                    ></textarea>
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Service *</label>
+                    <label htmlFor="cm-service" className="mb-1.5 block text-sm font-medium text-slate-700">Service *</label>
                     {servicesLoading ? (
-                      <p className="text-sm text-gray-500">Loading services...</p>
+                      <p className="text-sm text-slate-500">Loading services...</p>
                     ) : servicesError ? (
-                      <div className="text-sm text-red-500">
+                      <div className="text-sm text-rose-600">
                         {servicesError}
-                        <button
-                          type="button"
-                          onClick={handleRetryFetchServices}
-                          className="ml-2 text-indigo-600 hover:text-indigo-800 flex items-center"
-                        >
-                          <FiRefreshCw className={`mr-1 ${servicesLoading ? 'animate-spin' : ''}`} />
-                          Retry
+                        <button type="button" onClick={handleRetryFetchServices} className="ml-2 inline-flex items-center text-navy-700 hover:text-navy-800">
+                          <FiRefreshCw className="mr-1" /> Retry
                         </button>
                       </div>
                     ) : services.length === 0 ? (
-                      <p className="text-sm text-red-500">No services available. Contact superadmin to add services.</p>
+                      <p className="text-sm text-rose-600">No services available. Contact superadmin to add services.</p>
                     ) : (
                       <select
-                        name="serviceId"
-                        value={formData.serviceId}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        required
+                        id="cm-service" name="serviceId" value={formData.serviceId} onChange={handleInputChange} required
+                        className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                       >
                         <option value="">Select a service</option>
-                        {services.map(service => (
-                          <option key={service.id} value={service.id}>
-                            {service.name}
-                          </option>
+                        {services.map((service) => (
+                          <option key={service.id} value={service.id}>{service.name}</option>
                         ))}
                       </select>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                      <label htmlFor="cm-start" className="mb-1.5 block text-sm font-medium text-slate-700">Start date *</label>
                       <input
-                        type="date"
-                        name="startDate"
-                        value={formData.startDate}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        required
+                        id="cm-start" type="date" name="startDate" value={formData.startDate} onChange={handleInputChange} required
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">End Date *</label>
+                      <label htmlFor="cm-end" className="mb-1.5 block text-sm font-medium text-slate-700">End date *</label>
                       <input
-                        type="date"
-                        name="endDate"
-                        value={formData.endDate}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                        required
+                        id="cm-end" type="date" name="endDate" value={formData.endDate} min={formData.startDate || undefined} onChange={handleInputChange} required
+                        className="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Target Tokens *</label>
+                    <label htmlFor="cm-target" className="mb-1.5 block text-sm font-medium text-slate-700">Target tokens *</label>
                     <input
-                      type="number"
-                      name="targetTokens"
-                      value={formData.targetTokens}
-                      onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      id="cm-target" type="number" name="targetTokens" value={formData.targetTokens} onChange={handleInputChange} min="0" required
+                      className="w-full rounded-xl border border-slate-200 px-4 py-2.5 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                       placeholder="e.g., 100"
-                      min="0"
-                      required
                     />
                   </div>
                 </div>
-                <div className="mt-8 flex justify-end gap-3 border-t border-gray-200 pt-5">
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="button"
-                    onClick={resetForm}
-                    className="px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition-colors font-medium"
-                    disabled={loading}
-                  >
+                <div className="mt-8 flex justify-end gap-3 border-t border-slate-100 pt-5">
+                  <button type="button" onClick={resetForm} disabled={loading} className="rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-200">
                     Cancel
-                  </motion.button>
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.98 }}
-                    type="submit"
-                    className="px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-colors font-medium"
-                    disabled={loading || servicesLoading || servicesError}
+                  </button>
+                  <button
+                    type="submit" disabled={createDisabled}
+                    className="rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {loading ? 'Saving...' : isEditing ? 'Update Campaign' : 'Create Campaign'}
-                  </motion.button>
+                  </button>
                 </div>
               </form>
             </motion.div>

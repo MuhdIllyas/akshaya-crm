@@ -1,6 +1,7 @@
 import express from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
+import { todayIST, addDays } from "../../utils/dates.js";
 
 const router = express.Router();
 
@@ -20,27 +21,39 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
+/* Who may see / change the centre's accounts.
+   Staff used to be able to read the whole ledger, income, daily summary and
+   all wallet balances, and save reconciliation counts (found in the staging test).
+   'supervisor' is kept because the supervisor dashboard reads the nightly close —
+   remove it if supervisors shouldn't see the accounts. */
+const ACCOUNTING_ROLES = ['admin', 'superadmin', 'supervisor'];
+const requireAccounting = (req, res, next) => {
+  if (!ACCOUNTING_ROLES.includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+};
+const isYMD = (s) => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
 // ========== DAILY SUMMARY ==========
-router.get('/daily-summary', async (req, res) => {
+router.get('/daily-summary', requireAccounting, async (req, res) => {
+  const { date, centreId: queryCentreId } = req.query;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) {
+    centreId = Number(queryCentreId);
+  }
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  if (!isYMD(date)) {
+    return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
+  }
+
   const client = await req.db.connect();
 
   try {
-    const { date, centreId: queryCentreId } = req.query;
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId) {
-      return res.status(400).json({ error: "centreId is required" });
-    }
-
-    if (!date) {
-      return res.status(400).json({ error: 'date is required' });
-    }
 
     await client.query('BEGIN');
 
@@ -109,6 +122,9 @@ router.get('/daily-summary', async (req, res) => {
 
     // Business Inflow / Outflow
     let cashInflow = 0, digitalInflow = 0, bankInflow = 0;
+    // "of which misc income" — still inside the inflows above (it IS money in the wallet, so the
+    // cash count and balances need it), but shown separately: misc income is not service income / profit.
+    let cashMisc = 0, digitalMisc = 0, bankMisc = 0;
     let cashOutflow = 0, digitalOutflow = 0, bankOutflow = 0;
     
     // Internal Transfers (Liquidity Movements)
@@ -140,6 +156,11 @@ router.get('/daily-summary', async (req, res) => {
           if (isCash) cashInflow += amount;
           else if (isBank) bankInflow += amount;
           else if (isDigital) digitalInflow += amount;
+          if (row.category === 'Misc Income') {
+            if (isCash) cashMisc += amount;
+            else if (isBank) bankMisc += amount;
+            else if (isDigital) digitalMisc += amount;
+          }
         } else if (row.type === 'debit') {
           if (isCash) cashOutflow += amount;
           else if (isBank) bankOutflow += amount;
@@ -168,6 +189,10 @@ router.get('/daily-summary', async (req, res) => {
             digitalInflow,
             bankInflow,
 
+            cashMisc,         // part of cashInflow
+            digitalMisc,      // part of digitalInflow
+            bankMisc,         // part of bankInflow
+
             cashOutflow,
             digitalOutflow,
             bankOutflow,
@@ -193,12 +218,24 @@ router.get('/daily-summary', async (req, res) => {
 });
 
 // ========== SAVE ACTUAL CASH (DAILY SUMMARY) ==========
-router.post('/daily-summary/actual-cash', async (req, res) => {
+router.post('/daily-summary/actual-cash', requireAccounting, async (req, res) => {
+  const { date } = req.body;
+  const actual_cash = Number(req.body.actual_cash);
+  const centreId = req.user.centre_id;
+  const userId = req.user.id;
+
+  if (!centreId) {
+    return res.status(400).json({ error: 'No centre assigned to this user' });
+  }
+  if (!isYMD(date) || date > todayIST()) {
+    return res.status(400).json({ error: 'A valid date (not in the future) is required' });
+  }
+  if (!Number.isFinite(actual_cash) || actual_cash < 0) {
+    return res.status(400).json({ error: 'Actual cash must be 0 or more' });
+  }
+
   const client = await req.db.connect();
   try {
-    const { date, actual_cash } = req.body;
-    const centreId = req.user.centre_id;
-    const userId = req.user.id;
 
     await client.query(
       `INSERT INTO daily_accounting_closure 
@@ -222,65 +259,87 @@ router.post('/daily-summary/actual-cash', async (req, res) => {
 
 // ========== ADD MISCELLANEOUS INCOME / OVERAGE ==========
 router.post('/misc-income', async (req, res) => {
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+ 
+  const { wallet_id, description, date } = req.body;
+  const amount = Math.round(Number(req.body.amount) * 100) / 100;
+  const walletId = parseInt(wallet_id, 10);
+ 
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ error: 'Amount must be greater than 0' });
+  }
+  if (amount > 10000000) {
+    return res.status(400).json({ error: 'Amount is too large' });
+  }
+  if (Number.isNaN(walletId)) {
+    return res.status(400).json({ error: 'Wallet ID is required' });
+  }
+ 
+  // Frontend sends "YYYY-MM-DDTHH:MM:SS+05:30" (IST). No date = now.
+  const createdAt = date ? new Date(date) : new Date();
+  if (Number.isNaN(createdAt.getTime())) {
+    return res.status(400).json({ error: 'Invalid date' });
+  }
+  if (createdAt.getTime() > Date.now() + 5 * 60 * 1000) {
+    return res.status(400).json({ error: 'Date cannot be in the future' });
+  }
+ 
   const client = await req.db.connect();
-
   try {
-    const { amount, wallet_id, description, date } = req.body;
-    const staffId = req.user.id;
-    const centreId = req.user.centre_id;
-
-    if (!amount || !wallet_id) {
-      return res.status(400).json({ error: "Amount and Wallet ID are required" });
-    }
-
     await client.query('BEGIN');
-
+ 
+    // lock the wallet row, check it belongs to this centre
     const walletRes = await client.query(
-      `SELECT id FROM wallets WHERE id = $1 AND centre_id = $2`,
-      [wallet_id, centreId]
+      `SELECT id, centre_id FROM wallets WHERE id = $1 FOR UPDATE`,
+      [walletId]
     );
-
     if (walletRes.rows.length === 0) {
-      throw new Error("Invalid wallet for your centre");
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Wallet not found' });
     }
-
+    if (req.user.role !== 'superadmin' && walletRes.rows[0].centre_id !== req.user.centre_id) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Invalid wallet for your centre' });
+    }
+ 
     const groupId = crypto.randomUUID();
-
+ 
     await client.query(
       `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
-      [amount, wallet_id]
+      [amount, walletId]
     );
-
+ 
     await client.query(
       `INSERT INTO wallet_transactions (
-        wallet_id, staff_id, type, amount, description, category, 
+        wallet_id, staff_id, type, amount, description, category,
         correction_group_id, created_at
       )
        VALUES ($1, $2, 'credit', $3, $4, 'Misc Income', $5, $6)`,
       [
-        wallet_id, 
-        staffId, 
-        amount, 
-        description || 'Miscellaneous Income / Cash Overage', 
+        walletId,
+        req.user.id,
+        amount,
+        String(description || '').trim().slice(0, 500) || 'Miscellaneous Income / Cash Overage',
         groupId,
-        date ? new Date(date) : new Date()
+        createdAt,
       ]
     );
-
+ 
     await client.query('COMMIT');
-    res.json({ success: true, message: "Income recorded successfully" });
-
+    res.json({ success: true, message: 'Income recorded successfully' });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Misc income error:', err);
-    res.status(500).json({ error: err.message || 'Failed to record income' });
+    res.status(500).json({ error: 'Failed to record income' });
   } finally {
     client.release();
   }
 });
 
 // ========== LEDGER (FIXED - COALESCE to prevent NULL collapse) ==========
-router.get('/ledger', async (req, res) => {
+router.get('/ledger', requireAccounting, async (req, res) => {
   const client = await req.db.connect();
 
   try {
@@ -391,7 +450,7 @@ router.get('/ledger', async (req, res) => {
 });
 
 // ========== INCOME REPORT ==========
-router.get('/income', async (req, res) => {
+router.get('/income', requireAccounting, async (req, res) => {
   const client = await req.db.connect();
 
   try {
@@ -540,76 +599,150 @@ router.get('/wallet-balances', async (req, res) => {
     `, [centreId]);
 
     res.json(result.rows);
+  } catch (err) {
+    console.error('Wallet balances error:', err);
+    res.status(500).json({ error: 'Failed to load wallet balances' });
   } finally {
     client.release();
   }
 });
 
 // ========== GET WALLET RECONCILIATIONS ==========
-router.get('/wallet-reconciliations', async (req, res) => {
+router.get('/wallet-reconciliations', requireAccounting, async (req, res) => {
+  const { date, centreId: queryCentreId } = req.query;
+  const isSuperAdmin = req.user.role === 'superadmin';
+ 
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) {
+    centreId = Number(queryCentreId);
+  }
+ 
+  if (!centreId || !date || !/^\d{4}-\d{2}-\d{2}$/.test(String(date))) {
+    return res.status(400).json({ error: 'centreId and date (YYYY-MM-DD) are required' });
+  }
+ 
   const client = await req.db.connect();
-
   try {
-    const { date, centreId: queryCentreId } = req.query;
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId || !date) {
-      return res.status(400).json({ error: "centreId and date are required" });
-    }
-
-    const result = await client.query(`
+    // Latest count per wallet for that date (id breaks a tie on the same timestamp)
+    const result = await client.query(
+      `
       SELECT DISTINCT ON (wr.wallet_id)
+        wr.id,
         wr.wallet_id,
-        wr.book_balance, 
-        wr.actual_balance, 
-        wr.variance
+        wr.book_balance,
+        wr.actual_balance,
+        wr.variance,
+        wr.settled_amount,
+        wr.recon_date,
+        wr.reconciled_at
       FROM wallet_reconciliations wr
       JOIN wallets w ON w.id = wr.wallet_id
-      WHERE w.centre_id = $1 
-        AND wr.reconciled_at::date = $2::date
-      ORDER BY wr.wallet_id, wr.reconciled_at DESC
-    `, [centreId, date]);
-
+      WHERE w.centre_id = $1
+        AND wr.recon_date = $2::date
+      ORDER BY wr.wallet_id, wr.reconciled_at DESC, wr.id DESC
+      `,
+      [centreId, date]
+    );
+ 
     res.json(result.rows);
-
   } catch (err) {
-    console.error("Error fetching reconciliations:", err);
+    console.error('Error fetching reconciliations:', err);
     res.status(500).json({ error: 'Failed to fetch wallet reconciliations' });
   } finally {
     client.release();
   }
 });
 
-// ========== WALLET RECONCILIATION ==========
-router.post('/wallet-reconcile', async (req, res) => {
+/* ---------------------------------------------------------------------
+   B. NEW — record a booking against a saved reconciliation count
+   WalletReconciliation.jsx calls this after "Book shortage" (−amount),
+   "Book excess" (+amount) and a suggested correction transfer (− from, + to).
+   "To settle" = variance − settled_amount, so normal sales/expenses after
+   the count no longer change it.
+   --------------------------------------------------------------------- */
+router.patch('/wallet-reconciliations/:id/settle', async (req, res) => {
+  if (!['admin', 'superadmin'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+ 
+  const id = parseInt(req.params.id, 10);
+  const amount = Math.round(Number(req.body.amount) * 100) / 100; // signed change in system balance
+  if (Number.isNaN(id) || !Number.isFinite(amount) || amount === 0) {
+    return res.status(400).json({ error: 'id and a non-zero amount are required' });
+  }
+ 
+  const client = await req.db.connect();
+  try {
+    const { rows } = await client.query(
+      `UPDATE wallet_reconciliations r
+       SET settled_amount = r.settled_amount + $1
+       FROM wallets w
+       WHERE r.id = $2
+         AND w.id = r.wallet_id
+         AND ($3 = 'superadmin' OR w.centre_id = $4)
+       RETURNING r.id, r.wallet_id, r.settled_amount`,
+      [amount, id, req.user.role, req.user.centre_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Reconciliation not found' });
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Reconciliation settle error:', err);
+    res.status(500).json({ error: 'Failed to update reconciliation' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== WALLET RECONCILIATION (SAVE COUNTS) ==========
+router.post('/wallet-reconcile', requireAccounting, async (req, res) => {
   // Superadmin view is read-only
   if (req.user.role === 'superadmin') {
     return res.status(403).json({ error: 'Superadmin access is read-only' });
   }
-
+ 
   const centreId = req.user.centre_id;
   if (!centreId) {
     return res.status(400).json({ error: 'No centre assigned to this user' });
   }
-
-  const { reconciliations } = req.body;
-
+ 
+  const { reconciliations, date } = req.body;
+ 
   if (!Array.isArray(reconciliations) || reconciliations.length === 0) {
     return res.status(400).json({ error: 'reconciliations array is required' });
   }
-
+ 
+  // The day the count is for (the page sends it). Default: today in IST.
+  const todayIST = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const reconDate = date === undefined || date === null || date === '' ? todayIST : String(date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(reconDate)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+  if (reconDate > todayIST) {
+    return res.status(400).json({ error: 'Cannot reconcile a future date' });
+  }
+ 
+  // Validate every row; variance is worked out here, not taken from the browser
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const rows = [];
+  for (const r of reconciliations) {
+    const walletId = parseInt(r.wallet_id, 10);
+    const book = Number(r.book_balance);
+    const actual = Number(r.actual_balance);
+    if (Number.isNaN(walletId) || !Number.isFinite(book) || !Number.isFinite(actual)) {
+      return res.status(400).json({ error: 'Each row needs wallet_id, book_balance and actual_balance as numbers' });
+    }
+    if (Math.abs(actual) > 1e10 || Math.abs(book) > 1e10) {
+      return res.status(400).json({ error: 'Balance is too large' });
+    }
+    rows.push({ walletId, book: round2(book), actual: round2(actual), variance: round2(actual - book) });
+  }
+ 
+  // One row per wallet per save (the last one wins if a wallet is sent twice)
+  const byWallet = new Map(rows.map((r) => [r.walletId, r]));
+  const walletIds = [...byWallet.keys()];
+ 
   const client = await req.db.connect();
-
   try {
-    const userId = req.user.id;
-    const walletIds = [...new Set(reconciliations.map(r => Number(r.wallet_id)))];
-
     // Every wallet must belong to the caller's centre
     const own = await client.query(
       `SELECT COUNT(*)::int AS n FROM wallets WHERE id = ANY($1::int[]) AND centre_id = $2`,
@@ -618,25 +751,24 @@ router.post('/wallet-reconcile', async (req, res) => {
     if (own.rows[0].n !== walletIds.length) {
       return res.status(403).json({ error: 'Invalid wallet for your centre' });
     }
-
+ 
     await client.query('BEGIN');
-
-    for (const r of reconciliations) {
+ 
+    for (const r of byWallet.values()) {
       await client.query(
         `
         INSERT INTO wallet_reconciliations
-          (wallet_id, book_balance, actual_balance, variance, reconciled_by)
-        VALUES ($1, $2, $3, $4, $5)
+          (wallet_id, book_balance, actual_balance, variance, reconciled_by, recon_date)
+        VALUES ($1, $2, $3, $4, $5, $6::date)
         `,
-        [r.wallet_id, r.book_balance, r.actual_balance, r.variance, userId]
+        [r.walletId, r.book, r.actual, r.variance, req.user.id, reconDate]
       );
     }
-
+ 
     await client.query('COMMIT');
-    res.json({ success: true });
-
+    res.json({ success: true, date: reconDate, saved: byWallet.size });
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Wallet reconciliation error:', err);
     res.status(500).json({ error: 'Wallet reconciliation failed' });
   } finally {
@@ -644,17 +776,23 @@ router.post('/wallet-reconcile', async (req, res) => {
   }
 });
 
-router.get('/wallet-book-balances', async (req, res) => {
+router.get('/wallet-book-balances', requireAccounting, async (req, res) => {
+  const { centreId: queryCentreId, date } = req.query;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  if (date && !isYMD(date)) {
+    return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+  }
+  const targetDate = date || todayIST();
+
   const client = await req.db.connect();
 
   try {
-    const { centreId: queryCentreId, date } = req.query; 
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-    if (isSuperAdmin && queryCentreId) centreId = Number(queryCentreId);
-    
-    const targetDate = date || new Date().toISOString().split('T')[0];
 
     const result = await client.query(`
       SELECT
@@ -681,7 +819,7 @@ router.get('/wallet-book-balances', async (req, res) => {
 });
 
 // ========== WALLET LEDGER BALANCES ==========
-router.get('/wallet-ledger-balances', async (req, res) => {
+router.get('/wallet-ledger-balances', requireAccounting, async (req, res) => {
   const client = await req.db.connect();
 
   try {
@@ -722,17 +860,30 @@ router.get('/wallet-ledger-balances', async (req, res) => {
 });
 
 //Accounting Nighty Closing
-router.post('/nightly-close', async (req, res) => {
+router.post('/nightly-close', requireAccounting, async (req, res) => {
+  const centreId = req.user.centre_id;
+  const userId = req.user.id;
+
+  const {
+    date, opening_balance, closing_balance,
+    actual_cash, cash_variance, checklist, notes
+  } = req.body;
+
+  if (!centreId) {
+    return res.status(400).json({ error: 'No centre assigned to this user' });
+  }
+  if (!isYMD(date) || date > todayIST()) {
+    return res.status(400).json({ error: 'A valid date (not in the future) is required' });
+  }
+  for (const [k, v] of Object.entries({ opening_balance, closing_balance, actual_cash, cash_variance })) {
+    if (v !== undefined && v !== null && v !== '' && !Number.isFinite(Number(v))) {
+      return res.status(400).json({ error: `${k} must be a number` });
+    }
+  }
+
   const client = await req.db.connect();
 
   try {
-    const centreId = req.user.centre_id;
-    const userId = req.user.id;
-
-    const {
-      date, opening_balance, closing_balance,
-      actual_cash, cash_variance, checklist, notes
-    } = req.body;
 
     await client.query(
       `
@@ -762,22 +913,24 @@ router.post('/nightly-close', async (req, res) => {
   }
 });
 
-router.get('/nightly-close', async (req, res) => {
+router.get('/nightly-close', requireAccounting, async (req, res) => {
+  const { date, centreId: queryCentreId } = req.query;
+  const isSuperAdmin = req.user.role === "superadmin";
+
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && queryCentreId) {
+    centreId = Number(queryCentreId);
+  }
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  if (!isYMD(date)) {
+    return res.status(400).json({ error: 'date is required (YYYY-MM-DD)' });
+  }
+
   const client = await req.db.connect();
 
   try {
-    const { date, centreId: queryCentreId } = req.query;
-    const isSuperAdmin = req.user.role === "superadmin";
-
-    let centreId = req.user.centre_id;
-
-    if (isSuperAdmin && queryCentreId) {
-      centreId = Number(queryCentreId);
-    }
-
-    if (!centreId) {
-      return res.status(400).json({ error: "centreId is required" });
-    }
 
     const result = await client.query(
       `
@@ -789,54 +942,105 @@ router.get('/nightly-close', async (req, res) => {
     );
 
     res.json(result.rows[0] || null);
+  } catch (err) {
+    console.error('Nightly close fetch error:', err);
+    res.status(500).json({ error: 'Failed to load nightly close' });
   } finally {
     client.release();
   }
 });
+
+// ========== CLOSING STATUS (dashboards) ==========
+/* One row per centre for a day: the nightly close + what the wallet counts found.
+   Shortage / excess come live from the saved counts (latest count per wallet for
+   the day): variance = counted − system, settled_amount = what was booked for it
+   (Shortage expense / Misc income / correction transfer). Nothing extra is stored
+   at close time, so a booking made after the close still shows up.
+
+   cash_variance in the close = calculated cash − counted cash
+     → POSITIVE means cash was SHORT, negative means OVER.            */
+const CLOSING_STATUS_SQL = `
+  WITH target AS (
+    SELECT COALESCE($1::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 1) AS day
+  )
+  SELECT
+    c.id   AS centre_id,
+    c.name AS centre_name,
+    t.day::text AS accounting_date,
+    d.opening_balance,
+    d.closing_balance,
+    d.actual_cash,
+    d.cash_variance,
+    d.notes,
+    d.closed_at,
+    s.name AS closed_by_name,
+    CASE
+      WHEN d.centre_id IS NULL THEN 'not_closed'
+      WHEN d.checklist IS NULL THEN 'incomplete'   -- only actual cash was saved
+      ELSE 'closed'
+    END AS status,
+    COALESCE(r.wallets_counted, 0) AS wallets_counted,
+    COALESCE(r.short_total, 0)     AS short_total,
+    COALESCE(r.excess_total, 0)    AS excess_total,
+    COALESCE(r.short_booked, 0)    AS short_booked,
+    COALESCE(r.excess_booked, 0)   AS excess_booked,
+    COALESCE(r.open_short, 0)      AS open_short,
+    COALESCE(r.open_excess, 0)     AS open_excess,
+    COALESCE(r.wallet_diffs, '[]'::json) AS wallet_diffs
+  FROM centres c
+  CROSS JOIN target t
+  LEFT JOIN daily_accounting_closure d
+    ON d.centre_id = c.id AND d.accounting_date = t.day
+  LEFT JOIN staff s ON s.id = d.closed_by
+  LEFT JOIN LATERAL (
+    SELECT
+      COUNT(*)::int AS wallets_counted,
+      SUM(CASE WHEN lr.variance < 0 THEN -lr.variance ELSE 0 END) AS short_total,
+      SUM(CASE WHEN lr.variance > 0 THEN  lr.variance ELSE 0 END) AS excess_total,
+      SUM(CASE WHEN lr.variance < 0 THEN GREATEST(-lr.settled, 0) ELSE 0 END) AS short_booked,
+      SUM(CASE WHEN lr.variance > 0 THEN GREATEST( lr.settled, 0) ELSE 0 END) AS excess_booked,
+      SUM(CASE WHEN lr.variance - lr.settled < 0 THEN -(lr.variance - lr.settled) ELSE 0 END) AS open_short,
+      SUM(CASE WHEN lr.variance - lr.settled > 0 THEN  (lr.variance - lr.settled) ELSE 0 END) AS open_excess,
+      json_agg(
+        json_build_object('wallet', lr.wallet_name, 'type', lr.wallet_type,
+                          'variance', lr.variance, 'settled', lr.settled)
+        ORDER BY lr.variance
+      ) FILTER (WHERE lr.variance <> 0) AS wallet_diffs
+    FROM (
+      SELECT DISTINCT ON (wr.wallet_id)
+        wr.wallet_id, w.name AS wallet_name, w.wallet_type,
+        COALESCE(wr.variance, wr.actual_balance - wr.book_balance)::numeric AS variance,
+        COALESCE(wr.settled_amount, 0)::numeric AS settled
+      FROM wallet_reconciliations wr
+      JOIN wallets w ON w.id = wr.wallet_id
+      WHERE w.centre_id = c.id AND wr.recon_date = t.day
+      ORDER BY wr.wallet_id, wr.reconciled_at DESC, wr.id DESC
+    ) lr
+  ) r ON true
+  WHERE ($2::int IS NULL OR c.id = $2)
+`;
+
+const isYmdOrEmpty = (d) => !d || /^\d{4}-\d{2}-\d{2}$/.test(String(d));
 
 // ========== NIGHTLY CLOSE STATUS - ALL CENTRES (SUPERADMIN DASHBOARD) ==========
 router.get('/nightly-close/all', async (req, res) => {
   if (req.user.role !== 'superadmin') {
     return res.status(403).json({ error: 'Superadmin access required' });
   }
+  const { date } = req.query; // optional, "YYYY-MM-DD" (default: yesterday IST)
+  if (!isYmdOrEmpty(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
 
   const client = await req.db.connect();
-
   try {
-    const { date } = req.query; // optional, "YYYY-MM-DD"
-
     const result = await client.query(
-      `
-      SELECT * FROM (
-        WITH target AS (
-          -- defaults to yesterday in IST
-          SELECT COALESCE($1::date, (NOW() AT TIME ZONE 'Asia/Kolkata')::date - 1) AS day
-        )
-        SELECT
-          c.id   AS centre_id,
-          c.name AS centre_name,
-          t.day::text AS accounting_date,
-          d.actual_cash,
-          d.cash_variance,
-          d.closed_at,
-          s.name AS closed_by_name,
-          CASE
-            WHEN d.centre_id IS NULL THEN 'not_closed'
-            WHEN d.checklist IS NULL THEN 'incomplete'   -- only actual cash was saved
-            ELSE 'closed'
-          END AS status
-        FROM centres c
-        CROSS JOIN target t
-        LEFT JOIN daily_accounting_closure d
-          ON d.centre_id = c.id AND d.accounting_date = t.day
-        LEFT JOIN staff s ON s.id = d.closed_by
-      ) x
-      ORDER BY
-        CASE x.status WHEN 'not_closed' THEN 0 WHEN 'incomplete' THEN 1 ELSE 2 END,
-        ABS(COALESCE(x.cash_variance, 0)) DESC,
-        x.centre_name
-      `,
-      [date || null]
+      `SELECT * FROM (${CLOSING_STATUS_SQL}) x
+       ORDER BY
+         CASE x.status WHEN 'not_closed' THEN 0 WHEN 'incomplete' THEN 1 ELSE 2 END,
+         ABS(COALESCE(x.cash_variance, 0)) DESC,
+         (x.open_short + x.open_excess) DESC,
+         (x.short_total + x.excess_total) DESC,
+         x.centre_name`,
+      [date || null, null]
     );
 
     res.json({
@@ -846,6 +1050,28 @@ router.get('/nightly-close/all', async (req, res) => {
   } catch (err) {
     console.error('Nightly close (all centres) error:', err);
     res.status(500).json({ error: 'Failed to load closing log' });
+  } finally {
+    client.release();
+  }
+});
+
+// ========== CLOSING STATUS - ONE CENTRE (ADMIN DASHBOARD) ==========
+// Admin: own centre. Superadmin: ?centreId=. Same row shape as /nightly-close/all.
+router.get('/closing-status', requireAccounting, async (req, res) => {
+  const { date } = req.query;
+  if (!isYmdOrEmpty(date)) return res.status(400).json({ error: 'date must be YYYY-MM-DD' });
+
+  let centreId = req.user.centre_id;
+  if (req.user.role === 'superadmin' && req.query.centreId) centreId = Number(req.query.centreId);
+  if (!centreId) return res.status(400).json({ error: 'centreId is required' });
+
+  const client = await req.db.connect();
+  try {
+    const { rows } = await client.query(CLOSING_STATUS_SQL, [date || null, centreId]);
+    res.json(rows[0] || null);
+  } catch (err) {
+    console.error('Closing status error:', err);
+    res.status(500).json({ error: 'Failed to load closing status' });
   } finally {
     client.release();
   }

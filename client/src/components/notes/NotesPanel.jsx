@@ -1,345 +1,560 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FiPlus, FiSearch, FiFilter, FiUser, FiAtSign, FiMapPin, 
-  FiGlobe, FiLock, FiMessageCircle, FiPaperclip, FiCheckCircle,
-  FiClock, FiCalendar, FiTrash2, FiEdit2, FiX
+import {
+  FiPlus, FiSearch, FiAtSign, FiMapPin, FiGlobe, FiLock, FiMessageCircle,
+  FiCheckCircle, FiClock, FiCalendar, FiTrash2, FiEdit2, FiAlertCircle, FiRefreshCw,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import NoteEditorModal from './NoteEditorModal';
-// UPDATED IMPORTS
-import { getServiceEntryNotes, getCustomerNotes, deleteNote } from '@/services/noteService';
 import { formatDistanceToNow } from 'date-fns';
+import NoteEditorModal from './NoteEditorModal';
+import { getServiceEntryNotes, getCustomerNotes, deleteNote, updateNote, updateNoteColor } from '@/services/noteService';
 import api from '@/services/serviceService';
+import { colorOf, ColorPicker, loadColors, rememberNoteColor, resolveNoteColor } from './noteColors';
 
-const NotesPanel = ({ 
-  contextType,      
-  contextId,        
+const MENTION_RE = /@\[(.*?)\]\((\w+)\)/g;
+const plainText = (text) => (text || '').replace(MENTION_RE, '@$1');
+
+const FILTERS = [
+  { key: 'all', label: 'All', empty: 'No notes yet' },
+  { key: 'mine', label: 'Mine', empty: "You haven't written any notes here" },
+  { key: 'mentions', label: 'Mentions', empty: 'No notes mention you' },
+  { key: 'centre', label: 'Centre', empty: 'No centre-wide notes' },
+];
+
+// The notes API has used a few field names over time, so read them all.
+const firstDefined = (...vals) => vals.find((v) => v !== undefined && v !== null && v !== '');
+const authorId = (n) => firstDefined(n.created_by, n.creator_id, n.author_id, n.user_id, n.staff_id);
+const sameId = (a, b) => a !== undefined && a !== null && b !== undefined && b !== null && String(a) === String(b);
+
+const VISIBILITY = {
+  private: { label: 'Only me', Icon: FiLock, cls: 'text-slate-500' },
+  mentioned_only: { label: 'Mentioned staff', Icon: FiAtSign, cls: 'text-sky-600' },
+  centre: { label: 'Entire centre', Icon: FiMapPin, cls: 'text-emerald-600' },
+  global: { label: 'All centres', Icon: FiGlobe, cls: 'text-violet-600' },
+};
+
+const IST = 'Asia/Kolkata';
+const istDay = (value) => {
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-CA', { timeZone: IST });
+};
+const formatDue = (value) => {
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: IST });
+};
+
+const timeAgo = (value) => {
+  const d = new Date(value);
+  return isNaN(d.getTime()) ? '' : formatDistanceToNow(d, { addSuffix: true });
+};
+
+const tasksBase = () => (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
+
+const NotesPanel = ({
+  contextType,
+  contextId,
   showTaskConversion = true,
+  // eslint-disable-next-line no-unused-vars
   showAttachments = true,
   showMentions = true,
   embedded = true,
-  onNoteChange = () => {}
+  onNoteChange = () => {},
 }) => {
   const [notes, setNotes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
   const [showEditor, setShowEditor] = useState(false);
   const [editingNote, setEditingNote] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filter, setFilter] = useState('all'); 
+  const [filter, setFilter] = useState('all');
+  const [colors, setColors] = useState(loadColors);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+  const [busyTask, setBusyTask] = useState(null);
+  const reqRef = useRef(0);
 
-  const currentUserId = parseInt(localStorage.getItem('id'));
-  const userRole = localStorage.getItem('role');
+  const currentUserId = localStorage.getItem('id');
+  const userRole = (localStorage.getItem('role') || '').toLowerCase();
+  const isManager = userRole === 'admin' || userRole === 'superadmin';
+  const supported = (contextType === 'service_entry' || contextType === 'customer') && Boolean(contextId);
 
-  const fetchNotes = async () => {
-    setLoading(true);
-    try {
-      let rawNotes = [];
-      
-      // Route to the correct API based on context
-      if (contextType === 'service_entry' && contextId) {
-        rawNotes = await getServiceEntryNotes(contextId);
-      } else if (contextType === 'customer' && contextId) {
-        rawNotes = await getCustomerNotes(contextId);
+  /* One fetch per context. Search and filters work on the loaded list, so typing never reloads. */
+  const fetchNotes = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!supported) {
+        setNotes([]);
+        setLoading(false);
+        return;
       }
-
-      // Frontend Search Filtering (until backend search is implemented)
-      let filteredNotes = rawNotes;
-      if (searchTerm) {
-        const lowerSearch = searchTerm.toLowerCase();
-        filteredNotes = filteredNotes.filter(n => 
-          n.title?.toLowerCase().includes(lowerSearch) || 
-          n.content?.toLowerCase().includes(lowerSearch)
-        );
+      const req = ++reqRef.current;
+      if (!silent) setLoading(true);
+      setFailed(false);
+      try {
+        const raw =
+          contextType === 'service_entry' ? await getServiceEntryNotes(contextId) : await getCustomerNotes(contextId);
+        if (req !== reqRef.current) return;
+        // noteService returns the response body, whose shape may be a bare array or wrapped.
+        const list = [raw, raw?.data, raw?.notes, raw?.rows].find(Array.isArray);
+        // Notes written during a service entry are private to their author; never show someone else's.
+        setNotes((list || []).filter((n) => n.visibility !== 'private' || sameId(authorId(n), currentUserId)));
+      } catch (err) {
+        if (req !== reqRef.current) return;
+        console.error('Failed to fetch notes:', err);
+        setFailed(true);
+        if (!silent) toast.error('Could not load notes');
+      } finally {
+        if (req === reqRef.current) setLoading(false);
       }
+    },
+    [contextType, contextId, supported]
+  );
 
-      // Frontend Visibility/Role Filtering
-      if (filter === 'mine') {
-        filteredNotes = filteredNotes.filter(n => n.created_by === currentUserId);
-      }
-      
-      setNotes(filteredNotes);
-    } catch (err) {
-      console.error('Failed to fetch notes:', err);
-      toast.error('Could not load notes');
-    } finally {
-      setLoading(false);
-    }
-  };
+  // A different entry/customer is a fresh list: don't carry over the old search or filter.
+  useEffect(() => {
+    setSearchTerm('');
+    setFilter('all');
+  }, [contextType, contextId]);
 
   useEffect(() => {
-    if (contextId) {
-      fetchNotes();
-    }
-  }, [contextType, contextId, filter, searchTerm]);
+    fetchNotes();
+    return () => {
+      reqRef.current += 1; // drop any response that arrives after we've moved on
+    };
+  }, [fetchNotes]);
 
-  const handleDelete = async (noteId) => {
-    if (window.confirm('Delete this note permanently?')) {
-      try {
-        await deleteNote(noteId);
-        toast.success('Note deleted');
-        fetchNotes();
-        onNoteChange();
-      } catch (err) {
-        toast.error(err.response?.data?.error || 'Delete failed');
+  const isMentioned = useCallback(
+    (n) => {
+      if (n.is_mentioned === true || Number(n.is_mentioned) === 1) return true;
+      if ((n.mentions || []).some((m) => sameId(firstDefined(m.staff_id, m.id, m.user_id), currentUserId))) return true;
+      const re = new RegExp(MENTION_RE.source, 'g');
+      let m;
+      while ((m = re.exec(n.content || '')) !== null) {
+        if (m[2] === 'all' || sameId(m[2], currentUserId)) return true;
       }
+      return false;
+    },
+    [currentUserId]
+  );
+
+  const matchesFilter = useCallback(
+    (n, key) => {
+      if (key === 'mine') return sameId(authorId(n), currentUserId);
+      if (key === 'mentions') return isMentioned(n);
+      if (key === 'centre') return n.visibility === 'centre' || n.visibility === 'global';
+      return true;
+    },
+    [currentUserId, isMentioned]
+  );
+
+  const matchesSearch = useCallback((n, q) => {
+    if (!q) return true;
+    return `${n.title || ''} ${plainText(n.content)} ${n.task_title || ''} ${n.created_by_name || n.creator_name || ''}`
+      .toLowerCase()
+      .includes(q);
+  }, []);
+
+  const query = searchTerm.trim().toLowerCase();
+
+  // Counts honour the search box, so each pill tells you what you'd get if you clicked it.
+  const counts = useMemo(() => {
+    const out = {};
+    FILTERS.forEach((f) => {
+      out[f.key] = notes.filter((n) => matchesSearch(n, query) && matchesFilter(n, f.key)).length;
+    });
+    return out;
+  }, [notes, query, matchesSearch, matchesFilter]);
+
+  const visible = useMemo(
+    () => notes.filter((n) => matchesSearch(n, query) && matchesFilter(n, filter)),
+    [notes, query, filter, matchesSearch, matchesFilter]
+  );
+
+  const canEdit = (note) => isManager || sameId(authorId(note), currentUserId);
+
+  const refreshAfterChange = () => {
+    fetchNotes({ silent: true });
+    onNoteChange();
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteNote(deleteTarget.id);
+      toast.success('Note deleted');
+      setDeleteTarget(null);
+      refreshAfterChange();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Delete failed');
+    } finally {
+      setDeleting(false);
     }
   };
 
   const handleTaskToggle = async (taskId, currentStatus) => {
+    if (busyTask) return;
     const newStatus = currentStatus === 'completed' ? 'pending' : 'completed';
+    setBusyTask(taskId);
     try {
-      // 🔥 EXACT FIX: Swap the Base URL from /servicemanagement to /tasks
-      const taskBaseUrl = (api.defaults.baseURL || '').replace('servicemanagement', 'tasks');
-      
-      await api.patch(`/${taskId}/status`, { status: newStatus }, { baseURL: taskBaseUrl });
-      
+      await api.patch(`/${taskId}/status`, { status: newStatus }, { baseURL: tasksBase() });
       toast.success(`Task marked ${newStatus}`);
-      fetchNotes(); 
-      onNoteChange();
+      refreshAfterChange();
     } catch (err) {
       console.error(err);
       toast.error('Failed to update task');
+    } finally {
+      setBusyTask(null);
     }
   };
 
-  const getVisibilityIcon = (visibility) => {
-    switch (visibility) {
-      case 'private': return <FiLock className="text-gray-500" />;
-      case 'mentioned_only': return <FiAtSign className="text-blue-500" />;
-      case 'centre': return <FiMapPin className="text-green-500" />;
-      case 'global': return <FiGlobe className="text-purple-500" />;
-      default: return <FiLock className="text-gray-500" />;
+  const handleColor = async (note, key) => {
+    rememberNoteColor(note.id, key);
+    setColors(loadColors());
+    setNotes((prev) => prev.map((n) => (n.id === note.id ? { ...n, color: key } : n)));
+    try {
+      await updateNoteColor(note.id, key);
+    } catch (err) {
+      console.error(err);
+      toast.info('Could not save the colour for everyone; it is kept on this device only');
     }
-  };
-
-  const getVisibilityLabel = (visibility) => {
-    switch (visibility) {
-      case 'private': return 'Only me';
-      case 'mentioned_only': return 'Mentioned staff';
-      case 'centre': return 'Entire centre';
-      case 'global': return 'All centres';
-      default: return visibility;
-    }
-  };
-
-  const canEditNote = (note) => {
-    if (userRole === 'admin' || userRole === 'superadmin') return true;
-    return note.created_by === currentUserId;
   };
 
   const formatNoteContent = (text) => {
     if (!text) return null;
-
-    // 🔥 FIX: Changed \d+ to \w+
-    const mentionRegex = /@\[(.*?)\]\((\w+)\)/g;
+    const re = new RegExp(MENTION_RE.source, 'g');
     const parts = [];
-    let lastIndex = 0;
+    let last = 0;
     let match;
-
-    while ((match = mentionRegex.exec(text)) !== null) {
-      // 1. Push normal text before the mention
-      if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
-      }
-
-      const name = match[1];
-      const id = match[2];
-      const isAllStaff = id === 'all';
-
-      // 2. Push the styled mention badge
+    while ((match = re.exec(text)) !== null) {
+      if (match.index > last) parts.push(text.substring(last, match.index));
+      const isAll = match[2] === 'all';
       parts.push(
-        <span 
-          key={match.index} 
-          className={`font-bold px-1.5 py-0.5 rounded-md mx-0.5 border ${
-            isAllStaff 
-              ? 'text-rose-700 bg-rose-100/80 border-rose-200' 
-              : 'text-indigo-700 bg-indigo-100/80 border-indigo-200'
+        <span
+          key={match.index}
+          className={`mx-0.5 rounded-md border px-1.5 py-0.5 text-[13px] font-semibold ${
+            isAll ? 'border-rose-200 bg-rose-100/80 text-rose-700' : 'border-navy-500/20 bg-navy-500/10 text-navy-800'
           }`}
         >
-          @{name}
+          @{match[1]}
         </span>
       );
-
-      lastIndex = mentionRegex.lastIndex;
+      last = re.lastIndex;
     }
-
-    // 3. Push remaining normal text
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
-    }
-
+    if (last < text.length) parts.push(text.substring(last));
     return parts;
   };
 
+  const todayIst = istDay(new Date());
+
   return (
-    <div className={`notes-panel ${embedded ? '' : 'max-w-6xl mx-auto p-4'}`}>
-      {/* Header with actions */}
-      <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
+    <div className={`notes-panel ${embedded ? '' : 'mx-auto max-w-6xl p-4'}`}>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-gray-800">Notes & Tasks</h3>
-          <span className="text-sm text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-            {notes.length}
+          <h3 className="text-lg font-semibold text-navy-800">Notes &amp; tasks</h3>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+            {visible.length === notes.length ? notes.length : `${visible.length} of ${notes.length}`}
           </span>
         </div>
         <button
-          onClick={() => { setEditingNote(null); setShowEditor(true); }}
-          className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm"
+          type="button"
+          disabled={!supported}
+          onClick={() => {
+            setEditingNote(null);
+            setShowEditor(true);
+          }}
+          className="flex items-center gap-2 rounded-lg bg-navy-700 px-3 py-2 text-sm font-medium text-white transition hover:bg-navy-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 focus-visible:ring-offset-2 disabled:opacity-50"
         >
-          <FiPlus className="h-4 w-4" /> New Note
+          <FiPlus className="h-4 w-4" /> New note
         </button>
       </div>
 
-      {/* Search & Filters */}
-      <div className="flex flex-wrap gap-3 mb-5">
-        <div className="relative flex-1 min-w-[180px]">
-          <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+      <div className="mb-4 flex flex-wrap gap-3">
+        <div className="relative min-w-[180px] flex-1">
+          <FiSearch className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
-            type="text"
+            type="search"
             placeholder="Search notes..."
+            aria-label="Search notes"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/20"
           />
         </div>
-        <div className="flex flex-wrap gap-2">
-          {['all', 'mine', 'mentioned', 'centre'].map(f => (
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter notes">
+          {FILTERS.map((f) => (
             <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 text-sm rounded-full transition ${
-                filter === f 
-                  ? 'bg-indigo-100 text-indigo-700 font-medium' 
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              key={f.key}
+              type="button"
+              aria-pressed={filter === f.key}
+              onClick={() => setFilter(f.key)}
+              className={`rounded-full px-3 py-1.5 text-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500 ${
+                filter === f.key
+                  ? 'bg-navy-700 font-medium text-white'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
-              {f === 'all' && 'All'}
-              {f === 'mine' && 'Mine'}
-              {f === 'mentioned' && 'Mentions'}
-              {f === 'centre' && 'Centre'}
+              {f.label}
+              <span className={`ml-1.5 text-xs ${filter === f.key ? 'text-white/70' : 'text-slate-400'}`}>{counts[f.key]}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Notes List */}
       {loading ? (
-        <div className="flex justify-center py-10">
-          <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+        <div className="space-y-3" aria-busy="true" aria-label="Loading notes">
+          {[0, 1].map((i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-slate-200 bg-white p-4">
+              <div className="mb-3 h-3 w-1/3 rounded bg-slate-200" />
+              <div className="mb-2 h-3 w-full rounded bg-slate-100" />
+              <div className="h-3 w-2/3 rounded bg-slate-100" />
+            </div>
+          ))}
         </div>
-      ) : notes.length === 0 ? (
-        <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-8 text-center">
-          <FiMessageCircle className="mx-auto h-10 w-10 text-gray-400 mb-2" />
-          <p className="text-gray-600">No notes yet</p>
-          <p className="text-gray-500 text-sm">Click "New Note" to add one</p>
+      ) : failed && notes.length === 0 ? (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-6 text-center">
+          <FiAlertCircle className="mx-auto mb-2 h-8 w-8 text-rose-400" />
+          <p className="text-sm font-medium text-rose-800">Could not load notes</p>
+          <button
+            type="button"
+            onClick={() => fetchNotes()}
+            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-rose-200 bg-white px-3 py-1.5 text-sm text-rose-700 hover:bg-rose-100"
+          >
+            <FiRefreshCw className="h-4 w-4" /> Try again
+          </button>
+        </div>
+      ) : visible.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+          <FiMessageCircle className="mx-auto mb-2 h-10 w-10 text-slate-300" />
+          {notes.length === 0 ? (
+            <>
+              <p className="text-slate-600">No notes yet</p>
+              <p className="text-sm text-slate-500">Click &quot;New note&quot; to add one</p>
+            </>
+          ) : (
+            <>
+              <p className="text-slate-600">
+                {query ? 'No notes match your search' : FILTERS.find((f) => f.key === filter)?.empty}
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm('');
+                  setFilter('all');
+                }}
+                className="mt-1 text-sm font-medium text-navy-700 hover:underline"
+              >
+                Show all notes
+              </button>
+            </>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
-          <AnimatePresence>
-            {notes.map((note) => (
-              <motion.div
-                key={note.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                className="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition p-4"
-              >
-                <div className="flex justify-between items-start">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 flex-wrap mb-1">
-                      <span className="font-semibold text-gray-900">{note.title}</span>
-                      <span className="text-xs text-gray-400">
-                        by {note.created_by_name || 'Staff'} • {note.created_at ? formatDistanceToNow(new Date(note.created_at), { addSuffix: true }) : ''}
-                      </span>
-                      <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
-                        {getVisibilityIcon(note.visibility)} {getVisibilityLabel(note.visibility)}
-                      </span>
-                    </div>
-                    <div className="text-gray-700 text-sm whitespace-pre-wrap mb-3 leading-relaxed">
-                      {formatNoteContent(note.content)}
-                    </div>
+        <div className="space-y-3">
+          <AnimatePresence initial={false}>
+            {visible.map((note) => {
+              const colorKey = resolveNoteColor(note, colors);
+              const palette = colorOf(colorKey);
+              const vis = VISIBILITY[note.visibility] || VISIBILITY.private;
+              const VisIcon = vis.Icon;
+              const done = note.task_status === 'completed';
+              const overdue = note.task_due_date && !done && istDay(note.task_due_date) < todayIst;
+              const author = note.created_by_name || note.creator_name || 'Staff';
+              const editable = canEdit(note);
 
-                    {/* Mentions (Placeholder for future) */}
-                    {showMentions && note.mentions && note.mentions.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mb-3">
-                        {note.mentions.map((m, index) => (
-                          <span key={index} className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs px-2 py-0.5 rounded-full">
-                            <FiAtSign className="h-3 w-3" /> {m.staff_name}
-                          </span>
-                        ))}
+              return (
+                <motion.article
+                  key={note.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, x: -16 }}
+                  transition={{ duration: 0.15 }}
+                  className={`rounded-xl border p-4 shadow-sm transition-shadow hover:shadow-md ${palette.bg} ${palette.border}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="mb-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {note.title && <span className="font-semibold text-slate-900">{note.title}</span>}
+                        <span className="text-xs text-slate-500">
+                          by {author}
+                          {note.created_at ? ` • ${timeAgo(note.created_at)}` : ''}
+                        </span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-xs text-slate-600">
+                          <VisIcon className={`h-3 w-3 ${vis.cls}`} /> {vis.label}
+                        </span>
                       </div>
-                    )}
+                      <div className="mb-1 whitespace-pre-wrap break-words text-sm leading-relaxed text-slate-700">
+                        {formatNoteContent(note.content)}
+                      </div>
 
-                    {/* Linked Task */}
-                    {note.task_id && (
-                      <div className={`border rounded-lg p-3 mb-2 transition-colors mt-3 ${note.task_status === 'completed' ? 'bg-gray-50 border-gray-200' : 'bg-amber-50 border-amber-200'}`}>
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleTaskToggle(note.task_id, note.task_status)}
-                              className={`flex items-center gap-1.5 text-sm font-medium hover:opacity-80 transition-opacity ${note.task_status === 'completed' ? 'text-gray-500 line-through' : 'text-gray-800'}`}
+                      {showMentions && note.mentions && note.mentions.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {note.mentions.map((m, index) => (
+                            <span
+                              key={`${m.staff_id}-${index}`}
+                              className="inline-flex items-center gap-1 rounded-full bg-black/5 px-2 py-0.5 text-xs text-navy-800"
                             >
-                              {note.task_status === 'completed' ? <FiCheckCircle className="h-4 w-4 text-emerald-500" /> : <FiClock className="h-4 w-4 text-amber-500" />}
-                              {note.task_title}
-                            </button>
-                            {note.task_due_date && note.task_status !== 'completed' && (
-                              <span className="text-xs text-gray-500 flex items-center gap-1 bg-white px-2 py-0.5 rounded border border-gray-100 shadow-sm">
-                                <FiCalendar className="h-3 w-3" /> Due {new Date(note.task_due_date).toLocaleDateString('en-IN')}
-                              </span>
-                            )}
-                          </div>
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${note.task_status === 'completed' ? 'bg-gray-200 text-gray-600' : 'bg-amber-200 text-amber-800'}`}>
-                            {note.task_assigned_to_name || 'Staff'}
-                          </span>
+                              <FiAtSign className="h-3 w-3" /> {m.staff_name}
+                            </span>
+                          ))}
                         </div>
+                      )}
+
+                      {note.task_id && (
+                        <div
+                          className={`mt-3 rounded-lg border p-3 ${
+                            done ? 'border-slate-200 bg-white/70' : 'border-amber-200 bg-amber-50'
+                          }`}
+                        >
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={busyTask === note.task_id}
+                                onClick={() => handleTaskToggle(note.task_id, note.task_status)}
+                                aria-label={done ? 'Mark task pending' : 'Mark task completed'}
+                                className={`flex items-center gap-1.5 text-sm font-medium transition-opacity hover:opacity-80 disabled:opacity-50 ${
+                                  done ? 'text-slate-500 line-through' : 'text-slate-800'
+                                }`}
+                              >
+                                {done ? (
+                                  <FiCheckCircle className="h-4 w-4 text-emerald-500" />
+                                ) : (
+                                  <FiClock className="h-4 w-4 text-amber-500" />
+                                )}
+                                {note.task_title}
+                              </button>
+                              {note.task_due_date && !done && (
+                                <span
+                                  className={`flex items-center gap-1 rounded border px-2 py-0.5 text-xs ${
+                                    overdue
+                                      ? 'border-rose-200 bg-rose-50 text-rose-700'
+                                      : 'border-slate-100 bg-white text-slate-500'
+                                  }`}
+                                >
+                                  <FiCalendar className="h-3 w-3" /> {overdue ? 'Overdue · ' : 'Due '}
+                                  {formatDue(note.task_due_date)}
+                                </span>
+                              )}
+                            </div>
+                            <span
+                              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                                done ? 'bg-slate-200 text-slate-600' : 'bg-amber-200 text-amber-800'
+                              }`}
+                            >
+                              {note.task_assigned_to_name || 'Staff'}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {editable && (
+                      <div className="-mr-1 -mt-1 flex shrink-0 items-center">
+                        <ColorPicker value={colorKey} onChange={(k) => handleColor(note, k)} />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingNote(note);
+                            setShowEditor(true);
+                          }}
+                          className="rounded-lg p-1.5 text-slate-500 hover:bg-black/5 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+                          title="Edit"
+                          aria-label="Edit note"
+                        >
+                          <FiEdit2 className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDeleteTarget(note)}
+                          className="rounded-lg p-1.5 text-slate-500 hover:bg-black/5 hover:text-rose-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+                          title="Delete"
+                          aria-label="Delete note"
+                        >
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
                       </div>
                     )}
                   </div>
-
-                  {/* Action buttons */}
-                  <div className="flex gap-1 ml-2">
-                    {canEditNote(note) && (
-                      <button
-                        onClick={() => { setEditingNote(note); setShowEditor(true); }}
-                        className="p-1.5 text-gray-500 hover:text-indigo-600 rounded"
-                        title="Edit"
-                      >
-                        <FiEdit2 className="h-4 w-4" />
-                      </button>
-                    )}
-                    {(userRole === 'admin' || userRole === 'superadmin' || note.created_by === currentUserId) && (
-                      <button
-                        onClick={() => handleDelete(note.id)}
-                        className="p-1.5 text-gray-500 hover:text-rose-600 rounded"
-                        title="Delete"
-                      >
-                        <FiTrash2 className="h-4 w-4" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+                </motion.article>
+              );
+            })}
           </AnimatePresence>
         </div>
       )}
 
-      {/* Editor Modal */}
-      {showEditor && (
-        <NoteEditorModal
-          note={editingNote}
-          contextType={contextType}
-          contextId={contextId}
-          onClose={() => { setShowEditor(false); setEditingNote(null); }}
-          onSave={() => {
-            fetchNotes();
-            onNoteChange();
-            setShowEditor(false);
-            setEditingNote(null);
-          }}
-          showTaskConversion={showTaskConversion}
-        />
-      )}
+      <AnimatePresence>
+        {showEditor && (
+          <NoteEditorModal
+            key={editingNote?.id ?? 'new'}
+            note={editingNote}
+            contextType={contextType}
+            contextId={contextId}
+            showTaskConversion={showTaskConversion}
+            onClose={() => {
+              setShowEditor(false);
+              setEditingNote(null);
+            }}
+            onSave={() => {
+              setColors(loadColors());
+              setShowEditor(false);
+              setEditingNote(null);
+              refreshAfterChange();
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {deleteTarget && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-navy-800/40 p-4 backdrop-blur-sm"
+            onMouseDown={(e) => e.target === e.currentTarget && !deleting && setDeleteTarget(null)}
+            onKeyDown={(e) => e.key === 'Escape' && !deleting && setDeleteTarget(null)}
+          >
+            <motion.div
+              role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="del-note-title"
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-5 shadow-2xl"
+            >
+              <h4 id="del-note-title" className="text-base font-semibold text-slate-900">
+                Delete this note?
+              </h4>
+              <p className="mt-1 text-sm text-slate-600">
+                {deleteTarget.task_id
+                  ? 'The note will be removed permanently. Its linked task is managed on the Tasks page.'
+                  : 'This will remove the note permanently.'}
+              </p>
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  autoFocus
+                  disabled={deleting}
+                  onClick={() => setDeleteTarget(null)}
+                  className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={deleting}
+                  onClick={confirmDelete}
+                  className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50"
+                >
+                  {deleting ? 'Deleting...' : 'Delete'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

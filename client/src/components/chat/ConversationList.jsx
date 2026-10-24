@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase } from "react-icons/fi";
+import { FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers } from "react-icons/fi";
 import ChatAvatar from "./ChatAvatar";
 import {
   CHAT_TABS,
@@ -161,9 +161,10 @@ const ConversationList = ({
             const isGroup = isGroupConversation(c, currentUser.id);
             const isWhatsApp = c.channel === "whatsapp";
             const isService = c.context_type === "service_entry";
+            const isTeam = c.context_type === "team";
             const others = getOtherParticipants(c, currentUser.id);
             const isOnline =
-              !isGroup && !isWhatsApp && others[0] ? onlineUsers.has(String(others[0].staff_id)) : undefined;
+              !isGroup && !isWhatsApp && !isTeam && others[0] ? onlineUsers.has(String(others[0].staff_id)) : undefined;
             const typing = typingUsers[c.id] || [];
             const active = String(activeConversationId) === String(c.id);
             const hasUnread = (c.unread || 0) > 0;
@@ -180,9 +181,9 @@ const ConversationList = ({
                   name={name}
                   photo={getConversationPhoto(c, currentUser.id)}
                   size="lg"
-                  color={isWhatsApp ? "bg-emerald-600" : c.avatarColor || getAvatarColor(c.id)}
-                  isGroup={isGroup}
-                  icon={isWhatsApp ? FiSmartphone : undefined}
+                  color={isWhatsApp ? "bg-emerald-600" : isTeam ? "bg-navy-700" : c.avatarColor || getAvatarColor(c.id)}
+                  isGroup={isGroup && !isTeam}
+                  icon={isWhatsApp ? FiSmartphone : isTeam ? FiUsers : undefined}
                   online={isOnline === true ? true : undefined}
                 />
 
@@ -197,6 +198,7 @@ const ConversationList = ({
                     </span>
                     {isWhatsApp && <FiSmartphone className="shrink-0 text-emerald-600" size={12} title="WhatsApp" />}
                     {isService && <FiBriefcase className="shrink-0 text-violet-600" size={12} title="Service" />}
+                    {isTeam && <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-navy-700">Team</span>}
                     <span
                       className={`ml-auto shrink-0 text-[11px] ${
                         hasUnread ? "text-navy-700 font-semibold" : "text-slate-400"

@@ -24,7 +24,7 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
         alert('Filters reset');
       };
     const [dateFilter, setDateFilter] = useState(() => {
-        const today = new Date().toISOString().split('T')[0];
+        const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
         return { fromDate: today, toDate: today };
       });
 
@@ -80,7 +80,7 @@ const SuperAdminTransactionsSection = ({ centreId }) => {
   // ✅ early return AFTER all hooks
   if (!centreId) {
     return (
-      <div className="bg-white p-6 rounded-lg border text-gray-600">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
         Select a centre to view transactions
       </div>
     );

@@ -9,6 +9,7 @@ import {
 import { FaVenusMars, FaTransgender, FaMars, FaVenus } from 'react-icons/fa';
 import axios from "axios";
 import { toast } from 'react-toastify';
+import { todayIST, addDays } from "@/utils/dates";
 
 const CustomerProfile = () => {
   const [profile, setProfile] = useState({
@@ -541,7 +542,7 @@ const CustomerProfile = () => {
                       value={profile.date_of_birth}
                       onChange={handleInputChange}
                       className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
-                      max={new Date().toISOString().split('T')[0]}
+                      max={todayIST()}
                     />
                   ) : (
                     <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
@@ -622,7 +623,7 @@ const CustomerProfile = () => {
                         value={profile.date_of_marriage}
                         onChange={handleInputChange}
                         className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
-                        max={new Date().toISOString().split('T')[0]}
+                        max={todayIST()}
                       />
                     ) : (
                       <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">

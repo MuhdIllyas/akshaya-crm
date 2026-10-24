@@ -150,7 +150,7 @@ export async function sendMessage({
       );
       completeMessage = customerRes.rows[0];
     } else {
-      completeMessage = savedMessage;
+      completeMessage = { ...savedMessage, sender_name: sender_type === 'system' ? 'System' : null };
     }
 
     /* =========================

@@ -31,6 +31,7 @@ import adminAnalyticsRoutes from './routes/reports/adminAnalytics.js';
 import superAdminAnalyticsRoutes from './routes/reports/superAdminAnalytics.js';
 import reportsRoute from './routes/reports/reports.js';
 import reportSchedulesRoute from './routes/reports/reportSchedules.js';
+import bankStatementsRouter from './routes/bankStatements.js';
 
 import customerRoute from "./routes/customer.js";
 import customerDocumentsRoutes from "./routes/customerDocuments.js";
@@ -76,6 +77,9 @@ import serviceTrackingDocumentsRoutes from "./routes/serviceTrackingDocuments.js
 
 //Contact Route
 import contactRoutes from "./routes/contact.js";
+
+//Task Automations
+import automationRoutes from "./routes/automations.js";
 
 import "./routes/scheduler.js";
 
@@ -227,7 +231,7 @@ io.on("connection", (socket) => {
           ...savedMessage,
           sender_name: "SMS Gateway", 
           isCurrentUser: false,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+          time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
         });
 
         // Bump the conversation to the top of the sidebar for everyone in the centre
@@ -410,6 +414,7 @@ app.use("/api/expense", expenseRoute);
 app.use("/api/walletreport", walletreportsRoute);
 app.use("/api/staffreport", staffreportsRoute);
 app.use("/api/accounting", accountingRoute);
+app.use("/api/bankstatements", bankStatementsRouter);
 app.use("/api/transaction", transactionRoute);
 app.use('/api/analytics/admin', adminAnalyticsRoutes);
 app.use('/api/analytics/superadmin', superAdminAnalyticsRoutes);
@@ -463,6 +468,9 @@ app.use("/api/servicetracking", serviceTrackingDocumentsRoutes);
 
 /* Contact us - for public access */
 app.use("/api/contact", contactRoutes);
+
+/* Task Automations */
+app.use("/api/automations", automationRoutes);
 
 /* ================================
    STATIC FILES

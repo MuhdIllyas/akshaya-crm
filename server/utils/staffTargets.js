@@ -1,5 +1,6 @@
 // backend/utils/staffTargets.js
 // `db` can be the pg pool OR a checked-out client.
+import { istParts } from "./dates.js";
 
 const THROTTLE_MS = 60_000;
 const lastSync = new Map();
@@ -11,7 +12,7 @@ export const normalizeMonth = (input) => {
   if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) return null;
   const val = `${m[1]}-${m[2]}-01`;
   const now = new Date();
-  const cur = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+  const cur = `${istParts(now).ymd.slice(0, 7)}-01`;
   return val > cur ? null : val;
 };
 

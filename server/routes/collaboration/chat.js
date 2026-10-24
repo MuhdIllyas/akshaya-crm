@@ -556,6 +556,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
       // Since we don't care about historical JSON data, we just pass the live data straight through.
       // If it's a regular message, live_task_data will naturally be null based on our SQL query.
       time: new Date(m.created_at).toLocaleTimeString([], {
+        timeZone: 'Asia/Kolkata',
         hour: "2-digit",
         minute: "2-digit"
       }),
@@ -1053,6 +1054,12 @@ router.delete("/conversation/:conversationId", authenticateToken, async (req, re
     const hasAccess = await checkConversationAccess(conversationId, userId);
     if (!hasAccess && userRole !== 'superadmin' && userRole !== 'admin') {
       return res.status(403).json({ error: "Not authorized to delete this conversation" });
+    }
+
+    // Team chats follow their team: only admins can delete them (staff would wipe it for the whole team)
+    const kind = await pool.query(`SELECT context_type FROM chat_conversations WHERE id = $1`, [conversationId]);
+    if (kind.rows[0]?.context_type === 'team' && userRole !== 'superadmin' && userRole !== 'admin') {
+      return res.status(403).json({ error: "Team chats can't be deleted. They follow the team." });
     }
 
     // 🔥 Soft Delete: Update status to 'deleted' so it vanishes from the GET /conversations query

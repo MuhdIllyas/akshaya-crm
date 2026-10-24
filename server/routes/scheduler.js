@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import pool from '../db.js';
 import generateDailyBalances from './walletDailyBalanceService.js';
 import generateRecurringTasks from "../controllers/recurringTaskService.js";
+import runScheduledActions from "../controllers/scheduledActionWorker.js";
 
 // 👇 NEW: Automated Reports 👇
 import { getReportData } from '../routes/reports/analyticsService.js';
@@ -39,7 +40,7 @@ cron.schedule("10 0 * * *", async () => {
     const result = await pool.query(`
       DELETE FROM tokens
       WHERE type = 'normal'
-      AND (created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date < (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+        AND created_at < date_trunc('day', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata'
     `);
 
     console.log(`[CRON] Deleted ${result.rowCount} old normal tokens (cleared queue for the new day)`);
@@ -182,6 +183,21 @@ cron.schedule("* * * * *", async () => {
     await checkAndRunSchedules();
 }, {
     timezone: "Asia/Kolkata"
+});
+
+// ==========================================
+// 3. SCHEDULED ACTIONS (Reminders & auto-tasks)
+// Every minute: send due WhatsApp reminders and
+// create due staff tasks from scheduled_actions.
+// ==========================================
+cron.schedule("* * * * *", async () => {
+  try {
+    await runScheduledActions();
+  } catch (err) {
+    console.error("[CRON] Scheduled actions worker failed", err);
+  }
+}, {
+  timezone: "Asia/Kolkata"
 });
 
 // Run every day at 00:20 AM IST - Cleanup previous days' chat_messages (OTPs and Notifications)

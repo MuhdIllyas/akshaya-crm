@@ -6,6 +6,8 @@ import notificationService from '../utils/notificationService.js';
 
 const router = express.Router();
 
+const NOTE_COLORS = ['default', 'red', 'orange', 'yellow', 'green', 'teal', 'blue', 'indigo', 'purple', 'pink', 'brown', 'grey'];
+
 // Middleware to verify token and role
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -66,7 +68,7 @@ router.get('/unread', authenticateToken, async (req, res) => {
         AND n.created_at > curr_user.last_viewed
         AND (
           n.visibility = 'global'
-          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+          OR (n.visibility <> 'private' AND EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1))
         )
       `;
       values = [userId];
@@ -81,7 +83,7 @@ router.get('/unread', authenticateToken, async (req, res) => {
         AND (
           n.visibility = 'global' 
           OR (n.visibility = 'centre' AND s.centre_id = $2)
-          OR EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+          OR (n.visibility <> 'private' AND EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1))
         )
       `;
       values = [userId, centre_id];
@@ -105,7 +107,7 @@ router.get('/all', authenticateToken, async (req, res) => {
     
     let query = `
       SELECT 
-        n.id, n.title, n.content, n.visibility, n.created_at, 
+        n.id, n.title, n.content, n.visibility, n.color, n.created_at, 
         n.related_service_entry_id,
         n.related_service_tracking_id, 
         n.related_service_id, 
@@ -136,7 +138,7 @@ router.get('/all', authenticateToken, async (req, res) => {
       n.visibility = 'global' OR 
       n.visibility = 'centre' OR 
       n.created_by = $1 OR 
-      EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1)
+      (n.visibility <> 'private' AND EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $1))
     )`;
 
     query += ` ORDER BY n.created_at DESC LIMIT 100`;
@@ -159,7 +161,8 @@ router.post("/", async (req, res) => {
       title,
       content,
       visibility = "centre",
-      mentions = [],
+      color,
+      mentions: rawMentions = [],
       related_customer_id,
       related_service_id,
       related_service_entry_id,
@@ -172,17 +175,20 @@ router.post("/", async (req, res) => {
       return res.status(400).json({ error: "Content is required" });
     }
 
+    // A private note is visible only to its author, so it can't mention (or notify) anyone.
+    const mentions = visibility === 'private' ? [] : rawMentions;
+
     await client.query("BEGIN");
 
     const noteResult = await client.query(
       `
       INSERT INTO notes (
-        centre_id, title, content, visibility, created_by,
+        centre_id, title, content, visibility, created_by, color,
         related_customer_id, related_service_id, related_service_entry_id, related_service_tracking_id,
         related_conversation_id, origin_message_id, -- 🔥 NEW COLUMNS
         created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $12, $6, $7, $8, $9, $10, $11, NOW(), NOW())
       RETURNING *
       `,
       [
@@ -196,7 +202,8 @@ router.post("/", async (req, res) => {
         related_service_entry_id || null,
         related_service_tracking_id || null,
         related_conversation_id || null, // 🔥 INJECTED
-        origin_message_id || null        // 🔥 INJECTED
+        origin_message_id || null,       // 🔥 INJECTED
+        NOTE_COLORS.includes(color) ? color : null
       ]
     );
 
@@ -277,9 +284,15 @@ router.get("/customer/:id", async (req, res) => {
       LEFT JOIN tasks t ON t.note_id = n.id
       LEFT JOIN staff ts ON ts.id = t.assigned_to
       WHERE n.related_customer_id = $1
+      AND (
+        n.created_by = $2
+        OR n.visibility = 'global'
+        OR (n.visibility = 'centre' AND ($3 = 'superadmin' OR (n.centre_id = $4 OR s.centre_id = $4)))
+        OR (n.visibility = 'mentioned_only' AND EXISTS (SELECT 1 FROM note_mentions vm WHERE vm.note_id = n.id AND vm.staff_id = $2))
+      )
       ORDER BY n.created_at DESC
       `,
-      [req.params.id]
+      [req.params.id, req.user.id, req.user.role, req.user.centre_id]
     );
     res.json(result.rows);
   } catch (err) {
@@ -312,9 +325,15 @@ router.get("/service-entry/:id", async (req, res) => {
       LEFT JOIN tasks t ON t.note_id = n.id
       LEFT JOIN staff ts ON ts.id = t.assigned_to
       WHERE n.related_service_entry_id = $1
+      AND (
+        n.created_by = $2
+        OR n.visibility = 'global'
+        OR (n.visibility = 'centre' AND ($3 = 'superadmin' OR (n.centre_id = $4 OR s.centre_id = $4)))
+        OR (n.visibility = 'mentioned_only' AND EXISTS (SELECT 1 FROM note_mentions vm WHERE vm.note_id = n.id AND vm.staff_id = $2))
+      )
       ORDER BY n.created_at DESC
       `,
-      [req.params.id]
+      [req.params.id, req.user.id, req.user.role, req.user.centre_id]
     );
     res.json(result.rows);
   } catch (err) {
@@ -353,6 +372,39 @@ router.get("/conversation/:id", async (req, res) => {
   }
 });
 
+// --- 5b. Change a note's colour ---
+// Anyone who can see a note may colour it; the colour is stored on the note, so everyone sees the same one.
+router.patch("/:id/color", async (req, res) => {
+  if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid note ID" });
+  const { color } = req.body;
+  if (!NOTE_COLORS.includes(color)) return res.status(400).json({ error: "Invalid colour" });
+
+  try {
+    const result = await pool.query(
+      `
+      UPDATE notes n
+      SET color = $2
+      FROM (SELECT n2.id FROM notes n2 LEFT JOIN staff s ON s.id = n2.created_by
+            WHERE n2.id = $1
+              AND (
+                n2.created_by = $3
+                OR n2.visibility = 'global'
+                OR (n2.visibility = 'centre' AND ($4 = 'superadmin' OR n2.centre_id = $5 OR s.centre_id = $5))
+                OR (n2.visibility = 'mentioned_only' AND EXISTS (SELECT 1 FROM note_mentions vm WHERE vm.note_id = n2.id AND vm.staff_id = $3))
+              )) visible
+      WHERE n.id = visible.id
+      RETURNING n.id, n.color
+      `,
+      [req.params.id, color, req.user.id, req.user.role, req.user.centre_id]
+    );
+    if (!result.rows.length) return res.status(404).json({ error: "Note not found" });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to update note colour" });
+  }
+});
+
 // --- 6. Update a Note ---
 router.put("/:id", async (req, res) => {
   if (isNaN(parseInt(req.params.id, 10))) return res.status(400).json({ error: "Invalid note ID" });
@@ -366,16 +418,17 @@ router.put("/:id", async (req, res) => {
 
     if (!canEdit) return res.status(403).json({ error: "Unauthorized" });
 
-    const { title, content, visibility } = req.body;
+    const { title, content, visibility, color } = req.body;
 
     const result = await pool.query(
       `
       UPDATE notes
-      SET title = $1, content = $2, visibility = $3, updated_at = NOW()
-      WHERE id = $4
+      SET title = $1, content = $2, visibility = COALESCE($3, visibility),
+          color = COALESCE($4, color), updated_at = NOW()
+      WHERE id = $5
       RETURNING *
       `,
-      [title, content, visibility, req.params.id]
+      [title, content, visibility, NOTE_COLORS.includes(color) ? color : null, req.params.id]
     );
 
     res.json(result.rows[0]);

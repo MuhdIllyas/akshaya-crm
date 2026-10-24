@@ -218,13 +218,33 @@ router.get("/", async (req, res) => {
         t.created_at,
         t.centre_id,
         t.related_service_id,
-        s.name AS service_name,
+        t.related_service_entry_id,
+        t.assigned_to,
+        CASE
+          WHEN sub.name IS NOT NULL THEN COALESCE(es.name, s.name) || ' - ' || sub.name
+          ELSE COALESCE(es.name, s.name)
+        END AS service_name,
+        se.customer_name,
+        trk.id AS tracking_id,
         st.name AS assigned_staff_name,
         'task' AS source
 
       FROM tasks t
       LEFT JOIN services s
         ON s.id = t.related_service_id
+      LEFT JOIN service_entries se
+        ON se.id = t.related_service_entry_id
+      LEFT JOIN services es
+        ON es.id = se.category_id
+      LEFT JOIN subcategories sub
+        ON sub.id = se.subcategory_id
+      LEFT JOIN LATERAL (
+        SELECT tr.id
+        FROM service_tracking tr
+        WHERE tr.service_entry_id = se.id
+        ORDER BY tr.updated_at DESC NULLS LAST, tr.id DESC
+        LIMIT 1
+      ) trk ON true
       LEFT JOIN staff st
         ON st.id = t.assigned_to
 
@@ -265,6 +285,7 @@ router.get("/", async (req, res) => {
         se.id,
         se.customer_name,
         sv.name AS service_name,
+        sc.name AS subcategory_name,
         se.expiry_date,
         se.staff_id AS assigned_to,
         sf.name AS staff_name,
@@ -272,6 +293,7 @@ router.get("/", async (req, res) => {
         (SELECT id FROM service_tracking WHERE service_entry_id = se.id ORDER BY updated_at DESC LIMIT 1) AS tracking_id
       FROM service_entries se
       LEFT JOIN services sv ON sv.id = se.category_id
+      LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
       LEFT JOIN staff sf ON sf.id = se.staff_id
       ${expiryFilter}
     `;
@@ -315,7 +337,7 @@ router.get("/", async (req, res) => {
         tracking_id: row.tracking_id, 
 
         service_name: fullServiceName,
-        assigned_to: row.staff_id,
+        assigned_to: row.assigned_to,
         assigned_staff_name: row.staff_name,
         source: "service_expiry",
       });

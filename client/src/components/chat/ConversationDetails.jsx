@@ -110,6 +110,7 @@ const ConversationDetails = ({
   const isGroup = isGroupConversation(conversation, currentUser.id);
   const isWhatsApp = conversation.channel === "whatsapp";
   const isService = conversation.context_type === "service_entry";
+  const isTeam = conversation.context_type === "team";
   const onlineOthers = others.filter((p) => onlineUsers.has(String(p.staff_id)));
   const singleOnline = !isGroup && !isWhatsApp ? onlineOthers.length > 0 : undefined;
 
@@ -169,9 +170,9 @@ const ConversationDetails = ({
             name={name}
             photo={getConversationPhoto(conversation, currentUser.id)}
             size="xl"
-            color={isWhatsApp ? "bg-emerald-600" : conversation.avatarColor || getAvatarColor(conversation.id)}
-            isGroup={isGroup}
-            icon={isWhatsApp ? FiSmartphone : undefined}
+            color={isWhatsApp ? "bg-emerald-600" : isTeam ? "bg-navy-700" : conversation.avatarColor || getAvatarColor(conversation.id)}
+            isGroup={isGroup && !isTeam}
+            icon={isWhatsApp ? FiSmartphone : isTeam ? FiUsers : undefined}
             online={singleOnline}
           />
           <h3 className="mt-3 text-base font-semibold text-slate-900 break-words">{name}</h3>
@@ -184,6 +185,11 @@ const ConversationDetails = ({
             {isWhatsApp && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[11px] font-medium">
                 <FiSmartphone size={10} /> WhatsApp
+              </span>
+            )}
+            {isTeam && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-navy-700 ring-1 ring-blue-200 px-2 py-0.5 text-[11px] font-medium">
+                <FiUsers size={10} /> Team chat
               </span>
             )}
             {isService && (

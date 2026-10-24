@@ -61,8 +61,11 @@ import Chat from '@/components/Chat';
 import ConversationList from "@/components/chat/ConversationList";
 import ConversationDetails from "@/components/chat/ConversationDetails";
 import MessengerNav from "@/components/chat/MessengerNav";
+import SchedulesView from "@/components/automations/SchedulesView";
+import ServiceLinkChip from "@/components/automations/ServiceLinkChip";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
+import { todayIST, addDays } from "@/utils/dates";
 
 // ============== NEW CHAT MODAL (Grouped by Centre) ==============
 const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
@@ -330,9 +333,15 @@ const MessengerPage = ({ user }) => {
   const [quickNoteForm, setQuickNoteForm] = useState({ title: "", content: "" });
 
   const [taskFilter, setTaskFilter] = useState("all");
+  // "mine" = assigned to me or created by me; "all" = everyone in the centre
+  const [taskScope, setTaskScope] = useState(currentUser.role === "staff" ? "mine" : "all");
   const [taskViewMode, setTaskViewMode] = useState("board");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+
+  // Draft message passed in via navigation (e.g. "Send Wishes" from the dashboard)
+  const [pendingDraft, setPendingDraft] = useState(null);
+  const handledNavKeyRef = useRef(null);
 
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState({});
@@ -833,29 +842,35 @@ const MessengerPage = ({ user }) => {
     };
   }, [token, currentUser.id, currentUser.centreId, activeConversation]);
 
-  // 🔥 Catch incoming navigation from Notifications
+  // 🔥 Catch incoming navigation from Notifications / Dashboard (e.g. birthday wishes)
   useEffect(() => {
     if (!location.state) return;
 
     // Check if we need to open the Tasks tab
     if (location.state.openTasksView) {
       setActiveView("tasks");
+      if (location.state.tasksScope) setTaskScope(location.state.tasksScope);
       window.history.replaceState({}, document.title);
       return;
     }
 
     // Check if we need to open a specific Chat
     if (location.state.openConversationId && conversations.length > 0) {
+      if (handledNavKeyRef.current === location.key) return; // handle each navigation only once
       const targetConvId = location.state.openConversationId;
-      const chatToOpen = conversations.find(c => c.id === targetConvId);
-      
+      const chatToOpen = conversations.find(c => String(c.id) === String(targetConvId));
+
       if (chatToOpen) {
-        setActiveView("chats"); 
-        setActiveConversation(chatToOpen); 
+        handledNavKeyRef.current = location.key;
+        setActiveView("chats");
+        setActiveConversation(chatToOpen);
+        if (location.state.draftMessage) {
+          setPendingDraft({ conversationId: chatToOpen.id, text: location.state.draftMessage });
+        }
         window.history.replaceState({}, document.title);
       }
     }
-  }, [location.state, conversations]);
+  }, [location.state, location.key, conversations]);
 
   // ============== CHAT API INTEGRATION ==============
 
@@ -1503,10 +1518,10 @@ const MessengerPage = ({ user }) => {
     setLoading(true);
     setApiError(null);
     try {
-      let url = `${API_BASE_URL}/api/tasks/all`;
+      let url = `${API_BASE_URL}/api/tasks/all?limit=500`;
 
       if (currentUser.role !== "superadmin" && currentUser.centreId) {
-        url += `?centre_id=${currentUser.centreId}`;
+        url += `&centre_id=${currentUser.centreId}`;
       }
 
       const res = await fetch(url, {
@@ -1804,12 +1819,19 @@ const MessengerPage = ({ user }) => {
     setIsTemplateModalOpen(true);
   };
 
+  const isMyTask = (task) =>
+    String(task.assigned_to) === String(currentUser.id) ||
+    String(task.assigned_by) === String(currentUser.id);
+
+  const getScopedTasks = () => (taskScope === "mine" ? tasks.filter(isMyTask) : tasks);
+
   const getFilteredTasks = () => {
+    const scoped = getScopedTasks();
     switch (taskFilter) {
-      case "pending": return tasks.filter(task => task.status === "pending" || !task.status);
-      case "in_progress": return tasks.filter(task => task.status === "in_progress");
-      case "completed": return tasks.filter(task => task.status === "completed");
-      default: return tasks;
+      case "pending": return scoped.filter(task => task.status === "pending" || !task.status);
+      case "in_progress": return scoped.filter(task => task.status === "in_progress");
+      case "completed": return scoped.filter(task => task.status === "completed");
+      default: return scoped;
     }
   };
 
@@ -1909,7 +1931,7 @@ const MessengerPage = ({ user }) => {
   const openAddEventModal = () => {
     setEditingEvent(null);
     setEventForm({
-      date: new Date().toISOString().split('T')[0],
+      date: todayIST(),
       type: "working",
       description: "",
       centre_id: currentUser.role === "superadmin" ? "" : currentUser.centreId
@@ -2314,9 +2336,10 @@ const MessengerPage = ({ user }) => {
 
 const renderTasksView = () => {
     const filteredTasks = getFilteredTasks();
-    const pendingCount = tasks.filter(t => t.status === "pending" || !t.status).length;
-    const inProgressCount = tasks.filter(t => t.status === "in_progress").length;
-    const completedCount = tasks.filter(t => t.status === "completed").length;
+    const scopedTasks = getScopedTasks();
+    const pendingCount = scopedTasks.filter(t => t.status === "pending" || !t.status).length;
+    const inProgressCount = scopedTasks.filter(t => t.status === "in_progress").length;
+    const completedCount = scopedTasks.filter(t => t.status === "completed").length;
 
     // --- Safely get assignee, prioritizing the REAL name from local storage ---
     const getAssigneeDetails = (task) => {
@@ -2426,7 +2449,7 @@ const renderTasksView = () => {
           {/* Compact Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
             {[
-              { title: 'Total Tasks', value: tasks.length, color: 'bg-gray-600', icon: FiCheckSquare },
+              { title: taskScope === 'mine' ? 'My Tasks' : 'Total Tasks', value: scopedTasks.length, color: 'bg-gray-600', icon: FiCheckSquare },
               { title: 'To Do', value: pendingCount, color: 'bg-amber-500', icon: FiAlertCircle },
               { title: 'In Progress', value: inProgressCount, color: 'bg-blue-500', icon: FiPlayCircle },
               { title: 'Completed', value: completedCount, color: 'bg-emerald-500', icon: FiCheck },
@@ -2460,6 +2483,23 @@ const renderTasksView = () => {
           {/* Filters & View Toggle */}
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-4 bg-white p-2.5 rounded-xl border border-gray-200 shadow-sm">
             <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar w-full sm:w-auto">
+              <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200 flex-shrink-0">
+                {[
+                  { id: 'mine', label: 'Mine', icon: FiUser },
+                  { id: 'all', label: 'Everyone', icon: FiUsers },
+                ].map(opt => (
+                  <button
+                    key={opt.id}
+                    onClick={() => setTaskScope(opt.id)}
+                    className={`px-3 py-1 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                      taskScope === opt.id ? 'bg-white shadow-sm text-navy-700' : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    <opt.icon size={12} /> {opt.label}
+                  </button>
+                ))}
+              </div>
+              <span className="w-px h-5 bg-gray-200 flex-shrink-0" />
               <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
               {['all', 'pending', 'in_progress', 'completed'].map(f => (
                 <button
@@ -2563,6 +2603,12 @@ const renderTasksView = () => {
                               </p>
                             )}
 
+                            {task.related_service_entry_id && (
+                              <div className="mb-2">
+                                <ServiceLinkChip item={task} compact />
+                              </div>
+                            )}
+
                             {/* Board Card Footer: Stacked Date/Priority & User Pill */}
                             <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-50">
                               
@@ -2662,6 +2708,11 @@ const renderTasksView = () => {
                                 <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
                                   {task.description}
                                 </p>
+                              )}
+                              {task.related_service_entry_id && (
+                                <div className="mt-1">
+                                  <ServiceLinkChip item={task} />
+                                </div>
                               )}
                             </td>
                             <td className="py-3 px-4">
@@ -2814,6 +2865,8 @@ const renderTasksView = () => {
                 onDeleteConversation={handleDeleteConversation}
                 onOpenDetails={handleOpenDetails}
                 isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
+                initialDraft={pendingDraft}
+                onDraftConsumed={() => setPendingDraft(null)}
               />
             </section>
 
@@ -2835,7 +2888,7 @@ const renderTasksView = () => {
             ) : activeView === "tasks" ? (
               renderTasksView()
             ) : activeView === "schedules" ? (
-              renderPlaceholderView("Schedules")
+              <SchedulesView currentUser={currentUser} centresMap={centresMap} />
             ) : (
               renderPlaceholderView("Chat")
             )}

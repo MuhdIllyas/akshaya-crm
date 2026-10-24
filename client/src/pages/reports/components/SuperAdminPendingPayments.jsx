@@ -132,7 +132,7 @@ const SuperAdminPendingPayments = ({ centreId, readOnly = true }) => {
 
    if (!centreId) {
     return (
-      <div className="bg-white p-6 rounded-lg border text-gray-600">
+      <div className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-sm">
         Select a centre to view pending payments
       </div>
     );

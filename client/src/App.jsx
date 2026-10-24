@@ -5,7 +5,6 @@ import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
 import AdminDashboard from "./pages/AdminDashboard";
-import StaffTasks from "./pages/staff/StaffTasks";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
@@ -39,13 +38,14 @@ import ServiceWorkspace from './components/ServiceWorkspace';
 import StaffPerformance from './pages/staff/StaffPerformance';
 import StaffAttendance from "./pages/staff/StaffAttendance";
 import ServiceEntry from "./pages/staff/ServiceEntry";
+import ServiceRequirementsPrint from './pages/staff/ServiceRequirementsPrint';
 import ExpenseEntry from "./pages/staff/ExpenseEntry";
 import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
 import PendingPayments from './pages/staff/PendingPayments';
 import TrackService from "./pages/staff/TrackServicePage";
+import MyProfile from "./pages/staff/MyProfile";
 import AllEntries from './pages/AllEntries';
 import CustomerProfileSystem from './pages/CustomerProfileSystem';
-import MyProfile from './pages/MyProfile';
 import CampaignManagement from "./pages/campaign/CampaignManagement";
 import axios from "axios";
 import Login from "./pages/Login";
@@ -293,12 +293,6 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["staff", "admin", "superadmin"]}><MyProfile /></ProtectedRoute>}
             />
 
-            {/* Staff-specific MyProfile (optional, can keep for backward compatibility) */}
-            <Route
-              path="staff/myprofile"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><MyProfile /></ProtectedRoute>}
-            />
-
             <Route
               path="admin/calendar"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><CalendarPage /></ProtectedRoute>}
@@ -465,9 +459,10 @@ const App = () => {
               path="staff/calendar"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><CalendarPage /></ProtectedRoute>}
             />
+            {/* My Tasks now lives in Messenger → Tasks (old links and bookmarks still work) */}
             <Route
               path="staff/tasks"
-              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><StaffTasks /></ProtectedRoute>}
+              element={<Navigate to="/dashboard/staff/messenger" replace state={{ openTasksView: true, tasksScope: "mine" }} />}
             />
             <Route
               path="staff/notes"
@@ -484,6 +479,10 @@ const App = () => {
             <Route
               path="staff/service_entry"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceEntry /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/service_checklist"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceRequirementsPrint /></ProtectedRoute>}
             />
             <Route
               path="staff/token/:tokenId/service"

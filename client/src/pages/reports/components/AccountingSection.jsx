@@ -16,23 +16,31 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
 import AdminExpenseEntry from './AdminExpenseEntry';
+import WalletReconciliation from './WalletReconciliation';
+import BankStatementSection from './BankStatementSection';
 
 // Today's date in IST (YYYY-MM-DD)
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+const istNowTime = () =>
+  new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }); // "HH:MM:SS" in IST
+
+// Shared style tokens (UI only)
+const inputCls =
+  'w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 disabled:bg-slate-50 disabled:text-slate-500 disabled:cursor-not-allowed';
 
 // Compact StatCard Component
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
   <motion.div
     whileHover={{ y: -2 }}
-    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer p-3"
+    className={`rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition-shadow hover:shadow-md ${onClick ? 'cursor-pointer' : ''}`}
     onClick={onClick}
   >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-gray-600 mb-1 text-xs">{title}</p>
-        <p className="font-bold text-gray-900 mb-1 text-lg">{value}</p>
+    <div className="flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">{title}</p>
+        <p className="mb-1 truncate text-xl font-bold text-slate-900">{value}</p>
         <div className="flex items-center">
-          <p className="text-gray-500 text-xs">{subtitle}</p>
+          <p className="text-xs text-slate-500">{subtitle}</p>
           {trend && (
             <span className={`ml-2 flex items-center text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
               {trend > 0 ? <FiTrendingUp className="mr-1 h-2 w-2" /> : <FiTrendingDown className="mr-1 h-2 w-2" />}
@@ -41,15 +49,23 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend })
           )}
         </div>
       </div>
-      <div className={`rounded-lg ${color} p-2`}>
-        <Icon className="text-white h-4 w-4" />
+      <div className={`shrink-0 rounded-xl ${color} p-2.5`}>
+        <Icon className="h-4 w-4 text-white" />
       </div>
     </div>
   </motion.div>
 );
 
 // Nightly Accounting Checklist Component
-const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly = false }) => {
+// ₹1,240 · ₹5,799.30 · −₹1,019.70 (never "₹5,799.3" or "₹-1,019.7")
+const inr2 = (v) => {
+  const n = Math.round(Number(v || 0) * 100) / 100;
+  const frac = Number.isInteger(n) ? 0 : 2;
+  const s = Math.abs(n).toLocaleString('en-IN', { minimumFractionDigits: frac, maximumFractionDigits: frac });
+  return `${n < 0 ? '−' : ''}₹${s}`;
+};
+
+const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCash, readOnly = false }) => {
   const [checklist, setChecklist] = useState(
     existingData?.checklist || {
       incomeEntryVerified: false,
@@ -62,8 +78,28 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
   );
 
   const [notes, setNotes] = useState(existingData?.notes || '');
-  const [closingCash, setClosingCash] = useState(existingData?.closingCash?.toString() || '');
+  // Calculated cash comes from the system (cash opening + cash in − cash out ± cash transfers).
+  // Before: the admin had to type it, so a typo here hid a real shortage.
+  // After the day is closed, the saved figure is shown instead.
+  const systemCash = existingData?.closingCash
+    ? existingData.closingCash.toString()
+    : (expectedCash !== undefined && expectedCash !== null ? String(Math.round(Number(expectedCash) * 100) / 100) : '');
+  const closingCash = systemCash;
   const [actualCashCount, setActualCashCount] = useState(existingData?.actualCashCount?.toString() || '');
+
+  // A different date / a reload of the saved close brings its own values
+  useEffect(() => {
+    setChecklist(existingData?.checklist || {
+      incomeEntryVerified: false,
+      expenseEntryVerified: false,
+      bankEntryReconciled: false,
+      dailySummaryCompleted: false,
+      cashReconciled: false,
+      walletBalancesVerified: false
+    });
+    setNotes(existingData?.notes || '');
+    setActualCashCount(existingData?.actualCashCount?.toString() || '');
+  }, [date, existingData]);
 
   const handleChecklistToggle = (key) => {
     if (readOnly) return;
@@ -82,16 +118,21 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
       return;
     }
     
-    if (!closingCash || !actualCashCount) {
-      toast.error('Please enter both calculated cash and actual cash count');
+    if (closingCash === '') {
+      toast.error('Calculated cash is not loaded yet — refresh and try again');
       return;
     }
-    
-    const variance = parseFloat(closingCash) - parseFloat(actualCashCount);
-    
+    if (actualCashCount === '' || !Number.isFinite(parseFloat(actualCashCount)) || parseFloat(actualCashCount) < 0) {
+      toast.error('Enter the actual cash count');
+      return;
+    }
+
+    // + = cash short, − = cash excess
+    const variance = Math.round((parseFloat(closingCash) - parseFloat(actualCashCount)) * 100) / 100;
+
     const payload = {
       date: date,
-      opening_balance: 0,
+      opening_balance: 0, // replaced with the CASH opening by the parent
       closing_balance: parseFloat(closingCash),
       actual_cash: parseFloat(actualCashCount),
       cash_variance: variance,
@@ -107,33 +148,33 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
   };
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4 mb-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-gray-900 text-sm flex items-center">
-            <FiCheckCircle className="h-4 w-4 mr-2 text-indigo-600" />
+          <h3 className="flex items-center text-sm font-bold text-slate-900">
+            <FiCheckCircle className="mr-2 h-4 w-4 text-navy-700" />
             Nightly Accounting Checklist
           </h3>
-          <p className="text-xs text-gray-600">Date: {date}</p>
+          <p className="mt-0.5 text-xs text-slate-500">Date: {date}</p>
           {existingData && (
-            <div className="mt-1">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-800">
-                <FiCheckCircle className="h-3 w-3 mr-1" />
+            <div className="mt-1.5">
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                <FiCheckCircle className="mr-1 h-3 w-3" />
                 Closed on {new Date(existingData.timestamp).toLocaleDateString()}
               </span>
             </div>
           )}
         </div>
-        <div className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-          allCompleted ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+        <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ring-1 ${
+          allCompleted ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-amber-50 text-amber-700 ring-amber-200'
         }`}>
           {allCompleted ? 'Ready to Close' : 'Pending Items'}
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         {/* Checklist Items */}
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
             { key: 'incomeEntryVerified', label: 'Income Entry Verified', description: 'Service charges & fees' },
             { key: 'expenseEntryVerified', label: 'Expense Entry Verified', description: 'All expenses approved' },
@@ -142,49 +183,62 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
             { key: 'cashReconciled', label: 'Cash Reconciled', description: 'Cash matches count' },
             { key: 'walletBalancesVerified', label: 'Wallets Verified', description: 'Digital wallets checked' }
           ].map((item) => (
-            <div key={item.key} className="flex items-start space-x-2 p-3 border border-gray-200 rounded-lg hover:bg-gray-50">
+            <div
+              key={item.key}
+              className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${
+                checklist[item.key] ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'
+              }`}
+            >
               <button
+                type="button"
+                role="checkbox"
+                aria-checked={!!checklist[item.key]}
+                aria-label={item.label}
                 onClick={() => handleChecklistToggle(item.key)}
-                className={`mt-1 flex-shrink-0 w-4 h-4 rounded border flex items-center justify-center ${
+                className={`mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md border transition-colors ${
                   checklist[item.key]
-                    ? 'bg-emerald-500 border-emerald-500'
-                    : 'border-gray-300'
-                }`}
+                    ? 'border-emerald-500 bg-emerald-500'
+                    : 'border-slate-300 bg-white'
+                } ${readOnly ? 'cursor-default' : 'cursor-pointer'}`}
               >
-                {checklist[item.key] && <FiCheckIcon className="h-2 w-2 text-white" />}
+                {checklist[item.key] && <FiCheckIcon className="h-3 w-3 text-white" />}
               </button>
-              <div className="flex-1 min-w-0">
-                <label className="font-medium text-gray-900 text-sm cursor-pointer truncate" onClick={() => handleChecklistToggle(item.key)}>
+              <div className="min-w-0 flex-1">
+                <label
+                  className={`block truncate text-sm font-medium text-slate-900 ${readOnly ? '' : 'cursor-pointer'}`}
+                  onClick={() => handleChecklistToggle(item.key)}
+                >
                   {item.label}
                 </label>
-                <p className="text-xs text-gray-600 truncate">{item.description}</p>
+                <p className="truncate text-xs text-slate-500">{item.description}</p>
               </div>
             </div>
           ))}
         </div>
 
         {/* Cash Reconciliation */}
-        <div className="pt-4 border-t border-gray-200">
-          <h4 className="font-medium text-gray-900 text-sm mb-3 flex items-center">
-            <FiDollarSign className="h-3 w-3 mr-2 text-emerald-600" />
+        <div className="border-t border-slate-200 pt-5">
+          <h4 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+            <FiDollarSign className="mr-2 h-3.5 w-3.5 text-emerald-600" />
             Cash Reconciliation
           </h4>
-          <div className="grid gap-3 grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
-                Calculated Cash
+              <label className="mb-1 block text-xs font-medium text-slate-600">
+                Calculated Cash <span className="font-normal text-slate-400">(from the system)</span>
               </label>
               <input
                 type="number"
                 value={closingCash}
-                onChange={(e) => setClosingCash(e.target.value)}
-                disabled={readOnly}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
-                placeholder="₹0.00"
+                readOnly
+                disabled
+                className={inputCls}
+                placeholder="Loading…"
+                aria-label="Calculated Cash"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">
+              <label className="mb-1 block text-xs font-medium text-slate-600">
                 Actual Count
               </label>
               <input
@@ -192,28 +246,36 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
                 value={actualCashCount}
                 onChange={(e) => setActualCashCount(e.target.value)}
                 disabled={readOnly}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                className={inputCls}
                 placeholder="₹0.00"
               />
             </div>
           </div>
-          {closingCash && actualCashCount && (
-            <div className="mt-2">
-              <span className={`text-xs font-medium ${
-                Math.abs(parseFloat(closingCash) - parseFloat(actualCashCount)) <= 100
-                  ? 'text-emerald-600'
-                  : 'text-rose-600'
-              }`}>
-                Variance: ₹{(parseFloat(closingCash) - parseFloat(actualCashCount)).toFixed(2)}
-              </span>
-            </div>
-          )}
+          {closingCash !== '' && actualCashCount !== '' && (() => {
+            const diff = Math.round((parseFloat(closingCash) - parseFloat(actualCashCount)) * 100) / 100;
+            return (
+              <div className="mt-2">
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ${
+                  diff === 0
+                    ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+                    : 'bg-rose-50 text-rose-700 ring-rose-200'
+                }`}>
+                  {diff === 0 ? 'Cash matches ✓' : diff > 0 ? `Cash short ${inr2(diff)}` : `Cash excess ${inr2(-diff)}`}
+                </span>
+                {diff !== 0 && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    Book it in Wallet Recon (shortage → expense, excess → misc income) before closing, so the books match the count.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         {/* Notes */}
         <div>
-          <label className="block text-xs font-medium text-gray-700 mb-2 flex items-center">
-            <FiMessageSquare className="h-3 w-3 mr-1 text-gray-500" />
+          <label className="mb-1.5 flex items-center text-xs font-medium text-slate-600">
+            <FiMessageSquare className="mr-1 h-3 w-3 text-slate-400" />
             Notes & Observations
           </label>
           <textarea
@@ -221,7 +283,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
             onChange={(e) => setNotes(e.target.value)}
             disabled={readOnly}
             rows="2"
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+            className={inputCls}
             placeholder="Enter any notes or observations..."
           />
         </div>
@@ -232,12 +294,12 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
           <button
             onClick={handleCompleteAccounting}
             disabled={!allCompleted}
-            className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            className={`rounded-xl px-4 py-2 text-sm font-semibold shadow-sm transition-colors ${
               allCompleted
                 ? existingData
-                  ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                  : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  ? 'bg-navy-700 text-white hover:bg-navy-800'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                : 'cursor-not-allowed bg-slate-100 text-slate-400 shadow-none'
             }`}
           >
             {existingData ? 'Update Nightly Accounting' : 'Complete Nightly Accounting'}
@@ -250,7 +312,7 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, readOnly =
 };
 
 // Daily Summary Component
-const DailySummaryComponent = ({ summaryData, onUpdate, readOnly = false }) => {
+const DailySummaryComponent = ({ summaryData, onUpdate, countedCash = null, readOnly = false }) => {
   const [editing, setEditing] = useState(false);
   const [formData, setFormData] = useState({
     derived: summaryData?.derived || {},
@@ -282,7 +344,12 @@ const calculateTotals = () => {
       cashTransferOut = 0
     } = formData.derived || {};
 
-    const actualCashInHand = formData.manual?.actualCashInHand || 0;
+    // The count from the nightly close wins; otherwise the "Actual Cash in Hand" saved here.
+    // null = nobody has counted yet (used to be treated as ₹0 → "variance ₹21,240").
+    const savedManual = Number(formData.manual?.actualCashInHand || 0);
+    const actualCashInHand = countedCash !== null && countedCash !== undefined && countedCash !== ''
+      ? Number(countedCash)
+      : (savedManual > 0 ? savedManual : null);
 
     // Business Inflow/Outflow (strictly revenue and expenses)
     const totalInflow = cashInflow + bankInflow + digitalInflow;
@@ -292,13 +359,14 @@ const calculateTotals = () => {
     // 🔥 Physical Cash Calculation: Opening + Inflow + TransfersIn - Outflow - TransfersOut
     const expectedCash = cashOpening + cashInflow + cashTransferIn - cashOutflow - cashTransferOut;
 
-    // Variance = Expected Physical Cash - Actual Count
-    const variance = expectedCash - actualCashInHand;
+    // Variance = Expected Physical Cash - Actual Count (+ short, − excess)
+    const variance = actualCashInHand === null ? null : Math.round((expectedCash - actualCashInHand) * 100) / 100;
 
     return {
       totalInflow,
       totalOutflow,
       closingBalance,
+      expectedCash,
       variance
     };
   };
@@ -313,12 +381,22 @@ const calculateTotals = () => {
     toast.success('Daily summary saved');
   };
 
+  // Collections are shown WITHOUT misc income; misc income gets its own row (the totals still include it)
+  const fieldValue = (field) => {
+    const d = formData.derived || {};
+    if (field.key === 'actualCashInHand') return Number(formData.manual?.actualCashInHand || 0);
+    if (field.sum) return field.sum.reduce((t, k) => t + Number(d[k] || 0), 0);
+    return Number(d[field.key] || 0) - (field.less ? Number(d[field.less] || 0) : 0);
+  };
+
   const fields = [
     { key: 'openingBalance', label: 'Opening Balance', type: 'balance', category: 'system' },
     { key: 'cashOpening', label: 'Cash Opening Balance', type: 'cash', category: 'system' },
-    { key: 'cashInflow', label: 'Cash Collections', type: 'cash', category: 'inflow' },
-    { key: 'digitalInflow', label: 'Digital Collections', type: 'digital', category: 'inflow' },
-    { key: 'bankInflow', label: 'Bank Collections', type: 'bank', category: 'inflow' },
+    { key: 'cashInflow', label: 'Cash Collections', type: 'cash', category: 'inflow', less: 'cashMisc' },
+    { key: 'digitalInflow', label: 'Digital Collections', type: 'digital', category: 'inflow', less: 'digitalMisc' },
+    { key: 'bankInflow', label: 'Bank Collections', type: 'bank', category: 'inflow', less: 'bankMisc' },
+    // misc income: money in the wallet (counted in the totals) but NOT service income / profit
+    { key: 'miscIncome', label: 'Misc Income (not profit)', type: 'misc', category: 'inflow', sum: ['cashMisc', 'digitalMisc', 'bankMisc'] },
     { key: 'cashOutflow', label: 'Cash Outflow', type: 'cash', category: 'outflow' },
     { key: 'digitalOutflow', label: 'Digital Outflow', type: 'digital', category: 'outflow' },
     { key: 'bankOutflow', label: 'Bank Outflow', type: 'bank', category: 'outflow' },
@@ -328,23 +406,23 @@ const calculateTotals = () => {
   ];
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 p-4">
-      <div className="flex items-center justify-between mb-4">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-gray-900 text-sm flex items-center">
-            <FiBarChart2 className="h-4 w-4 mr-2 text-indigo-600" />
+          <h3 className="flex items-center text-sm font-bold text-slate-900">
+            <FiBarChart2 className="mr-2 h-4 w-4 text-navy-700" />
             Daily Summary
           </h3>
-          <p className="text-xs text-gray-600">Date: {summaryData?.date || '-'}</p>
+          <p className="mt-0.5 text-xs text-slate-500">Date: {summaryData?.date || '-'}</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex gap-2">
           {editing ? (
             <>
               <button
                 onClick={handleSave}
-                className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors flex items-center space-x-1 text-sm"
+                className="flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700"
               >
-                <FiSave className="h-3 w-3" />
+                <FiSave className="h-3.5 w-3.5" />
                 <span>Save</span>
               </button>
               <button
@@ -357,18 +435,18 @@ const calculateTotals = () => {
                   });
                   setEditing(false);
                 }}
-                className="px-3 py-1.5 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors flex items-center space-x-1 text-sm"
+                className="flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
               >
-                <FiX className="h-3 w-3" />
+                <FiX className="h-3.5 w-3.5" />
                 <span>Cancel</span>
               </button>
             </>
           ) : !readOnly ? (
             <button
               onClick={() => setEditing(true)}
-              className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors flex items-center space-x-1 text-sm"
+              className="flex items-center gap-1.5 rounded-xl bg-navy-700 px-3 py-1.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-navy-800"
             >
-              <FiEdit className="h-3 w-3" />
+              <FiEdit className="h-3.5 w-3.5" />
               <span>Edit Summary</span>
             </button>
           ) : null}
@@ -376,90 +454,99 @@ const calculateTotals = () => {
       </div>
 
       {/* Summary Stats */}
-      <div className="grid gap-3 mb-4 grid-cols-4">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <p className="text-xs text-blue-700 mb-1">Total Inflow</p>
-          <p className="font-bold text-blue-900 text-sm">
-            ₹{totals.totalInflow.toLocaleString()}
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+          <p className="mb-1 text-xs font-medium text-blue-700">Total Inflow</p>
+          <p className="text-base font-bold text-blue-900">
+            {inr2(totals.totalInflow)}
           </p>
         </div>
 
-        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3">
-          <p className="text-xs text-rose-700 mb-1">Total Outflow</p>
-          <p className="font-bold text-rose-900 text-sm">
-            ₹{totals.totalOutflow.toLocaleString()}
+        <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+          <p className="mb-1 text-xs font-medium text-rose-700">Total Outflow</p>
+          <p className="text-base font-bold text-rose-900">
+            {inr2(totals.totalOutflow)}
           </p>
         </div>
 
-        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-          <p className="text-xs text-emerald-700 mb-1">Closing Balance</p>
-          <p className="font-bold text-emerald-900 text-sm">
-            ₹{totals.closingBalance.toLocaleString()}
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+          <p className="mb-1 text-xs font-medium text-emerald-700">Closing Balance</p>
+          <p className="text-base font-bold text-emerald-900">
+            {inr2(totals.closingBalance)}
           </p>
         </div>
 
-        <div className={`border rounded-lg p-3 ${
-          Math.abs(totals.variance) <= 100
-            ? 'bg-emerald-50 border-emerald-200'
-            : 'bg-rose-50 border-rose-200'
+        <div className={`rounded-xl border p-3 ${
+          totals.variance === null
+            ? 'border-slate-200 bg-slate-50 text-slate-700'
+            : totals.variance === 0
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : 'border-rose-200 bg-rose-50 text-rose-900'
         }`}>
-          <p className="text-xs mb-1">Cash Variance</p>
-          <p className="font-bold text-sm">
-            ₹{totals.variance.toFixed(2)}
+          <p className="mb-1 text-xs font-medium">Cash Variance</p>
+          <p className="text-base font-bold">
+            {totals.variance === null
+              ? 'Not counted yet'
+              : totals.variance === 0
+                ? '₹0 ✓'
+                : totals.variance > 0
+                  ? `Short ${inr2(totals.variance)}`
+                  : `Excess ${inr2(-totals.variance)}`}
           </p>
+          <p className="mt-0.5 text-xs opacity-75">Expected cash {inr2(totals.expectedCash)}</p>
         </div>
       </div>
 
       {/* Summary Table */}
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-full">
+      <div className="overflow-x-auto rounded-xl border border-slate-200">
+        <table className="w-full min-w-[480px]">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+            <tr className="border-b border-slate-200 bg-slate-50">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Item
               </th>
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Type
               </th>
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Category
               </th>
-              <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              <th className="px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Amount (₹)
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-slate-100">
             {fields.map((field) => (
-              <tr key={field.key} className="hover:bg-gray-50 transition-colors">
-                <td className="py-2 px-3">
-                  <span className="font-medium text-gray-900 text-xs">{field.label}</span>
+              <tr key={field.key} className="transition-colors hover:bg-slate-50">
+                <td className="px-3 py-2.5">
+                  <span className="text-xs font-medium text-slate-900">{field.label}</span>
                 </td>
-                <td className="py-2 px-3">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                    field.type === 'cash' ? 'bg-blue-100 text-blue-800' :
-                    field.type === 'digital' ? 'bg-purple-100 text-purple-800' :
-                    field.type === 'bank' ? 'bg-indigo-100 text-indigo-800' :
-                    'bg-amber-100 text-amber-800'
+                <td className="px-3 py-2.5">
+                  <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                    field.type === 'cash' ? 'bg-blue-50 text-blue-700' :
+                    field.type === 'digital' ? 'bg-purple-50 text-purple-700' :
+                    field.type === 'bank' ? 'bg-slate-100 text-navy-700' :
+                    'bg-amber-50 text-amber-700'
                   }`}>
-                    {field.type === 'cash' && <FiDollarSign className="h-2 w-2 mr-1" />}
-                    {field.type === 'digital' && <FiSmartphone className="h-2 w-2 mr-1" />}
-                    {field.type === 'bank' && <FiCreditCard className="h-2 w-2 mr-1" />}
+                    {field.type === 'cash' && <FiDollarSign className="mr-1 h-2.5 w-2.5" />}
+                    {field.type === 'digital' && <FiSmartphone className="mr-1 h-2.5 w-2.5" />}
+                    {field.type === 'bank' && <FiCreditCard className="mr-1 h-2.5 w-2.5" />}
                     {field.type}
                   </span>
                 </td>
-                <td className="py-2 px-3">
+                <td className="px-3 py-2.5">
                   <span className={`inline-flex items-center text-xs ${
                     field.category === 'inflow' ? 'text-emerald-600' :
                     field.category === 'outflow' ? 'text-rose-600' :
-                    'text-gray-600'
+                    'text-slate-500'
                   }`}>
-                    {field.category === 'inflow' && <FiTrendingUp className="h-2 w-2 mr-1" />}
-                    {field.category === 'outflow' && <FiTrendingDown className="h-2 w-2 mr-1" />}
+                    {field.category === 'inflow' && <FiTrendingUp className="mr-1 h-2.5 w-2.5" />}
+                    {field.category === 'outflow' && <FiTrendingDown className="mr-1 h-2.5 w-2.5" />}
                     {field.category}
                   </span>
                 </td>
-                <td className="py-2 px-3">
+                <td className="px-3 py-2.5 text-right">
                   {editing && field.key === 'actualCashInHand' ? (
                     <input
                       type="number"
@@ -473,11 +560,11 @@ const calculateTotals = () => {
                           }
                         }))
                       }
-                      className="w-28 px-2 py-1 border border-gray-300 rounded text-right text-xs"
+                      className="w-28 rounded-lg border border-slate-300 px-2 py-1 text-right text-xs focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                     />
                   ) : (
-                    <span className="font-medium text-xs text-gray-800">
-                      ₹{(field.key === 'actualCashInHand' ? formData.manual.actualCashInHand : formData.derived[field.key])?.toLocaleString() || '0'}
+                    <span className="text-xs font-semibold text-slate-800">
+                      {inr2(fieldValue(field))}
                     </span>
                   )}
                 </td>
@@ -486,6 +573,192 @@ const calculateTotals = () => {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+};
+
+// Shortages & Excess for the day — shown on Daily Accounting for admin AND superadmin
+// (superadmin opens the same component with isSuperAdmin + centreId, read-only).
+// Sources:
+//   - wallet counts saved in Wallet Recon (latest count per wallet for the date)
+//   - what was booked for them (Shortage expenses / Misc Income), via settled_amount
+//   - the cash count at the nightly close
+const ShortageExcessCard = ({ date, buildQueryString, refreshKey, wallets = [], expenses = [], ledgerRows = [], nightly, onOpenRecon }) => {
+  const [rows, setRows] = useState([]);
+  const [loadError, setLoadError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconciliations?${buildQueryString({ date })}`,
+          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
+        );
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (!cancelled) { setRows(Array.isArray(data) ? data : []); setLoadError(false); }
+      } catch (e) {
+        if (!cancelled) { setRows([]); setLoadError(true); }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, refreshKey]);
+
+  const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+  const nameOf = (id) => wallets.find((w) => String(w.id) === String(id))?.name || `Wallet #${id}`;
+  const typeOf = (id) => (wallets.find((w) => String(w.id) === String(id))?.type || '').toLowerCase();
+
+  // Every counted wallet whose count differed from the system, even by ₹1
+  const diffs = rows
+    .map((r) => {
+      const variance = r2(r.variance ?? (Number(r.actual_balance) - Number(r.book_balance)));
+      const settled = r2(r.settled_amount);
+      return {
+        walletId: r.wallet_id,
+        name: nameOf(r.wallet_id),
+        type: typeOf(r.wallet_id),
+        book: r2(r.book_balance),
+        actual: r2(r.actual_balance),
+        variance,             // − short, + excess
+        settled,              // booked so far (same sign)
+        open: r2(variance - settled),
+      };
+    })
+    .filter((d) => d.variance !== 0)
+    .sort((a, b) => a.variance - b.variance);
+
+  const totalShort = r2(diffs.filter((d) => d.variance < 0).reduce((s, d) => s - d.variance, 0));
+  const totalExcess = r2(diffs.filter((d) => d.variance > 0).reduce((s, d) => s + d.variance, 0));
+  const openShort = r2(diffs.filter((d) => d.open < 0).reduce((s, d) => s - d.open, 0));
+  const openExcess = r2(diffs.filter((d) => d.open > 0).reduce((s, d) => s + d.open, 0));
+
+  const shortageExpenses = expenses.filter((e) => (e.category || '').toLowerCase() === 'shortage' && e.status !== 'rejected');
+  const bookedShortage = r2(shortageExpenses.reduce((s, e) => s + Number(e.amount || 0), 0));
+  const miscIncome = ledgerRows.filter((t) => t.category === 'Misc Income' && t.type === 'credit');
+  const bookedExcess = r2(miscIncome.reduce((s, t) => s + Number(t.amount || 0), 0));
+
+  const closeVariance = nightly?.closingCash && nightly?.actualCashCount
+    ? r2(Number(nightly.closingCash) - Number(nightly.actualCashCount)) // + short, − excess
+    : null;
+
+  const counted = rows.length;
+  const nothingToShow = counted === 0 && closeVariance === null && bookedShortage === 0 && bookedExcess === 0;
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="flex items-center text-sm font-bold text-slate-900">
+            <FiAlertTriangle className="mr-2 h-4 w-4 text-amber-600" />
+            Shortages & Excess
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Date: {date} · {counted > 0 ? `${counted} wallet${counted !== 1 ? 's' : ''} counted` : 'wallets not counted yet'}
+          </p>
+        </div>
+        {onOpenRecon && (
+          <button
+            type="button"
+            onClick={onOpenRecon}
+            className="rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Open Wallet Recon
+          </button>
+        )}
+      </div>
+
+      {loadError && (
+        <p className="mb-3 rounded-xl bg-amber-50 p-2 text-xs text-amber-800">Couldn't load the wallet counts for this date.</p>
+      )}
+
+      {nothingToShow ? (
+        <p className="py-4 text-center text-xs text-slate-500">No counts or shortage / excess entries for this date.</p>
+      ) : (
+        <>
+          <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
+              <p className="mb-1 text-xs font-medium text-rose-700">Total shortage</p>
+              <p className="text-base font-bold text-rose-900">{inr2(totalShort)}</p>
+              <p className="text-xs text-rose-700/80">Booked as expense {inr2(bookedShortage)}</p>
+            </div>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3">
+              <p className="mb-1 text-xs font-medium text-emerald-700">Total excess</p>
+              <p className="text-base font-bold text-emerald-900">{inr2(totalExcess)}</p>
+              <p className="text-xs text-emerald-700/80">Booked as misc income {inr2(bookedExcess)}</p>
+            </div>
+            <div className={`rounded-xl border p-3 ${openShort || openExcess ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+              <p className="mb-1 text-xs font-medium text-slate-700">Still to settle</p>
+              <p className="text-base font-bold text-slate-900">
+                {openShort || openExcess
+                  ? [openShort ? `Short ${inr2(openShort)}` : null, openExcess ? `Excess ${inr2(openExcess)}` : null].filter(Boolean).join(' · ')
+                  : 'Nil ✓'}
+              </p>
+            </div>
+            <div className={`rounded-xl border p-3 ${closeVariance === null ? 'border-slate-200 bg-slate-50' : closeVariance === 0 ? 'border-emerald-200 bg-emerald-50' : 'border-rose-200 bg-rose-50'}`}>
+              <p className="mb-1 text-xs font-medium text-slate-700">Cash at nightly close</p>
+              <p className="text-base font-bold text-slate-900">
+                {closeVariance === null ? 'Not closed' : closeVariance === 0 ? 'Matched ✓' : closeVariance > 0 ? `Short ${inr2(closeVariance)}` : `Excess ${inr2(-closeVariance)}`}
+              </p>
+              {closeVariance !== null && (
+                <p className="text-xs text-slate-500">Counted {inr2(nightly.actualCashCount)} of {inr2(nightly.closingCash)}</p>
+              )}
+            </div>
+          </div>
+
+          {diffs.length > 0 && (
+            <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <table className="w-full min-w-[560px]">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-3 py-2">Wallet</th>
+                    <th className="px-3 py-2 text-right">System</th>
+                    <th className="px-3 py-2 text-right">Counted</th>
+                    <th className="px-3 py-2 text-right">Difference</th>
+                    <th className="px-3 py-2 text-right">Booked</th>
+                    <th className="px-3 py-2 text-right">Open</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {diffs.map((d) => (
+                    <tr key={d.walletId}>
+                      <td className="px-3 py-2">
+                        <span className="font-medium text-slate-900">{d.name}</span>
+                        {d.type && <span className="ml-1 capitalize text-slate-400">· {d.type}</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{inr2(d.book)}</td>
+                      <td className="px-3 py-2 text-right text-slate-700">{inr2(d.actual)}</td>
+                      <td className={`px-3 py-2 text-right font-bold ${d.variance < 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {d.variance < 0 ? `Short ${inr2(-d.variance)}` : `Excess ${inr2(d.variance)}`}
+                      </td>
+                      <td className="px-3 py-2 text-right text-slate-700">{d.settled ? inr2(Math.abs(d.settled)) : '—'}</td>
+                      <td className={`px-3 py-2 text-right font-medium ${d.open === 0 ? 'text-emerald-600' : 'text-amber-700'}`}>
+                        {d.open === 0 ? 'Settled ✓' : inr2(Math.abs(d.open))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {(shortageExpenses.length > 0 || miscIncome.length > 0) && (
+            <div className="mt-3 space-y-1 text-xs text-slate-600">
+              {shortageExpenses.map((e) => (
+                <p key={`e-${e.id}`}>
+                  <span className="font-medium text-rose-600">−{inr2(e.amount)}</span> Shortage expense · {e.description || e.remarks || ''}
+                </p>
+              ))}
+              {miscIncome.map((t) => (
+                <p key={`m-${t.id}`}>
+                  <span className="font-medium text-emerald-600">+{inr2(t.amount)}</span> Misc income · {t.wallet_name}
+                </p>
+              ))}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
@@ -622,100 +895,245 @@ const IncomeViewComponent = ({ transactions = [] }) => {
 
   const trend = 12.5;
 
+  const rowCalc = (row) => {
+    const displayAmount = Number(row.received_amount || 0);
+    const totalBilled = Number(row.service_charges || 0) + Number(row.department_charges || 0);
+    let receivedServiceCharge = 0;
+    let receivedDepartmentCharge = 0;
+
+    if (totalBilled > 0 && displayAmount > 0) {
+      const paymentRatio = displayAmount / totalBilled;
+      receivedServiceCharge = Number(row.service_charges || 0) * paymentRatio;
+      receivedDepartmentCharge = Number(row.department_charges || 0) * paymentRatio;
+    } else if (displayAmount > 0 && totalBilled === 0) {
+      receivedServiceCharge = displayAmount;
+    }
+    return { displayAmount, totalBilled, receivedServiceCharge, receivedDepartmentCharge };
+  };
+
+  const fmtDate = (v) => (v ? new Date(v).toLocaleDateString() : '—');
+  const fmtTime = (v) => (v ? new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—');
+
+  const renderDetails = (row) => {
+    const { displayAmount, totalBilled, receivedServiceCharge, receivedDepartmentCharge } = rowCalc(row);
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-3">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h4 className="text-xs font-bold text-slate-900">Transaction Details</h4>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-500">ID:</span>
+            <span className="font-mono text-xs text-slate-700">{row.service_entry_id}</span>
+          </div>
+        </div>
+
+        <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Service Charge (Received)</p>
+            <p className="text-xs font-medium text-slate-900">₹{Math.round(receivedServiceCharge).toLocaleString()}</p>
+            <p className="text-xs text-slate-500">(Billed: ₹{Number(row.service_charges || 0).toLocaleString()})</p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Department Charge (Received)</p>
+            <p className="text-xs font-medium text-slate-900">₹{Math.round(receivedDepartmentCharge).toLocaleString()}</p>
+            <p className="text-xs text-slate-500">(Billed: ₹{Number(row.department_charges || 0).toLocaleString()})</p>
+          </div>
+          <div className="sm:col-span-2">
+            <p className="mb-1 text-xs text-slate-500">Total from Customer</p>
+            <p className="text-xs font-bold text-emerald-600">₹{displayAmount.toLocaleString()}</p>
+            <p className="text-xs text-slate-500">
+              {totalBilled > 0 ? (
+                <>
+                  {((displayAmount / totalBilled) * 100).toFixed(1)}% of total billed
+                  (₹{totalBilled.toLocaleString()})
+                </>
+              ) : (
+                'Full payment'
+              )}
+            </p>
+          </div>
+        </div>
+
+        {row.wallet_breakdown && Array.isArray(row.wallet_breakdown) && row.wallet_breakdown.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-2 text-xs font-medium text-slate-700">Wallet Transactions</p>
+            <div className="space-y-1">
+              {row.wallet_breakdown.map((w, i) => {
+                const isCustomerPayment =
+                  (Number(w.amount) === displayAmount) ||
+                  (Number(w.amount) === Number(row.service_charges || 0));
+
+                return (
+                  <div
+                    key={`${row.service_entry_id}-${w.wallet}-${i}`}
+                    className={`flex flex-wrap items-center justify-between gap-2 rounded-lg p-2 text-xs ${
+                      isCustomerPayment ? 'border border-emerald-100 bg-emerald-50' : 'bg-slate-50'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium text-slate-900">{w.wallet || 'Unknown'}</span>
+                      <span className={`rounded-full px-1.5 py-0.5 text-xs ${
+                        isCustomerPayment
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-slate-200 text-slate-700'
+                      }`}>
+                        {isCustomerPayment ? 'Customer Payment' : 'Internal Transfer'}
+                      </span>
+                      {w.received_at && (
+                        <span className="text-xs text-slate-500">
+                          {new Date(w.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
+                    </div>
+                    <div className={`font-semibold ${isCustomerPayment ? 'text-emerald-600' : 'text-navy-700'}`}>
+                      ₹{Number(w.amount || 0).toLocaleString()}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="mt-3 border-t border-slate-200 pt-3">
+          <div className="flex flex-col gap-1 text-xs sm:flex-row sm:justify-between">
+            <span className="text-slate-500">Note:</span>
+            <span className="text-slate-700">
+              Customer paid ₹{displayAmount.toLocaleString()} total
+              ({receivedServiceCharge > 0 ? `₹${Math.round(receivedServiceCharge).toLocaleString()} service` : ''}
+              {receivedDepartmentCharge > 0 ? ` + ₹${Math.round(receivedDepartmentCharge).toLocaleString()} department` : ''})
+            </span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderToggle = (row, isExpanded) => (
+    <button
+      type="button"
+      onClick={() => toggleRow(row.service_entry_id)}
+      aria-label={isExpanded ? 'Hide transaction details' : 'Show transaction details'}
+      aria-expanded={isExpanded}
+      className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-slate-100 hover:text-navy-700 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
+    >
+      {isExpanded ? <FiMinus className="h-4 w-4" /> : <FiPlus className="h-4 w-4" />}
+    </button>
+  );
+
+  const renderStatus = (row) => (
+    <>
+      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+        <FiCheck className="mr-1 h-2 w-2" />
+        Completed
+      </span>
+      {row.was_pending && (
+        <div className="mt-1">
+          <span className="flex w-fit items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+            <FiRotateCcw className="mr-1 h-2 w-2" />
+            Was Pending
+          </span>
+        </div>
+      )}
+    </>
+  );
+
+  const sideCardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const sideTitleCls = 'mb-3 flex items-center text-sm font-bold text-slate-900';
+  const emptyCls = 'py-2 text-center text-xs text-slate-500';
+  const thCls = 'px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500';
+
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Left Column - Key Metrics */}
-      <div className="col-span-1 space-y-4">
+      <div className="order-2 space-y-4 lg:order-1 lg:col-span-1">
         {/* Total Collected Card */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-emerald-100 rounded-lg">
+        <div className={`${sideCardCls} transition-shadow hover:shadow-md`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-emerald-100 p-2">
                 <FiDollarSign className="h-4 w-4 text-emerald-600" />
               </div>
               <div>
-                <p className="text-xs text-gray-500">Total Collected</p>
-                <p className="font-bold text-gray-900 text-lg">₹{totalCollected.toLocaleString()}</p>
+                <p className="text-xs text-slate-500">Total Collected</p>
+                <p className="text-lg font-bold text-slate-900">₹{totalCollected.toLocaleString()}</p>
               </div>
             </div>
-            <div className="text-right">
-              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-50 text-emerald-700">
-                <FiTrendingUp className="h-2 w-2 mr-1" />
-                +{trend}%
-              </span>
-            </div>
+            <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
+              <FiTrendingUp className="mr-1 h-2 w-2" />
+              +{trend}%
+            </span>
           </div>
           <div className="flex items-center justify-between text-xs">
-            <span className="text-gray-600">Service Charges (Received)</span>
-            <span className="font-medium">₹{totalServiceCharge.toLocaleString()}</span>
+            <span className="text-slate-600">Service Charges (Received)</span>
+            <span className="font-medium text-slate-900">₹{totalServiceCharge.toLocaleString()}</span>
           </div>
-          <div className="flex items-center justify-between text-xs mt-1">
-            <span className="text-gray-600">Department Charges (Debitted)</span>
-            <span className="font-medium">₹{totalDepartmentFee.toLocaleString()}</span>
+          <div className="mt-1 flex items-center justify-between text-xs">
+            <span className="text-slate-600">Department Charges (Debitted)</span>
+            <span className="font-medium text-slate-900">₹{totalDepartmentFee.toLocaleString()}</span>
           </div>
-          <div className="mt-2 pt-2 border-t border-gray-100">
+          <div className="mt-2 border-t border-slate-100 pt-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Net Customer Payment</span>
+              <span className="text-slate-600">Net Customer Payment</span>
               <span className="font-bold text-emerald-600">₹{totalCollected.toLocaleString()}</span>
             </div>
           </div>
         </div>
 
         {/* Wallet Summary */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiDatabase className="h-4 w-4 mr-2 text-blue-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiDatabase className="mr-2 h-4 w-4 text-navy-700" />
             Wallet Activity
           </h3>
           <div className="space-y-2">
             {Object.values(walletTotals).map((wallet, index) => (
-              <div key={wallet.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${
-                    index === 0 ? 'bg-blue-500' : 
-                    index === 1 ? 'bg-purple-500' : 
-                    index === 2 ? 'bg-emerald-500' : 'bg-gray-300'
+              <div key={wallet.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${
+                    index === 0 ? 'bg-navy-500' :
+                    index === 1 ? 'bg-slate-500' :
+                    index === 2 ? 'bg-emerald-500' : 'bg-slate-300'
                   }`} />
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[100px]">{wallet.name}</span>
+                  <span className="truncate text-xs font-medium text-slate-700">{wallet.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{wallet.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{wallet.count} txn</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{wallet.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{wallet.count} txn</p>
                 </div>
               </div>
             ))}
             {Object.keys(walletTotals).length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No wallet activity</p>
+              <p className={emptyCls}>No wallet activity</p>
             )}
           </div>
         </div>
 
         {/* Top Performing Staff */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiUsers className="h-4 w-4 mr-2 text-indigo-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiUsers className="mr-2 h-4 w-4 text-navy-700" />
             Top Performing Staff
           </h3>
           <div className="space-y-2">
             {topStaff.map((staff, index) => (
-              <div key={staff.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                    index === 1 ? 'bg-gray-100 text-gray-700' :
-                    index === 2 ? 'bg-amber-100 text-amber-700' :
-                    'bg-blue-50 text-blue-600'
+              <div key={staff.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0 ? 'bg-amber-100 text-amber-700' :
+                    index === 1 ? 'bg-slate-200 text-slate-700' :
+                    index === 2 ? 'bg-orange-100 text-orange-700' :
+                    'bg-slate-100 text-navy-700'
                   }`}>
                     {index + 1}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-900">{staff.name}</p>
-                    <p className="text-xs text-gray-500">{staff.count} services</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-900">{staff.name}</p>
+                    <p className="text-xs text-slate-500">{staff.count} services</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{Math.round(staff.total).toLocaleString()}</p>
-                  <div className="text-xs text-gray-500">
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{Math.round(staff.total).toLocaleString()}</p>
+                  <div className="text-xs text-slate-500">
                     <span>S: ₹{Math.round(staff.serviceCharge).toLocaleString()}</span>
                     {staff.departmentFee > 0 && (
                       <span className="ml-1">D: ₹{Math.round(staff.departmentFee).toLocaleString()}</span>
@@ -725,295 +1143,194 @@ const IncomeViewComponent = ({ transactions = [] }) => {
               </div>
             ))}
             {topStaff.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No staff data available</p>
+              <p className={emptyCls}>No staff data available</p>
             )}
           </div>
         </div>
 
         {/* Payment Method Distribution */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiCreditCard className="h-4 w-4 mr-2 text-purple-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiCreditCard className="mr-2 h-4 w-4 text-navy-700" />
             Wallet Distribution
           </h3>
           <div className="space-y-2">
-            {Object.values(paymentMethods).map((method, index) => (
-              <div key={method.name} className="flex items-center justify-between p-2">
-                <div className="flex items-center space-x-2">
-                  <div className={`p-1 rounded ${
+            {Object.values(paymentMethods).map((method) => (
+              <div key={method.name} className="flex items-center justify-between gap-2 p-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`shrink-0 rounded-lg p-1 ${
                     method.name.toLowerCase().includes('cash') ? 'bg-emerald-100 text-emerald-600' :
-                    method.name.toLowerCase().includes('counter') ? 'bg-blue-100 text-blue-600' :
-                    method.name.toLowerCase().includes('bank') ? 'bg-purple-100 text-purple-600' :
-                    'bg-gray-100 text-gray-600'
+                    method.name.toLowerCase().includes('counter') ? 'bg-slate-100 text-navy-700' :
+                    method.name.toLowerCase().includes('bank') ? 'bg-slate-200 text-slate-700' :
+                    'bg-slate-100 text-slate-600'
                   }`}>
                     {method.name.toLowerCase().includes('cash') ? <FiDollarSign className="h-3 w-3" /> :
                      method.name.toLowerCase().includes('counter') ? <FiCreditCard className="h-3 w-3" /> :
                      method.name.toLowerCase().includes('bank') ? <FiDatabase className="h-3 w-3" /> :
                      <FiCreditCard className="h-3 w-3" />}
                   </div>
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[80px]">{method.name}</span>
+                  <span className="truncate text-xs font-medium text-slate-700">{method.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{method.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{method.count} txn</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{method.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{method.count} txn</p>
                 </div>
               </div>
             ))}
             {Object.keys(paymentMethods).length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No wallet data</p>
+              <p className={emptyCls}>No wallet data</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Right Column - Transaction Table */}
-      <div className="col-span-2">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                <FiFileText className="h-4 w-4 mr-2 text-gray-600" />
+      {/* Right Column - Transactions */}
+      <div className="order-1 min-w-0 lg:order-2 lg:col-span-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center text-sm font-bold text-slate-900">
+                <FiFileText className="mr-2 h-4 w-4 text-navy-700" />
                 Income Transactions (Corrected View)
               </h3>
-              <span className="text-xs text-gray-600">
+              <span className="text-xs text-slate-600">
                 {rows.length} transactions • ₹{totalCollected.toLocaleString()} total
               </span>
             </div>
           </div>
-          
-          <div className="overflow-x-auto max-h-[500px]">
-            <table className="w-full min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-                <tr>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Staff</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"></th>
-                </tr>
-              </thead>
 
-              <tbody>
-                {rows.length === 0 && (
+          {rows.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-xs text-slate-500">
+              <FiFileText className="mb-2 h-8 w-8 text-slate-300" />
+              No income data for this date
+            </div>
+          )}
+
+          {/* Mobile cards */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {rows.map((row, index) => {
+              const rowKey = row.service_entry_id != null
+                ? `se-${row.service_entry_id}`
+                : `income-fallback-${index}`;
+              const isExpanded = expandedRow === row.service_entry_id;
+              const { displayAmount, receivedServiceCharge, receivedDepartmentCharge } = rowCalc(row);
+
+              return (
+                <div key={`m-${rowKey}`} className={`p-4 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">{row.customer_name || '—'}</p>
+                      <p className="truncate text-xs text-slate-600">{row.service_name || '—'}</p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {fmtDate(row.received_at)} · {fmtTime(row.received_at)}
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-bold text-slate-900">₹{displayAmount.toLocaleString()}</p>
+                      <p className="text-xs text-slate-500">Service: ₹{Math.round(receivedServiceCharge).toLocaleString()}</p>
+                      {receivedDepartmentCharge > 0 && (
+                        <p className="text-xs text-slate-500">Dept: ₹{Math.round(receivedDepartmentCharge).toLocaleString()}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <span className="flex items-center text-xs text-slate-600">
+                        <FiBriefcase className="mr-1 h-3 w-3 text-slate-400" />
+                        {row.staff_name || '—'}
+                      </span>
+                      {renderStatus(row)}
+                    </div>
+                    {renderToggle(row, isExpanded)}
+                  </div>
+                  {isExpanded && <div className="mt-3">{renderDetails(row)}</div>}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          {rows.length > 0 && (
+            <div className="hidden max-h-[500px] overflow-auto md:block">
+              <table className="w-full min-w-full">
+                <thead className="sticky top-0 border-b border-slate-200 bg-slate-50">
                   <tr>
-                    <td colSpan="7" className="text-center py-6 text-gray-500 text-xs">
-                      <div className="flex flex-col items-center justify-center">
-                        <FiFileText className="h-8 w-8 text-gray-300 mb-2" />
-                        No income data for this date
-                      </div>
-                    </td>
+                    <th className={thCls}>Date</th>
+                    <th className={thCls}>Customer</th>
+                    <th className={thCls}>Service</th>
+                    <th className={thCls}>Staff</th>
+                    <th className={thCls}>Amount</th>
+                    <th className={thCls}>Status</th>
+                    <th className={thCls}><span className="sr-only">Details</span></th>
                   </tr>
-                )}
+                </thead>
 
-                {rows.map((row, index) => {
-                  const rowKey = row.service_entry_id != null
-                    ? `se-${row.service_entry_id}`
-                    : `income-fallback-${index}`;
+                <tbody className="divide-y divide-slate-100">
+                  {rows.map((row, index) => {
+                    const rowKey = row.service_entry_id != null
+                      ? `se-${row.service_entry_id}`
+                      : `income-fallback-${index}`;
 
-                  const isExpanded = expandedRow === row.service_entry_id;
-                  const transactionAnalysis = analyzeTransaction(row);
-                  
-                  const displayAmount = Number(row.received_amount || 0);
-                  
-                  const totalBilled = Number(row.service_charges || 0) + Number(row.department_charges || 0);
-                  let receivedServiceCharge = 0;
-                  let receivedDepartmentCharge = 0;
-                  
-                  if (totalBilled > 0 && displayAmount > 0) {
-                    const paymentRatio = displayAmount / totalBilled;
-                    receivedServiceCharge = Number(row.service_charges || 0) * paymentRatio;
-                    receivedDepartmentCharge = Number(row.department_charges || 0) * paymentRatio;
-                  } else if (displayAmount > 0 && totalBilled === 0) {
-                    receivedServiceCharge = displayAmount;
-                  }
+                    const isExpanded = expandedRow === row.service_entry_id;
+                    const { displayAmount, receivedServiceCharge, receivedDepartmentCharge } = rowCalc(row);
 
-                  return (
-                    <React.Fragment key={rowKey}>
-                      <tr
-                        className={`hover:bg-gray-50 ${isExpanded ? 'bg-blue-50' : ''}`}
-                      >
-                        <td className="py-3 px-3">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-medium text-gray-900">
-                              {row.received_at ? new Date(row.received_at).toLocaleDateString() : '—'}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {row.received_at ? new Date(row.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center">
-                            <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2">
-                              <FiUser className="h-3 w-3 text-indigo-600" />
+                    return (
+                      <React.Fragment key={rowKey}>
+                        <tr className={`hover:bg-slate-50 ${isExpanded ? 'bg-slate-50' : ''}`}>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium text-slate-900">{fmtDate(row.received_at)}</span>
+                              <span className="text-xs text-slate-500">{fmtTime(row.received_at)}</span>
                             </div>
-                            <span className="text-xs font-medium text-gray-900 truncate max-w-[120px]">
-                              {row.customer_name || '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="text-xs text-gray-900">{row.service_name || '—'}</span>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex items-center">
-                            <div className="w-6 h-6 rounded-full bg-emerald-100 flex items-center justify-center mr-2">
-                              <FiBriefcase className="h-3 w-3 text-emerald-600" />
-                            </div>
-                            <span className="text-xs font-medium text-gray-900">
-                              {row.staff_name || '—'}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-gray-900">
-                              ₹{displayAmount.toLocaleString()}
-                            </span>
-                            <div className="flex items-center text-xs text-gray-500">
-                              <span className="mr-2">Service: ₹{Math.round(receivedServiceCharge).toLocaleString()}</span>
-                              {receivedDepartmentCharge > 0 && (
-                                <span>Dept: ₹{Math.round(receivedDepartmentCharge).toLocaleString()}</span>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                            <FiCheck className="h-2 w-2 mr-1" />
-                            Completed
-                          </span>
-                          {row.was_pending && (
-                            <div className="mt-1">
-                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 flex items-center">
-                                <FiRotateCcw className="h-2 w-2 mr-1" />
-                                Was Pending
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center">
+                              <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                                <FiUser className="h-3 w-3 text-navy-700" />
+                              </div>
+                              <span className="max-w-[140px] truncate text-xs font-medium text-slate-900">
+                                {row.customer_name || '—'}
                               </span>
                             </div>
-                          )}
-                        </td>
-                        <td className="py-3 px-3">
-                          <button
-                            onClick={() => toggleRow(row.service_entry_id)}
-                            className="text-gray-500 hover:text-gray-700"
-                          >
-                            {isExpanded ? (
-                              <FiMinus className="h-4 w-4" />
-                            ) : (
-                              <FiPlus className="h-4 w-4" />
-                            )}
-                          </button>
-                        </td>
-                      </tr>
-                      
-                      {isExpanded && (
-                        <tr className="bg-blue-50">
-                          <td colSpan="7" className="px-3 py-3">
-                            <div className="bg-white rounded-lg border border-gray-200 p-3">
-                              <div className="flex items-center justify-between mb-3">
-                                <h4 className="text-xs font-bold text-gray-900">Transaction Details</h4>
-                                <div className="flex items-center space-x-2">
-                                  <span className="text-xs text-gray-600">ID:</span>
-                                  <span className="text-xs font-mono text-gray-700">{row.service_entry_id}</span>
-                                </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <span className="text-xs text-slate-900">{row.service_name || '—'}</span>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex items-center">
+                              <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
+                                <FiBriefcase className="h-3 w-3 text-emerald-600" />
                               </div>
-                              
-                              <div className="grid grid-cols-2 gap-3 mb-3">
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Service Charge (Received)</p>
-                                  <p className="text-xs font-medium text-gray-900">₹{Math.round(receivedServiceCharge).toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">
-                                    (Billed: ₹{Number(row.service_charges || 0).toLocaleString()})
-                                  </p>
-                                </div>
-                                <div>
-                                  <p className="text-xs text-gray-500 mb-1">Department Charge (Received)</p>
-                                  <p className="text-xs font-medium text-gray-900">₹{Math.round(receivedDepartmentCharge).toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">
-                                    (Billed: ₹{Number(row.department_charges || 0).toLocaleString()})
-                                  </p>
-                                </div>
-                                <div className="col-span-2">
-                                  <p className="text-xs text-gray-500 mb-1">Total from Customer</p>
-                                  <p className="text-xs font-bold text-emerald-600">₹{displayAmount.toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">
-                                    {totalBilled > 0 ? (
-                                      <>
-                                        {((displayAmount / totalBilled) * 100).toFixed(1)}% of total billed 
-                                        (₹{totalBilled.toLocaleString()})
-                                      </>
-                                    ) : (
-                                      'Full payment'
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                              
-                              {row.wallet_breakdown && Array.isArray(row.wallet_breakdown) && row.wallet_breakdown.length > 0 && (
-                                <div className="mt-3">
-                                  <p className="text-xs font-medium text-gray-700 mb-2">Wallet Transactions</p>
-                                  <div className="space-y-1">
-                                    {row.wallet_breakdown.map((w, i) => {
-                                      const isCustomerPayment = 
-                                        (Number(w.amount) === displayAmount) || 
-                                        (Number(w.amount) === Number(row.service_charges || 0));
-                                      
-                                      return (
-                                        <div
-                                          key={`${row.service_entry_id}-${w.wallet}-${i}`}
-                                          className={`flex justify-between items-center text-xs p-2 rounded ${
-                                            isCustomerPayment ? 'bg-emerald-50 border border-emerald-100' : 'bg-gray-50'
-                                          }`}
-                                        >
-                                          <div className="flex items-center space-x-2">
-                                            <span className="font-medium">{w.wallet || 'Unknown'}</span>
-                                            <span className={`px-1.5 py-0.5 rounded-full text-xs ${
-                                              isCustomerPayment 
-                                                ? 'bg-emerald-100 text-emerald-700'
-                                                : 'bg-blue-100 text-blue-700'
-                                            }`}>
-                                              {isCustomerPayment ? 'Customer Payment' : 'Internal Transfer'}
-                                            </span>
-                                            {w.received_at && (
-                                              <span className="text-gray-500 text-xs">
-                                                {new Date(w.received_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                              </span>
-                                            )}
-                                          </div>
-                                          <div className={`font-semibold ${
-                                            isCustomerPayment ? 'text-emerald-600' : 'text-blue-600'
-                                          }`}>
-                                            ₹{Number(w.amount || 0).toLocaleString()}
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                </div>
-                              )}
-                              
-                              <div className="mt-3 pt-3 border-t border-gray-200">
-                                <div className="flex justify-between text-xs">
-                                  <span className="text-gray-600">Note:</span>
-                                  <span className="text-gray-700">
-                                    Customer paid ₹{displayAmount.toLocaleString()} total 
-                                    ({receivedServiceCharge > 0 ? `₹${Math.round(receivedServiceCharge).toLocaleString()} service` : ''}
-                                    {receivedDepartmentCharge > 0 ? ` + ₹${Math.round(receivedDepartmentCharge).toLocaleString()} department` : ''})
-                                  </span>
-                                </div>
+                              <span className="text-xs font-medium text-slate-900">{row.staff_name || '—'}</span>
+                            </div>
+                          </td>
+                          <td className="px-3 py-3">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-900">₹{displayAmount.toLocaleString()}</span>
+                              <div className="flex items-center text-xs text-slate-500">
+                                <span className="mr-2">Service: ₹{Math.round(receivedServiceCharge).toLocaleString()}</span>
+                                {receivedDepartmentCharge > 0 && (
+                                  <span>Dept: ₹{Math.round(receivedDepartmentCharge).toLocaleString()}</span>
+                                )}
                               </div>
                             </div>
                           </td>
+                          <td className="px-3 py-3">{renderStatus(row)}</td>
+                          <td className="px-3 py-3">{renderToggle(row, isExpanded)}</td>
                         </tr>
-                      )}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+
+                        {isExpanded && (
+                          <tr className="bg-slate-50">
+                            <td colSpan="7" className="px-3 py-3">{renderDetails(row)}</td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -1087,15 +1404,60 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
   
   const dailyTrend = 8.2;
 
+  const sideCardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const sideTitleCls = 'mb-3 flex items-center text-sm font-bold text-slate-900';
+  const emptyCls = 'py-2 text-center text-xs text-slate-500';
+  const thCls = 'px-3 py-2 text-left text-xs font-medium uppercase tracking-wider text-slate-500';
+
+  const walletIcon = (type) => (
+    type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
+    type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
+    <FiSmartphone className="h-3 w-3" />
+  );
+  const walletTone = (type) => (
+    type === 'cash' ? 'bg-emerald-100 text-emerald-600' :
+    type === 'bank' ? 'bg-slate-100 text-navy-700' :
+    'bg-slate-200 text-slate-700'
+  );
+  const typeBadge = (isCredit) => (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+      isCredit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+    }`}>
+      {isCredit ? (
+        <>
+          <FiTrendingUp className="mr-1 h-2 w-2" />
+          Credit
+        </>
+      ) : (
+        <>
+          <FiTrendingDown className="mr-1 h-2 w-2" />
+          Debit
+        </>
+      )}
+    </span>
+  );
+  const statusBadge = (
+    <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+      <FiCheckCircle className="mr-1 h-2 w-2" />
+      Processed
+    </span>
+  );
+  const rowKeyDown = (e, tx) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      onLedgerRowClick(tx);
+    }
+  };
+
   return (
-    <div className="grid grid-cols-3 gap-4">
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       {/* Left Column - Key Metrics */}
-      <div className="col-span-1 space-y-4">
+      <div className="order-2 space-y-4 lg:order-1 lg:col-span-1">
         {/* Net Balance Card */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className={`p-2 rounded-lg ${netBalance >= 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
+        <div className={`${sideCardCls} transition-shadow hover:shadow-md`}>
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className={`rounded-xl p-2 ${netBalance >= 0 ? 'bg-emerald-100' : 'bg-rose-100'}`}>
                 {netBalance >= 0 ? (
                   <FiTrendingUp className="h-4 w-4 text-emerald-600" />
                 ) : (
@@ -1103,65 +1465,61 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
                 )}
               </div>
               <div>
-                <p className="text-xs text-gray-500">Net Balance</p>
-                <p className={`font-bold text-lg ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                <p className="text-xs text-slate-500">Net Balance</p>
+                <p className={`text-lg font-bold ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                   ₹{Math.abs(netBalance).toLocaleString()}
                   {netBalance >= 0 ? ' (Credit)' : ' (Debit)'}
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                dailyTrend >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-              }`}>
-                {dailyTrend >= 0 ? (
-                  <FiTrendingUp className="h-2 w-2 mr-1" />
-                ) : (
-                  <FiTrendingDown className="h-2 w-2 mr-1" />
-                )}
-                {Math.abs(dailyTrend)}%
-              </span>
-            </div>
+            <span className={`inline-flex items-center rounded-lg px-2 py-1 text-xs font-medium ${
+              dailyTrend >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+            }`}>
+              {dailyTrend >= 0 ? (
+                <FiTrendingUp className="mr-1 h-2 w-2" />
+              ) : (
+                <FiTrendingDown className="mr-1 h-2 w-2" />
+              )}
+              {Math.abs(dailyTrend)}%
+            </span>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-gray-600 mb-1">Total Credits</p>
-              <p className="font-semibold text-emerald-600 text-sm">₹{totalCredits.toLocaleString()}</p>
+              <p className="mb-1 text-xs text-slate-600">Total Credits</p>
+              <p className="text-sm font-semibold text-emerald-600">₹{totalCredits.toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-xs text-gray-600 mb-1">Total Debits</p>
-              <p className="font-semibold text-rose-600 text-sm">₹{totalDebits.toLocaleString()}</p>
+              <p className="mb-1 text-xs text-slate-600">Total Debits</p>
+              <p className="text-sm font-semibold text-rose-600">₹{totalDebits.toLocaleString()}</p>
             </div>
           </div>
         </div>
 
         {/* Top Wallets by Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiCreditCard className="h-4 w-4 mr-2 text-indigo-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiCreditCard className="mr-2 h-4 w-4 text-navy-700" />
             Top Wallets
           </h3>
           <div className="space-y-2">
             {topWallets.map((wallet, index) => (
-              <div key={wallet.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? 'bg-indigo-100 text-indigo-600' :
-                    index === 1 ? 'bg-purple-100 text-purple-600' :
-                    index === 2 ? 'bg-blue-100 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
+              <div key={wallet.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0 ? 'bg-navy-700 text-white' :
+                    index === 1 ? 'bg-navy-500 text-white' :
+                    index === 2 ? 'bg-slate-300 text-slate-700' :
+                    'bg-slate-100 text-slate-600'
                   }`}>
-                    {wallet.type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
-                     wallet.type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
-                     <FiSmartphone className="h-3 w-3" />}
+                    {walletIcon(wallet.type)}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">{wallet.name}</p>
-                    <p className="text-xs text-gray-500">{wallet.type}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-900">{wallet.name}</p>
+                    <p className="text-xs text-slate-500">{wallet.type}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">{wallet.count} txns</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">{wallet.count} txns</p>
                   <p className={`text-xs ${wallet.net >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {wallet.net >= 0 ? '+' : '-'}₹{Math.abs(wallet.net).toLocaleString()}
                   </p>
@@ -1169,698 +1527,282 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
               </div>
             ))}
             {topWallets.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No wallet data</p>
+              <p className={emptyCls}>No wallet data</p>
             )}
           </div>
         </div>
 
         {/* Category Breakdown */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiTag className="h-4 w-4 mr-2 text-purple-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiTag className="mr-2 h-4 w-4 text-navy-700" />
             Category Breakdown
           </h3>
           <div className="space-y-2">
-            {topCategories.map((category, index) => (
-              <div key={category.name} className="flex items-center justify-between p-2">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-2 h-2 rounded-full ${
+            {topCategories.map((category) => (
+              <div key={category.name} className="flex items-center justify-between gap-2 p-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`h-2 w-2 shrink-0 rounded-full ${
                     category.name.includes('Service') ? 'bg-emerald-500' :
                     category.name.includes('Expense') ? 'bg-rose-500' :
-                    category.name.includes('Salary') ? 'bg-blue-500' :
-                    category.name.includes('Transfer') ? 'bg-indigo-500' :
-                    'bg-gray-400'
+                    category.name.includes('Salary') ? 'bg-navy-500' :
+                    category.name.includes('Transfer') ? 'bg-navy-700' :
+                    'bg-slate-400'
                   }`} />
-                  <span className="text-xs font-medium text-gray-700 truncate max-w-[80px]">
-                    {category.name}
-                  </span>
+                  <span className="truncate text-xs font-medium text-slate-700">{category.name}</span>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{category.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">{category.count} txns</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{category.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{category.count} txns</p>
                 </div>
               </div>
             ))}
             {topCategories.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No category data</p>
+              <p className={emptyCls}>No category data</p>
             )}
           </div>
         </div>
 
         {/* Staff Activity */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiUsers className="h-4 w-4 mr-2 text-amber-600" />
+        <div className={sideCardCls}>
+          <h3 className={sideTitleCls}>
+            <FiUsers className="mr-2 h-4 w-4 text-navy-700" />
             Staff Activity
           </h3>
           <div className="space-y-2">
             {topStaff.map((staff, index) => (
-              <div key={staff.name} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                    index === 0 ? 'bg-amber-100 text-amber-600' :
-                    index === 1 ? 'bg-emerald-100 text-emerald-600' :
-                    index === 2 ? 'bg-blue-100 text-blue-600' :
-                    'bg-gray-100 text-gray-600'
+              <div key={staff.name} className="flex items-center justify-between gap-2 rounded-lg p-2 hover:bg-slate-50">
+                <div className="flex min-w-0 items-center gap-2">
+                  <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                    index === 0 ? 'bg-amber-100 text-amber-700' :
+                    index === 1 ? 'bg-emerald-100 text-emerald-700' :
+                    index === 2 ? 'bg-slate-200 text-slate-700' :
+                    'bg-slate-100 text-slate-600'
                   }`}>
                     {staff.name.charAt(0)}
                   </div>
-                  <div>
-                    <p className="text-xs font-medium text-gray-900 truncate max-w-[100px]">{staff.name}</p>
-                    <p className="text-xs text-gray-500">Transactions: {staff.count}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-900">{staff.name}</p>
+                    <p className="text-xs text-slate-500">Transactions: {staff.count}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">₹{staff.total.toLocaleString()}</p>
-                  <p className="text-xs text-gray-500">Avg: ₹{(staff.total / staff.count).toFixed(0)}</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-bold text-slate-900">₹{staff.total.toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">Avg: ₹{(staff.total / staff.count).toFixed(0)}</p>
                 </div>
               </div>
             ))}
             {topStaff.length === 0 && (
-              <p className="text-xs text-gray-500 text-center py-2">No staff activity</p>
+              <p className={emptyCls}>No staff activity</p>
             )}
           </div>
         </div>
       </div>
 
-      {/* Right Column - Ledger Table */}
-      <div className="col-span-2">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                <FiBook className="h-4 w-4 mr-2 text-gray-600" />
+      {/* Right Column - Ledger */}
+      <div className="order-1 min-w-0 lg:order-2 lg:col-span-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="flex items-center text-sm font-bold text-slate-900">
+                <FiBook className="mr-2 h-4 w-4 text-navy-700" />
                 Ledger Transactions (Corrected View)
               </h3>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-600">
-                  {ledger.length} transactions
-                </span>
-                <span className="text-xs px-2 py-1 rounded bg-emerald-50 text-emerald-700">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-600">{ledger.length} transactions</span>
+                <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs text-emerald-700">
                   Net: ₹{netBalance.toLocaleString()}
                 </span>
               </div>
             </div>
-            <p className="text-xs text-gray-500 mt-1 flex items-center">
-              <FiInfo className="h-3 w-3 mr-1" />
+            <p className="mt-1 flex items-center text-xs text-slate-500">
+              <FiInfo className="mr-1 h-3 w-3" />
               Showing corrected transactions only (reversals hidden)
             </p>
           </div>
-          
-          <div className="overflow-x-auto max-h-[500px]">
-            <table className="w-full min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-200 sticky top-0">
-                <tr>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wallet</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service/Staff</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
 
-              <tbody>
-                {ledger.length === 0 && (
-                  <tr>
-                    <td colSpan="7" className="text-center py-6 text-gray-500 text-xs">
-                      <div className="flex flex-col items-center justify-center">
-                        <FiBook className="h-8 w-8 text-gray-300 mb-2" />
-                        No ledger transactions found
+          {ledger.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-xs text-slate-500">
+              <FiBook className="mb-2 h-8 w-8 text-slate-300" />
+              No ledger transactions found
+            </div>
+          )}
+
+          {/* Mobile cards */}
+          <div className="divide-y divide-slate-100 md:hidden">
+            {ledger.map((tx, index) => {
+              const isCredit = tx.type === 'credit';
+              const transactionDate = new Date(tx.created_at);
+              const rowKey = `ledger-${tx.id || index}`;
+
+              return (
+                <div
+                  key={`m-${rowKey}`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => rowKeyDown(e, tx)}
+                  className="cursor-pointer p-4 transition-colors hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                  onClick={() => onLedgerRowClick(tx)}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${walletTone(tx.wallet_type)}`}>
+                        {walletIcon(tx.wallet_type)}
                       </div>
-                    </td>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-slate-900">{tx.wallet_name}</p>
+                        <p className="text-xs capitalize text-slate-500">{tx.wallet_type}</p>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className={`text-sm font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {isCredit ? '+' : '-'}₹{Number(tx.amount || 0).toLocaleString()}
+                      </p>
+                      {tx.balance_after && (
+                        <p className="text-xs text-slate-500">Balance: ₹{Number(tx.balance_after).toLocaleString()}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {typeBadge(isCredit)}
+                    {statusBadge}
+                    <span className="text-xs font-medium text-slate-700">{tx.category}</span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs text-slate-500">
+                    <span className="flex min-w-0 items-center truncate">
+                      <FiUser className="mr-1 h-3 w-3 shrink-0 text-slate-400" />
+                      <span className="truncate">
+                        {tx.staff_name || 'System'}
+                        {tx.customer_name ? ` · ${tx.customer_name}` : ''}
+                      </span>
+                    </span>
+                    <span className="shrink-0">
+                      {transactionDate.toLocaleDateString()} {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  {tx.service_name && (
+                    <p className="mt-1 truncate text-xs text-slate-500">{tx.service_name}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Desktop table */}
+          {ledger.length > 0 && (
+            <div className="hidden max-h-[500px] overflow-auto md:block">
+              <table className="w-full min-w-full">
+                <thead className="sticky top-0 border-b border-slate-200 bg-slate-50">
+                  <tr>
+                    <th className={thCls}>Date</th>
+                    <th className={thCls}>Wallet</th>
+                    <th className={thCls}>Type</th>
+                    <th className={thCls}>Amount</th>
+                    <th className={thCls}>Category</th>
+                    <th className={thCls}>Service/Staff</th>
+                    <th className={thCls}>Status</th>
                   </tr>
-                )}
+                </thead>
 
-                {ledger.map((tx, index) => {
-                  const isCredit = tx.type === 'credit';
-                  const transactionDate = new Date(tx.created_at);
-                  const rowKey = `ledger-${tx.id || index}`;
-                  const isReversal = tx.is_reversal;
+                <tbody className="divide-y divide-slate-100">
+                  {ledger.map((tx, index) => {
+                    const isCredit = tx.type === 'credit';
+                    const transactionDate = new Date(tx.created_at);
+                    const rowKey = `ledger-${tx.id || index}`;
 
-                  return (
-                    <tr
-                      key={rowKey}
-                      className="hover:bg-gray-50 cursor-pointer"
-                      onClick={() => onLedgerRowClick(tx)}
-                    >
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium text-gray-900">
-                            {transactionDate.toLocaleDateString()}
-                          </span>
-                          <span className="text-xs text-gray-500">
-                            {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center">
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center mr-2 ${
-                            tx.wallet_type === 'cash' ? 'bg-emerald-100 text-emerald-600' :
-                            tx.wallet_type === 'bank' ? 'bg-blue-100 text-blue-600' :
-                            'bg-purple-100 text-purple-600'
-                          }`}>
-                            {tx.wallet_type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
-                             tx.wallet_type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
-                             <FiSmartphone className="h-3 w-3" />}
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-900">{tx.wallet_name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{tx.wallet_type}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          isCredit ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                        }`}>
-                          {isCredit ? (
-                            <>
-                              <FiTrendingUp className="h-2 w-2 mr-1" />
-                              Credit
-                            </>
-                          ) : (
-                            <>
-                              <FiTrendingDown className="h-2 w-2 mr-1" />
-                              Debit
-                            </>
-                          )}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col">
-                          <span className={`text-xs font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {isCredit ? '+' : '-'}₹{Number(tx.amount || 0).toLocaleString()}
-                          </span>
-                          {tx.balance_after && (
-                            <span className="text-xs text-gray-500">
-                              Balance: ₹{Number(tx.balance_after).toLocaleString()}
+                    return (
+                      <tr
+                        key={rowKey}
+                        tabIndex={0}
+                        onKeyDown={(e) => rowKeyDown(e, tx)}
+                        className="cursor-pointer hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                        onClick={() => onLedgerRowClick(tx)}
+                      >
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-900">{transactionDate.toLocaleDateString()}</span>
+                            <span className="text-xs text-slate-500">
+                              {transactionDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex flex-col">
-                          <span className="text-xs font-medium text-gray-900">{tx.category}</span>
-                          {tx.service_name && (
-                            <span className="text-xs text-gray-500 truncate max-w-[120px]">
-                              {tx.service_name}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center">
-                          <div className="w-6 h-6 rounded-full bg-indigo-100 flex items-center justify-center mr-2">
-                            <FiUser className="h-3 w-3 text-indigo-600" />
                           </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-900">
-                              {tx.staff_name || 'System'}
-                            </p>
-                            {tx.customer_name && (
-                              <p className="text-xs text-gray-500 truncate max-w-[100px]">
-                                {tx.customer_name}
-                              </p>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center">
+                            <div className={`mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${walletTone(tx.wallet_type)}`}>
+                              {walletIcon(tx.wallet_type)}
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-900">{tx.wallet_name}</p>
+                              <p className="text-xs capitalize text-slate-500">{tx.wallet_type}</p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">{typeBadge(isCredit)}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className={`text-xs font-bold ${isCredit ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {isCredit ? '+' : '-'}₹{Number(tx.amount || 0).toLocaleString()}
+                            </span>
+                            {tx.balance_after && (
+                              <span className="text-xs text-slate-500">
+                                Balance: ₹{Number(tx.balance_after).toLocaleString()}
+                              </span>
                             )}
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700">
-                          <FiCheckCircle className="h-2 w-2 mr-1" />
-                          Processed
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium text-slate-900">{tx.category}</span>
+                            {tx.service_name && (
+                              <span className="max-w-[140px] truncate text-xs text-slate-500">{tx.service_name}</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center">
+                            <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100">
+                              <FiUser className="h-3 w-3 text-navy-700" />
+                            </div>
+                            <div>
+                              <p className="text-xs font-medium text-slate-900">{tx.staff_name || 'System'}</p>
+                              {tx.customer_name && (
+                                <p className="max-w-[120px] truncate text-xs text-slate-500">{tx.customer_name}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3">{statusBadge}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
 
           {/* Summary Footer */}
           {ledger.length > 0 && (
-            <div className="border-t border-gray-200 bg-gray-50 p-3">
-              <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center space-x-4">
+            <div className="border-t border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-col gap-2 text-xs sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                   <div>
-                    <span className="text-gray-600">Total Credits:</span>
-                    <span className="font-bold text-emerald-600 ml-1">₹{totalCredits.toLocaleString()}</span>
+                    <span className="text-slate-600">Total Credits:</span>
+                    <span className="ml-1 font-bold text-emerald-600">₹{totalCredits.toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600">Total Debits:</span>
-                    <span className="font-bold text-rose-600 ml-1">₹{totalDebits.toLocaleString()}</span>
+                    <span className="text-slate-600">Total Debits:</span>
+                    <span className="ml-1 font-bold text-rose-600">₹{totalDebits.toLocaleString()}</span>
                   </div>
                   <div>
-                    <span className="text-gray-600">Net Balance:</span>
-                    <span className={`font-bold ml-1 ${
-                      netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'
-                    }`}>
+                    <span className="text-slate-600">Net Balance:</span>
+                    <span className={`ml-1 font-bold ${netBalance >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {netBalance >= 0 ? '+' : '-'}₹{Math.abs(netBalance).toLocaleString()}
                     </span>
                   </div>
                 </div>
-                <div className="text-gray-600">
-                  Showing {ledger.length} transactions
-                </div>
+                <div className="text-slate-600">Showing {ledger.length} transactions</div>
               </div>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Wallet Reconciliation Component
-const WalletReconciliation = ({ wallets, onRefreshWallets, date, centreId, isSuperAdmin = false, readOnly = false }) => {
-  const [walletBalances, setWalletBalances] = useState({});
-  const [historicalBookBalances, setHistoricalBookBalances] = useState({}); // 🔥 New state for history
-  const [isReconciling, setIsReconciling] = useState(false);
-
-  useEffect(() => {
-    const loadSavedBalances = async () => {
-      try {
-        const params = new URLSearchParams({ date });
-        if (isSuperAdmin && centreId) params.append("centreId", centreId);
-
-        const res = await fetch(
-          `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconciliations?${params.toString()}`,
-          { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } }
-        );
-        
-        if (res.ok) {
-          const savedData = await res.json();
-          const restoredBalances = {};
-          const restoredBooks = {};
-          
-          savedData.forEach(row => {
-            restoredBalances[row.wallet_id] = Number(row.actual_balance);
-            if (row.book_balance !== undefined && row.book_balance !== null) {
-              restoredBooks[row.wallet_id] = Number(row.book_balance);
-            }
-          });
-          
-          setWalletBalances(restoredBalances);
-          setHistoricalBookBalances(restoredBooks);
-        }
-      } catch (error) {
-        console.error("Failed to load saved reconciliations", error);
-      }
-    };
-
-    if (date) {
-      setWalletBalances({});
-      setHistoricalBookBalances({});
-      loadSavedBalances();
-    }
-  }, [date, centreId, isSuperAdmin]);
-
-  // 🔥 Process wallets to guarantee UI perfectly matches the math
-  const processedWallets = useMemo(() => {
-    return wallets.map(w => {
-      const actual = walletBalances[String(w.id)] ?? w.currentBalance ?? 0;
-      // Override book balance with historical save if it exists
-      const book = historicalBookBalances[String(w.id)] ?? w.book_balance ?? 0;
-      const variance = actual - book;
-      
-      return {
-        ...w,
-        displayActual: actual,
-        displayBook: book,
-        variance: variance,
-        isReconciled: Math.abs(variance) <= 10
-      };
-    });
-  }, [wallets, walletBalances, historicalBookBalances]);
-
-  const reconciledWallets = processedWallets.filter(w => w.isReconciled).length;
-  const totalVariance = processedWallets.reduce((sum, w) => sum + Math.abs(w.variance), 0);
-
-  const handleBalanceChange = (walletId, balance) => {
-    setWalletBalances(prev => ({
-      ...prev,
-      [walletId]: parseFloat(balance) || 0
-    }));
-  };
-
-  const handleReconcileWallets = async () => {
-    if (readOnly) return;
-    setIsReconciling(true);
-    try {
-      // 🔥 Build payload explicitly from exactly what is displayed on screen
-      const reconciliations = processedWallets.map(w => ({
-        wallet_id: w.id,
-        book_balance: w.displayBook,
-        actual_balance: w.displayActual,
-        variance: w.variance
-      }));
-
-      await fetch(
-        `${import.meta.env.VITE_API_URL}/api/accounting/wallet-reconcile`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`
-          },
-          body: JSON.stringify({ reconciliations })
-        }
-      );
-      
-      await onRefreshWallets(date);
-      toast.success('Wallets reconciled successfully!');
-    } catch (error) {
-      toast.error('Failed to reconcile wallets');
-      console.error(error);
-    } finally {
-      setIsReconciling(false);
-    }
-  };
-
-  const walletIcons = {
-    cash: FiDollarSign,
-    bank: FiCreditCard,
-    digital: FiSmartphone,
-    SBI: FiCreditCard,
-    Counter: FiHome,
-    'Counter Cash': FiHome,
-    Edistrict: FiSmartphone,
-    'Pan Card': FiDatabase,
-    'PAN Card': FiDatabase,
-    'Paper 70 GSM': FiPackage,
-    PVC: FiPackage,
-    'Digital Wallet': FiSmartphone,
-    'Cash in Hand': FiDollarSign,
-  };
-
-  return (
-    <div className="grid grid-cols-3 gap-4">
-      {/* Left Column - Reconciliation Stats */}
-      <div className="col-span-1 space-y-4">
-        {/* Reconciliation Summary */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-indigo-100 rounded-lg">
-                <FiCheckCircle className="h-4 w-4 text-indigo-600" />
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Reconciliation Status</p>
-                <p className="font-bold text-gray-900 text-lg">
-                  {reconciledWallets}/{wallets.length} Wallets
-                </p>
-              </div>
-            </div>
-            <div className="text-right">
-              <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
-                reconciledWallets === wallets.length ? 'bg-emerald-50 text-emerald-700' : 'bg-yellow-50 text-yellow-700'
-              }`}>
-                {reconciledWallets === wallets.length ? 'All Synced' : 'Pending'}
-              </span>
-            </div>
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Total Variance</span>
-              <span className={`font-bold ${totalVariance === 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                ₹{totalVariance.toFixed(2)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Wallets Pending</span>
-              <span className="font-bold text-rose-600">{wallets.length - reconciledWallets}</span>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-600">Last Reconciled</span>
-              <span className="font-medium text-gray-900">Today</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Wallet Types Distribution */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiPieChart className="h-4 w-4 mr-2 text-purple-600" />
-            Wallet Types
-          </h3>
-          <div className="space-y-2">
-            {Object.entries(wallets.reduce((acc, w) => {
-              const type = w.wallet_type || w.type || 'unknown';
-              acc[type] = (acc[type] || 0) + 1;
-              return acc;
-            }, {})).map(([type, count], index) => (
-              <div key={type} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <div className={`p-1 rounded ${
-                    type === 'cash' ? 'bg-emerald-100 text-emerald-600' :
-                    type === 'bank' ? 'bg-blue-100 text-blue-600' :
-                    type === 'digital' ? 'bg-purple-100 text-purple-600' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {type === 'cash' ? <FiDollarSign className="h-3 w-3" /> :
-                     type === 'bank' ? <FiCreditCard className="h-3 w-3" /> :
-                     <FiSmartphone className="h-3 w-3" />}
-                  </div>
-                  <span className="text-xs font-medium text-gray-700 capitalize">{type}</span>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-bold text-gray-900">{count} wallets</p>
-                  <p className="text-xs text-gray-500">
-                    ₹{wallets
-                      .filter(w => (w.wallet_type || w.type) === type)
-                      .reduce((sum, w) => sum + (w.book_balance || 0), 0)
-                      .toLocaleString()} 
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Quick Actions */}
-        <div className="bg-white rounded-lg border border-gray-200 p-4">
-          <h3 className="font-bold text-gray-900 text-sm mb-3 flex items-center">
-            <FiRefreshCw className="h-4 w-4 mr-2 text-blue-600" />
-            Quick Actions
-          </h3>
-          <div className="space-y-2">
-            <button
-              onClick={() => onRefreshWallets(date)}
-              className="w-full flex items-center justify-between p-2 hover:bg-blue-50 rounded transition-colors"
-            >
-              <div className="flex items-center space-x-2">
-                <FiRefreshCw className="h-4 w-4 text-blue-600" />
-                <span className="text-xs font-medium text-gray-900">Refresh Balances</span>
-              </div>
-              <FiChevronRight className="h-3 w-3 text-gray-400" />
-            </button>
-            
-            {!readOnly && (
-            <button
-              onClick={handleReconcileWallets}
-              disabled={isReconciling}
-              className={`w-full flex items-center justify-between p-2 rounded transition-colors ${
-                isReconciling 
-                  ? 'bg-gray-100 cursor-not-allowed' 
-                  : 'hover:bg-emerald-50'
-              }`}
-            >
-              <div className="flex items-center space-x-2">
-                <FiCheckCircle className={`h-4 w-4 ${
-                  isReconciling ? 'text-gray-400' : 'text-emerald-600'
-                }`} />
-                <span className={`text-xs font-medium ${
-                  isReconciling ? 'text-gray-400' : 'text-gray-900'
-                }`}>
-                  {isReconciling ? 'Reconciling...' : 'Reconcile All Wallets'}
-                </span>
-              </div>
-              {!isReconciling && <FiChevronRight className="h-3 w-3 text-gray-400" />}
-            </button>
-            )}
-            
-            <button className="w-full flex items-center justify-between p-2 hover:bg-amber-50 rounded transition-colors">
-              <div className="flex items-center space-x-2">
-                <FiAlertTriangle className="h-4 w-4 text-amber-600" />
-                <span className="text-xs font-medium text-gray-900">View Discrepancies</span>
-              </div>
-              <FiChevronRight className="h-3 w-3 text-gray-400" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Column - Wallet Reconciliation Table */}
-      <div className="col-span-2">
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 bg-gray-50">
-            <div className="flex items-center justify-between">
-              <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                <FiSmartphone className="h-4 w-4 mr-2 text-indigo-600" />
-                Wallet Reconciliation
-              </h3>
-              <div className="flex items-center space-x-2">
-                <span className="text-xs text-gray-600">
-                  {wallets.length} wallets to reconcile
-                </span>
-                <button
-                  onClick={() => onRefreshWallets(date)}
-                  className="p-1 hover:bg-gray-200 rounded transition-colors"
-                >
-                  <FiRefreshCw className="h-3 w-3 text-gray-600" />
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Wallet</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Book Balance</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actual Balance</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Variance</th>
-                  <th className="py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {processedWallets.map((wallet, index) => {
-                  const walletType = wallet.wallet_type || wallet.type || 'unknown';
-                  const WalletIcon = walletIcons[wallet.name] || walletIcons[walletType] || FiSmartphone;
-                  
-                  return (
-                    <tr key={wallet.id} className="hover:bg-gray-50">
-                      <td className="py-3 px-3">
-                        <div className="flex items-center">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center mr-2 ${
-                            walletType === 'cash' ? 'bg-emerald-500' :
-                            walletType === 'bank' ? 'bg-blue-500' :
-                            walletType === 'digital' ? 'bg-purple-500' :
-                            'bg-indigo-500'
-                          }`}>
-                            <WalletIcon className="h-4 w-4 text-white" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-medium text-gray-900">{wallet.name}</p>
-                            <p className="text-xs text-gray-500 capitalize">{walletType}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          walletType === 'cash' ? 'bg-emerald-100 text-emerald-700' :
-                          walletType === 'bank' ? 'bg-blue-100 text-blue-700' :
-                          'bg-purple-100 text-purple-700'
-                        }`}>
-                          {walletType}
-                        </span>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="text-left">
-                          <p className="text-xs font-bold text-gray-900">
-                            ₹{Number(wallet.displayBook).toLocaleString('en-IN')}
-                          </p>
-                          <p className="text-xs text-gray-500 flex items-center">
-                            <FiBook className="h-2 w-2 mr-1" />
-                            Ledger
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div>
-                          <div className="relative">
-                            <span className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-500 text-xs">₹</span>
-                            <input
-                              type="number"
-                              value={wallet.displayActual}
-                              onChange={e => handleBalanceChange(String(wallet.id), e.target.value)}
-                              disabled={readOnly}
-                              className="pl-6 pr-2 py-1 border border-gray-300 rounded text-sm w-32 focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                              placeholder="Actual"
-                            />
-                          </div>
-                          <p className="text-xs text-gray-500 mt-1 flex items-center">
-                            <FiSmartphone className="h-2 w-2 mr-1" />
-                            Physical/Digital
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className={`text-center ${
-                          wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'
-                        }`}>
-                          <p className={`text-xs font-bold ${wallet.isReconciled ? 'text-emerald-600' : 'text-rose-600'}`}>
-                            {wallet.variance >= 0 ? '+' : ''}₹{wallet.variance.toFixed(2)}
-                          </p>
-                          <p className="text-xs">
-                            {wallet.isReconciled ? 'Within Limit' : 'Review Needed'}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          wallet.isReconciled 
-                            ? 'bg-emerald-50 text-emerald-700' 
-                            : 'bg-rose-50 text-rose-700'
-                        }`}>
-                          {wallet.isReconciled ? (
-                            <>
-                              <FiCheck className="h-2 w-2 mr-1" />
-                              Reconciled
-                            </>
-                          ) : (
-                            <>
-                              <FiAlertCircle className="h-2 w-2 mr-1" />
-                              Pending
-                            </>
-                          )}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Action Bar */}
-          {!readOnly && (
-          <div className="border-t border-gray-200 bg-gray-50 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-xs text-gray-600">
-                <FiInfo className="h-3 w-3" />
-                <span>Enter actual balances and click Reconcile to sync all wallets</span>
-              </div>
-              <button
-                onClick={handleReconcileWallets}
-                disabled={isReconciling}
-                className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium ${
-                  isReconciling
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                }`}
-              >
-                {isReconciling ? (
-                  <>
-                    <FiRefreshCw className="h-4 w-4 animate-spin" />
-                    <span>Reconciling...</span>
-                  </>
-                ) : (
-                  <>
-                    <FiCheckCircle className="h-4 w-4" />
-                    <span>Reconcile All Wallets</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
           )}
         </div>
       </div>
@@ -1980,23 +1922,69 @@ const ExpenseManagement = ({
     return acc;
   }, {});
 
+  const cardCls = 'rounded-2xl border border-slate-200 bg-white p-4 shadow-sm';
+  const labelCls = 'mb-1 block text-sm font-medium text-slate-700';
+  const dotSep = <span className="text-xs text-slate-400">•</span>;
+
+  const renderHistoryList = (list, tone) => (
+    <div className="max-h-60 space-y-2 overflow-y-auto">
+      {list.map((expense) => (
+        <div
+          key={expense.id}
+          className={`flex flex-col gap-2 rounded-xl border p-3 sm:flex-row sm:items-center sm:justify-between ${
+            tone === 'rose' ? 'border-rose-100 bg-rose-50' : 'border-emerald-100 bg-emerald-50'
+          }`}
+        >
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium text-slate-900">
+              {expense.description || expense.category}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
+              <span>{expense.date}</span>
+              {dotSep}
+              <span>{expense.staff_name || 'Staff'}</span>
+              {dotSep}
+              <span>{expense.wallet_name || 'Wallet'}</span>
+            </div>
+          </div>
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            <span className={`whitespace-nowrap text-sm font-semibold ${tone === 'rose' ? 'text-rose-700' : 'text-emerald-700'}`}>
+              {formatCurrency(expense.amount)}
+            </span>
+            {onCorrect && tone !== 'rose' && (
+              <button
+                type="button"
+                onClick={() => openCorrection(expense)}
+                title="Correct this expense"
+                aria-label="Correct this expense"
+                className="rounded-lg bg-white p-1.5 text-navy-700 ring-1 ring-slate-200 transition-colors hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
+              >
+                <FiRefreshCw className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {/* Pending Approvals */}
       {pendingExpenses.length > 0 && (
-        <div className="bg-white rounded-lg border border-yellow-200 p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center space-x-2">
-              <div className="p-2 bg-yellow-100 rounded-lg">
-                <FiAlertTriangle className="h-4 w-4 text-yellow-600" />
+        <div className="rounded-2xl border border-amber-200 bg-white p-4 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-amber-100 p-2">
+                <FiAlertTriangle className="h-4 w-4 text-amber-600" />
               </div>
               <div>
-                <h4 className="font-bold text-gray-900 text-sm">Pending Approvals</h4>
-                <p className="text-xs text-yellow-600 font-medium">{pendingExpenses.length} items require action</p>
+                <h4 className="text-sm font-bold text-slate-900">Pending Approvals</h4>
+                <p className="text-xs font-medium text-amber-600">{pendingExpenses.length} items require action</p>
               </div>
             </div>
-            <span className="text-xs text-yellow-600 font-medium flex items-center">
-              <FiClock className="h-3 w-3 mr-1" />
+            <span className="flex items-center text-xs font-medium text-amber-600">
+              <FiClock className="mr-1 h-3 w-3" />
               Requires Action
             </span>
           </div>
@@ -2010,52 +1998,54 @@ const ExpenseManagement = ({
                   key={expense.id}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
-                  className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200"
+                  className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between"
                 >
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <div className="p-1 bg-white rounded border border-yellow-200">
-                        {category && React.createElement(category.icon, { className: "h-3 w-3 text-yellow-600" })}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                      <div className="mt-0.5 rounded-lg border border-amber-200 bg-white p-1">
+                        {category && React.createElement(category.icon, { className: "h-3 w-3 text-amber-600" })}
                       </div>
-                      <div>
-                        <p className="font-medium text-gray-900 text-sm">{expense.description}</p>
-                        <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                          <span className="text-xs text-gray-600 flex items-center">
-                            <PaymentIcon className="h-2 w-2 mr-1" />
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900">{expense.description}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                          <span className="flex items-center text-xs text-slate-600">
+                            <PaymentIcon className="mr-1 h-2 w-2" />
                             {expense.paymentMethod}
                           </span>
-                          <span className="text-xs text-gray-600">•</span>
-                          <span className="text-xs text-gray-600">by {expense.staff_name || 'Staff'}</span>
-                          <span className="text-xs text-gray-600">•</span>
-                          <span className="text-xs text-gray-600">{expense.date}</span>
+                          {dotSep}
+                          <span className="text-xs text-slate-600">by {expense.staff_name || 'Staff'}</span>
+                          {dotSep}
+                          <span className="text-xs text-slate-600">{expense.date}</span>
                         </div>
                       </div>
                     </div>
                     {expense.notes && (
-                      <p className="text-xs text-gray-600 mt-1 flex items-start">
-                        <FiMessageSquare className="h-2 w-2 mr-1 mt-0.5 flex-shrink-0" />
+                      <p className="mt-1 flex items-start text-xs text-slate-600">
+                        <FiMessageSquare className="mr-1 mt-0.5 h-2 w-2 shrink-0" />
                         {expense.notes}
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-col items-end space-y-1 ml-2">
-                    <p className="font-bold text-gray-900 text-sm">
+                  <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end sm:justify-start sm:gap-1">
+                    <p className="text-sm font-bold text-slate-900">
                       ₹{Number(expense.amount || 0).toLocaleString('en-IN', {
                         minimumFractionDigits: 2
                       })}
                     </p>
                     {!readOnly && (
-                    <div className="flex space-x-1">
+                    <div className="flex gap-1">
                       <button
+                        type="button"
                         onClick={() => onApprove(expense.id)}
-                        className="px-2 py-1 bg-emerald-600 text-white rounded hover:bg-emerald-700 text-xs flex items-center space-x-1"
+                        className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                       >
                         <FiCheck className="h-2 w-2" />
                         <span>Approve</span>
                       </button>
                       <button
+                        type="button"
                         onClick={() => onReject(expense.id)}
-                        className="px-2 py-1 bg-rose-600 text-white rounded hover:bg-rose-700 text-xs flex items-center space-x-1"
+                        className="flex items-center gap-1 rounded-lg bg-rose-600 px-2.5 py-1 text-xs text-white hover:bg-rose-700 focus:outline-none focus:ring-2 focus:ring-rose-500/40"
                       >
                         <FiX className="h-2 w-2" />
                         <span>Reject</span>
@@ -2075,154 +2065,80 @@ const ExpenseManagement = ({
         <div className="space-y-2">
           {/* Approved / Auto‑Approved */}
           {approvedExpenses.length > 0 && (
-            <div className="bg-white rounded-lg border border-emerald-200 p-4">
-              <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                <FiCheckCircle className="h-4 w-4 mr-2 text-emerald-600" />
+            <div className="rounded-2xl border border-emerald-200 bg-white p-4 shadow-sm">
+              <h4 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+                <FiCheckCircle className="mr-2 h-4 w-4 text-emerald-600" />
                 Approved / Auto‑Approved ({approvedExpenses.length})
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {approvedExpenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-3 rounded-lg border border-emerald-100 bg-emerald-50 flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {expense.description || expense.category}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <span>{expense.date}</span>
-                        <span>•</span>
-                        <span>{expense.staff_name || 'Staff'}</span>
-                        <span>•</span>
-                        <span>{expense.wallet_name || 'Wallet'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-emerald-700 text-sm whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      {onCorrect && (
-                        <button
-                          onClick={() => openCorrection(expense)}
-                          className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                          title="Correct this expense"
-                        >
-                          <FiRefreshCw className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderHistoryList(approvedExpenses, 'emerald')}
             </div>
           )}
 
           {/* Rejected */}
           {rejectedExpenses.length > 0 && (
-            <div className="bg-white rounded-lg border border-rose-200 p-4">
-              <h4 className="font-semibold text-gray-900 text-sm mb-3 flex items-center">
-                <FiXCircle className="h-4 w-4 mr-2 text-rose-600" />
+            <div className="rounded-2xl border border-rose-200 bg-white p-4 shadow-sm">
+              <h4 className="mb-3 flex items-center text-sm font-semibold text-slate-900">
+                <FiXCircle className="mr-2 h-4 w-4 text-rose-600" />
                 Rejected ({rejectedExpenses.length})
               </h4>
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {rejectedExpenses.map((expense) => (
-                  <div
-                    key={expense.id}
-                    className="p-3 rounded-lg border border-rose-100 bg-rose-50 flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">
-                        {expense.description || expense.category}
-                      </p>
-                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
-                        <span>{expense.date}</span>
-                        <span>•</span>
-                        <span>{expense.staff_name || 'Staff'}</span>
-                        <span>•</span>
-                        <span>{expense.wallet_name || 'Wallet'}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-rose-700 text-sm whitespace-nowrap">
-                        {formatCurrency(expense.amount)}
-                      </span>
-                      {onCorrect && (
-                        <button
-                          onClick={() => openCorrection(expense)}
-                          className="p-1.5 rounded-lg bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                          title="Correct this expense"
-                        >
-                          <FiRefreshCw className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {renderHistoryList(rejectedExpenses, 'rose')}
             </div>
           )}
         </div>
       )}
 
       {/* Expense Summary Cards */}
-      <div className="grid gap-3 grid-cols-3">
-        <div className="bg-white rounded-lg border border-emerald-200 p-3 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <h5 className="font-medium text-gray-900 text-xs flex items-center">
-              <FiCheckCircle className="h-3 w-3 mr-1 text-emerald-600" />
-              Approved
-            </h5>
-          </div>
-          <p className="font-bold text-emerald-600 text-sm">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="rounded-2xl border border-emerald-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+          <h5 className="mb-1 flex items-center text-xs font-medium text-slate-900">
+            <FiCheckCircle className="mr-1 h-3 w-3 text-emerald-600" />
+            Approved
+          </h5>
+          <p className="text-sm font-bold text-emerald-600">
             {formatCurrency(
               expenses
                 .filter(e => e.status === 'approved' || e.status === 'auto_approved')
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             )}
           </p>
-          <p className="text-xs text-gray-600 mt-0.5 flex items-center">
-            <FiPackage className="h-2 w-2 mr-1" />
+          <p className="mt-0.5 flex items-center text-xs text-slate-600">
+            <FiPackage className="mr-1 h-2 w-2" />
             {expenses.filter(e => e.status === 'approved' || e.status === 'auto_approved').length} items
           </p>
         </div>
 
-        <div className="bg-white rounded-lg border border-yellow-200 p-3 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <h5 className="font-medium text-gray-900 text-xs flex items-center">
-              <FiClock className="h-3 w-3 mr-1 text-yellow-600" />
-              Pending
-            </h5>
-          </div>
-          <p className="font-bold text-yellow-600 text-sm">
+        <div className="rounded-2xl border border-amber-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+          <h5 className="mb-1 flex items-center text-xs font-medium text-slate-900">
+            <FiClock className="mr-1 h-3 w-3 text-amber-600" />
+            Pending
+          </h5>
+          <p className="text-sm font-bold text-amber-600">
             {formatCurrency(
               expenses
                 .filter(e => e.status === 'pending')
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             )}
           </p>
-          <p className="text-xs text-gray-600 mt-0.5 flex items-center">
-            <FiAlertCircle className="h-2 w-2 mr-1" />
+          <p className="mt-0.5 flex items-center text-xs text-slate-600">
+            <FiAlertCircle className="mr-1 h-2 w-2" />
             {expenses.filter(e => e.status === 'pending').length} items
           </p>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-3 hover:shadow-sm transition-all">
-          <div className="flex items-center justify-between mb-1">
-            <h5 className="font-medium text-gray-900 text-xs flex items-center">
-              <FiDollarSign className="h-3 w-3 mr-1 text-gray-600" />
-              Total
-            </h5>
-          </div>
-          <p className="font-bold text-gray-900 text-sm">
+        <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm transition-shadow hover:shadow-md">
+          <h5 className="mb-1 flex items-center text-xs font-medium text-slate-900">
+            <FiDollarSign className="mr-1 h-3 w-3 text-navy-700" />
+            Total
+          </h5>
+          <p className="text-sm font-bold text-slate-900">
             {formatCurrency(
               expenses
                 .filter(e => e.status !== 'rejected')
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             )}
           </p>
-          <p className="text-xs text-gray-600 mt-0.5 flex items-center">
-            <FiDatabase className="h-2 w-2 mr-1" />
+          <p className="mt-0.5 flex items-center text-xs text-slate-600">
+            <FiDatabase className="mr-1 h-2 w-2" />
             {expenses.length} items
           </p>
         </div>
@@ -2232,10 +2148,11 @@ const ExpenseManagement = ({
       {allowAdd && !showAddForm && onAddClick && (
         <div className="flex justify-center">
           <motion.button
+            type="button"
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={onAddClick}
-            className="flex items-center space-x-2 px-3 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-all text-sm"
+            className="flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
           >
             <FiPlusCircle className="h-4 w-4" />
             <span className="font-medium">Add New Expense</span>
@@ -2250,33 +2167,37 @@ const ExpenseManagement = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Correct expense"
           >
             <motion.div
               initial={{ scale: 0.95 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.95 }}
-              className="bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto border border-gray-200"
+              className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl"
             >
-              <div className="p-6 border-b border-gray-200">
-                <h2 className="text-lg font-bold text-gray-900">Correct Expense</h2>
-                <p className="text-sm text-gray-500 mt-1">
+              <div className="border-b border-slate-200 p-6">
+                <h2 className="text-lg font-bold text-slate-900">Correct Expense</h2>
+                <p className="mt-1 text-sm text-slate-500">
                   Original: {correctingExpense.description} – {formatCurrency(correctingExpense.amount)} on {correctingExpense.expense_date || correctingExpense.date}
                 </p>
               </div>
-              <form onSubmit={handleCorrectionSubmit} className="p-6 space-y-4">
+              <form onSubmit={handleCorrectionSubmit} className="space-y-4 p-6">
                 {/* New Amount */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="correction-amount" className={labelCls}>
                     New Amount (₹) *
                   </label>
                   <input
+                    id="correction-amount"
                     type="number"
                     value={correctionForm.amount}
                     onChange={(e) =>
                       setCorrectionForm((prev) => ({ ...prev, amount: e.target.value }))
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputCls}
                     required
                     min="0"
                     step="0.01"
@@ -2286,20 +2207,18 @@ const ExpenseManagement = ({
                 {/* New Wallet */}
                 {wallets.length > 0 && (
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      New Wallet *
-                    </label>
-                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                    <span className={labelCls}>New Wallet *</span>
+                    <div className="max-h-40 space-y-2 overflow-y-auto pr-1" role="radiogroup" aria-label="New wallet">
                       {wallets.map((wallet) => (
                         <label
                           key={wallet.id}
-                          className={`flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                          className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border-2 p-3 transition-colors focus-within:ring-2 focus-within:ring-navy-500/40 ${
                             correctionForm.wallet_id === wallet.id.toString()
-                              ? 'border-blue-500 bg-blue-50'
-                              : 'border-gray-200 hover:border-gray-300'
+                              ? 'border-navy-500 bg-slate-50'
+                              : 'border-slate-200 hover:border-slate-300'
                           }`}
                         >
-                          <div className="flex items-center gap-2">
+                          <div className="flex min-w-0 items-center gap-2">
                             <input
                               type="radio"
                               name="correction_wallet"
@@ -2315,12 +2234,12 @@ const ExpenseManagement = ({
                               required
                             />
                             <span className="text-xl">{getWalletMeta(wallet).icon}</span>
-                            <div>
-                              <p className="font-medium text-gray-900 text-sm">{wallet.name}</p>
-                              <p className="text-xs text-gray-500">{getWalletMeta(wallet).label}</p>
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-slate-900">{wallet.name}</p>
+                              <p className="text-xs text-slate-500">{getWalletMeta(wallet).label}</p>
                             </div>
                           </div>
-                          <span className="text-sm font-semibold text-gray-700">
+                          <span className="shrink-0 text-sm font-semibold text-slate-700">
                             {formatCurrency(walletBalances[wallet.id] ?? 0)}
                           </span>
                         </label>
@@ -2331,31 +2250,32 @@ const ExpenseManagement = ({
 
                 {/* Reason */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="correction-reason" className={labelCls}>
                     Reason for Correction
                   </label>
                   <textarea
+                    id="correction-reason"
                     value={correctionForm.reason}
                     onChange={(e) =>
                       setCorrectionForm((prev) => ({ ...prev, reason: e.target.value }))
                     }
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={inputCls}
                     rows="3"
                     placeholder="Explain why you are correcting this expense..."
                   />
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
+                <div className="flex justify-end gap-3 border-t border-slate-200 pt-4">
                   <button
                     type="button"
                     onClick={() => setShowCorrectModal(false)}
-                    className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium text-sm"
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-sm flex items-center gap-2"
+                    className="flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
                     <FiRefreshCw className="h-4 w-4" />
                     Submit Correction
@@ -2433,20 +2353,10 @@ const AccountingSection = ({
       e.preventDefault();
       if (readOnly) return;
       try {
-        const [year, month, day] = miscIncomeForm.date.split('-');
-        const now = new Date();
-        const submissionDate = new Date(
-          year, 
-          month - 1,
-          day, 
-          now.getHours(), 
-          now.getMinutes(), 
-          now.getSeconds()
-        );
-
+        // chosen date + current time, both in IST (the browser's clock zone no longer matters)
         const payload = {
           ...miscIncomeForm,
-          date: submissionDate.toISOString() 
+          date: `${miscIncomeForm.date}T${istNowTime()}+05:30`
         };
 
         const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/misc-income`, {
@@ -2793,6 +2703,7 @@ const AccountingSection = ({
     { id: 'ledger', label: 'Ledger', icon: FiBook },
     { id: 'expenses', label: 'Expenses', icon: FiTrendingDown },
     { id: 'wallets', label: 'Wallet Recon', icon: FiSmartphone },
+    { id: 'bank', label: 'Bank Statement', icon: FiCreditCard },
     { id: 'reports', label: 'Reports', icon: FiFileText }
   ];
 
@@ -2970,8 +2881,11 @@ const handleApproveExpense = async (expenseId) => {
   const handleCompleteNightlyAccounting = async (payload) => {
     if (readOnly) return;
     try {
-      const openingBalance = accountingData.dailySummary?.derived?.openingBalance || 0;
-      
+      // The nightly close is a CASH close (bank / digital are checked against statements
+      // and fixed with transfers). Its closing_balance is the calculated cash, so the
+      // opening must be the CASH opening too — it was the total of all wallets.
+      const openingBalance = Number(accountingData.dailySummary?.derived?.cashOpening || 0);
+
       const finalPayload = {
         ...payload,
         opening_balance: openingBalance
@@ -3034,19 +2948,32 @@ const handleApproveExpense = async (expenseId) => {
     const totalBilled = serviceCharge + departmentCharge;
     
     if (totalBilled > 0 && received > 0) {
-      const paymentRatio = received / totalBilled;
+      // capped at 1: an overpaid entry (e.g. after a department-fee correction)
+      // must not count more than its full service charge
+      const paymentRatio = Math.min(1, received / totalBilled);
       return sum + (serviceCharge * paymentRatio);
     } else if (received > 0 && totalBilled === 0) {
       return sum + received;
     }
     return sum;
   }, 0) || 0;
-  
+
   const todayExpenses = expensesForCurrentDate
     .filter(e => e.status === 'approved')
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  
-  const todayProfit = totalServiceCharges - todayExpenses;
+
+  // rounded to paise (the pro-rata above produced values like ₹1,451.982)
+  const todayProfit = Math.round((totalServiceCharges - todayExpenses) * 100) / 100;
+
+  // Cash the system expects at close: cash opening + cash in − cash out ± cash transfers
+  const expectedCashForClose = (() => {
+    const d = accountingData.dailySummary?.derived;
+    if (!d || accountingData.dailySummary?.date !== date) return calculateCashInHand();
+    return Math.round((
+      Number(d.cashOpening || 0) + Number(d.cashInflow || 0) + Number(d.cashTransferIn || 0)
+      - Number(d.cashOutflow || 0) - Number(d.cashTransferOut || 0)
+    ) * 100) / 100;
+  })();
 
   const pendingApprovals = expensesForCurrentDate
     .filter(e => e.status === 'pending').length;
@@ -3241,33 +3168,38 @@ const handleExportExcel = () => {
     }
   };
 
+  const ledgerFieldCls = 'w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-900 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30';
+
   return (
     <div className="space-y-4">
       {/* Accounting Dashboard Header */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
-        <div className="flex items-center justify-between">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center">
-              <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
+            <h2 className="mb-1 flex items-center text-lg font-bold text-slate-900">
+              <FiFileText className="mr-2 h-5 w-5 text-navy-700" />
               Accounting Center
             </h2>
-            <p className="text-gray-600 text-xs">Daily financial management and reconciliation</p>
+            <p className="text-xs text-slate-600">Daily financial management and reconciliation</p>
           </div>
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center gap-3">
             <div className="relative">
-              <FiCalendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <FiCalendar className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="pl-10 pr-4 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                aria-label="Accounting date"
+                className="rounded-xl border border-slate-300 bg-white py-2 pl-10 pr-3 text-sm text-slate-900 focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30"
               />
             </div>
             <button
+              type="button"
               onClick={handleRefreshAllData}
               disabled={loading}
-              className="p-2 bg-indigo-100 text-indigo-600 rounded-lg hover:bg-indigo-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl bg-slate-100 p-2.5 text-navy-700 transition-colors hover:bg-slate-200 focus:outline-none focus:ring-2 focus:ring-navy-500/30 disabled:cursor-not-allowed disabled:opacity-50"
               title="Refresh all data"
+              aria-label="Refresh all data"
             >
               <FiRefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
@@ -3275,65 +3207,68 @@ const handleExportExcel = () => {
         </div>
 
         {/* Quick Stats */}
-        <div className="grid grid-cols-5 gap-3 mt-4">
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
           <StatCard
             title="Today's Revenue"
-            value={`₹${totalRevenue.toLocaleString()}`}
+            value={`${inr2(totalRevenue)}`}
             subtitle="Total collected amount"
             icon={FiDollarSign}
             color="bg-emerald-600"
           />
           <StatCard
             title="Today's Profit"
-            value={`₹${todayProfit.toLocaleString()}`}
+            value={`${inr2(todayProfit)}`}
             subtitle="Service charges minus expenses"
             icon={FiTrendingUp}
-            color="bg-indigo-600"
+            color="bg-navy-700"
           />
           <StatCard
             title="Pending Approvals"
             value={pendingApprovals}
             subtitle="Requires action"
             icon={FiAlertCircle}
-            color="bg-yellow-600"
-          />
-          <StatCard
-            title="Cash in Hand"
-            value={`₹${calculateCashInHand().toLocaleString()}`}
-            subtitle="Physical cash wallets"
-            icon={FiDollarSign}
             color="bg-amber-600"
           />
           <StatCard
+            title="Cash in Hand"
+            value={inr2(calculateCashInHand())}
+            subtitle="Physical cash wallets"
+            icon={FiDollarSign}
+            color="bg-navy-500"
+          />
+          <StatCard
             title="Total Wallet Balance"
-            value={`₹${calculateTotalWalletBalance().toLocaleString()}`}
+            value={inr2(calculateTotalWalletBalance())}
             subtitle="All wallets combined"
             icon={FiSmartphone}
-            color="bg-purple-600"
+            color="bg-slate-600"
           />
         </div>
       </div>
 
       {loading ? (
-        <div className="bg-white rounded-lg border border-gray-200 p-8 flex items-center justify-center">
-          <FiRefreshCw className="animate-spin h-6 w-6 text-indigo-600" />
-          <span className="ml-2 text-gray-600">Loading accounting data...</span>
+        <div role="status" className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <FiRefreshCw className="h-6 w-6 animate-spin text-navy-700" />
+          <span className="ml-2 text-slate-600">Loading accounting data...</span>
         </div>
       ) : (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-          <div className="border-b border-gray-200 bg-gray-50">
-            <div className="flex overflow-x-auto px-2">
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50">
+            <div className="flex overflow-x-auto px-2" role="tablist" aria-label="Accounting sections">
               {accountingTabs.map(tab => {
                 const Icon = tab.icon;
                 const isActive = activeAccountingTab === tab.id;
                 return (
                   <button
                     key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
                     onClick={() => setActiveAccountingTab(tab.id)}
-                    className={`flex items-center space-x-2 px-4 py-3 font-medium whitespace-nowrap border-b-2 transition-colors text-sm ${
+                    className={`flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500/40 ${
                       isActive
-                        ? 'border-indigo-500 text-indigo-600 bg-white'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-100'
+                        ? 'border-navy-700 bg-white text-navy-700'
+                        : 'border-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-700'
                     }`}
                   >
                     <Icon className="h-4 w-4" />
@@ -3352,12 +3287,25 @@ const handleExportExcel = () => {
                   date={date}
                   onComplete={handleCompleteNightlyAccounting}
                   existingData={accountingData.nightlyAccounting?.[date]}
+                  expectedCash={expectedCashForClose}
                   readOnly={readOnly}
                 />
-                
+
+                <ShortageExcessCard
+                  date={date}
+                  buildQueryString={buildQueryString}
+                  refreshKey={`${activeAccountingTab}-${accountingData.nightlyAccounting?.[date]?.timestamp || ''}-${expensesForCurrentDate.length}`}
+                  wallets={derivedWallets}
+                  expenses={expensesForCurrentDate}
+                  ledgerRows={accountingData.ledger?.rows || []}
+                  nightly={accountingData.nightlyAccounting?.[date]}
+                  onOpenRecon={() => setActiveAccountingTab('wallets')}
+                />
+
                 <DailySummaryComponent
                   summaryData={accountingData.dailySummary}
                   onUpdate={handleUpdateDailySummary}
+                  countedCash={accountingData.nightlyAccounting?.[date]?.actualCashCount ?? null}
                   readOnly={readOnly}
                 />
               </div>
@@ -3366,15 +3314,16 @@ const handleExportExcel = () => {
             {/* Income View */}
             {activeAccountingTab === 'income' && (
               <>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-sm font-semibold text-gray-900 flex items-center">
-                    <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center text-sm font-semibold text-slate-900">
+                    <FiTrendingUp className="mr-2 h-4 w-4 text-emerald-600" />
                     Income & Collections
                   </h2>
                   {!readOnly && (
                   <button
+                    type="button"
                     onClick={() => setShowMiscIncomeModal(true)}
-                    className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center space-x-1 text-sm shadow-sm"
+                    className="flex items-center gap-1 rounded-xl bg-navy-700 px-3 py-1.5 text-sm text-white shadow-sm hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
                     <FiPlusCircle className="h-4 w-4" />
                     <span>Add Misc Income</span>
@@ -3390,14 +3339,15 @@ const handleExportExcel = () => {
             {/* Ledger View */}
             {activeAccountingTab === 'ledger' && (
               <div className="space-y-4">
-                <div className="grid grid-cols-6 gap-3 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <input
                     type="date"
                     value={ledgerFilters.from || date}
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, from: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="From date"
+                    className={ledgerFieldCls}
                     placeholder="From date"
                   />
 
@@ -3407,7 +3357,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, to: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="To date"
+                    className={ledgerFieldCls}
                     placeholder="To date"
                   />
 
@@ -3416,7 +3367,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, staff_id: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Staff"
+                    className={ledgerFieldCls}
                   >
                     <option value="">All Staff</option>
                       {staff?.map(s => (
@@ -3431,7 +3383,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, wallet_id: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Wallet"
+                    className={ledgerFieldCls}
                   >
                     <option value="">All Wallets</option>
                       {derivedWallets?.map(w => (
@@ -3444,7 +3397,8 @@ const handleExportExcel = () => {
                     onChange={(e) =>
                       setLedgerFilters(prev => ({ ...prev, category: e.target.value }))
                     }
-                    className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    aria-label="Category"
+                    className={ledgerFieldCls}
                   >
                     <option value="">All Categories</option>
                     <option value="Service Payment">Service Payment</option>
@@ -3456,6 +3410,7 @@ const handleExportExcel = () => {
                   </select>
 
                   <button
+                    type="button"
                     onClick={() => {
                       setLedgerFilters({
                         from: date,
@@ -3465,9 +3420,9 @@ const handleExportExcel = () => {
                         category: ''
                       });
                     }}
-                    className="px-3 py-1.5 bg-indigo-600 text-white rounded text-sm hover:bg-indigo-700 flex items-center justify-center"
+                    className="flex items-center justify-center rounded-xl bg-navy-700 px-3 py-1.5 text-sm text-white hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
-                    <FiRefreshCw className="h-3 w-3 mr-1" />
+                    <FiRefreshCw className="mr-1 h-3 w-3" />
                     Reset to Current Filter
                   </button>
                 </div>
@@ -3482,16 +3437,17 @@ const handleExportExcel = () => {
             {/* Expenses */}
             {activeAccountingTab === 'expenses' && (
               <>
-                <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-sm font-semibold text-gray-900 flex items-center">
-                    <FiTrendingDown className="h-4 w-4 mr-2 text-indigo-600" />
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="flex items-center text-sm font-semibold text-slate-900">
+                    <FiTrendingDown className="mr-2 h-4 w-4 text-navy-700" />
                     Expenses
                   </h2>
 
                   {!readOnly && (
                   <button
+                    type="button"
                     onClick={() => setShowAdminExpenseModal(true)}
-                    className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-1 text-sm"
+                    className="flex items-center gap-1 rounded-xl bg-navy-700 px-3 py-1.5 text-sm text-white shadow-sm hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                   >
                     <FiPlusCircle className="h-4 w-4" />
                     <span>Add Expense</span>
@@ -3515,8 +3471,8 @@ const handleExportExcel = () => {
             {activeAccountingTab === 'wallets' && (
               <WalletReconciliation
                 wallets={derivedWallets}
-                onReconcile={handleReconcileWallets}
                 onRefreshWallets={refreshWalletBookBalances}
+                onAdjusted={fetchExpenses}
                 date={date}
                 centreId={centreId}
                 isSuperAdmin={isSuperAdmin}
@@ -3524,21 +3480,29 @@ const handleExportExcel = () => {
               />
             )}
 
+            {/* Bank statement check (debits of bank wallets vs the app) */}
+            {activeAccountingTab === 'bank' && (
+              <BankStatementSection
+                wallets={derivedWallets}
+                readOnly={readOnly || isSuperAdmin}
+              />
+            )}
+
             {/* Reports */}
             {activeAccountingTab === 'reports' && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                      <FiFileText className="h-5 w-5 mr-2 text-indigo-600" />
+                    <h2 className="flex items-center text-lg font-bold text-slate-900">
+                      <FiFileText className="mr-2 h-5 w-5 text-navy-700" />
                       Financial Reports & Analytics
                     </h2>
-                    <p className="text-gray-600 text-sm mt-1">Comprehensive financial insights and analysis</p>
+                    <p className="mt-1 text-sm text-slate-600">Comprehensive financial insights and analysis</p>
                   </div>
-                  <div className="flex items-center space-x-3">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-xs text-gray-600">Period:</span>
-                      <select className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-600">Period:</span>
+                      <select aria-label="Report period" className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30">
                         <option>Today</option>
                         <option>This Week</option>
                         <option>This Month</option>
@@ -3547,9 +3511,10 @@ const handleExportExcel = () => {
                         <option>Custom Range</option>
                       </select>
                     </div>
-                    <button 
+                    <button
+                      type="button"
                       onClick={handleExportExcel}
-                      className="flex items-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors text-sm"
+                      className="flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2 text-sm text-white transition-colors hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40"
                     >
                       <FiDownload className="h-4 w-4" />
                       <span>Export Report</span>
@@ -3558,80 +3523,80 @@ const handleExportExcel = () => {
                 </div>
 
                 {/* Key Performance Indicators */}
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-emerald-100 rounded-lg">
+                      <div className="p-2 bg-emerald-100 rounded-xl">
                         <FiTrendingUp className="h-5 w-5 text-emerald-600" />
                       </div>
                       <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full">+12.5%</span>
                     </div>
-                    <p className="text-sm text-gray-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{totalRevenue.toLocaleString()}</p>
-                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Total Revenue</p>
+                    <p className="text-2xl font-bold text-slate-900">{inr2(totalRevenue)}</p>
+                    <div className="mt-2 flex items-center text-xs text-slate-500">
                       <span>Services: {(accountingData.income?.rows?.length || 0)}</span>
-                      <div className="w-1 h-1 mx-2 bg-gray-300 rounded-full"></div>
+                      <div className="w-1 h-1 mx-2 bg-slate-300 rounded-full"></div>
                       <span>Avg: ₹{(totalRevenue/(accountingData.income?.rows?.length || 1)).toFixed(2)}</span>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-rose-100 rounded-lg">
+                      <div className="p-2 bg-rose-100 rounded-xl">
                         <FiTrendingDown className="h-5 w-5 text-rose-600" />
                       </div>
                       <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded-full">-8.2%</span>
                     </div>
-                    <p className="text-sm text-gray-600">Total Expenses</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{todayExpenses.toLocaleString()}</p>
-                    <div className="mt-2 flex items-center text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Total Expenses</p>
+                    <p className="text-2xl font-bold text-slate-900">{inr2(todayExpenses)}</p>
+                    <div className="mt-2 flex items-center text-xs text-slate-500">
                       <span>Approved: {expensesForCurrentDate.filter(e => e.status === 'approved').length}</span>
-                      <div className="w-1 h-1 mx-2 bg-gray-300 rounded-full"></div>
+                      <div className="w-1 h-1 mx-2 bg-slate-300 rounded-full"></div>
                       <span>Pending: {pendingApprovals}</span>
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-indigo-100 rounded-lg">
-                        <FiDollarSign className="h-5 w-5 text-indigo-600" />
+                      <div className="p-2 bg-slate-100 rounded-xl">
+                        <FiDollarSign className="h-5 w-5 text-navy-700" />
                       </div>
                       <span className={`text-xs px-2 py-1 rounded-full ${todayProfit >= 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
                         {todayProfit >= 0 ? '+' : ''}{totalServiceCharges > 0 ? ((todayProfit/totalServiceCharges)*100).toFixed(1) : '0'}%
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600">Net Profit</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{totalServiceCharges.toLocaleString()}</p>
-                    <div className="mt-2 text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Net Profit</p>
+                    <p className="text-2xl font-bold text-slate-900">{inr2(totalServiceCharges)}</p>
+                    <div className="mt-2 text-xs text-slate-500">
                       Service Charges • {(accountingData.income?.rows?.length || 0)} services
                     </div>
                   </div>
 
-                  <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+                  <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
                     <div className="flex items-center justify-between mb-2">
-                      <div className="p-2 bg-blue-100 rounded-lg">
-                        <FiActivity className="h-5 w-5 text-blue-600" />
+                      <div className="p-2 bg-slate-100 rounded-xl">
+                        <FiActivity className="h-5 w-5 text-navy-700" />
                       </div>
-                      <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">Real-time</span>
+                      <span className="text-xs bg-slate-100 text-navy-700 px-2 py-1 rounded-full">Real-time</span>
                     </div>
-                    <p className="text-sm text-gray-600">Cash in Hand</p>
-                    <p className="text-2xl font-bold text-gray-900">₹{calculateCashInHand().toLocaleString()}</p>
-                    <div className="mt-2 text-xs text-gray-500">
+                    <p className="text-sm text-slate-600">Cash in Hand</p>
+                    <p className="text-2xl font-bold text-slate-900">₹{calculateCashInHand().toLocaleString()}</p>
+                    <div className="mt-2 text-xs text-slate-500">
                       From {derivedWallets.filter(w => w.type?.toLowerCase() === 'cash').length} cash wallets
                     </div>
                   </div>
                 </div>
 
                 {/* Detailed Reports Grid (collapsed for brevity, same as original) */}
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
                   {/* Income Breakdown */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
                         <FiTrendingUp className="h-4 w-4 mr-2 text-emerald-600" />
                         Income Breakdown
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiEye className="h-3 w-3 mr-1" />
                         View Details
                       </button>
@@ -3643,13 +3608,13 @@ const handleExportExcel = () => {
                           <div className="flex items-center space-x-2">
                             <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
                             <div>
-                              <span className="text-xs font-medium text-gray-900">Service Charges (Profit)</span>
-                              <p className="text-xs text-gray-500">Our earnings from services</p>
+                              <span className="text-xs font-medium text-slate-900">Service Charges (Profit)</span>
+                              <p className="text-xs text-slate-500">Our earnings from services</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs font-bold text-gray-900">
-                              ₹{totalServiceCharges.toLocaleString()}
+                            <p className="text-xs font-bold text-slate-900">
+                              {inr2(totalServiceCharges)}
                             </p>
                             <p className="text-xs text-emerald-600 font-medium">
                               {totalRevenue > 0 ? 
@@ -3661,14 +3626,14 @@ const handleExportExcel = () => {
                         
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-2">
-                            <div className="w-3 h-3 rounded-full bg-blue-500"></div>
+                            <div className="w-3 h-3 rounded-full bg-navy-500"></div>
                             <div>
-                              <span className="text-xs font-medium text-gray-900">Department Charge (Cost)</span>
-                              <p className="text-xs text-gray-500">Payable to departments</p>
+                              <span className="text-xs font-medium text-slate-900">Department Charge (Cost)</span>
+                              <p className="text-xs text-slate-500">Payable to departments</p>
                             </div>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               ₹{(accountingData.income?.rows?.reduce((sum, row) => {
                                 const received = Number(row.received_amount || 0);
                                 const serviceCharge = Number(row.service_charges || 0);
@@ -3682,7 +3647,7 @@ const handleExportExcel = () => {
                                 return sum;
                               }, 0) || 0).toLocaleString()}
                             </p>
-                            <p className="text-xs text-blue-600">
+                            <p className="text-xs text-navy-700">
                               {totalRevenue > 0 ? 
                                 `${((accountingData.income?.rows?.reduce((sum, row) => {
                                   const received = Number(row.received_amount || 0);
@@ -3703,21 +3668,21 @@ const handleExportExcel = () => {
                       </div>
 
                       <div className="pt-2">
-                        <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
                           <div 
                             className="h-full bg-emerald-500"
                             style={{ width: `${totalRevenue > 0 ? 
                               (totalServiceCharges/totalRevenue) * 100 : 0}%` }}
                           ></div>
                         </div>
-                        <div className="flex justify-between text-xs text-gray-500 mt-1">
+                        <div className="flex justify-between text-xs text-slate-500 mt-1">
                           <span>Our Profit (Service Charges)</span>
                           <span>Cost (Department Charges)</span>
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Top 5 Services by Profit</h4>
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Top 5 Services by Profit</h4>
                         <div className="space-y-2">
                           {(() => {
                             const serviceProfit = accountingData.income?.rows?.reduce((acc, row) => {
@@ -3746,34 +3711,34 @@ const handleExportExcel = () => {
                               .slice(0, 5);
                             
                             if (topServices.length === 0) {
-                              return <p className="text-xs text-gray-500 text-center py-2">No service data</p>;
+                              return <p className="text-xs text-slate-500 text-center py-2">No service data</p>;
                             }
                             
                             const totalProfit = topServices.reduce((sum, s) => sum + s.profit, 0);
                             
                             return topServices.map((service, index) => (
-                              <div key={service.name} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded">
+                              <div key={service.name} className="flex items-center justify-between hover:bg-slate-50 p-2 rounded">
                                 <div className="flex items-center space-x-3">
-                                  <div className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold ${
-                                    index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                                    index === 1 ? 'bg-gray-100 text-gray-700' :
+                                  <div className={`w-6 h-6 rounded-xl flex items-center justify-center text-xs font-bold ${
+                                    index === 0 ? 'bg-amber-100 text-amber-700' :
+                                    index === 1 ? 'bg-slate-100 text-slate-700' :
                                     index === 2 ? 'bg-amber-100 text-amber-700' :
-                                    'bg-indigo-100 text-indigo-700'
+                                    'bg-slate-100 text-navy-700'
                                   }`}>
                                     {index + 1}
                                   </div>
                                   <div className="max-w-[140px]">
-                                    <span className="text-xs font-medium text-gray-900 truncate block">
+                                    <span className="text-xs font-medium text-slate-900 truncate block">
                                       {service.name}
                                     </span>
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-slate-500">
                                       Total: ₹{service.total.toLocaleString()}
                                     </span>
                                   </div>
                                 </div>
                                 <div className="text-right">
                                   <p className="text-xs font-bold text-emerald-600">₹{Math.round(service.profit).toLocaleString()}</p>
-                                  <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                  <div className="flex items-center space-x-1 text-xs text-slate-500">
                                     <span>Dept: ₹{Math.round(service.department).toLocaleString()}</span>
                                     <span>•</span>
                                     <span>{totalProfit > 0 ? `${((service.profit/totalProfit)*100).toFixed(1)}%` : '0%'}</span>
@@ -3788,21 +3753,21 @@ const handleExportExcel = () => {
                   </div>
 
                   {/* Expense Analysis - same as original, omitted for brevity */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
                         <FiTrendingDown className="h-4 w-4 mr-2 text-rose-600" />
                         Expense Analysis
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiEye className="h-3 w-3 mr-1" />
                         View Details
                       </button>
                     </div>
                     
                     <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 text-center">
                           <p className="text-xs text-emerald-700 mb-1">Approved</p>
                           <p className="font-bold text-emerald-900 text-sm">
                             ₹{expensesForCurrentDate
@@ -3815,20 +3780,20 @@ const handleExportExcel = () => {
                           </p>
                         </div>
                         
-                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-center">
-                          <p className="text-xs text-yellow-700 mb-1">Pending</p>
-                          <p className="font-bold text-yellow-900 text-sm">
+                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-center">
+                          <p className="text-xs text-amber-700 mb-1">Pending</p>
+                          <p className="font-bold text-amber-900 text-sm">
                             ₹{expensesForCurrentDate
                               .filter(e => e.status === 'pending')
                               .reduce((sum, e) => sum + Number(e.amount || 0), 0)
                               .toLocaleString()}
                           </p>
-                          <p className="text-xs text-yellow-600 mt-1">
+                          <p className="text-xs text-amber-600 mt-1">
                             {pendingApprovals} items
                           </p>
                         </div>
                         
-                        <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 text-center">
+                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 text-center">
                           <p className="text-xs text-rose-700 mb-1">Rejected</p>
                           <p className="font-bold text-rose-900 text-sm">
                             ₹{expensesForCurrentDate
@@ -3843,7 +3808,7 @@ const handleExportExcel = () => {
                       </div>
 
                       <div className="pt-4">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Expense by Category</h4>
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Expense by Category</h4>
                         <div className="space-y-2">
                           {(() => {
                             const categoryTotals = expensesForCurrentDate.reduce((acc, expense) => {
@@ -3860,39 +3825,39 @@ const handleExportExcel = () => {
                               .sort(([,a], [,b]) => b - a);
                             
                             if (sortedCategories.length === 0) {
-                              return <p className="text-xs text-gray-500 text-center py-2">No expense data for this date</p>;
+                              return <p className="text-xs text-slate-500 text-center py-2">No expense data for this date</p>;
                             }
                             
                             return sortedCategories.map(([category, amount]) => (
                               <div key={category} className="space-y-1">
                                 <div className="flex items-center justify-between text-xs">
                                   <div className="flex items-center space-x-2">
-                                    <span className="font-medium text-gray-700 capitalize">{category}</span>
-                                    <span className="text-gray-400">•</span>
-                                    <span className="text-gray-500">
+                                    <span className="font-medium text-slate-700 capitalize">{category}</span>
+                                    <span className="text-slate-400">•</span>
+                                    <span className="text-slate-500">
                                       {expensesForCurrentDate.filter(e => e.category === category && e.status !== 'rejected').length} items
                                     </span>
                                   </div>
                                   <div className="text-right">
-                                    <span className="font-bold text-gray-900">
+                                    <span className="font-bold text-slate-900">
                                       ₹{amount.toLocaleString()}
                                     </span>
                                     {totalExpenses > 0 && (
-                                      <span className="text-gray-500 ml-1">
+                                      <span className="text-slate-500 ml-1">
                                         ({((amount/totalExpenses)*100).toFixed(1)}%)
                                       </span>
                                     )}
                                   </div>
                                 </div>
-                                <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                                <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                                   <div 
                                     className={`h-full rounded-full ${
-                                      category.includes('Salary') ? 'bg-purple-500' :
-                                      category.includes('Operational') ? 'bg-blue-500' :
+                                      category.includes('Salary') ? 'bg-slate-500' :
+                                      category.includes('Operational') ? 'bg-navy-500' :
                                       category.includes('Office') ? 'bg-emerald-500' :
                                       category.includes('Utility') ? 'bg-amber-500' :
                                       category.includes('Maintenance') ? 'bg-rose-500' :
-                                      'bg-gray-500'
+                                      'bg-slate-500'
                                     }`}
                                     style={{ width: `${totalExpenses > 0 ? (amount/totalExpenses)*100 : 0}%` }}
                                   ></div>
@@ -3903,9 +3868,9 @@ const handleExportExcel = () => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Payment Methods</h4>
-                        <div className="grid grid-cols-3 gap-3">
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Payment Methods</h4>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                           {(() => {
                             const paymentMethods = expensesForCurrentDate.reduce((acc, expense) => {
                               const method = expense.payment_method || 'cash';
@@ -3919,24 +3884,24 @@ const handleExportExcel = () => {
                             const methods = Object.entries(paymentMethods);
                             
                             if (methods.length === 0) {
-                              return <p className="text-xs text-gray-500 col-span-3 text-center py-2">No payment data for this date</p>;
+                              return <p className="text-xs text-slate-500 col-span-full text-center py-2">No payment data for this date</p>;
                             }
                             
                             return methods.map(([method, amount]) => (
-                              <div key={method} className="text-center p-2 border border-gray-200 rounded-lg">
+                              <div key={method} className="text-center p-2 border border-slate-200 rounded-xl">
                                 <div className={`inline-flex items-center justify-center w-8 h-8 rounded-full mb-1 ${
                                   method === 'cash' ? 'bg-emerald-100 text-emerald-600' :
-                                  method === 'bank' ? 'bg-blue-100 text-blue-600' :
-                                  method === 'upi' ? 'bg-purple-100 text-purple-600' :
-                                  'bg-gray-100 text-gray-600'
+                                  method === 'bank' ? 'bg-slate-100 text-navy-700' :
+                                  method === 'upi' ? 'bg-slate-100 text-slate-600' :
+                                  'bg-slate-100 text-slate-600'
                                 }`}>
                                   {method === 'cash' ? <FiDollarSign className="h-4 w-4" /> :
                                   method === 'bank' ? <FiCreditCard className="h-4 w-4" /> :
                                   <FiSmartphone className="h-4 w-4" />}
                                 </div>
-                                <p className="text-xs font-medium text-gray-900 capitalize">{method}</p>
-                                <p className="text-xs font-bold text-gray-800">₹{amount.toLocaleString()}</p>
-                                <p className="text-xs text-gray-500">
+                                <p className="text-xs font-medium text-slate-900 capitalize">{method}</p>
+                                <p className="text-xs font-bold text-slate-800">₹{amount.toLocaleString()}</p>
+                                <p className="text-xs text-slate-500">
                                   {expensesForCurrentDate.filter(e => e.payment_method === method && e.status !== 'rejected').length} txn
                                 </p>
                               </div>
@@ -3948,59 +3913,59 @@ const handleExportExcel = () => {
                   </div>
 
                   {/* Performance Metrics - omitted for brevity, same as original */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                        <FiActivity className="h-4 w-4 mr-2 text-indigo-600" />
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
+                        <FiActivity className="h-4 w-4 mr-2 text-navy-700" />
                         Performance Metrics
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiRefreshCw className="h-3 w-3 mr-1" />
                         Refresh
                       </button>
                     </div>
                     
                     <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-indigo-700">Profit Margin</span>
+                            <span className="text-xs font-medium text-navy-700">Profit Margin</span>
                             <span className={`text-xs font-bold ${todayProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                               {totalRevenue > 0 ? ((todayProfit/totalRevenue)*100).toFixed(1) : '0'}%
                             </span>
                           </div>
-                          <div className="h-1.5 bg-indigo-200 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                             <div 
                               className={`h-full ${todayProfit >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`}
                               style={{ width: `${Math.min(Math.abs((todayProfit/totalRevenue)*100), 100)}%` }}
                             ></div>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Net Profit: ₹{todayProfit.toLocaleString()}
+                          <p className="text-xs text-slate-500 mt-1">
+                            Net Profit: {inr2(todayProfit)}
                           </p>
                         </div>
                         
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-blue-700">Expense Ratio</span>
-                            <span className="text-xs font-bold text-blue-600">
+                            <span className="text-xs font-medium text-navy-700">Expense Ratio</span>
+                            <span className="text-xs font-bold text-navy-700">
                               {totalRevenue > 0 ? ((todayExpenses/totalRevenue)*100).toFixed(1) : '0'}%
                             </span>
                           </div>
-                          <div className="h-1.5 bg-blue-200 rounded-full overflow-hidden">
+                          <div className="h-1.5 bg-slate-200 rounded-full overflow-hidden">
                             <div 
-                              className="h-full bg-blue-500"
+                              className="h-full bg-navy-500"
                               style={{ width: `${Math.min((todayExpenses/totalRevenue)*100, 100)}%` }}
                             ></div>
                           </div>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Expenses: ₹{todayExpenses.toLocaleString()}
+                          <p className="text-xs text-slate-500 mt-1">
+                            Expenses: {inr2(todayExpenses)}
                           </p>
                         </div>
                       </div>
 
                       <div className="pt-4">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Top Staff by Service Profit</h4>
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Top Staff by Service Profit</h4>
                         <div className="space-y-2">
                           {(() => {
                             const staffPerformance = accountingData.income?.rows?.reduce((acc, row) => {
@@ -4038,25 +4003,25 @@ const handleExportExcel = () => {
                               .slice(0, 5);
                             
                             if (topStaff.length === 0) {
-                              return <p className="text-xs text-gray-500 text-center py-2">No staff performance data</p>;
+                              return <p className="text-xs text-slate-500 text-center py-2">No staff performance data</p>;
                             }
                             
                             return topStaff.map((staff, index) => (
-                              <div key={staff.name} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded border border-gray-100">
+                              <div key={staff.name} className="flex items-center justify-between hover:bg-slate-50 p-2 rounded border border-slate-100">
                                 <div className="flex items-center space-x-3">
                                   <div className="relative">
-                                    <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-xs font-bold text-indigo-600 border border-indigo-200">
+                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-navy-700 border border-slate-200">
                                       {staff.name.charAt(0)}
                                     </div>
                                     {index === 0 && (
-                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-yellow-400 rounded-full flex items-center justify-center border border-white">
+                                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-amber-400 rounded-full flex items-center justify-center border border-white">
                                         <FiStar className="h-2 w-2 text-white" />
                                       </div>
                                     )}
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium text-gray-900 truncate max-w-[120px]">{staff.name}</p>
-                                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                    <p className="text-xs font-medium text-slate-900 truncate max-w-[120px]">{staff.name}</p>
+                                    <div className="flex items-center space-x-1 text-xs text-slate-500">
                                       <span>{staff.count} services</span>
                                       <span>•</span>
                                       <span>Dept: ₹{Math.round(staff.department).toLocaleString()}</span>
@@ -4065,7 +4030,7 @@ const handleExportExcel = () => {
                                 </div>
                                 <div className="text-right">
                                   <p className="text-xs font-bold text-emerald-600">₹{Math.round(staff.profit).toLocaleString()}</p>
-                                  <p className="text-xs text-gray-500">Avg: ₹{Math.round(staff.avg).toFixed(0)}</p>
+                                  <p className="text-xs text-slate-500">Avg: ₹{Math.round(staff.avg).toFixed(0)}</p>
                                 </div>
                               </div>
                             ));
@@ -4073,28 +4038,28 @@ const handleExportExcel = () => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Transaction Statistics</h4>
-                        <div className="grid grid-cols-3 gap-3">
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
-                            <p className="text-lg font-bold text-gray-900">{accountingData.income?.rows?.length || 0}</p>
-                            <p className="text-xs text-gray-600">Services</p>
+                      <div className="pt-4 border-t border-slate-100">
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Transaction Statistics</h4>
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
+                            <p className="text-lg font-bold text-slate-900">{accountingData.income?.rows?.length || 0}</p>
+                            <p className="text-xs text-slate-600">Services</p>
                             <p className="text-xs text-emerald-600 font-medium mt-1">
-                              Profit: ₹{totalServiceCharges.toLocaleString()}
+                              Profit: {inr2(totalServiceCharges)}
                             </p>
                           </div>
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
-                            <p className="text-lg font-bold text-gray-900">{expensesForCurrentDate.length}</p>
-                            <p className="text-xs text-gray-600">Expenses</p>
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
+                            <p className="text-lg font-bold text-slate-900">{expensesForCurrentDate.length}</p>
+                            <p className="text-xs text-slate-600">Expenses</p>
                             <p className="text-xs text-rose-600 font-medium mt-1">
-                              Cost: ₹{todayExpenses.toLocaleString()}
+                              Cost: {inr2(todayExpenses)}
                             </p>
                           </div>
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
-                            <p className="text-lg font-bold text-gray-900">{accountingData.ledger?.rows?.length || 0}</p>
-                            <p className="text-xs text-gray-600">Ledger Entries</p>
-                            <p className="text-xs text-blue-600 font-medium mt-1">
-                              Total: ₹{totalRevenue.toLocaleString()}
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
+                            <p className="text-lg font-bold text-slate-900">{accountingData.ledger?.rows?.length || 0}</p>
+                            <p className="text-xs text-slate-600">Ledger Entries</p>
+                            <p className="text-xs text-navy-700 font-medium mt-1">
+                              Total: {inr2(totalRevenue)}
                             </p>
                           </div>
                         </div>
@@ -4103,21 +4068,21 @@ const handleExportExcel = () => {
                   </div>
 
                   {/* Cash Flow & Wallet Summary - omitted for brevity, same as original */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
+                  <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
-                      <h3 className="font-bold text-gray-900 text-sm flex items-center">
-                        <FiSmartphone className="h-4 w-4 mr-2 text-purple-600" />
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center">
+                        <FiSmartphone className="h-4 w-4 mr-2 text-slate-600" />
                         Wallet Balances
                       </h3>
-                      <button className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center">
+                      <button className="text-xs text-navy-700 hover:text-navy-800 flex items-center">
                         <FiEye className="h-3 w-3 mr-1" />
                         Details
                       </button>
                     </div>
                     
                     <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
                               <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mr-2">
@@ -4136,47 +4101,47 @@ const handleExportExcel = () => {
                           </p>
                         </div>
                         
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
-                              <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center mr-2">
-                                <FiCreditCard className="h-4 w-4 text-blue-600" />
+                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mr-2">
+                                <FiCreditCard className="h-4 w-4 text-navy-700" />
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-blue-700">Bank Balance</p>
-                                <p className="text-lg font-bold text-blue-900">
+                                <p className="text-xs font-medium text-navy-700">Bank Balance</p>
+                                <p className="text-lg font-bold text-navy-800">
                                   ₹{calculateBankBalance().toLocaleString()}
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <p className="text-xs text-blue-600">
+                          <p className="text-xs text-navy-700">
                             {derivedWallets.filter(w => w.type?.toLowerCase() === 'bank').length} bank accounts
                           </p>
                         </div>
                         
-                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                        <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
                           <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center">
-                              <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center mr-2">
-                                <FiSmartphone className="h-4 w-4 text-purple-600" />
+                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center mr-2">
+                                <FiSmartphone className="h-4 w-4 text-slate-600" />
                               </div>
                               <div>
-                                <p className="text-xs font-medium text-purple-700">Digital Balance</p>
-                                <p className="text-lg font-bold text-purple-900">
+                                <p className="text-xs font-medium text-slate-700">Digital Balance</p>
+                                <p className="text-lg font-bold text-slate-800">
                                   ₹{calculateDigitalBalance().toLocaleString()}
                                 </p>
                               </div>
                             </div>
                           </div>
-                          <p className="text-xs text-purple-600">
+                          <p className="text-xs text-slate-600">
                             {derivedWallets.filter(w => w.type?.toLowerCase() === 'digital').length} digital wallets
                           </p>
                         </div>
                       </div>
 
                       <div className="pt-4">
-                        <h4 className="text-xs font-semibold text-gray-700 mb-3">Wallet Distribution</h4>
+                        <h4 className="text-xs font-semibold text-slate-700 mb-3">Wallet Distribution</h4>
                         <div className="space-y-2">
                           {derivedWallets.map((wallet, index) => {
                             const isCash = wallet.type?.toLowerCase() === 'cash';
@@ -4184,20 +4149,20 @@ const handleExportExcel = () => {
                             const isDigital = wallet.type?.toLowerCase() === 'digital';
                             
                             return (
-                              <div key={wallet.id} className="flex items-center justify-between hover:bg-gray-50 p-2 rounded border border-gray-100">
+                              <div key={wallet.id} className="flex items-center justify-between hover:bg-slate-50 p-2 rounded border border-slate-100">
                                 <div className="flex items-center space-x-3">
-                                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center border ${
+                                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center border ${
                                     isCash ? 'border-emerald-200 bg-emerald-50 text-emerald-600' :
-                                    isBank ? 'border-blue-200 bg-blue-50 text-blue-600' :
-                                    'border-purple-200 bg-purple-50 text-purple-600'
+                                    isBank ? 'border-slate-200 bg-slate-50 text-navy-700' :
+                                    'border-slate-200 bg-slate-50 text-slate-600'
                                   }`}>
                                     {isCash ? <FiDollarSign className="h-4 w-4" /> :
                                     isBank ? <FiCreditCard className="h-4 w-4" /> :
                                     <FiSmartphone className="h-4 w-4" />}
                                   </div>
                                   <div className="min-w-0">
-                                    <p className="text-xs font-medium text-gray-900 truncate max-w-[120px]">{wallet.name}</p>
-                                    <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                    <p className="text-xs font-medium text-slate-900 truncate max-w-[120px]">{wallet.name}</p>
+                                    <div className="flex items-center space-x-1 text-xs text-slate-500">
                                       <span className="capitalize">{wallet.type}</span>
                                       <span>•</span>
                                       <span>Book: ₹{(wallet.book_balance || 0).toLocaleString()}</span>
@@ -4205,7 +4170,7 @@ const handleExportExcel = () => {
                                   </div>
                                 </div>
                                 <div className="text-right">
-                                  <p className="text-xs font-bold text-gray-900">
+                                  <p className="text-xs font-bold text-slate-900">
                                     ₹{(wallet.currentBalance || 0).toLocaleString()}
                                   </p>
                                   <p className={`text-xs ${Math.abs((wallet.book_balance || 0) - (wallet.currentBalance || 0)) <= 10 ? 'text-emerald-600' : 'text-rose-600'}`}>
@@ -4218,25 +4183,25 @@ const handleExportExcel = () => {
                         </div>
                       </div>
 
-                      <div className="pt-4 border-t border-gray-100">
+                      <div className="pt-4 border-t border-slate-100">
                         <div className="grid grid-cols-2 gap-3">
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
                             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-1">
                               <FiCheckCircle className="h-4 w-4 text-emerald-600" />
                             </div>
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               {derivedWallets.filter(w => Math.abs((w.book_balance || 0) - (w.currentBalance || 0)) <= 10).length}
                             </p>
-                            <p className="text-xs text-gray-600">Reconciled Wallets</p>
+                            <p className="text-xs text-slate-600">Reconciled Wallets</p>
                           </div>
-                          <div className="text-center p-3 border border-gray-200 rounded-lg">
+                          <div className="text-center p-3 border border-slate-200 rounded-xl">
                             <div className="w-8 h-8 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-1">
                               <FiAlertCircle className="h-4 w-4 text-rose-600" />
                             </div>
-                            <p className="text-xs font-bold text-gray-900">
+                            <p className="text-xs font-bold text-slate-900">
                               {derivedWallets.filter(w => Math.abs((w.book_balance || 0) - (w.currentBalance || 0)) > 10).length}
                             </p>
-                            <p className="text-xs text-gray-600">Pending Reconciliation</p>
+                            <p className="text-xs text-slate-600">Pending Reconciliation</p>
                           </div>
                         </div>
                       </div>
@@ -4244,39 +4209,39 @@ const handleExportExcel = () => {
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                  <h3 className="font-bold text-gray-900 text-sm flex items-center mb-3">
-                    <FiMessageSquare className="h-4 w-4 mr-2 text-gray-600" />
+                <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+                  <h3 className="font-bold text-slate-900 text-sm flex items-center mb-3">
+                    <FiMessageSquare className="h-4 w-4 mr-2 text-slate-600" />
                     Report Summary & Notes
                   </h3>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="col-span-2">
+                  <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+                    <div className="lg:col-span-2">
                       <textarea
-                        className="w-full h-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 text-sm"
+                        className="w-full h-32 px-3 py-2 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-sm"
                         placeholder="Add your observations, insights, or notes about this financial period..."
                         defaultValue={accountingData.nightlyAccounting?.[date]?.notes || ''}
                       ></textarea>
                       <div className="flex justify-end mt-2">
-                        <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm">
+                        <button className="px-4 py-2 bg-navy-700 text-white rounded-xl hover:bg-navy-700 text-sm">
                           Save Notes
                         </button>
                       </div>
                     </div>
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
-                        <span className="text-gray-600">Report Date:</span>
-                        <span className="font-medium text-gray-900">{date}</span>
+                      <div className="flex items-center justify-between text-sm p-2 border border-slate-200 rounded">
+                        <span className="text-slate-600">Report Date:</span>
+                        <span className="font-medium text-slate-900">{date}</span>
                       </div>
-                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
-                        <span className="text-gray-600">Generated:</span>
-                        <span className="font-medium text-gray-900">{new Date().toLocaleDateString()}</span>
+                      <div className="flex items-center justify-between text-sm p-2 border border-slate-200 rounded">
+                        <span className="text-slate-600">Generated:</span>
+                        <span className="font-medium text-slate-900">{new Date().toLocaleDateString()}</span>
                       </div>
-                      <div className="flex items-center justify-between text-sm p-2 border border-gray-200 rounded">
-                        <span className="text-gray-600">Status:</span>
+                      <div className="flex items-center justify-between text-sm p-2 border border-slate-200 rounded">
+                        <span className="text-slate-600">Status:</span>
                         <span className="font-medium text-emerald-600">Complete</span>
                       </div>
                       <div className="pt-2">
-                        <button className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm">
+                        <button className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 text-sm">
                           <FiDownload className="h-4 w-4" />
                           <span>Generate Full Report (PDF)</span>
                         </button>
@@ -4299,36 +4264,39 @@ const handleExportExcel = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowMiscIncomeModal(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Add misc income"
             >
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-                <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-lg">
-                  <h2 className="text-lg font-bold text-gray-900 flex items-center">
-                    <FiTrendingUp className="mr-2 text-emerald-600 h-5 w-5" />
+              <div className="pointer-events-auto max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-xl">
+                <div className="flex items-center justify-between rounded-t-2xl border-b border-slate-200 bg-slate-50 p-5">
+                  <h2 className="flex items-center text-lg font-bold text-slate-900">
+                    <FiTrendingUp className="mr-2 h-5 w-5 text-emerald-600" />
                     Add Misc Income / Overage
                   </h2>
-                  <button onClick={() => setShowMiscIncomeModal(false)} className="text-gray-400 hover:text-gray-600">
+                  <button type="button" onClick={() => setShowMiscIncomeModal(false)} aria-label="Close" className="rounded-lg p-1 text-slate-400 hover:bg-slate-200 hover:text-slate-600 focus:outline-none focus:ring-2 focus:ring-navy-500/30">
                     <FiX className="h-5 w-5" />
                   </button>
                 </div>
-                <form onSubmit={handleMiscIncomeSubmit} className="p-6 space-y-4">
+                <form onSubmit={handleMiscIncomeSubmit} className="space-y-4 p-6">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
-                    <input type="date" value={miscIncomeForm.date} onChange={(e) => setMiscIncomeForm(prev => ({...prev, date: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required />
+                    <label htmlFor="misc-date" className="mb-1 block text-sm font-medium text-slate-700">Date</label>
+                    <input id="misc-date" type="date" value={miscIncomeForm.date} onChange={(e) => setMiscIncomeForm(prev => ({...prev, date: e.target.value}))} className={inputCls} required />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
-                    <input type="number" min="0" step="0.01" value={miscIncomeForm.amount} onChange={(e) => setMiscIncomeForm(prev => ({...prev, amount: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required placeholder="Enter amount" />
+                    <label htmlFor="misc-amount" className="mb-1 block text-sm font-medium text-slate-700">Amount (₹)</label>
+                    <input id="misc-amount" type="number" min="0" step="0.01" value={miscIncomeForm.amount} onChange={(e) => setMiscIncomeForm(prev => ({...prev, amount: e.target.value}))} className={inputCls} required placeholder="Enter amount" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Wallet to Credit</label>
-                    <select value={miscIncomeForm.wallet_id} onChange={(e) => setMiscIncomeForm(prev => ({...prev, wallet_id: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required>
+                    <label htmlFor="misc-wallet" className="mb-1 block text-sm font-medium text-slate-700">Wallet to Credit</label>
+                    <select id="misc-wallet" value={miscIncomeForm.wallet_id} onChange={(e) => setMiscIncomeForm(prev => ({...prev, wallet_id: e.target.value}))} className={inputCls} required>
                       <option value="">Select a wallet...</option>
                       {derivedWallets.map(w => (
                         <option key={w.id} value={w.id}>{w.name} ({w.wallet_type || w.type})</option>
@@ -4336,12 +4304,12 @@ const handleExportExcel = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Description / Reason</label>
-                    <textarea value={miscIncomeForm.description} onChange={(e) => setMiscIncomeForm(prev => ({...prev, description: e.target.value}))} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500 text-sm" required placeholder="e.g., Cash drawer overage for 29/04, Sale of scrap paper, etc." rows="3" />
+                    <label htmlFor="misc-desc" className="mb-1 block text-sm font-medium text-slate-700">Description / Reason</label>
+                    <textarea id="misc-desc" value={miscIncomeForm.description} onChange={(e) => setMiscIncomeForm(prev => ({...prev, description: e.target.value}))} className={inputCls} required placeholder="e.g., Cash drawer overage for 29/04, Sale of scrap paper, etc." rows="3" />
                   </div>
-                  <div className="flex justify-end pt-4 border-t border-gray-100">
-                    <button type="button" onClick={() => setShowMiscIncomeModal(false)} className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg mr-3 hover:bg-gray-50 text-sm font-medium transition-colors">Cancel</button>
-                    <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium transition-colors">Record Income</button>
+                  <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+                    <button type="button" onClick={() => setShowMiscIncomeModal(false)} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-navy-500/30">Cancel</button>
+                    <button type="submit" className="rounded-xl bg-navy-700 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-navy-800 focus:outline-none focus:ring-2 focus:ring-navy-500/40">Record Income</button>
                   </div>
                 </form>
               </div>
@@ -4359,15 +4327,18 @@ const handleExportExcel = () => {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setShowAdminExpenseModal(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+              className="fixed inset-0 z-40 bg-slate-900/50 backdrop-blur-sm"
             />
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Admin expense entry"
             >
-              <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+              <div className="pointer-events-auto max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-xl">
                 <AdminExpenseEntry
                   wallets={wallets}
                   categories={[]}

@@ -363,11 +363,11 @@ const MyProfile = () => {
             </div>
             <div>
               <p className="text-gray-500">Reports To</p>
-              <p>{profile.reportsTo || "None"}</p>
+              <p>{profile.reportsToName || "None"}</p>
             </div>
             <div>
               <p className="text-gray-500">Centre</p>
-              <p>{profile.centreId || "N/A"}</p>
+              <p>{profile.centreName || "N/A"}</p>
             </div>
           </div>
         </div>

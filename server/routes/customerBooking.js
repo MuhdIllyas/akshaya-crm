@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import { todayIST, addDays } from "../utils/dates.js";
 
 const router = express.Router();
 
@@ -550,7 +551,9 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
     const totalCharges = departmentCharges + serviceCharges;
 
     // 5. Generate application number
-    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    // IST date, same day as the CURRENT_DATE counter below. With the UTC date, the first
+    // applications after midnight IST got yesterday's date and could repeat yesterday's numbers.
+    const datePart = todayIST().replace(/-/g, '');
     
     // Get today's count
     const countResult = await client.query(
@@ -598,7 +601,7 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
           ...(service_data || {})
         }),
         service.has_expiry 
-          ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+          ? addDays(todayIST(), 30)
           : null,
         "Draft application created by customer"
       ]
