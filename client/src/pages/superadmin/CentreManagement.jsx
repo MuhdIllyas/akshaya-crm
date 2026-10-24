@@ -2,7 +2,10 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import AddAdminForm from "../../components/AddAdminForm";
-import { FiPlus } from "react-icons/fi";
+import {
+  FiPlus, FiSearch, FiX, FiGrid, FiList, FiEye, FiEdit2, FiTrash2, FiUserPlus, FiPhone, FiClock,
+  FiHome, FiUserCheck, FiAlertCircle, FiMessageCircle, FiUser,
+} from "react-icons/fi";
 
 const EMPTY_CENTRE_FORM = {
   name: "", admin_id: "", communication_account_id: "",
@@ -10,6 +13,20 @@ const EMPTY_CENTRE_FORM = {
   latitude: "", longitude: "", google_place_id: "",
   working_hours: "", phone: "", email: "", logo: ""
 };
+
+const getViewMode = () => {
+  try { return localStorage.getItem("centre-view-mode") || "card"; } catch { return "card"; }
+};
+
+const WaBadge = ({ on }) => (
+  <span
+    className={`shrink-0 inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${
+      on ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"
+    }`}
+  >
+    {on ? "WhatsApp on" : "System only"}
+  </span>
+);
 
 const CentreManagement = () => {
   const [centres, setCentres] = useState([]);
@@ -22,10 +39,17 @@ const CentreManagement = () => {
   const [showCentreDetails, setShowCentreDetails] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const [filterMode, setFilterMode] = useState("all");
+  const [viewMode, setViewMode] = useState(getViewMode);
+
+  const changeView = (mode) => {
+    setViewMode(mode);
+    try { localStorage.setItem("centre-view-mode", mode); } catch {}
+  };
 
   const visibleCentres = centres.filter((c) => {
-    if (unassignedOnly && c.admin_name) return false;
+    if (filterMode === "no_admin" && c.admin_name) return false;
+    if (filterMode === "no_whatsapp" && c.communication_account_id) return false;
     const q = searchTerm.trim().toLowerCase();
     if (!q) return true;
     return [c.name, c.admin_name, c.created_by_name, c.district, c.phone].some((f) => String(f || "").toLowerCase().includes(q));
@@ -42,6 +66,42 @@ const CentreManagement = () => {
     const path = imagePath.startsWith("/") ? imagePath : `/${imagePath}`;
     return `${baseUrl}${path}`;
   };
+
+  const CentreLogo = ({ centre, size }) => {
+    const [failed, setFailed] = useState(false);
+    if (centre.logo && !failed) {
+      return (
+        <img
+          src={getImageUrl(centre.logo)}
+          alt={`${centre.name} logo`}
+          onError={() => setFailed(true)}
+          className={`${size} rounded-xl object-cover border border-slate-200 bg-white shrink-0`}
+        />
+      );
+    }
+    return (
+      <div className={`${size} rounded-xl bg-navy-700 text-white flex items-center justify-center shrink-0`}>
+        <FiHome size={18} />
+      </div>
+    );
+  };
+
+  const CentreActions = ({ centre }) => (
+    <div className="inline-flex gap-1">
+      <button onClick={() => fetchCentreDetails(centre.id)} className="p-2.5 rounded-lg text-slate-500 hover:text-navy-700 hover:bg-slate-100 transition-colors" title="View centre details" aria-label={`View ${centre.name}`}>
+        <FiEye size={16} />
+      </button>
+      <button onClick={() => handleEditCentre(centre)} className="p-2.5 rounded-lg text-slate-500 hover:text-navy-700 hover:bg-slate-100 transition-colors" title="Edit centre" aria-label={`Edit ${centre.name}`}>
+        <FiEdit2 size={16} />
+      </button>
+      <button onClick={() => setShowAddAdminForm(centre.id)} className="p-2.5 rounded-lg text-slate-500 hover:text-emerald-700 hover:bg-emerald-50 transition-colors" title="Add admin" aria-label={`Add admin to ${centre.name}`}>
+        <FiUserPlus size={16} />
+      </button>
+      <button onClick={() => handleDeleteCentre(centre.id)} className="p-2.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 transition-colors" title="Delete centre" aria-label={`Delete ${centre.name}`}>
+        <FiTrash2 size={16} />
+      </button>
+    </div>
+  );
 
   useEffect(() => {
     fetchCentres();
@@ -572,142 +632,204 @@ const CentreManagement = () => {
           </div>
         )}
 
-        {/* Centres List */}
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="px-6 py-5 border-b border-gray-200">
-            <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-800">Centres List</h2>
-              <div className="flex items-center">
-                <div className="relative mr-4">
-                  <input
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    aria-label="Search centres"
-                    placeholder="Search centres..."
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
-                  />
-                  <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                  </svg>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setUnassignedOnly((v) => !v)}
-                  aria-pressed={unassignedOnly}
-                  title="Show only centres without an admin"
-                  className={`p-2 rounded-lg transition-colors ${unassignedOnly ? "bg-navy-700 text-white" : "hover:bg-gray-100"}`}
-                >
-                  <svg className={`w-5 h-5 ${unassignedOnly ? "text-white" : "text-gray-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
-                  </svg>
+        {/* Summary tiles */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {[
+            { label: "Total centres", value: centres.length, icon: FiHome, tone: "bg-slate-100 text-navy-700" },
+            { label: "With admin", value: centres.filter((c) => c.admin_name).length, icon: FiUserCheck, tone: "bg-emerald-50 text-emerald-600" },
+            { label: "No admin", value: centres.filter((c) => !c.admin_name).length, icon: FiAlertCircle, tone: "bg-amber-50 text-amber-600" },
+            { label: "WhatsApp connected", value: centres.filter((c) => c.communication_account_id).length, icon: FiMessageCircle, tone: "bg-slate-100 text-navy-700" },
+          ].map(({ label, value, icon: Icon, tone }) => (
+            <div key={label} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-500 font-medium">{label}</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{loading && centres.length === 0 ? "–" : value}</p>
+              </div>
+              <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${tone}`}>
+                <Icon size={20} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Toolbar */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 mb-6">
+          <div className="flex flex-col xl:flex-row gap-3 xl:items-center">
+            <div className="relative flex-1">
+              <FiSearch className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                aria-label="Search centres"
+                placeholder="Search centres, admins, phone…"
+                className="w-full pl-10 pr-9 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
+              />
+              {searchTerm && (
+                <button type="button" onClick={() => setSearchTerm("")} aria-label="Clear search" className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                  <FiX size={16} />
                 </button>
+              )}
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {[["all", "All"], ["no_admin", "No admin"], ["no_whatsapp", "No WhatsApp"]].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFilterMode(id)}
+                  aria-pressed={filterMode === id}
+                  className={`px-3.5 py-2 rounded-full text-sm font-medium border transition-colors ${
+                    filterMode === id ? "bg-navy-700 text-white border-navy-700" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+              <div className="flex bg-slate-100 rounded-xl p-1">
+                {[["card", FiGrid, "Cards"], ["table", FiList, "Table"]].map(([mode, Icon, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => changeView(mode)}
+                    aria-pressed={viewMode === mode}
+                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 text-sm font-medium ${
+                      viewMode === mode ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                    }`}
+                  >
+                    <Icon size={15} /> <span className="hidden sm:inline">{label}</span>
+                  </button>
+                ))}
               </div>
             </div>
           </div>
-          
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-navy-700"></div>
-              <span className="mt-3 text-gray-600 font-medium">Loading centres...</span>
+          {(searchTerm || filterMode !== "all") && (
+            <div className="mt-3 flex items-center gap-3 text-sm text-slate-500">
+              Showing {visibleCentres.length} of {centres.length}
+              <button type="button" onClick={() => { setSearchTerm(""); setFilterMode("all"); }} className="text-navy-700 hover:text-navy-800 font-medium">Clear filters</button>
             </div>
-          ) : centres.length === 0 ? (
-            <div className="text-center py-16">
-              <div className="inline-block p-4 bg-slate-100 rounded-full">
-                <svg className="w-12 h-12 text-navy-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
-                </svg>
+          )}
+        </div>
+
+        {/* Centres */}
+        {loading && centres.length === 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5" aria-busy="true">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 animate-pulse">
+                <div className="flex gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-slate-200" />
+                  <div className="flex-1 space-y-2 pt-1">
+                    <div className="h-4 bg-slate-200 rounded w-2/3" />
+                    <div className="h-3 bg-slate-200 rounded w-1/3" />
+                  </div>
+                </div>
+                <div className="mt-5 space-y-2">
+                  <div className="h-3 bg-slate-200 rounded" />
+                  <div className="h-3 bg-slate-200 rounded w-5/6" />
+                </div>
               </div>
-              <h3 className="mt-4 text-lg font-medium text-gray-700">No centres found</h3>
-              <p className="mt-1 text-gray-500">Create your first centre using the form above</p>
-              <button
-                onClick={() => setShowForm(true)}
-                className="mt-4 inline-flex items-center gap-2 bg-navy-700 hover:bg-navy-800 text-white px-4 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg"
-              >
-                <FiPlus className="text-lg" />
-                Add Centre
-              </button>
+            ))}
+          </div>
+        ) : centres.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 text-center py-16">
+            <div className="inline-block p-4 bg-slate-100 rounded-full text-navy-700">
+              <FiHome size={36} />
             </div>
-          ) : visibleCentres.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">No centres match your search.</div>
-          ) : (
+            <h3 className="mt-4 text-lg font-medium text-slate-800">No centres found</h3>
+            <p className="mt-1 text-slate-500">Create your first centre to get started</p>
+            <button
+              onClick={() => setShowForm(true)}
+              className="mt-4 inline-flex items-center gap-2 bg-navy-700 hover:bg-navy-800 text-white px-4 py-2.5 rounded-xl font-medium transition-colors shadow-sm"
+            >
+              <FiPlus className="text-lg" />
+              Add Centre
+            </button>
+          </div>
+        ) : visibleCentres.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 text-center py-12 text-slate-500">No centres match your search.</div>
+        ) : viewMode === "table" ? (
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Centre Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Admin</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created By</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    {["Centre", "Admin", "Contact", "Hours", "WhatsApp", "Created By"].map((h) => (
+                      <th key={h} className="px-5 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                    ))}
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-slate-100">
                   {visibleCentres.map((centre) => (
-                    <tr key={centre.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="bg-slate-100 rounded-lg p-2 mr-3">
-                            <svg className="h-5 w-5 text-navy-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
-                            </svg>
+                    <tr key={centre.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <CentreLogo centre={centre} size="w-10 h-10" />
+                          <div>
+                            <p className="font-medium text-slate-900">{centre.name}</p>
+                            {centre.district && <p className="text-xs text-slate-500">{centre.district}</p>}
                           </div>
-                          <span className="font-medium text-gray-900">{centre.name}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                        {centre.admin_name || <span className="text-gray-400 italic">Not assigned</span>}
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-700">
+                        {centre.admin_name || <span className="text-amber-600">Not assigned</span>}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-700">
-                        {centre.created_by_name || centre.created_by}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
-                        <div className="flex justify-end space-x-1">
-                          <button
-                            onClick={() => fetchCentreDetails(centre.id)}
-                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="View centre details"
-                          >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleEditCentre(centre)}
-                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-slate-100 rounded-lg transition-colors"
-                            title="Edit centre"
-                          >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCentre(centre.id)}
-                            className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                            title="Delete centre"
-                          >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path>
-                            </svg>
-                          </button>
-                          <button
-                            onClick={() => setShowAddAdminForm(centre.id)}
-                            className="p-2 text-gray-600 hover:text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                            title="Add admin"
-                          >
-                            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"></path>
-                            </svg>
-                          </button>
-                        </div>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{centre.phone || "—"}</td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{centre.working_hours || "—"}</td>
+                      <td className="px-5 py-3.5 whitespace-nowrap"><WaBadge on={!!centre.communication_account_id} /></td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{centre.created_by_name || centre.created_by}</td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-right">
+                        <CentreActions centre={centre} />
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5">
+            {visibleCentres.map((centre) => (
+              <div key={centre.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col">
+                <div className="p-5 flex-1">
+                  <div className="flex items-start gap-3">
+                    <CentreLogo centre={centre} size="w-11 h-11" />
+                    <div className="min-w-0 flex-1">
+                      <h3 className="font-semibold text-slate-900 truncate" title={centre.name}>{centre.name}</h3>
+                      <p className="text-xs text-slate-500 truncate">
+                        {[centre.district, centre.state].filter(Boolean).join(", ") || "Location not set"}
+                      </p>
+                    </div>
+                    {centre.admin_name ? (
+                      <WaBadge on={!!centre.communication_account_id} />
+                    ) : (
+                      <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">No admin</span>
+                    )}
+                  </div>
+                  <div className="mt-4 space-y-2 text-sm text-slate-600">
+                    <p className="flex items-center gap-2.5 min-w-0">
+                      <FiUser className="text-slate-400 shrink-0" size={14} />
+                      <span className="truncate">{centre.admin_name || "Not assigned"}</span>
+                    </p>
+                    <p className="flex items-center gap-2.5 min-w-0">
+                      <FiPhone className="text-slate-400 shrink-0" size={14} />
+                      <span className="truncate">{centre.phone || "No phone"}</span>
+                    </p>
+                    <p className="flex items-center gap-2.5 min-w-0">
+                      <FiClock className="text-slate-400 shrink-0" size={14} />
+                      <span className="truncate">{centre.working_hours || "Hours not set"}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between gap-2 px-3 py-2 border-t border-slate-100">
+                  <span className="text-xs text-slate-500 pl-2 truncate">
+                    {centre.staff_count != null ? `${centre.staff_count} staff` : `By ${centre.created_by_name || centre.created_by || "—"}`}
+                  </span>
+                  <CentreActions centre={centre} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Centre Details Modal */}
