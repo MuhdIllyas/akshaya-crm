@@ -142,6 +142,7 @@ const STATUS_TABS = [
   { id: "all", label: "All" },
   { id: "active", label: "Active" },
   { id: "inactive", label: "Inactive" },
+  { id: "no_wallet", label: "Wallet not connected" },
 ];
 
 /* ---------------- page ---------------- */
@@ -240,14 +241,39 @@ const ServiceManagement = () => {
 
   /* ---------------- derived ---------------- */
 
+  // wallets of THIS centre only (the API returns just this centre's wallets)
+  const ownWalletIds = useMemo(() => new Set(wallets.map((w) => w.id)), [wallets]);
+
+  /* Does this service still need a wallet from this centre?
+     "Requires wallet" is decided by the superadmin (master setting). A wallet that is not
+     one of this centre's own (empty, or another centre's) counts as not connected —
+     staff can't save an entry with a department fee for it until it is fixed. */
+  const walletStatus = (service) => {
+    const needs = service.master_requires_wallet ?? service.requires_wallet;
+    if (!needs) return { needs: false, state: "none", missingSubs: [] };
+    const missingSubs = (service.subcategories || []).filter(
+      (sc) => sc.wallet_id && !ownWalletIds.has(sc.wallet_id)
+    );
+    if (!service.wallet_id) return { needs: true, state: "missing", missingSubs };
+    if (!ownWalletIds.has(service.wallet_id)) return { needs: true, state: "other", missingSubs };
+    if (missingSubs.length) return { needs: true, state: "subs", missingSubs };
+    return { needs: true, state: "ok", missingSubs };
+  };
+  const needsWallet = (service) => {
+    const st = walletStatus(service).state;
+    return st === "missing" || st === "other" || st === "subs";
+  };
+
   const counts = useMemo(
     () => ({
       all: services.length,
       active: services.filter((s) => s.status === "active").length,
       inactive: services.filter((s) => s.status !== "active").length,
+      no_wallet: services.filter((s) => s.status === "active" && needsWallet(s)).length,
       subs: services.reduce((sum, s) => sum + (s.subcategories?.length || 0), 0),
     }),
-    [services]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [services, ownWalletIds]
   );
 
   const filteredServices = useMemo(() => {
@@ -255,6 +281,7 @@ const ServiceManagement = () => {
     return services.filter((service) => {
       if (statusFilter === "active" && service.status !== "active") return false;
       if (statusFilter === "inactive" && service.status === "active") return false;
+      if (statusFilter === "no_wallet" && !(service.status === "active" && needsWallet(service))) return false;
       if (!q) return true;
       return (
         service.name?.toLowerCase().includes(q) ||
@@ -262,7 +289,8 @@ const ServiceManagement = () => {
         (service.subcategories || []).some((sc) => sc.name?.toLowerCase().includes(q))
       );
     });
-  }, [services, searchQuery, statusFilter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [services, searchQuery, statusFilter, ownWalletIds]);
 
   const highlightMatch = (text) => {
     const q = searchQuery.trim();
@@ -370,7 +398,7 @@ const ServiceManagement = () => {
     setEditingService(service);
     setEditServiceDocuments(service.required_documents?.map((doc) => doc.document_name).join("\n") || "");
     setEditServiceHasExpiry(service.has_expiry || false);
-    setEditServiceRequiresWallet(!!service.requires_wallet);
+    setEditServiceRequiresWallet(!!(service.master_requires_wallet ?? service.requires_wallet));
     // only an explicit false means "quick service"
     setEditServiceRequiresWorkflow(service.requires_workflow !== false);
     setShowEditModal(true);
@@ -500,10 +528,39 @@ const ServiceManagement = () => {
 
         {/* KPI tiles */}
         {showList && (
-          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <KpiTile label="Total services" value={counts.all} icon={FiBriefcase} chip="bg-slate-100 text-navy-700" />
             <KpiTile label="Active services" value={counts.active} icon={FiCheckCircle} chip="bg-emerald-50 text-emerald-600" />
             <KpiTile label="Sub-categories" value={counts.subs} icon={FiLayers} chip="bg-amber-50 text-amber-600" />
+            <KpiTile
+              label="Wallet not connected"
+              value={counts.no_wallet}
+              icon={FiCreditCard}
+              chip={counts.no_wallet ? "bg-rose-50 text-rose-600" : "bg-emerald-50 text-emerald-600"}
+            />
+          </div>
+        )}
+
+        {/* Services that still need this centre's wallet */}
+        {showList && counts.no_wallet > 0 && (
+          <div className="flex flex-col gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+            <div className="flex items-start gap-3">
+              <FiAlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+              <div>
+                <p className="text-sm font-semibold text-rose-800">
+                  {counts.no_wallet} service{counts.no_wallet === 1 ? " needs" : "s need"} a wallet from this centre
+                </p>
+                <p className="mt-0.5 text-xs text-rose-700">
+                  The department fee for these services is paid from a wallet. Until you connect one of your wallets,
+                  staff can't save entries with a department fee for them.
+                </p>
+              </div>
+            </div>
+            {statusFilter !== "no_wallet" && (
+              <button onClick={() => setStatusFilter("no_wallet")} className={`${btnGhost} shrink-0`}>
+                Show them
+              </button>
+            )}
           </div>
         )}
 
@@ -541,7 +598,9 @@ const ServiceManagement = () => {
                 }`}
               >
                 {t.label}
-                <span className="ml-1.5 tabular-nums text-slate-400">{counts[t.id]}</span>
+                <span className={`ml-1.5 tabular-nums ${t.id === "no_wallet" && counts.no_wallet ? "font-semibold text-rose-600" : "text-slate-400"}`}>
+                  {counts[t.id]}
+                </span>
               </button>
             ))}
           </div>
@@ -588,6 +647,7 @@ const ServiceManagement = () => {
           <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {filteredServices.map((service) => {
               const wallet = getWalletById(service.wallet_id);
+              const ws = walletStatus(service);
               const isActive = service.status === "active";
               const isQuick = service.requires_workflow === false;
               const open = expandedService === service.id;
@@ -597,7 +657,9 @@ const ServiceManagement = () => {
               return (
                 <div
                   key={service.id}
-                  className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-shadow hover:shadow-md"
+                  className={`overflow-hidden rounded-2xl border bg-white shadow-sm transition-shadow hover:shadow-md ${
+                    isActive && needsWallet(service) ? "border-rose-300" : "border-slate-200"
+                  }`}
                 >
                   <div className="p-4">
                     {/* title row */}
@@ -657,7 +719,7 @@ const ServiceManagement = () => {
                       <Pill icon={FiClock} tone={service.has_expiry ? "blue" : "slate"}>
                         {service.has_expiry ? "Has expiry date" : "No expiry"}
                       </Pill>
-                      {service.requires_wallet && wallet && (
+                      {(ws.state === "ok" || ws.state === "subs") && wallet && (
                         <Pill icon={FiCreditCard} tone="blue" title="Linked wallet">{wallet.name}</Pill>
                       )}
                       <Pill icon={FiLayers}>
@@ -665,6 +727,28 @@ const ServiceManagement = () => {
                       </Pill>
                     </div>
                   </div>
+
+                  {/* wallet not connected */}
+                  {ws.state !== "none" && ws.state !== "ok" && (
+                    <div className="flex items-center justify-between gap-2 border-t border-rose-100 bg-rose-50 px-4 py-2">
+                      <p className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-rose-700">
+                        <FiAlertCircle className="h-3.5 w-3.5 shrink-0" />
+                        <span>
+                          {ws.state === "missing" && "No wallet connected"}
+                          {ws.state === "other" && "Connected to another centre's wallet"}
+                          {ws.state === "subs" &&
+                            `${ws.missingSubs.length} sub-categor${ws.missingSubs.length === 1 ? "y uses" : "ies use"} another centre's wallet`}
+                        </span>
+                      </p>
+                      <button
+                        onClick={() => openEditModal(service)}
+                        className="shrink-0 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-rose-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+                        title={ws.state === "subs" ? "Save the service to give its sub-categories this wallet" : undefined}
+                      >
+                        {ws.state === "subs" ? "Fix" : "Connect wallet"}
+                      </button>
+                    </div>
+                  )}
 
                   {/* footer */}
                   <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-3 py-2">
@@ -1021,6 +1105,10 @@ const ServiceManagement = () => {
             onSubmit={handleEditService}
             submitLabel="Save changes"
           >
+            <p className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Name, description, website and documents are shared by all centres — a change here updates them
+              everywhere. Charges and the wallet are for your centre only.
+            </p>
             <Field label="Service name *">
               <input type="text" name="name" defaultValue={editingService.name} className={inputCls} required />
             </Field>
@@ -1061,16 +1149,38 @@ const ServiceManagement = () => {
               checked={!editServiceRequiresWorkflow}
               onChange={(e) => setEditServiceRequiresWorkflow(!e.target.checked)}
             />
-            <Check
-              label="Requires wallet"
-              hint="Department charges are paid from a wallet"
-              name="requiresWallet"
-              checked={editServiceRequiresWallet}
-              onChange={(e) => setEditServiceRequiresWallet(e.target.checked)}
-            />
+            {editingService.master_requires_wallet ? (
+              <p className="flex items-start gap-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">
+                <FiCreditCard className="mt-0.5 h-4 w-4 shrink-0 text-navy-700" />
+                <span>
+                  <span className="block text-sm font-medium text-slate-800">Requires wallet</span>
+                  Set by the superadmin: the department fee is paid from one of your centre's wallets.
+                </span>
+              </p>
+            ) : (
+              <Check
+                label="Requires wallet"
+                hint="Department charges are paid from a wallet"
+                name="requiresWallet"
+                checked={editServiceRequiresWallet}
+                onChange={(e) => setEditServiceRequiresWallet(e.target.checked)}
+              />
+            )}
             {editServiceRequiresWallet && (
-              <Field label="Linked wallet *">
-                <select name="walletId" defaultValue={editingService.wallet_id || ""} className={inputCls} required>
+              <Field
+                label="Linked wallet *"
+                hint={
+                  editingService.wallet_id && !ownWalletIds.has(editingService.wallet_id)
+                    ? "The wallet set before belongs to another centre — choose one of yours."
+                    : "Sub-categories of this service use the same wallet."
+                }
+              >
+                <select
+                  name="walletId"
+                  defaultValue={ownWalletIds.has(editingService.wallet_id) ? editingService.wallet_id : ""}
+                  className={inputCls}
+                  required
+                >
                   <option value="">Select wallet</option>
                   {wallets.map((wallet) => (
                     <option key={wallet.id} value={wallet.id}>
@@ -1083,11 +1193,11 @@ const ServiceManagement = () => {
             <Field label="Website *">
               <input type="url" name="website" defaultValue={editingService.website} className={inputCls} required />
             </Field>
-            <Field label="Status *">
-              <select name="status" defaultValue={editingService.status} className={inputCls} required>
-                <option value="active">Active</option>
-                <option value="inactive">Inactive</option>
-              </select>
+            <Field label="Status" hint="Set by the superadmin for all centres">
+              <input type="hidden" name="status" value={editingService.status || "active"} />
+              <p className={`${inputCls} bg-slate-50 text-slate-600`}>
+                {editingService.status === "inactive" ? "Inactive" : "Active"}
+              </p>
             </Field>
             <Field label="Required documents" hint="One per line">
               <textarea

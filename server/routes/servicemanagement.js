@@ -11,6 +11,53 @@ import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
 
+const httpErr = (status, message) => Object.assign(new Error(message), { status });
+
+/* Department fee wallet for an entry = the wallet THIS centre connected to the service
+   (subcategory configuration first, then the service configuration).
+   Never a wallet sent by the browser, never another centre's wallet. Before this, an old
+   configuration that pointed at another centre's wallet took the fee from that centre silently. */
+async function deptWalletFor(client, { centreId, categoryId, subcategoryId, sentWalletId, deptCharge, label }) {
+  const cat = parseInt(categoryId, 10);
+  const sub = parseInt(subcategoryId, 10);
+  let walletId = null;
+  if (!Number.isInteger(cat)) {
+    walletId = parseInt(sentWalletId, 10) || null; // quick service: no configuration to look up
+  } else {
+    if (Number.isInteger(sub)) {
+      const r = await client.query(
+        'SELECT wallet_id FROM subcategory_configurations WHERE subcategory_id = $1 AND centre_id = $2',
+        [sub, centreId]
+      );
+      walletId = r.rows[0]?.wallet_id ?? null;
+    }
+    if (!walletId) {
+      const r = await client.query(
+        'SELECT wallet_id FROM service_configurations WHERE service_id = $1 AND centre_id = $2',
+        [cat, centreId]
+      );
+      walletId = r.rows[0]?.wallet_id ?? null;
+    }
+  }
+  if (!(Number(deptCharge) > 0)) return walletId;
+  if (!walletId) {
+    throw httpErr(400, `${label}: no wallet is connected to this service for your centre. Ask the admin to connect one in Service Management.`);
+  }
+  const w = await client.query('SELECT centre_id FROM wallets WHERE id = $1', [walletId]);
+  if (!w.rows.length || Number(w.rows[0].centre_id) !== Number(centreId)) {
+    throw httpErr(409, `${label}: the wallet connected to this service belongs to another centre. Ask the admin to connect this centre's own wallet in Service Management.`);
+  }
+  return Number(walletId);
+}
+
+// Payment wallets must belong to the entry's centre too.
+async function assertOwnWallets(client, walletIds, centreId) {
+  const ids = [...new Set(walletIds.map((w) => parseInt(w, 10)).filter(Number.isInteger))];
+  if (!ids.length) return;
+  const r = await client.query('SELECT id FROM wallets WHERE id = ANY($1::int[]) AND centre_id = $2', [ids, centreId]);
+  if (r.rows.length !== ids.length) throw httpErr(403, 'A payment wallet does not belong to your centre');
+}
+
 // Middleware to verify token and role
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -191,6 +238,7 @@ router.get('/services', authenticateToken, async (req, res) => {
     let query = `
       SELECT 
         s.id, s.name, s.description, s.website, s.status, s.requires_workflow, s.has_expiry,
+        s.requires_wallet AS master_requires_wallet, -- set by the superadmin
         sc.wallet_id,
         COALESCE(sc.department_charge, 0) AS department_charges,
         COALESCE(sc.service_charge, 0) AS service_charges,
@@ -516,6 +564,11 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
     const serviceCheck = await client.query('SELECT * FROM services WHERE id = $1', [id]);
     if (serviceCheck.rows.length === 0) throw new Error('Service not found');
 
+    // the superadmin decides whether a service needs a wallet; a centre admin can't switch it off
+    if (req.user.role !== 'superadmin' && serviceCheck.rows[0].requires_wallet && !requires_wallet) {
+      throw new Error('This service requires a wallet (set by the superadmin). Choose one of your wallets.');
+    }
+
     let finalWalletId = null;
     if (req.user.role === 'superadmin') {
       if (wallet_id) throw new Error('Superadmins cannot set wallet_id for services');
@@ -550,9 +603,14 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
       const serviceResult = await client.query(serviceQuery, serviceValues);
       updatedService = serviceResult.rows[0];
     } else {
-      // Centre Admins cannot alter the Global Master Name/Description. 
-      // We just fetch the existing data to return to the frontend.
-      const serviceResult = await client.query('SELECT * FROM services WHERE id = $1', [id]);
+      // Centre admins keep the shared details current too (a department website or the way a
+      // service is done changes for every centre). Name, description and website are shared by
+      // all centres; status, wallet requirement and charges stay with the superadmin / the centre.
+      const serviceResult = await client.query(
+        `UPDATE services SET name = $1, description = $2, website = $3, updated_at = NOW()
+         WHERE id = $4 RETURNING *`,
+        [String(name).trim(), String(description).trim(), String(website).trim(), id]
+      );
       updatedService = serviceResult.rows[0];
     }
 
@@ -592,7 +650,12 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    const auditDetails = `Updated service ${name} by ${req.user.role}`;
+    // record what changed in the shared details, so other centres / the superadmin can see who changed it
+    const before = serviceCheck.rows[0];
+    const changed = ['name', 'description', 'website']
+      .filter((k) => String(before[k] ?? '').trim() !== String(req.body[k] ?? '').trim())
+      .map((k) => `${k}: "${String(before[k] ?? '').slice(0, 120)}" → "${String(req.body[k] ?? '').slice(0, 120)}"`);
+    const auditDetails = `Updated service ${name} by ${req.user.role}` + (changed.length ? ` (shared: ${changed.join('; ')})` : '');
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`,
       ['Service Updated', req.user.username, auditDetails, req.user.centre_id]
@@ -822,6 +885,7 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
         VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
         ON CONFLICT (centre_id, subcategory_id)
         DO UPDATE SET 
+            wallet_id = EXCLUDED.wallet_id,
             service_charge = EXCLUDED.service_charge,
             department_charge = EXCLUDED.department_charge,
             requires_wallet = EXCLUDED.requires_wallet,
@@ -1532,7 +1596,18 @@ router.post('/entry', authenticateToken, async (req, res) => {
       );
     }
 
-    const debitWalletId = serviceWalletId || resolvedServiceWalletId;
+    // Department fee: only this centre's own configured wallet (see deptWalletFor)
+    const debitWalletId = await deptWalletFor(client, {
+      centreId: req.user.centre_id,
+      categoryId: isQuickEntry ? null : finalCategoryId,
+      subcategoryId: isQuickEntry ? null : finalSubcategoryId,
+      sentWalletId: serviceWalletId,
+      deptCharge: finalDepartmentCharge,
+      label: serviceName,
+    });
+    if (req.user.role !== 'superadmin') {
+      await assertOwnWallets(client, payments.map((p) => p.wallet), req.user.centre_id);
+    }
 
     if (debitWalletId && Number(finalDepartmentCharge) > 0) {
       const deptGroupId = crypto.randomUUID();
@@ -1601,7 +1676,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('servicemanagement.js error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -1643,6 +1718,10 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       if (tokenResult.rows.length === 0) throw new Error(`Token ${tokenId} not found`);
       centreId = tokenResult.rows[0].centre_id;
       tokenCentreId = centreId;
+    }
+
+    if (req.user.role !== 'superadmin') {
+      await assertOwnWallets(client, payments.map((p) => p.wallet), req.user.centre_id);
     }
 
     // 3. Setup the Payment Pool (The "Waterfall" Source)
@@ -1712,6 +1791,16 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       // Online Booking is only attached to the first item in the cart
       const currentCustomerServiceId = (i === 0 && customerServiceId) ? customerServiceId : null;
 
+      // Department fee wallet: this centre's own configured wallet, not the one the browser sent
+      const deptWalletId = await deptWalletFor(client, {
+        centreId: req.user.centre_id,
+        categoryId: svc.categoryId,
+        subcategoryId: svc.subcategoryId,
+        sentWalletId: svc.serviceWalletId,
+        deptCharge: svcDept,
+        label: serviceNameById.get(Number(svc.categoryId)) || 'Service',
+      });
+
       // --- DATABASE INSERTIONS ---
       // A. Insert Service Entry
       const insertRes = await client.query(`
@@ -1726,7 +1815,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
         svcService, svcDept, svcTotal, svcStatus, svc.expiryDate || null, staffId, 
         currentCustomerServiceId, currentCustomerServiceId ? 'online' : 'offline', 
         resolvedTeamId, 
-        svc.serviceWalletId || null 
+        deptWalletId
       ]);
       const newEntryId = insertRes.rows[0].id;
 
@@ -1740,13 +1829,13 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       const serviceName = serviceNameById.get(Number(svc.categoryId)) || 'Service';
 
       // C. Process Department Charges (Deduction)
-      if (svc.serviceWalletId && svcDept > 0) {
+      if (deptWalletId && svcDept > 0) {
         const deptGroupId = crypto.randomUUID();
-        await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [svcDept, svc.serviceWalletId]);
+        await client.query('UPDATE wallets SET balance = balance - $1 WHERE id = $2', [svcDept, deptWalletId]);
         await client.query(`
           INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type, correction_group_id, team_id, created_at)
           VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, $7, NOW())
-        `, [svc.serviceWalletId, staffId, svcDept, `Department charge for ${serviceName} (#${newEntryId})`, newEntryId, deptGroupId, resolvedTeamId]);
+        `, [deptWalletId, staffId, svcDept, `Department charge for ${serviceName} (#${newEntryId})`, newEntryId, deptGroupId, resolvedTeamId]);
       }
 
       // D. Process Applied Payments (Additions)
@@ -1825,7 +1914,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('Bulk Entry Error:', err);
-    res.status(500).json({ error: err.message });
+    res.status(err.status || 500).json({ error: err.message });
   } finally {
     client.release();
   }
