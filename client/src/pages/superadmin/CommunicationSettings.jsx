@@ -8,7 +8,9 @@ const CommunicationSettings = () => {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [copiedToken, setCopiedToken] = useState(false);
+  const [copiedId, setCopiedId] = useState(null);
+  const [savingMappings, setSavingMappings] = useState(false);
+  const [loadError, setLoadError] = useState(null);
   
   // NEW: Track if we are editing an existing account
   const [editingId, setEditingId] = useState(null);
@@ -40,6 +42,7 @@ const CommunicationSettings = () => {
 
   const fetchAccounts = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
       const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/communication/accounts`, {
         headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
@@ -47,9 +50,9 @@ const CommunicationSettings = () => {
       setAccounts(response.data || []);
     } catch (err) {
       console.error("Failed to fetch accounts", err);
-      setAccounts([
-        { id: 1, name: "Shared Main Account", phone_number: "+919961900071", is_active: true }
-      ]);
+      const msg = err.response?.data?.error || "Failed to load communication accounts";
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -113,12 +116,16 @@ const CommunicationSettings = () => {
     setAccountForm({ name: "", phone_number: "", access_token: "", channel_id: "" });
   };
 
-  const copyWebhook = (phone) => {
+  const copyWebhook = async (accountId) => {
     const url = `${import.meta.env.VITE_API_URL}/api/webhook/whatsapp`;
-    navigator.clipboard.writeText(url);
-    setCopiedToken(true);
-    setTimeout(() => setCopiedToken(false), 2000);
-    toast.info("Webhook URL copied to clipboard");
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopiedId(accountId);
+      setTimeout(() => setCopiedId(null), 2000);
+      toast.info("Webhook URL copied to clipboard");
+    } catch (err) {
+      toast.error("Couldn't copy. Please copy the URL manually: " + url);
+    }
   };
 
   // Fetch existing mappings when an account is selected
@@ -151,7 +158,7 @@ const CommunicationSettings = () => {
       toast.warning("Please select an account first");
       return;
     }
-    setLoading(true);
+    setSavingMappings(true);
     try {
       await axios.put(`${import.meta.env.VITE_API_URL}/api/communication/accounts/${selectedMappingAccount}/mappings`, 
         { mappings }, 
@@ -161,111 +168,143 @@ const CommunicationSettings = () => {
     } catch (err) {
       toast.error(err.response?.data?.error || "Failed to save mappings");
     } finally {
-      setLoading(false);
+      setSavingMappings(false);
     }
   };
 
+  const activeCount = accounts.filter((a) => a.is_active).length;
+
+  const AccountActions = ({ acc }) => (
+    <div className="inline-flex items-center gap-1">
+      <button
+        onClick={() => copyWebhook(acc.id)}
+        className="p-2.5 rounded-lg text-slate-500 hover:text-navy-700 hover:bg-slate-100 transition-colors"
+        title="Copy Webhook URL"
+        aria-label={`Copy webhook URL for ${acc.name}`}
+      >
+        {copiedId === acc.id ? <FiCheck className="text-emerald-600" size={16} /> : <FiCopy size={16} />}
+      </button>
+      <button
+        onClick={() => handleToggleStatus(acc.id, acc.is_active)}
+        className={`p-2.5 rounded-lg transition-colors ${acc.is_active ? "text-slate-500 hover:text-rose-600 hover:bg-rose-50" : "text-slate-500 hover:text-emerald-700 hover:bg-emerald-50"}`}
+        title={acc.is_active ? "Deactivate Account" : "Activate Account"}
+        aria-label={`${acc.is_active ? "Deactivate" : "Activate"} ${acc.name}`}
+      >
+        <FiPower size={16} />
+      </button>
+      <button
+        onClick={() => handleEditClick(acc)}
+        className="p-2.5 rounded-lg text-slate-500 hover:text-navy-700 hover:bg-slate-100 transition-colors"
+        title="Edit Account"
+        aria-label={`Edit ${acc.name}`}
+      >
+        <FiEdit size={16} />
+      </button>
+    </div>
+  );
+
+  const StatusPill = ({ active }) => (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-full border ${active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-rose-50 text-rose-700 border-rose-200"}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-rose-500"}`} />
+      {active ? "Active" : "Inactive"}
+    </span>
+  );
+
+  const inputCls = "w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 disabled:bg-slate-100 disabled:text-slate-400";
+
   return (
-    <div className="bg-gray-50 min-h-screen p-6">
-      <div className="max-w-7xl mx-auto">
-        
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-800">Communication Settings</h1>
-          <p className="text-gray-500 mt-1">Manage WhatsApp numbers, providers, and message templates.</p>
+    <div className="bg-slate-50 min-h-screen p-4 md:p-6">
+      <div className="w-full">
+
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-900">Communication Settings</h1>
+          <p className="text-slate-500 mt-1">Manage WhatsApp numbers, providers, and message templates.</p>
         </div>
 
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            onClick={() => setActiveTab("accounts")}
-            className={`py-3 px-6 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === "accounts"
-                ? "border-[#1e3a5f] text-[#1e3a5f]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <FiMessageSquare /> WhatsApp Accounts
-            </div>
-          </button>
-          <button
-            onClick={() => setActiveTab("templates")}
-            className={`py-3 px-6 font-medium text-sm border-b-2 transition-colors ${
-              activeTab === "templates"
-                ? "border-[#1e3a5f] text-[#1e3a5f]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <FiSettings /> Template Mappings
-            </div>
-          </button>
+        <div className="flex w-full sm:inline-flex sm:w-auto bg-slate-200/70 rounded-xl p-1 mb-6" role="tablist">
+          {[["accounts", FiMessageSquare, "WhatsApp Accounts"], ["templates", FiSettings, "Template Mappings"]].map(([id, Icon, label]) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={activeTab === id}
+              onClick={() => setActiveTab(id)}
+              className={`flex-1 sm:flex-none whitespace-nowrap flex items-center justify-center gap-2 px-3 sm:px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                activeTab === id ? "bg-white text-navy-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Icon /> {label}
+            </button>
+          ))}
         </div>
+
+        {loadError && !loading && (
+          <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3">
+            <div>
+              <p className="text-sm font-semibold text-rose-800">Couldn't load accounts</p>
+              <p className="text-sm text-rose-600">{loadError}</p>
+            </div>
+            <button onClick={fetchAccounts} className="shrink-0 px-3 py-2 text-sm font-medium text-rose-700 hover:text-rose-900">Retry</button>
+          </div>
+        )}
 
         {activeTab === "accounts" && (
           <div className="space-y-6">
-            <div className="flex justify-end">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="grid grid-cols-3 gap-3 sm:gap-4 flex-1">
+                {[
+                  ["Total accounts", accounts.length, "text-slate-900"],
+                  ["Active", activeCount, "text-emerald-600"],
+                  ["Inactive", accounts.length - activeCount, "text-rose-600"],
+                ].map(([label, value, tone]) => (
+                  <div key={label} className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
+                    <p className="text-xs sm:text-sm text-slate-500 font-medium">{label}</p>
+                    <p className={`text-2xl font-bold ${tone}`}>{value}</p>
+                  </div>
+                ))}
+              </div>
               <button
                 onClick={() => setShowAddModal(true)}
-                className="flex items-center gap-2 bg-[#1e3a5f] hover:bg-[#172a45] text-white px-4 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md"
+                className="inline-flex items-center justify-center gap-2 bg-navy-700 hover:bg-navy-800 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors shadow-sm"
               >
                 <FiPlus className="text-lg" />
                 Add Account
               </button>
             </div>
 
-            <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            {/* Desktop table */}
+            <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Name</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone Number</th>
-                    <th className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Account Name</th>
+                    <th className="px-6 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Phone Number</th>
+                    <th className="px-6 py-3 text-center text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
+                <tbody className="bg-white divide-y divide-slate-100">
                   {accounts.map((acc) => (
-                    <tr key={acc.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">{acc.name}</td>
-                      <td className="px-6 py-4 whitespace-nowrap text-gray-600">{acc.phone_number}</td>
+                    <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center gap-3">
+                          <span className="w-10 h-10 rounded-xl bg-slate-100 text-navy-700 flex items-center justify-center shrink-0">
+                            <FiMessageSquare size={18} />
+                          </span>
+                          <span className="font-medium text-slate-900">{acc.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-slate-600">{acc.phone_number}</td>
                       <td className="px-6 py-4 whitespace-nowrap text-center">
-                        <span className={`px-2 py-1 text-xs rounded-full ${acc.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {acc.is_active ? 'Active' : 'Inactive'}
-                        </span>
+                        <StatusPill active={acc.is_active} />
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="flex justify-end items-center gap-3">
-                          <button 
-                            onClick={() => copyWebhook(acc.phone_number)}
-                            className="text-gray-500 hover:text-[#1e3a5f]"
-                            title="Copy Webhook URL"
-                          >
-                            {copiedToken ? <FiCheck className="text-green-500" /> : <FiCopy />}
-                          </button>
-                          
-                          <div className="w-px h-4 bg-gray-300"></div> {/* Divider */}
-                          
-                          <button 
-                            onClick={() => handleToggleStatus(acc.id, acc.is_active)}
-                            className={`${acc.is_active ? 'text-red-500 hover:text-red-700' : 'text-green-600 hover:text-green-800'}`}
-                            title={acc.is_active ? "Deactivate Account" : "Activate Account"}
-                          >
-                            <FiPower />
-                          </button>
-                          <button 
-                            onClick={() => handleEditClick(acc)}
-                            className="text-blue-500 hover:text-blue-700"
-                            title="Edit Account"
-                          >
-                            <FiEdit />
-                          </button>
-                        </div>
+                        <AccountActions acc={acc} />
                       </td>
                     </tr>
                   ))}
                   {accounts.length === 0 && (
                     <tr>
-                      <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                      <td colSpan="4" className="px-6 py-10 text-center text-slate-500">
                         No communication accounts configured yet.
                       </td>
                     </tr>
@@ -273,21 +312,48 @@ const CommunicationSettings = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-3">
+              {accounts.map((acc) => (
+                <div key={acc.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="w-10 h-10 rounded-xl bg-slate-100 text-navy-700 flex items-center justify-center shrink-0">
+                      <FiMessageSquare size={18} />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-900 truncate">{acc.name}</p>
+                      <p className="text-sm text-slate-500 truncate">{acc.phone_number}</p>
+                    </div>
+                    <StatusPill active={acc.is_active} />
+                  </div>
+                  <div className="mt-3 pt-3 border-t border-slate-100 flex justify-end">
+                    <AccountActions acc={acc} />
+                  </div>
+                </div>
+              ))}
+              {accounts.length === 0 && (
+                <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500">
+                  No communication accounts configured yet.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* Tab 2: Template Mappings */}
         {activeTab === "templates" && (
-          <div className="bg-white p-6 rounded-xl shadow-md border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Map Libromi Templates to CRM Events</h3>
-            <p className="text-sm text-gray-500 mb-6">
+          <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-slate-200">
+            <h3 className="text-lg font-semibold text-slate-900 mb-1">Map Libromi Templates to CRM Events</h3>
+            <p className="text-sm text-slate-500 mb-6">
               Select an account and link your approved Meta template names to the automated events in Akshaya CRM.
             </p>
 
             <div className="mb-6 max-w-md">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Select Account to Configure</label>
-              <select 
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+              <label htmlFor="mapping-account" className="block text-sm font-medium text-slate-700 mb-2">Select Account to Configure</label>
+              <select
+                id="mapping-account"
+                className={inputCls}
                 value={selectedMappingAccount}
                 onChange={(e) => setSelectedMappingAccount(e.target.value)}
               >
@@ -298,39 +364,40 @@ const CommunicationSettings = () => {
               </select>
             </div>
 
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <div className="grid grid-cols-12 bg-gray-50 p-4 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase">
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <div className="hidden md:grid grid-cols-12 bg-slate-50 px-4 py-3 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 <div className="col-span-4">CRM Event (Trigger)</div>
                 <div className="col-span-8">Approved Meta Template Name</div>
               </div>
-              
+
               {systemEvents.map((event, index) => (
-                <div key={event.key} className={`grid grid-cols-12 items-center p-4 ${index !== systemEvents.length - 1 ? 'border-b border-gray-100' : ''}`}>
-                  <div className="col-span-4">
-                    <span className="block font-medium text-gray-800">{event.label}</span>
-                    <span className="block text-xs text-gray-400 font-mono mt-1">{event.key}</span>
+                <div key={event.key} className={`grid grid-cols-1 md:grid-cols-12 gap-2 md:gap-4 md:items-center px-4 py-3.5 ${index !== systemEvents.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                  <div className="md:col-span-4">
+                    <label htmlFor={`map-${event.key}`} className="block font-medium text-slate-800">{event.label}</label>
+                    <span className="block text-xs text-slate-400 font-mono mt-0.5">{event.key}</span>
                   </div>
-                  <div className="col-span-8">
-                    <input 
-                      type="text" 
+                  <div className="md:col-span-8">
+                    <input
+                      id={`map-${event.key}`}
+                      type="text"
                       placeholder={`e.g., ${event.key}_v1`}
                       value={mappings[event.key] || ""}
                       onChange={(e) => setMappings({...mappings, [event.key]: e.target.value})}
                       disabled={!selectedMappingAccount}
-                      className="w-full max-w-md px-3 py-2 border border-gray-300 rounded focus:ring-1 focus:ring-[#1e3a5f] disabled:bg-gray-100"
+                      className={`${inputCls} md:max-w-xl`}
                     />
                   </div>
                 </div>
               ))}
             </div>
-            
+
             <div className="mt-6 flex justify-end">
-              <button 
+              <button
                 onClick={handleSaveMappings}
-                disabled={loading || !selectedMappingAccount}
-                className="bg-[#1e3a5f] hover:bg-[#172a45] disabled:bg-gray-400 text-white px-6 py-2.5 rounded-lg font-medium transition-colors"
+                disabled={savingMappings || !selectedMappingAccount}
+                className="bg-navy-700 hover:bg-navy-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl font-semibold transition-colors shadow-sm"
               >
-                {loading ? "Saving..." : "Save Mappings"}
+                {savingMappings ? "Saving..." : "Save Mappings"}
               </button>
             </div>
           </div>
@@ -338,62 +405,66 @@ const CommunicationSettings = () => {
 
       {/* Add / Edit Account Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl w-full max-w-md shadow-xl overflow-hidden">
-            <div className="bg-[#1e3a5f] text-white p-4">
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true" aria-label={editingId ? "Edit WhatsApp Account" : "Add New WhatsApp Account"}>
+          <div className="bg-white rounded-2xl w-full max-w-md max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
+            <div className="bg-navy-700 text-white px-5 py-4">
               <h2 className="text-lg font-semibold">
                 {editingId ? "Edit WhatsApp Account" : "Add New WhatsApp Account"}
               </h2>
             </div>
-            <form onSubmit={handleSaveAccount} className="p-6">
+            <form onSubmit={handleSaveAccount} className="p-5 md:p-6 overflow-y-auto">
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Internal Name</label>
+                  <label htmlFor="acc-name" className="block text-sm font-medium text-slate-700 mb-1.5">Internal Name</label>
                   <input
+                    id="acc-name"
                     type="text"
                     required
                     value={accountForm.name}
                     onChange={(e) => setAccountForm({...accountForm, name: e.target.value})}
                     placeholder="e.g., Shared Main Account"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">WhatsApp Phone Number</label>
+                  <label htmlFor="acc-phone" className="block text-sm font-medium text-slate-700 mb-1.5">WhatsApp Phone Number</label>
                   <input
+                    id="acc-phone"
                     type="text"
                     required
                     value={accountForm.phone_number}
                     onChange={(e) => setAccountForm({...accountForm, phone_number: e.target.value})}
                     placeholder="e.g., +919961900071"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Channel ID</label>
+                  <label htmlFor="acc-channel" className="block text-sm font-medium text-slate-700 mb-1.5">Channel ID</label>
                   <input
+                    id="acc-channel"
                     type="text"
                     required
                     value={accountForm.channel_id}
                     onChange={(e) => setAccountForm({...accountForm, channel_id: e.target.value})}
                     placeholder="e.g., 1234"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor="acc-token" className="block text-sm font-medium text-slate-700 mb-1.5">
                     Libromi Access Token
                   </label>
                   <input
+                    id="acc-token"
                     type="password"
                     required={!editingId} // Only required when creating a new account
                     value={accountForm.access_token}
                     onChange={(e) => setAccountForm({...accountForm, access_token: e.target.value})}
                     placeholder={editingId ? "Leave blank to keep existing token" : "Paste token here"}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1e3a5f]"
+                    className={inputCls}
                   />
                   {editingId && (
-                    <p className="text-xs text-gray-400 mt-1">Only fill this if you need to update the token.</p>
+                    <p className="text-xs text-slate-500 mt-1.5">Only fill this if you need to update the token.</p>
                   )}
                 </div>
               </div>
@@ -401,14 +472,14 @@ const CommunicationSettings = () => {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition-colors"
+                  className="px-4 py-2.5 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl font-medium transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-[#1e3a5f] hover:bg-[#172a45] text-white px-4 py-2 rounded-lg font-medium transition-colors"
+                  className="bg-navy-700 hover:bg-navy-800 disabled:opacity-60 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors shadow-sm"
                 >
                   {loading ? "Saving..." : (editingId ? "Update Account" : "Save Account")}
                 </button>
