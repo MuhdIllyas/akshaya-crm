@@ -213,7 +213,7 @@ const SuperadminStaffManagement = () => {
     { label: "Centres", value: centres.length, icon: FiHome, tone: "bg-purple-50 text-purple-600" },
   ];
 
-  const selectCls = "px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none";
+  const selectCls = "px-3 py-2.5 border border-gray-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 outline-none";
 
   const ActionButtons = ({ staff }) => (
     <div className="inline-flex gap-1">
@@ -231,7 +231,7 @@ const SuperadminStaffManagement = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
           <div>
@@ -279,7 +279,7 @@ const SuperadminStaffManagement = () => {
               <input
                 type="text"
                 placeholder="Search name, username, employee ID, email or phone…"
-                className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
@@ -335,7 +335,7 @@ const SuperadminStaffManagement = () => {
 
         {/* Content */}
         {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse">
                 <div className="flex gap-3">
@@ -409,7 +409,7 @@ const SuperadminStaffManagement = () => {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-5">
             {filteredStaff.map((staff) => {
               const dob = staff.dateOfBirth || staff.dob;
               return (

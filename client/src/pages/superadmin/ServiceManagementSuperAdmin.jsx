@@ -471,7 +471,7 @@ const ServiceManagementSuperAdmin = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 p-4 sm:p-6">
-      <div className="mx-auto max-w-7xl space-y-5">
+      <div className="w-full space-y-5">
         {/* Header */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -554,7 +554,7 @@ const ServiceManagementSuperAdmin = () => {
 
         {/* Loading skeleton */}
         {loading && (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3" aria-busy="true">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" aria-busy="true">
             {[0, 1, 2].map((i) => (
               <div key={i} className="animate-pulse space-y-4 rounded-xl border border-slate-200 bg-white p-5">
                 <div className="flex gap-3">
@@ -576,7 +576,7 @@ const ServiceManagementSuperAdmin = () => {
 
         {/* Services grid */}
         {showList && filteredServices.length > 0 && (
-          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
             {filteredServices.map((service) => {
               const isActive = service.status === "active";
               const isQuick = service.requires_workflow === false;

@@ -78,7 +78,7 @@ const Avatar = ({ name = "", photo, size = "w-8 h-8", text = "text-xs" }) => {
 };
 
 const inputCls =
-  "w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-50";
+  "w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 disabled:bg-gray-50";
 
 const Modal = ({ title, subtitle, onClose, children, footer, size = "max-w-lg" }) => (
   <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50" onClick={onClose}>
@@ -522,7 +522,7 @@ const WalletManagementSuperAdmin = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
+      <div className="w-full">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
           <div>
@@ -535,7 +535,7 @@ const WalletManagementSuperAdmin = () => {
               <select
                 value={selectedCentre}
                 onChange={(e) => setSelectedCentre(e.target.value)}
-                className="pl-9 pr-8 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 outline-none"
+                className="pl-9 pr-8 py-2.5 border border-gray-300 bg-white rounded-xl text-sm font-medium text-gray-700 focus:ring-2 focus:ring-navy-500/30 outline-none"
                 aria-label="Filter by centre"
               >
                 <option value="">All centres</option>
@@ -598,7 +598,7 @@ const WalletManagementSuperAdmin = () => {
                   value={auditSearch}
                   onChange={(e) => setAuditSearch(e.target.value)}
                   placeholder="Search logs…"
-                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-navy-500/30 outline-none"
                 />
               </div>
             </div>
@@ -647,7 +647,7 @@ const WalletManagementSuperAdmin = () => {
               placeholder="Search wallets, centres, staff or today's transactions…"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
-              className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              className="w-full pl-10 pr-9 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
             />
             {searchInput && (
               <button onClick={() => setSearchInput("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -679,7 +679,7 @@ const WalletManagementSuperAdmin = () => {
         </div>
 
         {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 mb-8">
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="bg-white rounded-2xl border border-gray-200 p-5 animate-pulse">
                 <div className="flex gap-3">
@@ -706,7 +706,7 @@ const WalletManagementSuperAdmin = () => {
         ) : filteredWallets.length === 0 ? (
           <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-gray-500 mb-8">No wallets match “{searchInput}”.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 mb-8">
             {filteredWallets.map((w) => {
               const type = getType(w.wallet_type);
               const TypeIcon = type.icon;
@@ -904,7 +904,7 @@ const WalletManagementSuperAdmin = () => {
               {loading ? "Loading…" : "No personal wallets are assigned to staff yet."}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4">
               {staffWallets.map((s) => (
                 <div key={s.id} className="bg-white rounded-2xl border border-gray-200 shadow-sm p-4">
                   <div className="flex items-center gap-3">

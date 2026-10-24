@@ -4,21 +4,32 @@ import { toast } from "react-toastify";
 import AddAdminForm from "../../components/AddAdminForm";
 import { FiPlus } from "react-icons/fi";
 
+const EMPTY_CENTRE_FORM = {
+  name: "", admin_id: "", communication_account_id: "",
+  address: "", district: "", state: "", pincode: "",
+  latitude: "", longitude: "", google_place_id: "",
+  working_hours: "", phone: "", email: "", logo: ""
+};
+
 const CentreManagement = () => {
   const [centres, setCentres] = useState([]);
   const [availableCommAccounts, setAvailableCommAccounts] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [centreForm, setCentreForm] = useState({ 
-    name: "", admin_id: "", communication_account_id: "",
-    address: "", district: "", state: "", pincode: "", 
-    latitude: "", longitude: "", google_place_id: "", 
-    working_hours: "", phone: "", email: "", logo: "" 
-  });
+  const [centreForm, setCentreForm] = useState(EMPTY_CENTRE_FORM);
   const [editingCentreId, setEditingCentreId] = useState(null);
   const [showAddAdminForm, setShowAddAdminForm] = useState(null);
   const [showCentreDetails, setShowCentreDetails] = useState(null);
   const [showForm, setShowForm] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
+
+  const visibleCentres = centres.filter((c) => {
+    if (unassignedOnly && c.admin_name) return false;
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) return true;
+    return [c.name, c.admin_name, c.created_by_name, c.district, c.phone].some((f) => String(f || "").toLowerCase().includes(q));
+  });
 
   const getImageUrl = (imagePath) => {
     if (!imagePath) return "";
@@ -150,12 +161,7 @@ const CentreManagement = () => {
       }
       
       // Reset form
-      setCentreForm({ 
-        name: "", admin_id: "", communication_account_id: "",
-        address: "", district: "", state: "", pincode: "", 
-        latitude: "", longitude: "", google_place_id: "", 
-        working_hours: "", phone: "", email: "", logo: "" 
-      });
+      setCentreForm(EMPTY_CENTRE_FORM);
       setEditingCentreId(null);
       setShowForm(false);
       fetchCentres();
@@ -234,8 +240,8 @@ const CentreManagement = () => {
   };
 
   return (
-    <div className="bg-gray-50 min-h-screen p-6">
-      <div className="max-w-7xl mx-auto">
+    <div className="bg-slate-50 min-h-screen p-4 md:p-6">
+      <div className="w-full">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
           <div>
             <h1 className="text-2xl font-bold text-gray-800">Centre Management</h1>
@@ -248,10 +254,10 @@ const CentreManagement = () => {
                 setShowForm(!showForm);
                 if (editingCentreId) {
                   setEditingCentreId(null);
-                  setCentreForm({ name: "", admin_id: "" });
+                  setCentreForm(EMPTY_CENTRE_FORM);
                 }
               }}
-              className="flex items-center gap-2 bg-[#1e3a5f] hover:bg-[#172a45] text-white px-4 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg"
+              className="flex items-center gap-2 bg-navy-700 hover:bg-navy-800 text-white px-4 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg"
             >
               <FiPlus className="text-lg" />
               {showForm ? "Hide Form" : "Add Centre"}
@@ -261,8 +267,8 @@ const CentreManagement = () => {
 
         {/* Add/Edit Centre Card - Only shown when showForm is true */}
         {showForm && (
-          <div className="bg-white rounded-xl shadow-md border border-gray-200 mb-8 overflow-hidden">
-            <div className="bg-[#1e3a5f] text-white p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 mb-8 overflow-hidden">
+            <div className="bg-navy-700 text-white p-4">
               <div className="flex items-center">
                 <svg className="h-6 w-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
@@ -285,7 +291,7 @@ const CentreManagement = () => {
                     name="name"
                     value={centreForm.name}
                     onChange={(e) => setCentreForm({ ...centreForm, name: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter centre name"
                     required
                     disabled={loading}
@@ -301,7 +307,7 @@ const CentreManagement = () => {
                     id="centre-phone"
                     value={centreForm.phone}
                     onChange={(e) => setCentreForm({ ...centreForm, phone: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter contact number"
                     disabled={loading}
                   />
@@ -316,7 +322,7 @@ const CentreManagement = () => {
                     id="centre-email"
                     value={centreForm.email}
                     onChange={(e) => setCentreForm({ ...centreForm, email: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter email address"
                     disabled={loading}
                   />
@@ -331,7 +337,7 @@ const CentreManagement = () => {
                     id="centre-working-hours"
                     value={centreForm.working_hours}
                     onChange={(e) => setCentreForm({ ...centreForm, working_hours: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="e.g., 9:00 AM - 6:00 PM"
                     disabled={loading}
                   />
@@ -345,7 +351,7 @@ const CentreManagement = () => {
                     id="centre-address"
                     value={centreForm.address}
                     onChange={(e) => setCentreForm({ ...centreForm, address: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter full address"
                     rows="2"
                     disabled={loading}
@@ -361,7 +367,7 @@ const CentreManagement = () => {
                     id="centre-district"
                     value={centreForm.district}
                     onChange={(e) => setCentreForm({ ...centreForm, district: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter district"
                     disabled={loading}
                   />
@@ -376,7 +382,7 @@ const CentreManagement = () => {
                     id="centre-state"
                     value={centreForm.state}
                     onChange={(e) => setCentreForm({ ...centreForm, state: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter state"
                     disabled={loading}
                   />
@@ -391,7 +397,7 @@ const CentreManagement = () => {
                     id="centre-pincode"
                     value={centreForm.pincode}
                     onChange={(e) => setCentreForm({ ...centreForm, pincode: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter pincode"
                     disabled={loading}
                   />
@@ -417,8 +423,8 @@ const CentreManagement = () => {
 
                   {/* Show preview of newly selected file */}
                   {centreForm.logo && typeof centreForm.logo === 'object' && (
-                    <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg inline-block">
-                      <p className="text-xs text-blue-600 mb-2">New Logo Preview:</p>
+                    <div className="mb-3 p-2 bg-slate-50 border border-slate-200 rounded-lg inline-block">
+                      <p className="text-xs text-navy-700 mb-2">New Logo Preview:</p>
                       <img 
                         src={URL.createObjectURL(centreForm.logo)} 
                         alt="New Logo Preview" 
@@ -432,7 +438,7 @@ const CentreManagement = () => {
                     id="centre-logo"
                     accept="image/*"
                     onChange={(e) => setCentreForm({ ...centreForm, logo: e.target.files[0] })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-navy-700 hover:file:bg-slate-200"
                     disabled={loading}
                   />
                   {editingCentreId && (
@@ -449,7 +455,7 @@ const CentreManagement = () => {
                     id="centre-latitude"
                     value={centreForm.latitude}
                     onChange={(e) => setCentreForm({ ...centreForm, latitude: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="e.g., 11.2588"
                     disabled={loading}
                   />
@@ -464,7 +470,7 @@ const CentreManagement = () => {
                     id="centre-longitude"
                     value={centreForm.longitude}
                     onChange={(e) => setCentreForm({ ...centreForm, longitude: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="e.g., 75.7804"
                     disabled={loading}
                   />
@@ -479,7 +485,7 @@ const CentreManagement = () => {
                     id="centre-place-id"
                     value={centreForm.google_place_id}
                     onChange={(e) => setCentreForm({ ...centreForm, google_place_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     placeholder="Enter Google Place ID"
                     disabled={loading}
                   />
@@ -494,7 +500,7 @@ const CentreManagement = () => {
                     name="admin_id"
                     value={centreForm.admin_id || ""}
                     onChange={(e) => setCentreForm({ ...centreForm, admin_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                     disabled={loading}
                   >
                     <option value="">-- Select an Admin (Optional) --</option>
@@ -512,7 +518,7 @@ const CentreManagement = () => {
                   onClick={() => {
                     setShowForm(false);
                     setEditingCentreId(null);
-                    setCentreForm({ name: "", admin_id: "" });
+                    setCentreForm(EMPTY_CENTRE_FORM);
                   }}
                   className="mr-3 px-4 py-2.5 border border-gray-300 rounded-lg font-medium text-gray-700 hover:bg-gray-50 transition-colors"
                   disabled={loading}
@@ -522,7 +528,7 @@ const CentreManagement = () => {
                 <button
                   type="submit"
                   className={`px-6 py-2.5 rounded-xl font-medium text-white shadow-md transition-all duration-300 
-                    bg-[#1e3a5f] hover:bg-[#172a45] ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
+                    bg-navy-700 hover:bg-navy-800 ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
                   disabled={loading}
                 >
                   {loading ? (
@@ -547,7 +553,7 @@ const CentreManagement = () => {
                   name="communication_account_id"
                   value={centreForm.communication_account_id || ""}
                   onChange={(e) => setCentreForm({ ...centreForm, communication_account_id: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 transition"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition"
                   disabled={loading}
                 >
                   <option value="">No WhatsApp (System Only)</option>
@@ -567,7 +573,7 @@ const CentreManagement = () => {
         )}
 
         {/* Centres List */}
-        <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="px-6 py-5 border-b border-gray-200">
             <div className="flex items-center justify-between">
               <h2 className="text-lg font-semibold text-gray-800">Centres List</h2>
@@ -575,15 +581,24 @@ const CentreManagement = () => {
                 <div className="relative mr-4">
                   <input
                     type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    aria-label="Search centres"
                     placeholder="Search centres..."
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
                   />
                   <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
                   </svg>
                 </div>
-                <button className="p-2 rounded-lg hover:bg-gray-100 transition-colors">
-                  <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <button
+                  type="button"
+                  onClick={() => setUnassignedOnly((v) => !v)}
+                  aria-pressed={unassignedOnly}
+                  title="Show only centres without an admin"
+                  className={`p-2 rounded-lg transition-colors ${unassignedOnly ? "bg-navy-700 text-white" : "hover:bg-gray-100"}`}
+                >
+                  <svg className={`w-5 h-5 ${unassignedOnly ? "text-white" : "text-gray-600"}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"></path>
                   </svg>
                 </button>
@@ -593,13 +608,13 @@ const CentreManagement = () => {
           
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-[#1e3a5f]"></div>
+              <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-navy-700"></div>
               <span className="mt-3 text-gray-600 font-medium">Loading centres...</span>
             </div>
           ) : centres.length === 0 ? (
             <div className="text-center py-16">
-              <div className="inline-block p-4 bg-blue-100 rounded-full">
-                <svg className="w-12 h-12 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <div className="inline-block p-4 bg-slate-100 rounded-full">
+                <svg className="w-12 h-12 text-navy-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                 </svg>
               </div>
@@ -607,12 +622,14 @@ const CentreManagement = () => {
               <p className="mt-1 text-gray-500">Create your first centre using the form above</p>
               <button
                 onClick={() => setShowForm(true)}
-                className="mt-4 inline-flex items-center gap-2 bg-[#1e3a5f] hover:bg-[#172a45] text-white px-4 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg"
+                className="mt-4 inline-flex items-center gap-2 bg-navy-700 hover:bg-navy-800 text-white px-4 py-2.5 rounded-xl font-medium transition-all duration-300 shadow-md hover:shadow-lg"
               >
                 <FiPlus className="text-lg" />
                 Add Centre
               </button>
             </div>
+          ) : visibleCentres.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">No centres match your search.</div>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200">
@@ -625,12 +642,12 @@ const CentreManagement = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {centres.map((centre) => (
+                  {visibleCentres.map((centre) => (
                     <tr key={centre.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center">
-                          <div className="bg-blue-100 rounded-lg p-2 mr-3">
-                            <svg className="h-5 w-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                          <div className="bg-slate-100 rounded-lg p-2 mr-3">
+                            <svg className="h-5 w-5 text-navy-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
                             </svg>
                           </div>
@@ -647,7 +664,7 @@ const CentreManagement = () => {
                         <div className="flex justify-end space-x-1">
                           <button
                             onClick={() => fetchCentreDetails(centre.id)}
-                            className="p-2 text-gray-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-slate-100 rounded-lg transition-colors"
                             title="View centre details"
                           >
                             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -657,7 +674,7 @@ const CentreManagement = () => {
                           </button>
                           <button
                             onClick={() => handleEditCentre(centre)}
-                            className="p-2 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-slate-100 rounded-lg transition-colors"
                             title="Edit centre"
                           >
                             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -696,7 +713,7 @@ const CentreManagement = () => {
       {/* Centre Details Modal */}
       {showCentreDetails && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-all">
-          <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-xl transform transition-all">
+          <div className="bg-white rounded-xl w-full max-w-5xl max-h-[90vh] overflow-y-auto shadow-xl transform transition-all">
             <div className="p-6">
               <div className="flex items-center justify-between mb-5">
                 <h2 className="text-xl font-bold text-gray-800">{showCentreDetails.centre.name} Details</h2>
@@ -747,8 +764,8 @@ const CentreManagement = () => {
                               }}
                             />
                           ) : (
-                            <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center mr-4">
-                              <svg className="h-7 w-7 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mr-4">
+                              <svg className="h-7 w-7 text-navy-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                               </svg>
                             </div>
