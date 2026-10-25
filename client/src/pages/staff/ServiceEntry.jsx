@@ -128,6 +128,33 @@ const getTrackingStatusStyle = (value) => {
   }
 };
 
+// One money line (department / service / payment) inside a phone entry card
+const MobileMoneyLine = ({ label, amount, note, textClass, edited, onHistory, onCorrect, disabled }) => (
+  <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+    <div className="min-w-0 flex flex-wrap items-center gap-1.5">
+      <span className={`text-sm font-medium ${textClass}`}>
+        {label} <span className="whitespace-nowrap">{amount}</span>{note && <span className="text-xs font-normal text-slate-500"> {note}</span>}
+      </span>
+      {edited && (
+        <span className="px-1.5 py-0.5 text-xs font-medium rounded-full bg-amber-100 text-amber-700 inline-flex items-center gap-0.5">
+          <FiRotateCcw className="h-3 w-3" />
+          Edited
+        </span>
+      )}
+    </div>
+    <div className="flex items-center gap-1.5 flex-shrink-0">
+      <button type="button" onClick={onHistory} className="px-2.5 py-2 min-h-[40px] rounded-lg bg-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-300">
+        History
+      </button>
+      {onCorrect && (
+        <button type="button" onClick={onCorrect} disabled={disabled} className="px-2.5 py-2 min-h-[40px] rounded-lg bg-amber-100 text-amber-700 text-xs font-medium hover:bg-amber-200 disabled:opacity-50">
+          Correct
+        </button>
+      )}
+    </div>
+  </div>
+);
+
 const ServiceEntry = () => {
   const { tokenId, customerServiceId } = useParams();
   const navigate = useNavigate();
@@ -1730,7 +1757,7 @@ const ServiceEntry = () => {
                             </h4>
                           </div>
                           {!isEditMode && formData.services.length > 1 && (
-                            <button type="button" onClick={() => removeServiceFromCart(index)} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-1.5 rounded transition">
+                            <button type="button" onClick={() => removeServiceFromCart(index)} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2.5 sm:p-1.5 rounded transition">
                               <FiTrash2 className="h-4 w-4" />
                             </button>
                           )}
@@ -1781,7 +1808,7 @@ const ServiceEntry = () => {
                                   <label className="block text-xs font-medium text-slate-700 mb-1">Category *</label>
                                   <div className="relative">
                                     <select value={svc.category} onChange={(e) => handleCartChange(index, 'category', e.target.value)} required
-                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white appearance-none">
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base sm:text-sm bg-white appearance-none">
                                       <option value="">Select Category</option>
                                       {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                     </select>
@@ -1792,7 +1819,7 @@ const ServiceEntry = () => {
                                   <label className="block text-xs font-medium text-slate-700 mb-1">Subcategory *</label>
                                   <div className="relative">
                                     <select value={svc.subcategory} onChange={(e) => handleCartChange(index, 'subcategory', e.target.value)} required disabled={!svc.category}
-                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm bg-white appearance-none disabled:bg-slate-50">
+                                      className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base sm:text-sm bg-white appearance-none disabled:bg-slate-50">
                                       <option value="">Select Subcategory</option>
                                       {subcategories.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                                     </select>
@@ -1843,18 +1870,18 @@ const ServiceEntry = () => {
                               )}
 
                               {/* Financials */}
-                              <div className="grid grid-cols-3 gap-3">
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                                 <div>
                                   <label className="block text-xs font-medium text-slate-700 mb-1">Service (₹)</label>
-                                  <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                                  <input type="number" value={svc.serviceCharge} onChange={(e) => handleCartChange(index, 'serviceCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base sm:text-sm" />
                                 </div>
                                 <div>
                                   <label className="block text-xs font-medium text-slate-700 mb-1">Dept (₹)</label>
-                                  <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm" />
+                                  <input type="number" value={svc.departmentCharge} onChange={(e) => handleCartChange(index, 'departmentCharge', e.target.value)} min="0" step="0.01" required className="w-full px-3 py-2 border border-slate-300 rounded-lg text-base sm:text-sm" />
                                 </div>
-                                <div>
+                                <div className="col-span-2 sm:col-span-1">
                                   <label className="block text-xs font-medium text-slate-700 mb-1">Total (₹)</label>
-                                  <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-navy-500/5 border border-navy-500/15 font-bold text-navy-800 rounded-lg text-sm" />
+                                  <input type="text" value={svc.totalCharge} readOnly className="w-full px-3 py-2 bg-navy-500/5 border border-navy-500/15 font-bold text-navy-800 rounded-lg text-base sm:text-sm" />
                                 </div>
                               </div>
 
@@ -1867,7 +1894,7 @@ const ServiceEntry = () => {
                                       <FiCalendar className="h-4 w-4 text-slate-400" />
                                     </div>
                                     <input type="date" value={svc.expiryDate} onChange={(e) => handleCartChange(index, 'expiryDate', e.target.value)} required
-                                      className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-navy-500/30 focus:border-navy-500" />
+                                      className="w-full pl-9 pr-3 py-2 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-navy-500/30 focus:border-navy-500" />
                                   </div>
                                   {svc.expiryDate && (
                                     <p className={`text-xs mt-1.5 font-medium ${
@@ -1950,7 +1977,7 @@ const ServiceEntry = () => {
                                   <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Assign To</label>
                                   <select value={svc.assignedTo}
                                     onChange={(e) => handleCartChange(index, 'assignedTo', e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm">
+                                    className="w-full px-3 py-2 text-base sm:text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm">
                                     <option value="">Unassigned Staff</option>
                                     {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
                                   </select>
@@ -1965,7 +1992,7 @@ const ServiceEntry = () => {
                                     </div>
                                     <input type="date" value={svc.estimatedDelivery}
                                       onChange={(e) => handleCartChange(index, 'estimatedDelivery', e.target.value)}
-                                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm text-slate-700" />
+                                      className="w-full pl-8 pr-3 py-2 text-base sm:text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm text-slate-700" />
                                   </div>
                                 </div>
 
@@ -1979,7 +2006,7 @@ const ServiceEntry = () => {
                                     <input type="text" placeholder="e.g., 7 days"
                                       value={svc.averageTime}
                                       onChange={(e) => handleCartChange(index, 'averageTime', e.target.value)}
-                                      className="w-full pl-8 pr-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm" />
+                                      className="w-full pl-8 pr-3 py-2 text-base sm:text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm" />
                                   </div>
                                 </div>
 
@@ -2006,7 +2033,7 @@ const ServiceEntry = () => {
                                   <label className="block text-[11px] font-semibold text-slate-600 mb-1 uppercase tracking-wide">Current Step</label>
                                   <select value={svc.currentStep}
                                     onChange={(e) => handleCartChange(index, 'currentStep', e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm">
+                                    className="w-full px-3 py-2 text-base sm:text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm">
                                     <option value="Submitted">Submitted</option>
                                     <option value="Initial Review">Initial Review</option>
                                     <option value="Document Verification">Document Verification</option>
@@ -2043,7 +2070,7 @@ const ServiceEntry = () => {
                                 <textarea rows="2" placeholder="Remarks visible to customer..."
                                   value={svc.customerRemarks}
                                   onChange={(e) => handleCartChange(index, 'customerRemarks', e.target.value)}
-                                  className="w-full px-3 py-2 text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm resize-none" />
+                                  className="w-full px-3 py-2 text-base sm:text-xs border border-slate-300 rounded-md focus:ring-2 focus:ring-navy-500/30 bg-white shadow-sm resize-none" />
                               </div>
 
                               {/* Quick "Clear all" link */}
@@ -2090,7 +2117,7 @@ const ServiceEntry = () => {
 
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <select value={svc.initialNoteVisibility} onChange={(e) => handleCartChange(index, 'initialNoteVisibility', e.target.value)}
-                                  className="text-xs bg-white border border-slate-300 rounded px-2 py-1.5 text-slate-700 shadow-sm">
+                                  className="text-base sm:text-xs bg-white border border-slate-300 rounded px-2 py-1.5 text-slate-700 shadow-sm">
                                   <option value="centre">🏢 Centre View</option>
                                   <option value="private">🔒 Private</option>
                                   <option value="mentioned_only">👥 Mentions Only</option>
@@ -2113,10 +2140,10 @@ const ServiceEntry = () => {
                               {svc.createTask && (
                                 <div className="bg-navy-500/5 p-3 rounded-lg border border-navy-500/15 space-y-3">
                                   <input type="text" value={svc.taskTitle} onChange={(e) => handleCartChange(index, 'taskTitle', e.target.value)} placeholder="Task Title *" required
-                                    className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md focus:ring-navy-500/30" />
+                                    className="w-full px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-md focus:ring-navy-500/30" />
                                   <div className="grid grid-cols-2 gap-2">
                                     <select value={svc.taskAssignee} onChange={(e) => handleCartChange(index, 'taskAssignee', e.target.value)} required
-                                      className="w-full px-3 py-2 text-sm border border-slate-300 rounded-md bg-white">
+                                      className="w-full px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-md bg-white">
                                       <option value="">Assign To *</option>
                                       {staffList.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
                                     </select>
@@ -2226,7 +2253,7 @@ const ServiceEntry = () => {
                               value={payment.method}
                               disabled={isEditMode}
                               onChange={(e) => handlePaymentChange(index, 'method', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-base sm:text-sm"
                             >
                               <option value="cash">Cash</option>
                               <option value="wallet">Digital Wallet</option>
@@ -2241,7 +2268,7 @@ const ServiceEntry = () => {
                               value={payment.wallet}
                               disabled={isEditMode}
                               onChange={(e) => handlePaymentChange(index, 'wallet', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-base sm:text-sm"
                             >
                               <option value="">Select wallet</option>
                               {(payment.method === 'cash' ? wallets.offline : wallets.online).map(wallet => (
@@ -2268,7 +2295,7 @@ const ServiceEntry = () => {
                                 required
                                 min="0"
                                 step="0.01"
-                                className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
+                                className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-base sm:text-sm"
                                 placeholder="0.00"
                               />
                             </div>
@@ -2282,7 +2309,7 @@ const ServiceEntry = () => {
                               value={payment.status}
                               disabled={isEditMode}
                               onChange={(e) => handlePaymentChange(index, 'status', e.target.value)}
-                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-sm"
+                              className="w-full px-4 py-2.5 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-navy-500/30 text-base sm:text-sm"
                             >
                               {paymentStatusOptions.map(option => (
                                 <option key={option.id} value={option.id}>
@@ -2404,10 +2431,10 @@ const ServiceEntry = () => {
       )}
 
       {/* ========== TODAY'S SERVICE ENTRIES TABLE ========== */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <div className="flex justify-between items-center mb-5">
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4 sm:p-6">
+        <div className="flex flex-wrap justify-between items-center gap-2 mb-5">
           <h3 className="text-lg font-semibold text-slate-900">Today's Service Entries</h3>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
             <div className="text-sm text-slate-500">{serviceEntries.length} records</div>
             <Link
               to="/dashboard/staff/all-entries"
@@ -2426,7 +2453,136 @@ const ServiceEntry = () => {
             <p className="text-slate-500 text-sm mt-1">Today's submitted service entries will appear here</p>
           </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-slate-200">
+          <>
+          {/* Phones: one card per entry */}
+          <div className="md:hidden space-y-3">
+            {serviceEntries.map((entry) => {
+              const deptTx = entry.departmentChargeTransaction;
+              const serviceTx = entry.serviceChargeTransaction;
+              const safePayments = getLatestTransactions(entry.payments || []);
+              const statusDisplay = getServiceStatusDisplay(entry.status);
+              const hasMoneyLines = (deptTx && deptTx.id && !deptTx.is_reversal) || (serviceTx && serviceTx.id && !serviceTx.is_reversal) || safePayments.length > 0;
+
+              return (
+                <div key={entry.id} className="rounded-2xl border border-slate-200 bg-white shadow-sm p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs text-slate-400 font-medium">{entry.tokenId ? `#${entry.tokenId}` : 'No token'}</div>
+                      <div className="font-semibold text-slate-900 flex items-center gap-2 flex-wrap">
+                        <span className="break-words">{entry.customerName}</span>
+                        {entry.notes_count > 0 && (
+                          <span className="inline-flex items-center gap-1 bg-navy-500/5 text-navy-700 text-xs font-bold px-2 py-0.5 rounded-full border border-navy-500/15">
+                            <FiMessageCircle className="h-3 w-3" />
+                            {entry.notes_count}
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">{entry.phone}</div>
+                      {(userRole === 'admin' || userRole === 'superadmin') && (
+                        <div className="text-xs text-slate-500 mt-0.5">Staff: <span className="font-medium text-slate-700">{entry.staffName || 'Unknown'}</span></div>
+                      )}
+                    </div>
+                    <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded-full ${statusDisplay.color}`}>
+                      {statusDisplay.name}
+                    </span>
+                  </div>
+
+                  <div className="mt-2 text-sm">
+                    <span className="font-semibold text-slate-900">{getCategoryName(entry.category)}</span>
+                    <span className="text-slate-500"> · {getSubcategoryName(entry.category, entry.subcategory)}</span>
+                  </div>
+                  {entry.expiryDate && entry.expiryDate !== 'N/A' && (
+                    <div className="mt-1.5 inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-slate-100 text-navy-700 text-xs font-medium border border-slate-200">
+                      <FiCalendar className="h-3 w-3" />
+                      Exp: {new Date(entry.expiryDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                    </div>
+                  )}
+
+                  {hasMoneyLines && (
+                    <div className="mt-3 rounded-xl bg-slate-50 border border-slate-100 divide-y divide-slate-100">
+                      {deptTx && deptTx.id && !deptTx.is_reversal && (
+                        <MobileMoneyLine
+                          label="Dept:"
+                          amount={`₹${Number(deptTx.amount).toFixed(2)}`}
+                          textClass="text-rose-600"
+                          edited={correctionStatus[deptTx.id]?.corrections_used > 0}
+                          onHistory={() => viewTransactionHistory(deptTx.id, 'department_charge')}
+                          onCorrect={canCorrectTransaction(deptTx, entry, 'department_charge') ? () => openCorrectionModal(deptTx, entry, 'department_charge') : null}
+                          disabled={deptTx.is_reversal}
+                        />
+                      )}
+                      {serviceTx && serviceTx.id && !serviceTx.is_reversal && (
+                        <MobileMoneyLine
+                          label="Service:"
+                          amount={`₹${Number(serviceTx.amount).toFixed(2)}`}
+                          textClass="text-rose-600"
+                          edited={correctionStatus[serviceTx.id]?.corrections_used > 0}
+                          onHistory={() => viewTransactionHistory(serviceTx.id, 'service_charge')}
+                          onCorrect={canCorrectTransaction(serviceTx, entry, 'service_charge') ? () => openCorrectionModal(serviceTx, entry, 'service_charge') : null}
+                          disabled={serviceTx.is_reversal}
+                        />
+                      )}
+                      {safePayments.map((payment, idx) => {
+                        const correctionId = payment.transaction_id || payment.id;
+                        return (
+                          <MobileMoneyLine
+                            key={idx}
+                            label={`${getWalletName(payment.wallet)}:`}
+                            amount={`₹${Number(payment.amount).toFixed(2)}`}
+                            note={`(${payment.status})`}
+                            textClass="text-slate-700"
+                            edited={correctionStatus[correctionId]?.corrections_used > 0}
+                            onHistory={() => viewTransactionHistory(correctionId, 'payment')}
+                            onCorrect={canCorrectTransaction(payment, entry, 'payment') && payment.status === 'received' ? () => openCorrectionModal(payment, entry, 'payment') : null}
+                            disabled={payment.is_reversal}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <div className="text-xs text-slate-400">Total</div>
+                      <div className="text-lg font-bold text-slate-900">₹{entry.totalCharge.toFixed(2)}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => setSelectedEntry(entry)} className="px-4 py-2 min-h-[40px] rounded-lg bg-navy-700 text-white text-sm font-medium hover:bg-navy-800">
+                        View
+                      </button>
+                      {isToday(entry.created_at) && (!entry.is_edited || userRole === 'admin' || userRole === 'superadmin') && (
+                        <button
+                          type="button"
+                          onClick={() => handleEditEntry(entry)}
+                          className={`px-4 py-2 min-h-[40px] rounded-lg text-sm font-medium ${entry.is_edited ? 'bg-amber-50 text-amber-700 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {isToday(entry.created_at) && entry.is_edited && userRole === 'staff' && (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-200 text-slate-700">
+                          Edited
+                        </span>
+                      )}
+                      {(userRole === 'admin' || userRole === 'superadmin') && (
+                        <button
+                          type="button"
+                          onClick={() => setDeleteDialog({ isOpen: true, entryId: entry.id, loading: false })}
+                          className="p-2.5 min-h-[40px] rounded-lg text-rose-600 bg-rose-50 hover:bg-rose-100"
+                          aria-label="Delete this entry completely"
+                        >
+                          <FiTrash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Tablets and computers: the table */}
+          <div className="hidden md:block overflow-x-auto rounded-lg border border-slate-200">
             <table className="min-w-full divide-y divide-slate-200">
               <thead className="bg-slate-50">
                 <tr>
@@ -2661,6 +2817,7 @@ const ServiceEntry = () => {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
