@@ -449,7 +449,9 @@ const PendingPaymentsSection = ({
   toDate: externalToDate,
   setToDate: setExternalToDate,
   isSuperAdmin = false,
-  readOnly = false
+  readOnly = false,
+  title,
+  subtitle
 }) => {
   const [pendingPayments, setPendingPayments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -693,8 +695,18 @@ const PendingPaymentsSection = ({
   return (
     <ErrorBoundary>
       <div className="space-y-5">
-        {/* Toolbar */}
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* Title (optional) + toolbar in one row */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+          {title ? (
+            <div className="min-w-0">
+              <h2 className="flex items-center text-lg font-bold text-slate-900">
+                <FiFileText className="mr-2 h-5 w-5 shrink-0 text-navy-700" />
+                {title}
+              </h2>
+              {subtitle && <p className="text-sm text-slate-500">{subtitle}</p>}
+            </div>
+          ) : <span />}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
           {!isSuperAdmin && (
             <button type="button" onClick={() => fetchPayments(true)} disabled={refreshing || isLoading} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-navy-700 hover:bg-slate-50 disabled:opacity-60">
               <FiRefreshCw className={refreshing || isLoading ? "animate-spin" : ""} /> Refresh
@@ -703,6 +715,7 @@ const PendingPaymentsSection = ({
           <button type="button" onClick={exportCsv} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-navy-800">
             <FiDownload /> Export CSV
           </button>
+          </div>
         </div>
 
         {loadError && (
