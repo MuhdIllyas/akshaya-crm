@@ -2911,7 +2911,10 @@ router.get('/tokens/history', authenticateToken, async (req, res) => {
 
 // Get Active Tokens (excludes expired campaign tokens)
 router.get('/tokens', authenticateToken, async (req, res) => {
-  const { centreId, status } = req.query;
+  // The staff app sends `centre_id`; older callers send `centreId` — accept both.
+  // scope=mine (staff dashboard): only tokens assigned to me or unassigned.
+  const { status, scope } = req.query;
+  const centreId = req.query.centreId || req.query.centre_id;
   const userRole = req.user.role;
   const userId = req.user.id;
 
@@ -2931,8 +2934,16 @@ router.get('/tokens', authenticateToken, async (req, res) => {
       LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
       LEFT JOIN staff st ON t.staff_id::integer = st.id
       LEFT JOIN staff st2 ON t.created_by::integer = st2.id
-      LEFT JOIN service_entries se ON se.token_id = t.token_id         
-      LEFT JOIN service_tracking st_track ON st_track.service_entry_id = se.id  
+      -- LATERAL + LIMIT 1: one row per token (a token with several entries/tracking
+      -- rows used to be returned several times)
+      LEFT JOIN LATERAL (
+        SELECT trk.id
+        FROM service_entries se
+        JOIN service_tracking trk ON trk.service_entry_id = se.id
+        WHERE se.token_id = t.token_id
+        ORDER BY trk.updated_at DESC
+        LIMIT 1
+      ) st_track ON TRUE
     `;
     const queryParams = [];
     const conditions = [];
@@ -2962,6 +2973,11 @@ router.get('/tokens', authenticateToken, async (req, res) => {
       queryParams.push(status);
     }
 
+    if (scope === 'mine') {
+      conditions.push(`(t.staff_id IS NULL OR t.staff_id::text IN ('', 'null', $${queryParams.length + 1}))`);
+      queryParams.push(String(userId));
+    }
+
     conditions.push(`(
       t.type = 'normal' 
       OR (
@@ -2976,7 +2992,6 @@ router.get('/tokens', authenticateToken, async (req, res) => {
 
     query += ` ORDER BY t.created_at DESC`;
 
-    console.log('servicemanagement.js: Fetching active tokens with query:', query, 'params:', queryParams);
     const result = await client.query(query, queryParams);
     const tokens = result.rows.map(row => ({
       id: row.id,
@@ -3001,7 +3016,6 @@ router.get('/tokens', authenticateToken, async (req, res) => {
       trackingId: row.tracking_id,
     }));
 
-    console.log('servicemanagement.js: Fetched active tokens:', JSON.stringify(tokens, null, 2));
     res.json(tokens);
   } catch (err) {
     console.error('servicemanagement.js: Error fetching tokens:', err);

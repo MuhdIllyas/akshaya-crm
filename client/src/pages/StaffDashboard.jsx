@@ -215,7 +215,7 @@ const StaffDashboard = () => {
   // --- Refresh tokens (unchanged) ---
   const refreshTokens = useCallback(async () => {
     try {
-      const tokensRes = await getTokens(centreId, 'all');
+      const tokensRes = await getTokens(centreId, 'all', { scope: 'mine' });
       setTokens(tokensRes.data || []);
       setLastUpdated(new Date());
     } catch (err) {
@@ -468,10 +468,6 @@ const StaffDashboard = () => {
       clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => refreshTokensRef.current(), 400);
     };
-    const onTokenUpdate = (data) => {
-      setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
-      scheduleRefreshTokens();
-    };
     const onCentreTokenUpdate = (data) => {
       setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
       scheduleRefreshTokens();
@@ -497,7 +493,8 @@ const StaffDashboard = () => {
       }
     };
 
-    socket.on('tokenUpdate', onTokenUpdate);
+    // Only the centre-room event is used: the backend also broadcasts a global 'tokenUpdate'
+    // to every connected user of every centre, which would double the refetches.
     socket.on(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
     socket.on('newToken', onNewToken);
     socket.on('tokenReassigned', onTokenReassigned);
@@ -505,7 +502,6 @@ const StaffDashboard = () => {
 
     return () => {
       clearTimeout(refreshTimer);
-      socket.off('tokenUpdate', onTokenUpdate);
       socket.off(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
       socket.off('newToken', onNewToken);
       socket.off('tokenReassigned', onTokenReassigned);

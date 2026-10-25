@@ -160,9 +160,8 @@ export const createToken = async (tokenData) => {
 };
 
 // Get tokens by centre and status (staff)
-export const getTokens = async (centreId, status = 'pending') => {
-  console.log('serviceService.js: Fetching tokens for centre:', centreId, 'with status:', status);
-  return await api.get('/tokens', { params: { centre_id: centreId, status } });
+export const getTokens = async (centreId, status = 'pending', extra = {}) => {
+  return await api.get('/tokens', { params: { centre_id: centreId, status, ...extra } });
 };
 
 // Get token by ID (staff)
