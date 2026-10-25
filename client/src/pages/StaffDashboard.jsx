@@ -1940,22 +1940,6 @@ const StaffDashboard = () => {
                 )}
               </div>
 
-              {/* ===== MY DAY: ATTENDANCE & WALLET ===== */}
-              {myWallet && (
-              <div role="region" aria-label="My wallet" className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-                <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-3">
-                  <FiDollarSign className="h-4 w-4 mr-2 text-navy-700" />
-                  My wallet
-                </h3>
-                <dl className="divide-y divide-slate-100 text-sm">
-                  <div className="flex justify-between py-2">
-                    <dt className="text-slate-600">{myWallet ? myWallet.name : 'My wallet'}</dt>
-                    <dd className="font-semibold text-slate-900">{myWallet ? formatCurrency(myWallet.balance) : 'Not assigned'}</dd>
-                  </div>
-                </dl>
-              </div>
-              )}
-
               {/* ===== UPCOMING EVENTS (AUTO-CYCLING) ===== */}
               <div 
                 role="region"
