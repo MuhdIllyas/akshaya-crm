@@ -4302,7 +4302,7 @@ const ReportsSection = () => {
                     <p className="text-slate-500 text-sm mt-1">Generate and export business reports</p>
                 </div>
                 <button
-                    onClick={handleGenerate}
+                    onClick={() => handleGenerate()}
                     className="flex items-center justify-center px-5 py-2.5 bg-navy-700 text-white rounded-xl hover:bg-navy-800 transition-colors text-sm font-semibold shadow-sm"
                 >
                     <FiRefreshCw className="h-4 w-4 mr-2" />
@@ -4325,7 +4325,7 @@ const ReportsSection = () => {
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
                     {/* Period */}
                     <div>
                         <label className="block text-xs font-medium text-slate-700 mb-1.5">Period</label>
@@ -4405,6 +4405,20 @@ const ReportsSection = () => {
                                     {staffMember.name} {staffMember.role ? `(${staffMember.role})` : ''}
                                 </option>
                             ))}
+                        </select>
+                    </div>
+
+                    {/* Export format */}
+                    <div>
+                        <label htmlFor="export-format" className="block text-xs font-medium text-slate-700 mb-1.5">Export as</label>
+                        <select
+                            id="export-format"
+                            value={exportFormat}
+                            onChange={(e) => setExportFormat(e.target.value)}
+                            className="w-full px-3 py-2.5 border border-slate-300 bg-white rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-sm"
+                        >
+                            <option value="pdf">PDF</option>
+                            <option value="xlsx">Excel (.xlsx)</option>
                         </select>
                     </div>
                 </div>

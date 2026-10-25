@@ -59,19 +59,22 @@ const PaymentReceiptDrawer = ({ isOpen, onClose, paymentId }) => {
           <motion.div 
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40"
           />
 
           {/* Slide-out Drawer */}
           <motion.div 
             initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="fixed top-0 right-0 w-full max-w-md h-full bg-white shadow-2xl z-50 flex flex-col overflow-hidden"
+            className="fixed top-0 right-0 w-full max-w-md h-full bg-white shadow-2xl z-50 flex flex-col overflow-hidden sm:rounded-l-2xl"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Payment receipt"
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
-              <h2 className="text-lg font-bold text-gray-800">Payment Receipt</h2>
-              <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded-full transition">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50">
+              <h2 className="text-lg font-bold text-slate-800">Payment Receipt</h2>
+              <button onClick={onClose} aria-label="Close" className="p-2.5 text-slate-500 hover:text-slate-700 hover:bg-slate-200 rounded-full transition">
                 <FiX className="h-5 w-5" />
               </button>
             </div>
@@ -79,41 +82,41 @@ const PaymentReceiptDrawer = ({ isOpen, onClose, paymentId }) => {
             {/* Content Loader */}
             {loading || !receipt ? (
               <div className="flex-1 flex justify-center items-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto p-6 space-y-6">
                 
                 {/* 1. Status Hero Section */}
-                <div className="text-center pb-6 border-b border-gray-100">
-                  <div className={`mx-auto w-12 h-12 flex items-center justify-center rounded-full mb-3 ${receipt.status === 'fully_paid' ? 'bg-green-100 text-green-600' : 'bg-yellow-100 text-yellow-600'}`}>
+                <div className="text-center pb-6 border-b border-slate-100">
+                  <div className={`mx-auto w-12 h-12 flex items-center justify-center rounded-full mb-3 ${receipt.status === 'fully_paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
                     {receipt.status === 'fully_paid' ? <FiCheckCircle className="h-6 w-6" /> : <FiClock className="h-6 w-6" />}
                   </div>
-                  <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(receipt.amountCollected)}</h3>
-                  <p className={`text-sm font-medium mt-1 ${receipt.status === 'fully_paid' ? 'text-green-600' : 'text-yellow-600'}`}>
+                  <h3 className="text-3xl font-bold text-slate-900">{formatCurrency(receipt.amountCollected)}</h3>
+                  <p className={`text-sm font-medium mt-1 ${receipt.status === 'fully_paid' ? 'text-emerald-600' : 'text-amber-600'}`}>
                     {receipt.status === 'fully_paid' ? 'Fully Paid' : 'Partially Paid'}
                   </p>
-                  <p className="text-xs text-gray-400 mt-2">
+                  <p className="text-xs text-slate-500 mt-2">
                     {new Date(receipt.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
 
                 {/* 2. Customer & Service Details */}
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Service Details</h4>
-                  <div className="bg-gray-50 rounded-xl p-4 space-y-3 border border-gray-100">
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Service Details</h4>
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-3 border border-slate-200">
                     <div className="flex items-start gap-3">
-                      <FiUser className="h-4 w-4 text-gray-400 mt-0.5" />
+                      <FiUser className="h-4 w-4 text-slate-400 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{receipt.customer.name}</p>
-                        <p className="text-xs text-gray-500">{receipt.customer.phone}</p>
+                        <p className="text-sm font-medium text-slate-900">{receipt.customer.name}</p>
+                        <p className="text-xs text-slate-500">{receipt.customer.phone}</p>
                       </div>
                     </div>
-                    <div className="flex items-start gap-3 pt-2 border-t border-gray-200">
-                      <FiBriefcase className="h-4 w-4 text-gray-400 mt-0.5" />
+                    <div className="flex items-start gap-3 pt-2 border-t border-slate-200">
+                      <FiBriefcase className="h-4 w-4 text-slate-400 mt-0.5" />
                       <div>
-                        <p className="text-sm font-medium text-gray-900">{receipt.service.name}</p>
-                        <p className="text-xs text-gray-500">Tracking: {receipt.service.trackingId}</p>
+                        <p className="text-sm font-medium text-slate-900">{receipt.service.name}</p>
+                        <p className="text-xs text-slate-500">Tracking: {receipt.service.trackingId}</p>
                       </div>
                     </div>
                   </div>
@@ -121,23 +124,23 @@ const PaymentReceiptDrawer = ({ isOpen, onClose, paymentId }) => {
 
                 {/* 3. Financial Breakdown */}
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Financial Breakdown</h4>
-                  <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm space-y-2">
-                    <div className="flex justify-between text-sm text-gray-600">
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Financial Breakdown</h4>
+                  <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm space-y-2">
+                    <div className="flex justify-between text-sm text-slate-600">
                       <span>Total Service Bill</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(receipt.totalBill)}</span>
+                      <span className="font-medium text-slate-900">{formatCurrency(receipt.totalBill)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-gray-600">
+                    <div className="flex justify-between text-sm text-slate-600">
                       <span>Previously Paid</span>
-                      <span className="font-medium text-gray-900">{formatCurrency(receipt.previouslyPaid)}</span>
+                      <span className="font-medium text-slate-900">{formatCurrency(receipt.previouslyPaid)}</span>
                     </div>
-                    <div className="flex justify-between text-sm font-medium text-indigo-600 bg-indigo-50 px-2 py-1.5 rounded -mx-2">
+                    <div className="flex justify-between text-sm font-medium text-navy-700 bg-slate-100 px-2 py-1.5 rounded -mx-2">
                       <span>This Payment</span>
                       <span>+{formatCurrency(receipt.amountCollected)}</span>
                     </div>
-                    <div className="flex justify-between text-sm text-gray-900 font-bold pt-2 border-t border-gray-200 mt-2">
+                    <div className="flex justify-between text-sm text-slate-900 font-bold pt-2 border-t border-slate-200 mt-2">
                       <span>Remaining Balance</span>
-                      <span className={receipt.remainingBalance === 0 ? 'text-green-600' : 'text-red-600'}>
+                      <span className={receipt.remainingBalance === 0 ? 'text-emerald-600' : 'text-red-600'}>
                         {formatCurrency(receipt.remainingBalance)}
                       </span>
                     </div>
@@ -146,19 +149,19 @@ const PaymentReceiptDrawer = ({ isOpen, onClose, paymentId }) => {
 
                 {/* 4. Audit Trail */}
                 <div>
-                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Audit Trail</h4>
-                  <div className="bg-gray-50 rounded-xl p-4 space-y-2 border border-gray-100 text-sm">
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Audit Trail</h4>
+                  <div className="bg-slate-50 rounded-xl p-4 space-y-2 border border-slate-200 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-gray-500 flex items-center gap-1"><FiUser className="h-3 w-3"/> Collected By</span>
-                      <span className="font-medium text-gray-900">{receipt.audit.collectedBy} ({receipt.audit.role})</span>
+                      <span className="text-slate-500 flex items-center gap-1"><FiUser className="h-3 w-3"/> Collected By</span>
+                      <span className="font-medium text-slate-900">{receipt.audit.collectedBy} ({receipt.audit.role})</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500 flex items-center gap-1"><FiCreditCard className="h-3 w-3"/> Deposited To</span>
-                      <span className="font-medium text-gray-900">{receipt.audit.wallet}</span>
+                      <span className="text-slate-500 flex items-center gap-1"><FiCreditCard className="h-3 w-3"/> Deposited To</span>
+                      <span className="font-medium text-slate-900">{receipt.audit.wallet}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-gray-500 flex items-center gap-1"><FiHash className="h-3 w-3"/> Transaction ID</span>
-                      <span className="font-medium text-gray-900 font-mono text-xs">TXN-{receipt.id}</span>
+                      <span className="text-slate-500 flex items-center gap-1"><FiHash className="h-3 w-3"/> Transaction ID</span>
+                      <span className="font-medium text-slate-900 font-mono text-xs">TXN-{receipt.id}</span>
                     </div>
                   </div>
                 </div>
@@ -167,8 +170,8 @@ const PaymentReceiptDrawer = ({ isOpen, onClose, paymentId }) => {
             )}
             
             {/* Footer Action */}
-            <div className="p-4 border-t border-gray-100 bg-gray-50">
-              <button onClick={onClose} className="w-full py-2.5 bg-gray-900 text-white rounded-lg font-medium hover:bg-gray-800 transition shadow-md hover:shadow-lg">
+            <div className="p-4 border-t border-slate-100 bg-slate-50">
+              <button onClick={onClose} className="w-full py-3 bg-navy-700 text-white rounded-xl font-semibold hover:bg-navy-800 transition shadow-sm">
                 Close Receipt
               </button>
             </div>
