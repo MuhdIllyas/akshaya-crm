@@ -2777,7 +2777,7 @@ const ServiceEntry = () => {
       {/* ========== UNIFIED TRANSACTION CORRECTION MODAL ========== */}
       {correctionModal.isOpen && correctionModal.transaction && (
         <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-xl p-4 sm:p-6 max-w-md w-full mx-4 max-h-[90dvh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <FiRotateCcw className="h-5 w-5 text-amber-600" />
@@ -2901,7 +2901,7 @@ const ServiceEntry = () => {
               </div>
             </div>
             
-            <div className="flex justify-end gap-3 mt-6">
+            <div className="flex justify-end gap-3 mt-6 pt-3 border-t border-slate-100 sticky bottom-0 bg-white">
               <button
                 onClick={() => setCorrectionModal({ isOpen: false, transaction: null, loading: false, newAmount: '', newWalletId: '', reason: '', transactionType: '' })}
                 className="px-4 py-2 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 transition-colors"
