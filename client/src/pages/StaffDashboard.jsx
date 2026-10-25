@@ -124,9 +124,7 @@ const StaffDashboard = () => {
 
   // Application Tracking State
   const [trackingStats, setTrackingStats] = useState({ total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
-  const [trackingEntries, setTrackingEntries] = useState([]);
   const [statView, setStatView] = useState('applications'); 
-  const [activeAppView, setActiveAppView] = useState('active');
 
   // --- Welcome banner state ---
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -166,23 +164,15 @@ const StaffDashboard = () => {
       const token = localStorage.getItem('token');
       const headers = { Authorization: `Bearer ${token}` };
 
-      // Explicitly pass the staffId to force the backend to return ONLY this user's data
-      const [statsRes, entriesRes] = await Promise.all([
-        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/stats?staff=${staffId}`, { headers }),
-        fetch(`${import.meta.env.VITE_API_URL}/api/servicetracking/entries?staff=${staffId}&limit=100`, { headers })
-      ]);
-
+      // Stats only (counts). The full application list lives on the Track Service page.
+      const statsRes = await fetch(
+        `${import.meta.env.VITE_API_URL}/api/servicetracking/stats?staff=${staffId}`,
+        { headers }
+      );
       if (!statsRes.ok) throw new Error('Failed to fetch tracking stats');
-      if (!entriesRes.ok) throw new Error('Failed to fetch tracking entries');
-
       const statsData = await statsRes.json();
-      const entriesData = await entriesRes.json();
 
       setTrackingStats(statsData || { total: 0, pending: 0, in_progress: 0, completed: 0, delayed: 0 });
-      
-      // The /entries endpoint wraps the array inside a 'data' property
-      const entries = entriesData.data || [];
-      setTrackingEntries(entries);
     } catch (err) {
       console.error('Error fetching tracking data:', err);
     }
@@ -234,7 +224,9 @@ const StaffDashboard = () => {
   }, [centreId]);
 
   // --- Fetch Entire Workspace (Hybrid BFF) ---
+  const workspaceReqRef = useRef(0);
   const fetchWorkspaceInit = useCallback(async () => {
+    const reqId = ++workspaceReqRef.current;
     try {
       setPerformanceLoading(true);
       const token = localStorage.getItem('token');
@@ -256,6 +248,7 @@ const StaffDashboard = () => {
       if (!response.ok) throw new Error('Failed to fetch workspace data');
       
       const result = await response.json();
+      if (reqId !== workspaceReqRef.current) return; // a newer request superseded this one
       const { performance: perfData, tasks, events, recentActivity, onlinePending, onlineProcessing, todayAttendance: att } = result.data;
 
       setTodayAttendance(att);
@@ -300,11 +293,19 @@ const StaffDashboard = () => {
 
     } catch (err) {
       console.error('Error fetching workspace:', err);
-      toast.error('Failed to load workspace data');
+      if (reqId === workspaceReqRef.current) toast.error('Failed to load workspace data');
     } finally {
-      setPerformanceLoading(false);
+      if (reqId === workspaceReqRef.current) setPerformanceLoading(false);
     }
   }, [period, customDateRange]);
+
+  // Latest callbacks kept in refs so effects/socket listeners don't re-run when a period changes
+  const fetchWorkspaceInitRef = useRef(fetchWorkspaceInit);
+  const refreshTokensRef = useRef(refreshTokens);
+  const fetchTrackingDataRef = useRef(fetchTrackingData);
+  fetchWorkspaceInitRef.current = fetchWorkspaceInit;
+  refreshTokensRef.current = refreshTokens;
+  fetchTrackingDataRef.current = fetchTrackingData;
 
   // --- Auto-cycle Events Tabs ---
   useEffect(() => {
@@ -429,9 +430,9 @@ const StaffDashboard = () => {
         // Load the 3 main pillars concurrently
         await Promise.all([
           getCategories().then(res => setCategories(res.data || [])),
-          refreshTokens(),
-          fetchWorkspaceInit(),
-          fetchTrackingData()
+          refreshTokensRef.current(),
+          fetchWorkspaceInitRef.current(),
+          fetchTrackingDataRef.current()
         ]);
         
       } catch (err) {
@@ -443,42 +444,56 @@ const StaffDashboard = () => {
     };
     
     fetchData();
-  }, [staffId, centreId, refreshTokens, fetchWorkspaceInit]);
+  }, [staffId, centreId]);
 
   const isMounted = useRef(false);
 
   // Refetch when period changes
   useEffect(() => {
-    if (isMounted.current && !loading) {
-      fetchWorkspaceInit();
-    } else if (!loading) {
+    if (loading) return;
+    if (!isMounted.current) {
       isMounted.current = true;
+      return;
     }
+    // Wait until both dates are chosen for a custom range
+    if (period === 'custom' && !(customDateRange.from && customDateRange.to)) return;
+    fetchWorkspaceInit();
   }, [period, customDateRange, fetchWorkspaceInit, loading]);
 
   // --- Socket events (unchanged) ---
   useEffect(() => {
+    // Several events often fire for one change: coalesce them into a single token refetch
+    let refreshTimer = null;
+    const scheduleRefreshTokens = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => refreshTokensRef.current(), 400);
+    };
     const onTokenUpdate = (data) => {
       setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
-      refreshTokens();
+      scheduleRefreshTokens();
     };
     const onCentreTokenUpdate = (data) => {
       setTokens(prev => prev.map(t => t.tokenId === data.tokenId ? { ...t, status: data.status } : t));
-      refreshTokens();
+      scheduleRefreshTokens();
     };
     const onNewToken = (data) => {
       toast.info(data.message || 'New token created');
-      refreshTokens();
+      scheduleRefreshTokens();
     };
     const onTokenReassigned = (data) => {
       toast.info(data.message || 'Token reassigned');
-      refreshTokens();
+      scheduleRefreshTokens();
     };
-    const onServiceEntryCreated = async (data) => {
+    const onServiceEntryCreated = (data) => {
       const entryStaffId = String(data.staff_id || '').trim();
       if (!entryStaffId || entryStaffId === String(staffId).trim()) {
-        await refreshTokens();
-        await fetchWorkspaceInit();
+        clearTimeout(refreshTimer);
+        // Run in parallel (was one after the other); also keeps the application counts fresh
+        Promise.all([
+          refreshTokensRef.current(),
+          fetchWorkspaceInitRef.current(),
+          fetchTrackingDataRef.current()
+        ]);
       }
     };
 
@@ -489,13 +504,14 @@ const StaffDashboard = () => {
     socket.on('serviceEntryCreated', onServiceEntryCreated);
 
     return () => {
+      clearTimeout(refreshTimer);
       socket.off('tokenUpdate', onTokenUpdate);
       socket.off(`tokenUpdate:${centreId}`, onCentreTokenUpdate);
       socket.off('newToken', onNewToken);
       socket.off('tokenReassigned', onTokenReassigned);
       socket.off('serviceEntryCreated', onServiceEntryCreated);
     };
-  }, [centreId, staffId, refreshTokens, fetchWorkspaceInit]);
+  }, [centreId, staffId]);
 
   // --- Helper functions (unchanged) ---
   const getCategoryName = (id) => categories.find(c => c.id === id)?.name || 'N/A';
@@ -660,31 +676,6 @@ const StaffDashboard = () => {
       return acc;
     }, {});
   }, [recentServiceEntries]);
-
-  const filteredApplications = useMemo(() => {
-    let source = trackingEntries;
-    
-    // 1. Filter by Tab View
-    if (activeAppView === 'active') {
-      source = source.filter(app => ['pending', 'in_progress', 'resubmit'].includes(app.status));
-    } else if (activeAppView === 'completed') {
-      source = source.filter(app => ['completed', 'paid'].includes(app.status));
-    } else if (activeAppView === 'delayed') {
-      source = source.filter(app => ['rejected', 'delayed'].includes(app.status));
-    }
-
-    // 2. Filter by Search Query (Seamless integration with the top search bar)
-    const searchLower = searchQuery.toLowerCase().trim();
-    if (searchLower) {
-      source = source.filter(app => 
-        String(app.customer_name || '').toLowerCase().includes(searchLower) ||
-        String(app.application_number || '').toLowerCase().includes(searchLower) ||
-        String(app.phone || '').toLowerCase().includes(searchLower)
-      );
-    }
-
-    return source;
-  }, [trackingEntries, activeAppView, searchQuery]);
 
   const handleTakeWork = async (bookingId) => {
     try {
@@ -1338,13 +1329,13 @@ const StaffDashboard = () => {
 
               <div className="flex flex-col gap-6">
               {/* Work queue: shown only when there is something to work on (or Applications is opened) */}
-              {(activeTokens.length > 0 || campaignTokens.length > 0 || onlineBookings.length > 0 || processingBookings.length > 0 || workspaceTab === 'applications') ? (
+              {(activeTokens.length > 0 || campaignTokens.length > 0 || onlineBookings.length > 0 || processingBookings.length > 0) ? (
               <>
               <div role="region" aria-label="Work queue" className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[min(850px,85vh)]">
                 
                 {/* Master Workspace Tabs */}
                 <div role="tablist" aria-label="Work queue sections" className="flex p-3 border-b border-slate-200 bg-slate-50/80 gap-2 overflow-x-auto hide-scrollbar">
-                  <button role="tab" aria-selected={workspaceTab === 'tokens'} onClick={() => setWorkspaceTab('tokens')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button role="tab" aria-selected={workspaceTab === 'tokens'} onClick={() => { setWorkspaceTab('tokens'); setStatView('tokens'); }} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'tokens' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
                     <FiUsers className="h-4 w-4" />
                     Walk-in Tokens
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'tokens' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{statusCounts.total}</span>
@@ -1359,10 +1350,10 @@ const StaffDashboard = () => {
                     My Online Work
                     <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'processing' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-600'}`}>{processingBookings.length}</span>
                   </button>
-                  <button role="tab" aria-selected={workspaceTab === 'applications'} onClick={() => setWorkspaceTab('applications')} className={`flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all ${workspaceTab === 'applications' ? 'bg-white text-navy-700 shadow-sm border border-slate-200' : 'text-slate-600 hover:bg-slate-200/50'}`}>
+                  <button onClick={() => navigate('/dashboard/staff/track_service')} className="flex items-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl text-sm font-semibold whitespace-nowrap transition-all text-slate-600 hover:bg-slate-200/50">
                     <FiTarget className="h-4 w-4" />
                     Applications
-                    <span className={`px-2 py-0.5 rounded-full text-xs ${workspaceTab === 'applications' ? 'bg-slate-200 text-navy-700' : 'bg-slate-200 text-slate-600'}`}>{trackingStats.total || 0}</span>
+                    <span className="px-2 py-0.5 rounded-full text-xs bg-slate-200 text-slate-600">{trackingStats.total || 0}</span>
                   </button>
                 </div>
 
@@ -1528,95 +1519,6 @@ const StaffDashboard = () => {
                       )}
                     </div>
                   )}
-                
-                  {/* TAB 4: APPLICATIONS TRACKING */}
-                  {workspaceTab === 'applications' && (
-                    <div className="space-y-4">
-                      
-                      {/* Sub-Tabs for Applications */}
-                      <div className="flex gap-2 border-b border-slate-200 pb-3">
-                        {['active', 'completed', 'delayed'].map(tab => {
-                          // Calculate counts based on global stats for the badges
-                          let count = 0;
-                          if (tab === 'active') count = (trackingStats.pending || 0) + (trackingStats.in_progress || 0);
-                          if (tab === 'completed') count = (trackingStats.completed || 0);
-                          if (tab === 'delayed') count = (trackingStats.delayed || 0);
-
-                          return (
-                            <button
-                              key={tab}
-                              aria-pressed={activeAppView === tab}
-                              onClick={() => setActiveAppView(tab)}
-                              className={`px-4 py-2 min-h-[40px] rounded-full text-xs font-bold capitalize transition-colors flex items-center gap-1.5 ${
-                                activeAppView === tab ? 'bg-navy-800 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
-                              }`}
-                            >
-                              {tab}
-                              <span className={`px-1.5 py-0.5 rounded-full text-xs ${activeAppView === tab ? 'bg-white/20' : 'bg-slate-200 text-slate-500'}`}>
-                                {count}
-                              </span>
-                            </button>
-                          )
-                        })}
-                      </div>
-
-                      {/* Application List */}
-                      <div className="space-y-3">
-                        {filteredApplications.length === 0 ? (
-                          <div className="text-center py-16 text-slate-500">
-                            <FiTarget className="mx-auto h-12 w-12 mb-3 opacity-30"/>
-                            <p className="font-medium">No {activeAppView} applications found</p>
-                          </div>
-                        ) : (
-                          filteredApplications.map(app => (
-                            <div key={app.id} className="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-all group">
-                              <div className="flex items-center gap-4 min-w-0">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shrink-0 ${
-                                  activeAppView === 'completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' :
-                                  activeAppView === 'delayed' ? 'bg-rose-50 text-rose-700 border border-rose-100' :
-                                  'bg-slate-100 text-navy-700 border border-slate-200'
-                                }`}>
-                                  {app.application_number ? `#${app.application_number.slice(-4)}` : 'APP'}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <h4 className="font-bold text-slate-900 text-sm truncate">{app.customer_name}</h4>
-                                    <span className={`px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
-                                      app.status === 'completed' || app.status === 'paid' ? 'bg-emerald-100 text-emerald-700' :
-                                      app.status === 'in_progress' ? 'bg-slate-200 text-navy-700' :
-                                      app.status === 'pending' ? 'bg-amber-100 text-amber-700' :
-                                      app.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
-                                      app.status === 'resubmit' ? 'bg-orange-100 text-orange-700' :
-                                      'bg-slate-100 text-slate-700'
-                                    }`}>
-                                      {app.status?.replace('_', ' ')}
-                                    </span>
-                                    <span className="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-bold">
-                                      {app.progress}%
-                                    </span>
-                                  </div>
-                                  <p className="text-xs text-slate-500 truncate flex items-center gap-2">
-                                    <span className="font-medium">{app.service_name}</span>
-                                    <span className="w-1 h-1 bg-slate-300 rounded-full"></span>
-                                    <span>{app.current_step || 'Submitted'}</span>
-                                  </p>
-                                  <p className="text-xs text-slate-500 mt-1 font-mono">
-                                    Last updated: {new Date(app.updated_at).toLocaleString('en-IN', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}
-                                  </p>
-                                </div>
-                              </div>
-                              <button 
-                                onClick={() => navigate(`/dashboard/staff/track_service/${app.id}`)} 
-                                className="px-4 py-2 min-h-[40px] bg-white border border-slate-300 text-slate-700 text-xs font-bold rounded-xl hover:bg-slate-50 shadow-sm shrink-0 flex items-center gap-1.5 transition-colors"
-                              >
-                                <FiBarChart2 className="h-4 w-4" /> Track
-                              </button>
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
               </>
@@ -1627,7 +1529,7 @@ const StaffDashboard = () => {
                   <p className="text-sm font-medium text-slate-800">No tokens or online requests right now. New ones will appear here automatically.</p>
                 </div>
                 <button
-                  onClick={() => setWorkspaceTab('applications')}
+                  onClick={() => navigate('/dashboard/staff/track_service')}
                   className="px-4 py-2 min-h-[40px] rounded-xl text-sm font-semibold border border-slate-200 text-navy-700 hover:bg-slate-50 shrink-0"
                 >
                   View applications ({trackingStats.total})
