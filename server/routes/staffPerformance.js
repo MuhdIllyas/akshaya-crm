@@ -150,7 +150,7 @@ const loadPerformanceSummary = async (client, staffId, range) => {
     ${paymentsLateralJoin()}
     WHERE se.staff_id = $1
       AND se.status IN ('completed', 'pending')
-      AND DATE(se.created_at) BETWEEN $2 AND $3
+      AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
   `, [staffId, range.start, range.end]);
 
   const r = rows[0] || {};
@@ -197,7 +197,7 @@ const loadRatings = (client, staffId, range) => client.query(`
   FROM service_reviews
   WHERE staff_id = $1
     AND is_submitted = true
-    AND DATE(created_at) BETWEEN $2 AND $3
+    AND created_at >= $2::date AND created_at < ($3::date + 1)
 `, [staffId, range.start, range.end]);
 
 const pct = (n) => Math.round(n * 100) / 100;
@@ -249,7 +249,7 @@ router.get('/dashboard', async (req, res) => {
         FROM service_entries se
         WHERE se.staff_id = $1
           AND se.status IN ('completed', 'pending')
-          AND DATE(se.created_at) BETWEEN $2 AND $3
+          AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
           AND se.customer_name IS NOT NULL
           AND se.customer_name != ''
         GROUP BY customer_name
@@ -272,7 +272,7 @@ router.get('/dashboard', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
         AND p.received_amount > 0
     `;
 
@@ -304,7 +304,7 @@ router.get('/dashboard', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       GROUP BY DATE(se.created_at)
       ORDER BY DATE(se.created_at) ASC
     `;
@@ -322,7 +322,7 @@ router.get('/dashboard', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       GROUP BY s.id, s.name
       ORDER BY total_revenue DESC
       LIMIT 10
@@ -339,7 +339,7 @@ router.get('/dashboard', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
         AND se.customer_name IS NOT NULL
         AND se.customer_name != ''
       GROUP BY se.customer_name, se.phone
@@ -367,7 +367,7 @@ router.get('/dashboard', async (req, res) => {
       LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       ORDER BY se.created_at DESC
       LIMIT 20
     `;
@@ -415,7 +415,7 @@ router.get('/dashboard', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       GROUP BY DATE_TRUNC('week', se.created_at)
       ORDER BY DATE_TRUNC('week', se.created_at) ASC
     `;
@@ -652,7 +652,7 @@ router.get('/compare', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
     `;
 
     const [currentResult, previousResult] = await Promise.all([
@@ -1271,7 +1271,7 @@ router.get('/service-breakdown', async (req, res) => {
       ${paymentsLateralJoin()}
       WHERE se.staff_id = $1 
         AND se.status IN ('completed', 'pending')
-        AND DATE(se.created_at) BETWEEN $2 AND $3
+        AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       GROUP BY s.id, s.name
       ORDER BY total_revenue DESC
     `;
@@ -1428,6 +1428,12 @@ router.get('/workspace-init', async (req, res) => {
   if (range.error) return res.status(400).json({ error: range.error });
 
   const client = await pool.connect();
+  // PERF: one pg client runs its queries strictly one after another, so sharing a
+  // single client made the "concurrent" Promise.all below fully sequential.
+  // Spread the 12 queries over 3 connections (3 lanes) -> ~3x faster, while still
+  // using only 3 pool slots per request (not 12) so the pool can't be starved.
+  const laneB = await pool.connect();
+  const laneC = await pool.connect();
   try {
     const staffId = req.user.id;
     const centreId = req.user.centre_id;
@@ -1463,7 +1469,7 @@ router.get('/workspace-init', async (req, res) => {
       loadRatings(client, staffId, range),
 
       // 3. Tasks
-      client.query(`
+      laneB.query(`
         -- 🔥 FIX: Added 'assigned_to' so the frontend filter can read it
         SELECT id, title, description, priority, due_date, status, assigned_to
         FROM tasks
@@ -1472,7 +1478,7 @@ router.get('/workspace-init', async (req, res) => {
       `, [staffId]),
 
       // 4. Events (Sorted descending: largest dates first)
-      client.query(`
+      laneB.query(`
         SELECT 
           id, 
           COALESCE(title, description, type, 'Event') AS title, 
@@ -1499,7 +1505,7 @@ router.get('/workspace-init', async (req, res) => {
       `, [centreId, staffId, ...windowArgs]),
 
       // 5. Recent Activity
-      client.query(`
+      laneB.query(`
         SELECT
           se.id, 
           se.created_at, 
@@ -1518,7 +1524,7 @@ router.get('/workspace-init', async (req, res) => {
       `, [staffId]),
 
       // 6. Online Bookings (Pending)
-      client.query(`
+      laneC.query(`
         SELECT cs.*, c.name as customer_name, c.primary_phone as phone
         FROM customer_services cs
         LEFT JOIN customers c ON cs.customer_id = c.id
@@ -1527,7 +1533,7 @@ router.get('/workspace-init', async (req, res) => {
       `),
 
       // 7. Online Bookings (Processing)
-      client.query(`
+      laneC.query(`
         SELECT cs.*, c.name as customer_name, c.primary_phone as phone
         FROM customer_services cs
         LEFT JOIN customers c ON cs.customer_id = c.id
@@ -1536,7 +1542,7 @@ router.get('/workspace-init', async (req, res) => {
       `, [staffId]),
 
       // 8. Deliveries (Dynamically respects the dropdown period!)
-      client.query(`
+      laneC.query(`
         SELECT
           tr.id as tracking_id,
           tr.service_entry_id as related_service_id,
@@ -1555,7 +1561,7 @@ router.get('/workspace-init', async (req, res) => {
       `, [staffId, ...windowArgs]),
 
       // 9. Expiries (Dynamically respects the dropdown period!)
-      client.query(`
+      laneC.query(`
         SELECT
           se.id as related_service_id,
           se.customer_name,
@@ -1573,7 +1579,7 @@ router.get('/workspace-init', async (req, res) => {
       `, [staffId, ...windowArgs]),
 
       // 10. Today's Latest Attendance Session
-      client.query(`
+      laneB.query(`
         SELECT id, status, punch_in, punch_out, hours as total_hours
         FROM attendance
         WHERE staff_id = $1 AND date = CURRENT_DATE
@@ -1723,6 +1729,8 @@ router.get('/workspace-init', async (req, res) => {
     console.error('Workspace Init Error:', err);
     res.status(500).json({ error: 'Failed to initialize workspace' });
   } finally {
+    laneB.release();
+    laneC.release();
     client.release();
   }
 });
