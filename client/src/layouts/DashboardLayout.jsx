@@ -7,7 +7,13 @@ const DashboardLayout = () => {
   const role = localStorage.getItem("role");
   const staffName = localStorage.getItem("name");
   const customerName = localStorage.getItem("customer_name");
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [collapsedPref, setCollapsedPref] = useState(false);
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(
+    typeof window !== 'undefined' && window.matchMedia ? window.matchMedia('(min-width: 768px)').matches : true
+  );
+  // Collapsed (icon-only) mode is a desktop feature; the phone drawer always shows labels
+  const isCollapsed = collapsedPref && isDesktop;
   const [activePath, setActivePath] = useState(window.location.pathname);
   const location = useLocation();
   const token = localStorage.getItem("token");
@@ -173,6 +179,36 @@ const DashboardLayout = () => {
     }
   }, [location.pathname]);
 
+  // Track the desktop breakpoint
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = (e) => setIsDesktop(e.matches);
+    setIsDesktop(mq.matches);
+    mq.addEventListener ? mq.addEventListener('change', onChange) : mq.addListener(onChange);
+    return () => {
+      mq.removeEventListener ? mq.removeEventListener('change', onChange) : mq.removeListener(onChange);
+    };
+  }, []);
+
+  // Close the phone drawer after navigating
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [location.pathname]);
+
+  // Drawer open: close on Escape and lock background scroll
+  useEffect(() => {
+    if (!isMobileOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') setIsMobileOpen(false); };
+    document.addEventListener('keydown', onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isMobileOpen]);
+
   // Updated Role-based navigation configuration with MessengerIconWithBadge
   const roleNavigation = {
     superadmin: [
@@ -263,7 +299,7 @@ const DashboardLayout = () => {
   };
 
   const toggleSidebar = () => {
-    setIsCollapsed(!isCollapsed);
+    setCollapsedPref(!collapsedPref);
   };
 
   const handleNavigation = (path) => {
@@ -271,11 +307,23 @@ const DashboardLayout = () => {
   };
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar with original navy blue colors */}
+    <div className="flex min-h-screen min-h-dvh bg-slate-50">
+      {/* Phone: dimmed backdrop behind the open drawer */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-slate-900/50 z-40 md:hidden"
+          onClick={() => setIsMobileOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar with original navy blue colors (off-canvas drawer on phones) */}
       <aside 
-        className={`bg-navy-800 text-white min-h-screen fixed top-0 left-0 bottom-0 flex flex-col transition-all duration-300 z-50 ${
-          isCollapsed ? "w-20" : "w-64"
+        id="app-sidebar"
+        className={`bg-navy-800 text-white fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
+          isMobileOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0 md:max-w-none ${
+          isCollapsed ? "md:w-20" : "md:w-64"
         }`}
       >
         {/* Header Section */}
@@ -302,12 +350,19 @@ const DashboardLayout = () => {
             {!isCollapsed && (
               <button
                 onClick={toggleSidebar}
-                className="p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+                className="hidden md:block p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
                 title="Collapse Sidebar"
               >
                 <CollapseIcon />
               </button>
             )}
+            <button
+              onClick={() => setIsMobileOpen(false)}
+              className="md:hidden p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+              aria-label="Close menu"
+            >
+              <CloseIcon />
+            </button>
           </div>
           {!isCollapsed && (
             <p className="text-blue-200 text-sm mt-3">
@@ -318,7 +373,7 @@ const DashboardLayout = () => {
         
         {/* Navigation Section - Custom scrollbar */}
         <div className="flex-1 py-4 overflow-y-auto custom-scrollbar">
-          <nav className="space-y-1 px-3">
+          <nav className="space-y-1 px-3" aria-label="Main navigation">
             {userNavigation.map((item, index) => {
               const isActive = activePath === item.path;
               const IconComponent = item.icon;
@@ -454,7 +509,7 @@ const DashboardLayout = () => {
         </div>
         
         {/* Footer Section */}
-        <div className="border-t border-navy-700 py-4">
+        <div className="border-t border-navy-700 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {/* Toggle Button for collapsed state */}
           {isCollapsed && (
             <button
@@ -475,18 +530,38 @@ const DashboardLayout = () => {
         </div>
       </aside>
 
-      {/* Main Content Area - Hidden scrollbar */}
-      <main 
-        className={`flex-1 transition-all duration-300 min-h-screen overflow-auto main-content-scrollbar ${
-          isCollapsed ? "ml-20" : "ml-64"
+      {/* Main Content Area */}
+      <div
+        className={`flex-1 min-w-0 flex flex-col transition-all duration-300 ml-0 ${
+          isCollapsed ? "md:ml-20" : "md:ml-64"
         }`}
       >
-        <div className="p-6">
-          <div className="bg-white rounded-2xl shadow-sm p-6 min-h-full border border-gray-200">
-            <Outlet />
+        {/* Phone top bar with the menu button */}
+        <header className="md:hidden sticky top-0 z-30 flex items-center gap-3 bg-navy-800 text-white px-3 py-2.5 shadow-sm">
+          <button
+            onClick={() => setIsMobileOpen(true)}
+            className="relative p-2 rounded-lg hover:bg-navy-700 text-blue-200 hover:text-white"
+            aria-label="Open menu"
+            aria-expanded={isMobileOpen}
+            aria-controls="app-sidebar"
+          >
+            <MenuIcon />
+            {(unreadCount + unreadNotesCount + (notificationsCount || 0)) > 0 && (
+              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-navy-800"></span>
+            )}
+          </button>
+          <span className="font-bold">{role === "customer" ? "Client Suite" : "Office Suite"}</span>
+        </header>
+
+        {/* Hidden scrollbar */}
+        <main className="flex-1 min-w-0 overflow-auto main-content-scrollbar">
+          <div className="p-2 sm:p-4 md:p-6">
+            <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-5 md:p-6 min-h-full border border-slate-200">
+              <Outlet />
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
+      </div>
       
       {/* Color definitions and custom scrollbar styles */}
       <style>{`
@@ -541,6 +616,18 @@ const DashboardLayout = () => {
 const CollapseIcon = () => (
   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+  </svg>
+);
+
+const CloseIcon = () => (
+  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+  </svg>
+);
+
+const MenuIcon = () => (
+  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
   </svg>
 );
 
