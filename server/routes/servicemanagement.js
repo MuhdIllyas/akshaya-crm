@@ -2281,6 +2281,27 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
     // 🔥 STEP 4: CASCADING DELETION (WIPING THE DATA)
     // ====================================================================
     
+    // 4-pre. Bank statement links (if the bank statement tables exist): a bank row matched to this
+    // entry goes back to "open" so it can be matched again, and the match / "checked" marks are
+    // removed. Without this the delete fails on bank_statement_match_items_wallet_tx_id_fkey.
+    const deletedTxIds = txRes.rows.map((t) => t.id);
+    const hasBankTables = (await client.query("SELECT to_regclass('public.bank_statement_match_items') AS t")).rows[0].t;
+    if (deletedTxIds.length && hasBankTables) {
+      await client.query(`
+        UPDATE bank_statement_lines SET status = 'open'
+        WHERE status = 'matched' AND id IN (
+          SELECT i2.line_id
+          FROM bank_statement_match_items i
+          JOIN bank_statement_matches m ON m.id = i.match_id AND m.status = 'confirmed'
+          JOIN bank_statement_match_items i2 ON i2.match_id = m.id AND i2.line_id IS NOT NULL
+          WHERE i.wallet_tx_id = ANY($1::int[]))`, [deletedTxIds]);
+      // match items are removed with their match (ON DELETE CASCADE)
+      await client.query(`
+        DELETE FROM bank_statement_matches
+        WHERE id IN (SELECT match_id FROM bank_statement_match_items WHERE wallet_tx_id = ANY($1::int[]))`, [deletedTxIds]);
+      await client.query('DELETE FROM bank_statement_app_checks WHERE wallet_tx_id = ANY($1::int[])', [deletedTxIds]);
+    }
+
     // 4a. Delete Wallet Transactions
     await client.query(`
       DELETE FROM wallet_transactions 

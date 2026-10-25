@@ -60,6 +60,7 @@ const CATEGORIES = [
   { id: 17, name: "Daily Adjustment", color: "#F59E0B", icon: "⚖️", requires_approval: false },
   { id: 18, name: "Refreshments / Pantry", color: "#0EA5E9", icon: "💧", requires_approval: false },
   { id: 19, name: "Software Subscriptions", color: "#8B5CF6", icon: "☁️", requires_approval: false },
+  { id: 20, name: "Donations", color: "#DB2777", icon: "🤝", requires_approval: false },
 ];
 
 const STATUSES = [
@@ -232,7 +233,7 @@ const ExpenseEntry = () => {
     return expenses.filter((expense) => {
       if (q) {
         // any of these can be null, so never call string methods on them directly
-        const hit = [expense.description, expense.receipt_number, expense.category, expense.remarks, expense.wallet_name]
+        const hit = [expense.description, expense.receipt_number, expense.category, expense.remarks, expense.wallet_name, expense.team_name]
           .some((f) => f && String(f).toLowerCase().includes(q));
         if (!hit) return false;
       }
@@ -361,8 +362,8 @@ const ExpenseEntry = () => {
   const exportToCSV = () => {
     if (filteredExpenses.length === 0) { toast.info("Nothing to export for this selection"); return; }
     const rows = [
-      ["Date", "Category", "Description", "Amount", "Wallet", "Payment Method", "Receipt No", "Status", "Remarks"],
-      ...filteredExpenses.map((e) => [ymd(e.expense_date), e.category, e.description, e.amount, e.wallet_name, e.payment_method, e.receipt_number, e.status, e.remarks]),
+      ["Date", "Category", "Description", "Amount", "Wallet", "Team", "Payment Method", "Receipt No", "Status", "Remarks"],
+      ...filteredExpenses.map((e) => [ymd(e.expense_date), e.category, e.description, e.amount, e.wallet_name, e.team_name, e.payment_method, e.receipt_number, e.status, e.remarks]),
     ];
     const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
@@ -424,6 +425,7 @@ const ExpenseEntry = () => {
             <span className="inline-flex items-center gap-1"><FiCalendar className="h-3 w-3" />{formatDate(expense.expense_date)}</span>
             <span className="rounded-full px-2 py-0.5 font-medium" style={{ backgroundColor: `${category?.color || "#6B7280"}1f`, color: category?.color || "#6B7280" }}>{expense.category}</span>
             {expense.receipt_number && <span className="inline-flex items-center gap-1"><FiFileText className="h-3 w-3" />{expense.receipt_number}</span>}
+            {expense.team_name && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600" title="Team">👥 {expense.team_name}</span>}
             {expense.payment_method && <span>{pm?.icon} {pm?.name || String(expense.payment_method).replace(/_/g, " ")}</span>}
             {expense.is_recurring && <span className="rounded-full bg-violet-50 px-2 py-0.5 font-medium text-violet-700">Recurring{expense.recurrence_type && expense.recurrence_type !== "none" ? ` (${expense.recurrence_type})` : ""}</span>}
           </div>
@@ -779,6 +781,9 @@ const ExpenseEntry = () => {
             <div className="border-b border-slate-100 p-6">
               <h2 className="text-lg font-semibold text-slate-900">Correct expense</h2>
               <p className="mt-1 text-sm text-slate-500">Original: {correctingExpense.description} · {formatCurrency(correctingExpense.amount)} on {formatDate(correctingExpense.expense_date)}</p>
+              {correctingExpense.team_name && (
+                <p className="mt-1 text-xs text-slate-500">Team: <b>{correctingExpense.team_name}</b> — if the team is wrong, ask an admin to change it.</p>
+              )}
             </div>
             <form onSubmit={handleCorrectExpense} className="space-y-4 p-6">
               <label className="block space-y-1.5">

@@ -27,6 +27,8 @@ const authenticateToken = (req, res, next) => {
 
 router.use(authenticateToken);
 
+const httpErr = (status, message) => Object.assign(new Error(message), { status });
+
 /* ======================================================
    TEAM RESOLUTION HELPER
 ====================================================== */
@@ -244,9 +246,10 @@ router.post("/", async (req, res) => {
 router.get("/my", async (req, res) => {
   try {
     const result = await req.db.query(
-      `SELECT e.*, w.name AS wallet_name
+      `SELECT e.*, w.name AS wallet_name, t.name AS team_name
        FROM expenses e
        JOIN wallets w ON e.wallet_id = w.id
+       LEFT JOIN teams t ON t.id = e.team_id
        WHERE e.staff_id = $1 AND e.centre_id = $2
          AND COALESCE(e.is_reversal, FALSE) = FALSE
        ORDER BY e.expense_date DESC, e.created_at DESC`,
@@ -261,36 +264,134 @@ router.get("/my", async (req, res) => {
 
 /* ======================================================
    DELETE EXPENSE
+   - pending (never debited): the owner or an admin can delete it, as before
+   - approved / auto approved: ADMIN only. The amount goes back to the wallet
+     (a credit posted today, so today's cash count is right), the expense is kept
+     hidden (is_reversal, "Deleted by …" in remarks — kept for the audit
+     trail) and any bank statement match on it is removed.
 ====================================================== */
 router.delete("/:id", async (req, res) => {
   const client = await req.db.connect();
   try {
-    const expenseId = req.params.id;
+    const expenseId = parseInt(req.params.id, 10);
+    if (Number.isNaN(expenseId)) return res.status(400).json({ error: "Invalid expense id" });
+    const reason = String(req.body?.reason || req.query.reason || "").trim().slice(0, 300);
+
     await client.query("BEGIN");
 
     const expRes = await client.query(
-      `SELECT id, staff_id, status, requires_approval FROM expenses WHERE id = $1`,
+      `SELECT * FROM expenses WHERE id = $1 AND COALESCE(is_reversal, FALSE) = FALSE FOR UPDATE`,
       [expenseId]
     );
-    if (expRes.rows.length === 0) {
-      return res.status(404).json({ error: "Expense not found" });
-    }
+    if (expRes.rows.length === 0) throw httpErr(404, "Expense not found");
     const exp = expRes.rows[0];
-    if (!exp.requires_approval || exp.status !== "pending") {
-      return res.status(400).json({ error: "Expense cannot be deleted" });
-    }
-    const isOwner = exp.staff_id === req.user.id;
+
     const isAdmin = ["admin", "superadmin"].includes(req.user.role);
-    if (!isOwner && !isAdmin) {
-      return res.status(403).json({ error: "Access denied" });
+    const isOwner = exp.staff_id === req.user.id;
+    if (req.user.role !== "superadmin" && Number(exp.centre_id) !== Number(req.user.centre_id)) {
+      throw httpErr(403, "Access denied");
     }
-    await client.query(`DELETE FROM expenses WHERE id = $1`, [expenseId]);
+
+    // 1. pending — nothing was debited
+    if (exp.status === "pending") {
+      if (!isOwner && !isAdmin) throw httpErr(403, "Access denied");
+      await client.query(`DELETE FROM expenses WHERE id = $1`, [expenseId]);
+      await client.query("COMMIT");
+      return res.json({ message: "Expense deleted successfully" });
+    }
+
+    // 2. posted expense
+    if (!["approved", "auto_approved"].includes(exp.status)) {
+      throw httpErr(400, `An expense with status "${exp.status}" can't be deleted`);
+    }
+    if (!isAdmin) throw httpErr(403, "Only an admin can delete an expense that was already debited");
+    if (reason.length < 3) throw httpErr(400, "Add a short reason for deleting this expense");
+
+    // the debit(s) this expense made (latest version of each correction group)
+    const debits = (await client.query(
+      `SELECT DISTINCT ON (COALESCE(NULLIF(correction_group_id::text, ''), id::text))
+              id, wallet_id, amount::numeric AS amount, type, is_reversal
+       FROM wallet_transactions
+       WHERE reference_id = $1 AND category = 'Expense'
+       ORDER BY COALESCE(NULLIF(correction_group_id::text, ''), id::text), created_at DESC, id DESC`,
+      [expenseId]
+    )).rows.filter((t) => t.type === "debit" && !t.is_reversal);
+
+    if (!debits.length) {
+      throw httpErr(409, "No wallet debit is linked to this expense, so nothing can be returned automatically. Correct it by hand.");
+    }
+    const debitIds = debits.map((t) => t.id);
+    const net = debits.reduce((sum, t) => sum + Number(t.amount), 0);
+
+    // bank statement links (only if the bank statement tables exist)
+    const hasBankTables = (await client.query(
+      "SELECT to_regclass('public.bank_statement_match_items') AS t"
+    )).rows[0].t;
+    // a match may point at an earlier version of this expense (before a correction): same group
+    const linkIds = (await client.query(
+      `SELECT id FROM wallet_transactions
+        WHERE id = ANY($1::int[])
+           OR correction_group_id IN (SELECT correction_group_id FROM wallet_transactions
+                                      WHERE id = ANY($1::int[]) AND correction_group_id IS NOT NULL)`,
+      [debitIds]
+    )).rows.map((r) => r.id);
+    if (linkIds.length && hasBankTables) {
+      await client.query(
+        `UPDATE bank_statement_lines SET status = 'open'
+         WHERE status = 'matched' AND id IN (
+           SELECT i2.line_id FROM bank_statement_match_items i
+           JOIN bank_statement_matches m ON m.id = i.match_id AND m.status = 'confirmed'
+           JOIN bank_statement_match_items i2 ON i2.match_id = m.id AND i2.line_id IS NOT NULL
+           WHERE i.wallet_tx_id = ANY($1::int[]))`,
+        [linkIds]
+      );
+      await client.query(
+        `DELETE FROM bank_statement_matches
+         WHERE id IN (SELECT match_id FROM bank_statement_match_items WHERE wallet_tx_id = ANY($1::int[]))
+            OR adjustment_tx_id = ANY($1::int[])`,
+        [linkIds]
+      );
+      await client.query(`DELETE FROM bank_statement_app_checks WHERE wallet_tx_id = ANY($1::int[])`, [linkIds]);
+    }
+
+    // money back to the wallet, posted now, under the staff who made the expense
+    for (const d of debits) {
+      await client.query(
+        `INSERT INTO wallet_transactions (
+           wallet_id, staff_id, type, amount, description, category, team_id,
+           reference_id, reference_type, created_at)
+         VALUES ($1, $2, 'credit', $3, $4, 'Expense', $5, $6, 'expense', NOW())`,
+        [d.wallet_id, exp.staff_id, d.amount,
+         `Expense deleted, amount returned: ${exp.category} (#${expenseId}) — ${reason}`.slice(0, 500),
+         exp.team_id, expenseId]
+      );
+      await client.query(`UPDATE wallets SET balance = balance + $1 WHERE id = $2`, [d.amount, d.wallet_id]);
+    }
+
+    await client.query(
+      // status stays as it was (the status column only allows its fixed values); is_reversal hides it
+      // from every list and report, the same way a corrected original is hidden
+      `UPDATE expenses
+          SET is_reversal = TRUE,
+              remarks = CONCAT_WS(' | ', NULLIF(remarks, ''), $2::text), updated_at = NOW()
+        WHERE id = $1`,
+      [expenseId, `Deleted by ${req.user.username || req.user.id}: ${reason}`]
+    );
+
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ('Expense Deleted', $1, $2, $3, NOW())`,
+      [req.user.username || String(req.user.id),
+       `Expense #${expenseId} (${exp.category}, ₹${Number(exp.amount).toFixed(2)}) deleted, ₹${net.toFixed(2)} returned to the wallet. Reason: ${reason}`.slice(0, 1000),
+       exp.centre_id]
+    );
+
     await client.query("COMMIT");
-    res.json({ message: "Expense deleted successfully" });
+    res.json({ message: "Expense deleted and amount returned to the wallet", returned: net });
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     console.error("Delete expense error:", err);
-    res.status(500).json({ error: "Failed to delete expense" });
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to delete expense" });
   } finally {
     client.release();
   }
@@ -522,12 +623,16 @@ router.put("/:id/reject", async (req, res) => {
 /* ======================================================
    CORRECTION ENDPOINT – FULLY HARDENED
 ====================================================== */
-const httpErr = (status, message) => Object.assign(new Error(message), { status });
- 
 router.put("/:id/correct", async (req, res) => {
   const amount = Number(req.body.amount);
   const walletId = Number(req.body.wallet_id);
   const reason = req.body.reason;
+  // team_id: undefined = keep, null / "" = no team, number = that team
+  const teamGiven = Object.prototype.hasOwnProperty.call(req.body, "team_id");
+  const teamInput = teamGiven && req.body.team_id !== null && req.body.team_id !== "" ? Number(req.body.team_id) : null;
+  if (teamGiven && teamInput !== null && !Number.isInteger(teamInput)) {
+    return res.status(400).json({ error: "Invalid team" });
+  }
   const expenseId = req.params.id;
  
   if (!(amount > 0) || !Number.isInteger(walletId)) {
@@ -562,6 +667,50 @@ router.put("/:id/correct", async (req, res) => {
       throw httpErr(400, `Cannot correct an expense with status "${original.status}"`);
     }
  
+    // only an admin moves an expense to another team (team targets depend on it)
+    if (teamGiven && !isAdmin && Number(teamInput || 0) !== Number(original.team_id || 0)) {
+      throw httpErr(403, "Only an admin can change the team of an expense");
+    }
+
+    // team: must be a team of this centre or a global team
+    const newTeamId = teamGiven ? teamInput : original.team_id;
+    if (newTeamId !== null && newTeamId !== undefined && Number(newTeamId) !== Number(original.team_id)) {
+      const t = await client.query(
+        `SELECT id FROM teams WHERE id = $1 AND (centre_id = $2 OR centre_id IS NULL OR is_global = TRUE)`,
+        [newTeamId, original.centre_id]
+      );
+      if (!t.rows.length) throw httpErr(400, "Team not found for this centre");
+    }
+
+    // Only the team changed: fix it in place — no money moves, the bank statement match stays
+    const sameMoney = Math.round(amount * 100) === Math.round(Number(original.amount) * 100)
+      && walletId === Number(original.wallet_id);
+    if (sameMoney) {
+      if (Number(newTeamId || 0) === Number(original.team_id || 0)) {
+        throw httpErr(400, "Nothing to correct — amount, wallet and team are the same");
+      }
+      await client.query(
+        `UPDATE expenses SET team_id = $1,
+                remarks = CONCAT_WS(' | ', NULLIF(remarks, ''), $2::text), updated_at = NOW()
+          WHERE id = $3`,
+        [newTeamId, `Team corrected${reason ? `: ${reason}` : ""}`, expenseId]
+      );
+      await client.query(
+        `UPDATE wallet_transactions SET team_id = $1
+          WHERE reference_id = $2 AND category = 'Expense'`,
+        [newTeamId, expenseId]
+      );
+      await client.query(
+        `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+         VALUES ('Expense Team Corrected', $1, $2, $3, NOW())`,
+        [req.user.username || String(req.user.id),
+         `Expense #${expenseId}: team #${original.team_id ?? "none"} → #${newTeamId ?? "none"}${reason ? ` (${reason})` : ""}`,
+         original.centre_id]
+      );
+      await client.query("COMMIT");
+      return res.json({ message: "Expense team corrected", data: { ...original, team_id: newTeamId } });
+    }
+
     const groupId = original.correction_group_id || crypto.randomUUID();
  
     const countRes = await client.query(
@@ -591,7 +740,7 @@ router.put("/:id/correct", async (req, res) => {
          wallet_id, staff_id, type, amount, description, category, team_id,
          is_reversal, correction_group_id, reference_id, reference_type, created_at)
        VALUES ($1,$2,'credit',$3,$4,'Expense',$5,TRUE,$6,$7,'expense',NOW())`,
-      [original.wallet_id, req.user.id, original.amount,
+      [original.wallet_id, original.staff_id, original.amount,
        `Expense correction reversal: ${original.category} (Original ID: ${expenseId})`,
        original.team_id, groupId, expenseId]
     );
@@ -609,7 +758,7 @@ router.put("/:id/correct", async (req, res) => {
          correction_group_id, original_expense_id, is_reversal, submitted_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'auto_approved',$13,$14,FALSE,NOW())
        RETURNING *`,
-      [original.centre_id, original.staff_id, original.team_id, original.category, original.category_id,
+      [original.centre_id, original.staff_id, newTeamId ?? null, original.category, original.category_id,
        amount, original.description, reason || original.remarks, walletId, original.payment_method,
        original.receipt_number, original.expense_date, groupId, expenseId]
     );
@@ -620,9 +769,9 @@ router.put("/:id/correct", async (req, res) => {
          wallet_id, staff_id, type, amount, description, category, team_id,
          correction_group_id, reference_id, reference_type, created_at)
        VALUES ($1,$2,'debit',$3,$4,'Expense',$5,$6,$7,'expense',NOW())`,
-      [walletId, req.user.id, amount,
+      [walletId, original.staff_id, amount,
        `Corrected expense: ${original.category} (Original ID: ${expenseId})`,
-       original.team_id, groupId, newExp.rows[0].id]
+       newTeamId ?? null, groupId, newExp.rows[0].id]
     );
     await client.query(`UPDATE wallets SET balance = balance - $1 WHERE id = $2`, [amount, walletId]);
  
