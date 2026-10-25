@@ -124,12 +124,15 @@ const resolvePeriod = (query = {}, fallback = 'month') => {
 };
 
 /* One formula everywhere (matches the tooltip on the Performance page):
-   collection rate 50% + revenue efficiency 30% (₹5,000/day = full marks) + consistency 20% */
-const computeIncentiveScore = ({ collectionRate, avgDailyRevenue, activeDays, totalDays }) => {
+   service charges 50% (avg service charge per active day; SERVICE_CHARGE_FULL_MARKS_PER_DAY = full marks)
+   + collection rate 30% + consistency 20%.
+   (Used to be driven by revenue, which includes department fees that are not the staff's earning.) */
+const SERVICE_CHARGE_FULL_MARKS_PER_DAY = 600; // ₹ per active day that earns the full 50 points — tune to your centres
+const computeIncentiveScore = ({ collectionRate, avgDailyServiceCharge, activeDays, totalDays }) => {
   const collectionScore = Math.min(Math.max(Number(collectionRate) || 0, 0), 100);
-  const revenueScore = Math.min(((Number(avgDailyRevenue) || 0) / 5000) * 100, 100);
+  const chargeScore = Math.min(((Number(avgDailyServiceCharge) || 0) / SERVICE_CHARGE_FULL_MARKS_PER_DAY) * 100, 100);
   const consistencyScore = totalDays > 0 ? Math.min(((Number(activeDays) || 0) / totalDays) * 100, 100) : 0;
-  return Math.round(collectionScore * 0.5 + revenueScore * 0.3 + consistencyScore * 0.2);
+  return Math.round(chargeScore * 0.5 + collectionScore * 0.3 + consistencyScore * 0.2);
 };
 
 /* Summary used by BOTH /dashboard and /workspace-init, so their numbers match.
@@ -160,6 +163,9 @@ const loadPerformanceSummary = async (client, staffId, range) => {
   const totalCollected = parseFloat(r.total_collected || 0);
   const collectionRate = totalBilled > 0 ? Math.round((totalCollected / totalBilled) * 10000) / 100 : 0;
   const avgDailyRevenue = activeDays > 0 ? Math.round((totalCollected / activeDays) * 100) / 100 : 0;
+  const totalServiceCharges = parseFloat(r.total_service_charges || 0);
+  const avgDailyServiceCharge = activeDays > 0 ? Math.round((totalServiceCharges / activeDays) * 100) / 100 : 0;
+  const avgServiceChargePerService = totalServices > 0 ? Math.round((totalServiceCharges / totalServices) * 100) / 100 : 0;
   // "All time" counts from the first service day, not from the year 2000
   const startForDays = range.all ? (r.first_day || range.end) : range.start;
   const totalDays = Math.max(daysIncl(startForDays, range.end), 1);
@@ -175,9 +181,11 @@ const loadPerformanceSummary = async (client, staffId, range) => {
     avg_transaction_value: parseFloat(r.avg_transaction_value || 0),
     collection_rate: collectionRate,
     avg_daily_revenue: avgDailyRevenue,
+    avg_daily_service_charge: avgDailyServiceCharge,
+    avg_service_charge_per_service: avgServiceChargePerService,
     avg_daily_services: activeDays > 0 ? Math.round((totalServices / activeDays) * 100) / 100 : 0,
     total_days: totalDays,
-    incentive_score: computeIncentiveScore({ collectionRate, avgDailyRevenue, activeDays, totalDays }),
+    incentive_score: computeIncentiveScore({ collectionRate, avgDailyServiceCharge, activeDays, totalDays }),
   };
 };
 
@@ -212,6 +220,9 @@ router.get('/dashboard', async (req, res) => {
   const { start: startDate, end: endDate } = range;
 
   const client = await pool.connect();
+  // PERF: one pg client runs its queries one after another — spread the dashboard queries over 3 connections
+  const laneB = await pool.connect();
+  const laneC = await pool.connect();
 
   try {
     const staffId = req.user.id;
@@ -324,7 +335,7 @@ router.get('/dashboard', async (req, res) => {
         AND se.status IN ('completed', 'pending')
         AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       GROUP BY s.id, s.name
-      ORDER BY total_revenue DESC
+      ORDER BY total_profit DESC
       LIMIT 10
     `;
 
@@ -420,6 +431,51 @@ router.get('/dashboard', async (req, res) => {
       ORDER BY DATE_TRUNC('week', se.created_at) ASC
     `;
 
+    // Target (this IST month, independent of the period picker) — same source as the staff dashboard.
+    // Non-fatal: the page still loads if the target tables have a problem.
+    try {
+      await ensureTargets(client, { staffId });
+      await refreshActive(client, { staffId });
+    } catch (e) { console.error('Non-fatal: target refresh failed', e); }
+
+    const targetQuery = `
+      SELECT
+        t.target_amount AS monthly_target,
+        COALESCE((SELECT SUM(se.service_charges) FROM service_entries se
+                  WHERE se.staff_id = $1 AND se.status = 'completed'
+                    AND se.created_at >= date_trunc('month', CURRENT_DATE)), 0) AS current_service_charge
+      FROM staff_monthly_targets t
+      WHERE t.staff_id = $1
+        AND t.month = date_trunc('month', CURRENT_DATE)::date
+    `;
+    const targetHistoryQuery = `
+      SELECT TO_CHAR(month, 'YYYY-MM') AS month, target_amount, achieved_amount, achievement_percent
+      FROM staff_monthly_targets
+      WHERE staff_id = $1
+        AND status = 'closed'
+        AND month < date_trunc('month', CURRENT_DATE)::date
+      ORDER BY month DESC
+      LIMIT 6
+    `;
+    // "Needs your attention": expiries in the next 7 days, deliveries late / due within 3 days
+    const expiringQuery = `
+      SELECT COUNT(*) AS expiring_count
+      FROM service_entries se
+      WHERE se.staff_id = $1
+        AND se.expiry_date IS NOT NULL
+        AND se.is_expiry_dismissed = FALSE
+        AND se.expiry_date::date BETWEEN CURRENT_DATE AND CURRENT_DATE + 7
+    `;
+    const deliveriesQuery = `
+      SELECT
+        COUNT(*) FILTER (WHERE tr.estimated_delivery::date < CURRENT_DATE) AS late_count,
+        COUNT(*) FILTER (WHERE tr.estimated_delivery::date BETWEEN CURRENT_DATE AND CURRENT_DATE + 3) AS soon_count
+      FROM service_tracking tr
+      WHERE tr.assigned_to = $1
+        AND tr.status NOT IN ('completed', 'paid', 'delivered')
+        AND tr.estimated_delivery IS NOT NULL
+    `;
+
     const args = [staffId, startDate, endDate];
     const [
       summary,
@@ -433,21 +489,62 @@ router.get('/dashboard', async (req, res) => {
       ratingData,
       monthlyTrends,
       attendanceData,
-      weeklyBreakdown
+      weeklyBreakdown,
+      targetData,
+      targetHistoryData,
+      expiringData,
+      deliveriesData
     ] = await Promise.all([
+      // lane A (client)
       loadPerformanceSummary(client, staffId, range),
       client.query(repeatCustomerQuery, args),
       client.query(collectionEfficiencyQuery, args),
       client.query(pendingQuery, [staffId]),
-      client.query(dailyPerformanceQuery, args),
-      client.query(categoryQuery, args),
-      client.query(topCustomersQuery, args),
-      client.query(recentServicesQuery, args),
-      loadRatings(client, staffId, range),
-      client.query(monthlyTrendsQuery, [staffId]),
-      client.query(attendanceQuery, args),
-      client.query(weeklyBreakdownQuery, args)
+      // lane B
+      laneB.query(dailyPerformanceQuery, args),
+      laneB.query(categoryQuery, args),
+      laneB.query(topCustomersQuery, args),
+      laneB.query(recentServicesQuery, args),
+      // lane C
+      loadRatings(laneC, staffId, range),
+      laneC.query(monthlyTrendsQuery, [staffId]),
+      laneC.query(attendanceQuery, args),
+      laneC.query(weeklyBreakdownQuery, args),
+      client.query(targetQuery, [staffId]),
+      laneB.query(targetHistoryQuery, [staffId]),
+      laneC.query(expiringQuery, [staffId]),
+      laneC.query(deliveriesQuery, [staffId])
     ]);
+
+    // --- Target block: this month, pace and projection ---
+    const [tY, tM, tD] = todayIST().split('-').map(Number);
+    const daysInMonth = new Date(Date.UTC(tY, tM, 0)).getUTCDate();
+    const daysLeft = daysInMonth - tD + 1;               // today still counts
+    const tRow = targetData.rows[0] || {};
+    const monthlyTarget = parseFloat(tRow.monthly_target) || 0;
+    const achievedMonth = parseFloat(tRow.current_service_charge) || 0;
+    const dailyAvgMonth = tD > 0 ? achievedMonth / tD : 0;
+    const targetBlock = {
+      has_target: monthlyTarget > 0,
+      month: `${tY}-${String(tM).padStart(2, '0')}`,
+      monthly_target: monthlyTarget,
+      achieved: achievedMonth,
+      progress_percentage: monthlyTarget > 0 ? (achievedMonth / monthlyTarget) * 100 : 0,
+      days_in_month: daysInMonth,
+      days_elapsed: tD,
+      days_left: daysLeft,
+      remaining: Math.max(monthlyTarget - achievedMonth, 0),
+      needed_per_day: monthlyTarget > 0 ? Math.max(monthlyTarget - achievedMonth, 0) / daysLeft : 0,
+      daily_target: monthlyTarget > 0 ? monthlyTarget / daysInMonth : 0,
+      daily_avg: dailyAvgMonth,
+      projected: dailyAvgMonth * daysInMonth,
+      history: targetHistoryData.rows.map(r => ({
+        month: r.month,
+        target: parseFloat(r.target_amount),
+        achieved: parseFloat(r.achieved_amount),
+        percent: r.achievement_percent === null ? null : parseFloat(r.achievement_percent)
+      }))
+    };
 
     const totalCustomersWithVisits = parseInt(repeatCustomerData.rows[0]?.total_customers || 0, 10);
     const repeatCustomers = parseInt(repeatCustomerData.rows[0]?.repeat_customers || 0, 10);
@@ -495,6 +592,8 @@ router.get('/dashboard', async (req, res) => {
           active_days: summary.active_days,
           unique_customers: summary.unique_customers,
           avg_daily_revenue: summary.avg_daily_revenue,
+          avg_daily_service_charge: summary.avg_daily_service_charge,
+          avg_service_charge_per_service: summary.avg_service_charge_per_service,
           avg_daily_services: summary.avg_daily_services,
           incentive_score: summary.incentive_score,
           repeat_customer_rate: pct(repeatCustomerRate),
@@ -507,6 +606,16 @@ router.get('/dashboard', async (req, res) => {
           pending_amount: parseFloat(pendingData.rows[0]?.pending_amount || 0),
           overdue_count: parseInt(pendingData.rows[0]?.overdue_count || 0, 10),
           overdue_amount: parseFloat(pendingData.rows[0]?.overdue_amount || 0)
+        },
+        target: targetBlock,
+        attention: {
+          overdue_count: parseInt(pendingData.rows[0]?.overdue_count || 0, 10),
+          overdue_amount: parseFloat(pendingData.rows[0]?.overdue_amount || 0),
+          pending_count: parseInt(pendingData.rows[0]?.pending_count || 0, 10),
+          pending_amount: parseFloat(pendingData.rows[0]?.pending_amount || 0),
+          expiring_7d: parseInt(expiringData.rows[0]?.expiring_count || 0, 10),
+          deliveries_late: parseInt(deliveriesData.rows[0]?.late_count || 0, 10),
+          deliveries_soon: parseInt(deliveriesData.rows[0]?.soon_count || 0, 10)
         },
         daily_performance: dailyData.rows.map(row => ({
           date: row.date,
@@ -592,6 +701,8 @@ router.get('/dashboard', async (req, res) => {
       res.status(500).json({ success: false, error: 'Failed to load performance data' });
     }
   } finally {
+    laneB.release();
+    laneC.release();
     client.release();
   }
 });
@@ -1273,12 +1384,13 @@ router.get('/service-breakdown', async (req, res) => {
         AND se.status IN ('completed', 'pending')
         AND se.created_at >= $2::date AND se.created_at < ($3::date + 1)
       GROUP BY s.id, s.name
-      ORDER BY total_revenue DESC
+      ORDER BY total_profit DESC
     `;
     const breakdown = await client.query(breakdownQuery, [staffId, startDate, endDate]);
     
     // Calculate total for percentages
     const totalRevenue = breakdown.rows.reduce((sum, row) => sum + parseFloat(row.total_revenue), 0);
+    const totalProfit = breakdown.rows.reduce((sum, row) => sum + parseFloat(row.total_profit), 0);
     const totalServices = breakdown.rows.reduce((sum, row) => sum + parseInt(row.total_services), 0);
     
     res.json({
@@ -1293,6 +1405,9 @@ router.get('/service-breakdown', async (req, res) => {
         unique_customers: parseInt(row.unique_customers),
         revenue_per_service: parseFloat(row.revenue_per_service),
         revenue_percentage: totalRevenue > 0 ? (parseFloat(row.total_revenue) / totalRevenue) * 100 : 0,
+        // service charges are what the staff earns — share and average are based on them
+        profit_percentage: totalProfit > 0 ? (parseFloat(row.total_profit) / totalProfit) * 100 : 0,
+        avg_profit: parseInt(row.total_services) > 0 ? parseFloat(row.total_profit) / parseInt(row.total_services) : 0,
         service_percentage: totalServices > 0 ? (parseInt(row.total_services) / totalServices) * 100 : 0
       })),
       totals: {
