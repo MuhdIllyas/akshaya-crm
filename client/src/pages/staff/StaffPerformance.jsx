@@ -7,6 +7,7 @@ import {
   FiUser, FiPhone, FiMail, FiMapPin, FiActivity, FiSmile,
   FiThumbsUp, FiThumbsDown, FiLoader, FiInfo, FiEye, FiZap, FiHeart, FiGift, FiX
 } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Chart as ChartJS,
@@ -20,9 +21,11 @@ import {
   Legend,
   Filler,
   ArcElement,
-  RadialLinearScale
+  RadialLinearScale,
+  BarController,
+  LineController
 } from 'chart.js';
-import { Line, Bar, Doughnut, Radar } from 'react-chartjs-2';
+import { Doughnut, Chart as MixedChart } from 'react-chartjs-2';
 import { toast } from 'react-toastify';
 
 // Register Chart.js components
@@ -37,7 +40,9 @@ ChartJS.register(
   Legend,
   Filler,
   ArcElement,
-  RadialLinearScale
+  RadialLinearScale,
+  BarController,
+  LineController
 );
 
 // Format currency
@@ -87,191 +92,31 @@ const formatTime = (time) => {
   });
 };
 
-// Stat Card Component
-const StatCard = ({ title, value, icon: Icon, color, subtitle, trend, onClick, loading, trendValue }) => (
-  <motion.div
-    whileHover={{ y: -2 }}
-    className="bg-white rounded-2xl border border-slate-200 hover:shadow-lg transition-all duration-300 cursor-pointer p-5"
-    onClick={onClick}
-  >
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="font-medium text-slate-600 mb-1 text-sm">{title}</p>
-        {loading ? (
-          <div className="h-8 w-24 bg-slate-200 animate-pulse rounded"></div>
-        ) : (
-          <p className="font-bold text-slate-900 mb-1 text-2xl">{value}</p>
-        )}
-        {subtitle && (
-          <p className="text-slate-500 text-sm">{subtitle}</p>
-        )}
-        {trend !== undefined && trendValue !== undefined && (
-          <p className={`font-medium text-sm mt-1 flex items-center ${trendValue >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {trendValue >= 0 ? <FiTrendingUp className="mr-1 h-3 w-3" /> : <FiTrendingDown className="mr-1 h-3 w-3" />}
-            {Math.round(Math.abs(trendValue))}% {trend}
-          </p>
-        )}
-      </div>
-      <div className={`rounded-xl ${color} p-3`}>
-        <Icon className="text-white h-6 w-6" />
-      </div>
-    </div>
-  </motion.div>
-);
-
-// Performance Gauge Component
-const PerformanceGauge = ({ score, loading }) => {
-  const getScoreColor = () => {
-    if (score >= 80) return 'from-emerald-500 to-emerald-600';
-    if (score >= 60) return 'from-amber-500 to-amber-600';
-    return 'from-rose-500 to-rose-600';
-  };
-  
-  const getScoreLabel = () => {
-    if (score >= 80) return 'Excellent';
-    if (score >= 60) return 'Good';
-    if (score >= 40) return 'Average';
-    return 'Needs Improvement';
-  };
-  
-  const getScoreMessage = () => {
-    if (score >= 80) return 'Outstanding! Keep up the great work!';
-    if (score >= 60) return 'Good performance. Aim higher!';
-    if (score >= 40) return 'Room for improvement. Stay focused!';
-    return 'Need to work harder. Ask for help if needed!';
-  };
-  
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-          <FiAward className="h-4 w-4 mr-2 text-navy-700" />
-          Performance Score
-        </h3>
-        <div className="relative group">
-          <FiInfo className="h-4 w-4 text-slate-500 cursor-pointer" />
-          <div className="absolute bottom-full right-0 mb-2 hidden group-hover:block w-64 p-2 bg-slate-900 text-white text-xs rounded-xl z-10">
-            Score based on collection rate (50%), revenue efficiency (30%), and consistency (20%)
-          </div>
-        </div>
-      </div>
-      
-      {loading ? (
-        <div className="h-32 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-navy-700"></div>
-        </div>
-      ) : (
-        <div className="text-center">
-          <div className="relative inline-block">
-            <svg className="w-32 h-32">
-              <circle
-                className="text-slate-200"
-                strokeWidth="12"
-                stroke="currentColor"
-                fill="transparent"
-                r="54"
-                cx="64"
-                cy="64"
-              />
-              <circle
-                className="transition-all duration-1000"
-                strokeWidth="12"
-                strokeDasharray={339.292}
-                strokeDashoffset={339.292 * (1 - score / 100)}
-                strokeLinecap="round"
-                stroke={`url(#gradient)`}
-                fill="transparent"
-                r="54"
-                cx="64"
-                cy="64"
-              />
-              <defs>
-                <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor={score >= 80 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444'} />
-                  <stop offset="100%" stopColor={score >= 80 ? '#059669' : score >= 60 ? '#D97706' : '#DC2626'} />
-                </linearGradient>
-              </defs>
-            </svg>
-            <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-              <p className="text-2xl font-bold text-slate-900">{score}%</p>
-              <p className="text-xs text-slate-500">{getScoreLabel()}</p>
-            </div>
-          </div>
-          <p className="text-xs text-slate-600 mt-3">{getScoreMessage()}</p>
-        </div>
-      )}
-    </div>
-  );
+// "2026-09" -> "Sep"
+const shortMonth = (ym) => {
+  if (!ym) return '';
+  const d = new Date(`${String(ym).slice(0, 7)}-01T12:00:00+05:30`);
+  return Number.isNaN(d.getTime()) ? String(ym) : d.toLocaleDateString('en-IN', { month: 'short', timeZone: 'Asia/Kolkata' });
 };
 
-// Rating Card Component
-const RatingCard = ({ rating, totalReviews, distribution, loading }) => (
-  <div className="bg-white rounded-2xl border border-slate-200 p-5">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-        <FiStar className="h-4 w-4 mr-2 text-amber-500" />
-        Customer Rating
-      </h3>
-    </div>
-    
-    {loading ? (
-      <div className="space-y-3">
-        <div className="h-12 bg-slate-200 animate-pulse rounded"></div>
-        <div className="h-8 bg-slate-200 animate-pulse rounded"></div>
-      </div>
-    ) : (
-      <>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <div className="text-3xl font-bold text-slate-900">
-              {rating || '—'}
-            </div>
-            <div className="flex items-center mt-1">
-              {[1, 2, 3, 4, 5].map(star => (
-                <FiStar
-                  key={star}
-                  className={`h-4 w-4 ${star <= Math.round(rating || 0) ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`}
-                />
-              ))}
-            </div>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-slate-600">{totalReviews || 0} reviews</p>
-            <p className="text-xs text-slate-500">Total feedback</p>
-          </div>
-        </div>
-        
-        {/* Rating Distribution */}
-        {distribution && distribution.length > 0 && (
-          <div className="space-y-2 mt-4 pt-4 border-t border-slate-100">
-            {distribution.map((item, idx) => {
-              const percentage = totalReviews > 0 ? (item.count / totalReviews) * 100 : 0;
-              return (
-                <div key={idx} className="flex items-center text-xs">
-                  <span className="w-8 text-slate-600">{item.rating}★</span>
-                  <div className="flex-1 mx-2">
-                    <div className="w-full bg-slate-200 rounded-full h-1.5">
-                      <div
-                        className={`h-1.5 rounded-full ${
-                          item.rating >= 4 ? 'bg-emerald-500' :
-                          item.rating >= 3 ? 'bg-amber-500' : 'bg-rose-500'
-                        }`}
-                        style={{ width: `${percentage}%` }}
-                      />
-                    </div>
-                  </div>
-                  <span className="w-12 text-right text-slate-500">
-                    {Math.round(percentage)}% ({item.count})
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </>
-    )}
-  </div>
-);
+// "2026-10-14" -> "14 Oct"
+const shortDay = (ymd) => {
+  if (!ymd) return '';
+  const d = new Date(`${ymd}T00:00:00+05:30`);
+  return Number.isNaN(d.getTime()) ? String(ymd) : d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'Asia/Kolkata' });
+};
+
+// small "▲ 12% vs last period" pill
+const TrendPill = ({ value, label = 'vs last period' }) => {
+  if (value === undefined || value === null || Number.isNaN(Number(value))) return null;
+  const up = Number(value) >= 0;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-semibold ${up ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+      {up ? <FiTrendingUp className="h-3 w-3" /> : <FiTrendingDown className="h-3 w-3" />}
+      {Math.round(Math.abs(Number(value)))}% {label}
+    </span>
+  );
+};
 
 // Achievement Card Component
 const AchievementCard = ({ achievement, index }) => (
@@ -319,6 +164,7 @@ const AchievementCard = ({ achievement, index }) => (
 
 // Main Staff Performance Component
 const StaffPerformance = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [period, setPeriod] = useState('month');
@@ -526,87 +372,78 @@ const StaffPerformance = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
   
-  // Chart data for daily performance
-  const dailyChartData = useMemo(() => {
+  // Service charge per day (bars) + daily target (dashed line)
+  const chargeChartData = useMemo(() => {
     if (!data?.daily_performance?.length) return null;
-    
+    const dayTarget = data?.target?.has_target ? Math.round(data.target.daily_target) : null;
     return {
-      labels: data.daily_performance.map(d => formatDate(d.date)),
+      labels: data.daily_performance.map(d => shortDay(d.date)),
       datasets: [
         {
-          label: 'Revenue Collected (₹)',
-          data: data.daily_performance.map(d => d.collected_amount),
-          borderColor: 'rgb(30, 58, 95)',
-          backgroundColor: 'rgba(30, 58, 95, 0.1)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y',
+          type: 'bar',
+          label: 'Service charge',
+          data: data.daily_performance.map(d => d.service_charges),
+          backgroundColor: 'rgba(59, 93, 143, 0.85)',
+          hoverBackgroundColor: '#1e3a5f',
+          borderRadius: 4,
+          maxBarThickness: 28,
+          order: 2,
         },
-        {
-          label: 'Services Count',
-          data: data.daily_performance.map(d => d.services_count),
-          borderColor: 'rgb(16, 185, 129)',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          tension: 0.4,
-          fill: true,
-          yAxisID: 'y1',
-        }
+        ...(dayTarget ? [{
+          type: 'line',
+          label: 'Daily target',
+          data: data.daily_performance.map(() => dayTarget),
+          borderColor: '#f59e0b',
+          borderDash: [6, 4],
+          borderWidth: 1.5,
+          pointRadius: 0,
+          fill: false,
+          order: 1,
+        }] : [])
       ]
     };
   }, [data]);
-  
-  const dailyChartOptions = {
+
+  const chargeChartOptions = useMemo(() => ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: 'index', intersect: false },
+    onClick: (_evt, elements) => {
+      const idx = elements?.[0]?.index;
+      const day = idx !== undefined ? data?.daily_performance?.[idx]?.date : null;
+      if (day) fetchDailyLog(day);
+    },
     plugins: {
-      legend: { position: 'top', labels: { font: { size: 11 } } },
+      legend: { display: false },
       tooltip: {
         callbacks: {
-          label: (context) => {
-            let label = context.dataset.label || '';
-            let value = context.raw;
-            if (context.dataset.label?.includes('Revenue')) {
-              return `${label}: ${formatCurrency(value)}`;
-            }
-            return `${label}: ${value}`;
+          label: (ctx) => `${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`,
+          afterBody: (items) => {
+            const d = data?.daily_performance?.[items?.[0]?.dataIndex];
+            return d ? `${d.services_count} service${d.services_count === 1 ? '' : 's'}` : '';
           }
         }
       }
     },
     scales: {
-      y: {
-        type: 'linear',
-        display: true,
-        position: 'left',
-        title: { display: true, text: 'Revenue (₹)', font: { size: 10 } },
-        ticks: { callback: (value) => `₹${value/1000}k`, font: { size: 10 } }
-      },
-      y1: {
-        type: 'linear',
-        display: true,
-        position: 'right',
-        title: { display: true, text: 'Services', font: { size: 10 } },
-        grid: { drawOnChartArea: false },
-        ticks: { font: { size: 10 } }
-      },
-      x: {
-        ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 45 }
-      }
+      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, callback: (v) => `₹${Number(v).toLocaleString('en-IN')}` } },
+      x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }
     }
-  };
-  
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [data]);
+
   // Category breakdown chart - FIXED: Added responsive wrapper with proper height
   const categoryChartData = useMemo(() => {
     if (!serviceBreakdown?.length) return null;
     
-    const top5 = serviceBreakdown.slice(0, 5);
+    const top5 = serviceBreakdown.filter(c => c.total_profit > 0).slice(0, 5);
+    if (!top5.length) return null;
     const colors = ['#1e3a5f', '#10B981', '#F59E0B', '#E11D48', '#3b5d8f'];
     
     return {
       labels: top5.map(c => c.service_name),
       datasets: [{
-        data: top5.map(c => c.total_revenue),
+        data: top5.map(c => c.total_profit),
         backgroundColor: colors,
         borderWidth: 0,
         hoverOffset: 10
@@ -637,37 +474,69 @@ const StaffPerformance = () => {
     }
   };
   
-  // Monthly trends chart
-  const monthlyTrendsChart = useMemo(() => {
-    if (!data?.monthly_trends?.length) return null;
-    
-    return {
-      labels: data.monthly_trends.map(t => t.month),
-      datasets: [
-        {
-          label: 'Revenue',
-          data: data.monthly_trends.map(t => t.total_collected),
-          borderColor: 'rgb(30, 58, 95)',
-          backgroundColor: 'rgba(30, 58, 95, 0.1)',
-          fill: true,
-          tension: 0.4,
-        },
-        {
-          label: 'Profit',
-          data: data.monthly_trends.map(t => t.service_charges),
-          borderColor: 'rgb(16, 185, 129)',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          fill: true,
-          tension: 0.4,
-        }
-      ]
-    };
-  }, [data]);
-  
   const summary = data?.summary || {};
   const pending = data?.pending || {};
   const ratings = data?.ratings || {};
   const attendance = data?.attendance || {};
+  const target = data?.target || {};
+  const attention = data?.attention || {};
+
+  // Top 3 days by service charge
+  const bestDays = useMemo(() => (
+    [...(data?.daily_performance || [])]
+      .filter(d => d.service_charges > 0)
+      .sort((a, b) => b.service_charges - a.service_charges)
+      .slice(0, 3)
+  ), [data]);
+
+  // Where the service charges come from: top 4 services + the rest
+  const chargeShare = useMemo(() => {
+    const cats = (data?.category_breakdown || []).filter(c => c.total_profit > 0);
+    const total = cats.reduce((sum, c) => sum + c.total_profit, 0);
+    if (!total) return { total: 0, parts: [] };
+    const top = cats.slice(0, 4).map(c => ({ name: c.service_name, value: c.total_profit }));
+    const rest = cats.slice(4).reduce((sum, c) => sum + c.total_profit, 0);
+    if (rest > 0) top.push({ name: 'Others', value: rest });
+    return { total, parts: top.map(p => ({ ...p, pct: (p.value / total) * 100 })) };
+  }, [data]);
+  const shareColors = ['bg-navy-700', 'bg-navy-500', 'bg-sky-400', 'bg-emerald-500', 'bg-slate-300'];
+  const periodProfitChange = comparison?.metrics?.profit?.change;
+
+  // "Needs your attention" rows (only things that need action)
+  const attentionItems = [];
+  if (attention.overdue_count > 0) attentionItems.push({
+    key: 'overdue', tone: 'rose',
+    title: `${attention.overdue_count} overdue payment${attention.overdue_count === 1 ? '' : 's'}`,
+    sub: `${formatCurrency(attention.overdue_amount)} to collect`,
+    action: 'Collect', to: '/dashboard/staff/pending_payments'
+  });
+  const notOverdueCount = Math.max((attention.pending_count || 0) - (attention.overdue_count || 0), 0);
+  if (notOverdueCount > 0) attentionItems.push({
+    key: 'pending', tone: 'amber',
+    title: `${notOverdueCount} payment${notOverdueCount === 1 ? '' : 's'} pending`,
+    sub: `${formatCurrency(Math.max((attention.pending_amount || 0) - (attention.overdue_amount || 0), 0))} still to collect`,
+    action: 'View', to: '/dashboard/staff/pending_payments'
+  });
+  if (attention.deliveries_late > 0) attentionItems.push({
+    key: 'late', tone: 'rose',
+    title: `${attention.deliveries_late} application${attention.deliveries_late === 1 ? '' : 's'} past delivery date`,
+    sub: 'Update the status or inform the customer',
+    action: 'Track', to: '/dashboard/staff/track_service'
+  });
+  if (attention.deliveries_soon > 0) attentionItems.push({
+    key: 'soon', tone: 'amber',
+    title: `${attention.deliveries_soon} deliver${attention.deliveries_soon === 1 ? 'y' : 'ies'} due in 3 days`,
+    sub: 'Keep these on track',
+    action: 'Track', to: '/dashboard/staff/track_service'
+  });
+  if (attention.expiring_7d > 0) attentionItems.push({
+    key: 'expiry', tone: 'amber',
+    title: `${attention.expiring_7d} expir${attention.expiring_7d === 1 ? 'y' : 'ies'} in the next 7 days`,
+    sub: 'Call customers about renewal',
+    action: 'Calendar', to: '/dashboard/staff/calendar'
+  });
+  const toneBox = { rose: 'bg-rose-50 text-rose-700', amber: 'bg-amber-50 text-amber-700', slate: 'bg-slate-50 text-slate-700' };
+  const onPace = target.has_target && target.projected >= target.monthly_target;
   
   const tabs = [
     { id: 'overview', label: 'Overview', icon: FiBarChart2 },
@@ -690,7 +559,7 @@ const StaffPerformance = () => {
                 <h1 className="font-bold text-slate-900 text-2xl">My Performance Dashboard</h1>
                 <p className="text-slate-600 flex items-center text-sm">
                   <FiBriefcase className="h-3 w-3 mr-1" />
-                  Track your revenue, services, and customer satisfaction
+                  Track your service charges, target and customer satisfaction
                 </p>
               </div>
             </div>
@@ -877,209 +746,257 @@ const StaffPerformance = () => {
           <>
             {/* Overview Tab */}
             {activeTab === 'overview' && (
-              <>
-                {/* Stats Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <StatCard
-                    title="Revenue Collected"
-                    value={formatCurrency(summary.total_collected)}
-                    subtitle={`Billed: ${formatCurrency(summary.total_billed)}`}
-                    icon={FiDollarSign}
-                    color="bg-emerald-600"
-                    loading={loading}
-                    trend="vs last period"
-                    trendValue={comparison?.metrics?.revenue?.change}
-                  />
-                  <StatCard
-                    title="Services Completed"
-                    value={summary.total_services || 0}
-                    subtitle="Total services"
-                    icon={FiBriefcase}
-                    color="bg-navy-700"
-                    loading={loading}
-                    trend="vs last period"
-                    trendValue={comparison?.metrics?.services?.change}
-                  />
-                  <StatCard
-                    title="Collection Rate"
-                    value={`${summary.collection_rate || 0}%`}
-                    subtitle="Of total billed"
-                    icon={FiTarget}
-                    color="bg-navy-500"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="Service Charge Earned"
-                    value={formatCurrency(summary.total_service_charges)}
-                    subtitle="Your profit"
-                    icon={FiTrendingUp}
-                    color="bg-amber-500"
-                    loading={loading}
-                    trend="vs last period"
-                    trendValue={comparison?.metrics?.profit?.change}
-                  />
-                </div>
-                
-                {/* Second Row - Enhanced Metrics */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                  <StatCard
-                    title="Avg Daily Revenue"
-                    value={formatCurrency(summary.avg_daily_revenue)}
-                    subtitle="Per active day"
-                    icon={FiActivity}
-                    color="bg-navy-700"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="Avg Transaction Value"
-                    value={formatCurrency(summary.avg_transaction_value)}
-                    subtitle="Per service"
-                    icon={FiTrendingUp}
-                    color="bg-slate-600"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="Repeat Customer Rate"
-                    value={`${summary.repeat_customer_rate || 0}%`}
-                    subtitle="Returning customers"
-                    icon={FiUsers}
-                    color="bg-navy-500"
-                    loading={loading}
-                  />
-                  <StatCard
-                    title="CSAT Score"
-                    value={`${summary.csat_score || 0}%`}
-                    subtitle="Customer satisfaction"
-                    icon={FiSmile}
-                    color="bg-amber-500"
-                    loading={loading}
-                  />
-                </div>
-                
-                {/* Performance & Ratings Row */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
-                  <PerformanceGauge score={summary.incentive_score} loading={loading} />
-                  <RatingCard 
-                    rating={ratings.avg_rating} 
-                    totalReviews={ratings.total_reviews}
-                    distribution={ratings.distribution}
-                    loading={loading}
-                  />
-                </div>
-                
-                {/* Pending Payments Alert */}
-                {pending.pending_count > 0 && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-3">
-                        <div className="p-2 bg-amber-100 rounded-xl">
-                          <FiClock className="h-5 w-5 text-amber-600" />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* ===== LEFT: target, charges, per-day chart ===== */}
+                <div className="lg:col-span-2 space-y-5 min-w-0">
+
+                  {/* Target card — always this month */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6">
+                    {target.has_target ? (
+                      <div className="flex flex-col sm:flex-row gap-6 items-center">
+                        <div className="relative w-40 h-40 shrink-0">
+                          <svg viewBox="0 0 36 36" className="w-40 h-40 -rotate-90" aria-hidden="true">
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" strokeWidth="3" />
+                            <circle cx="18" cy="18" r="15.9" fill="none" stroke="#1e3a5f" strokeWidth="3" strokeLinecap="round"
+                              strokeDasharray={`${Math.min(Math.max(target.progress_percentage, 0), 100)} 100`} />
+                          </svg>
+                          <div className="absolute inset-0 flex flex-col items-center justify-center">
+                            <span className="text-3xl font-bold text-navy-700">{Math.round(target.progress_percentage)}%</span>
+                            <span className="text-xs text-slate-500">of target</span>
+                          </div>
                         </div>
-                        <div>
-                          <h3 className="font-semibold text-amber-800">Pending Payments</h3>
-                          <p className="text-amber-700 text-sm mt-1">
-                            You have {pending.pending_count} pending payment{pending.pending_count !== 1 ? 's' : ''} totaling {formatCurrency(pending.pending_amount)}
+                        <div className="flex-1 w-full min-w-0">
+                          <p className="text-sm text-slate-500">This month's service-charge target</p>
+                          <p className="text-3xl font-bold text-slate-900 mt-1">
+                            {formatCurrency(target.achieved)}
+                            <span className="text-lg text-slate-400 font-medium"> / {formatCurrency(target.monthly_target)}</span>
                           </p>
-                          {pending.overdue_count > 0 && (
-                            <p className="text-rose-600 text-sm mt-1">
-                              {pending.overdue_count} overdue payment{pending.overdue_count !== 1 ? 's' : ''} ({formatCurrency(pending.overdue_amount)})
-                            </p>
-                          )}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 text-sm">
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">Need per day</p>
+                              {target.remaining > 0 ? (
+                                <>
+                                  <p className="font-bold text-lg text-slate-900">{formatCurrency(target.needed_per_day)}</p>
+                                  <p className="text-xs text-slate-500">{target.days_left} day{target.days_left === 1 ? '' : 's'} left</p>
+                                </>
+                              ) : (
+                                <p className="font-bold text-lg text-emerald-700">Target reached</p>
+                              )}
+                            </div>
+                            <div className="rounded-xl bg-slate-50 p-3">
+                              <p className="text-xs text-slate-500">Your daily average</p>
+                              <p className="font-bold text-lg text-slate-900">{formatCurrency(target.daily_avg)}</p>
+                              <p className={`text-xs ${target.daily_avg >= target.needed_per_day ? 'text-emerald-600' : 'text-amber-600'}`}>
+                                {target.remaining <= 0 ? 'keep going' : target.daily_avg >= target.needed_per_day ? 'ahead of pace' : 'behind pace'}
+                              </p>
+                            </div>
+                            <div className={`rounded-xl p-3 ${onPace ? 'bg-emerald-50' : 'bg-amber-50'}`}>
+                              <p className={`text-xs ${onPace ? 'text-emerald-700' : 'text-amber-700'}`}>Projected month-end</p>
+                              <p className={`font-bold text-lg ${onPace ? 'text-emerald-700' : 'text-amber-700'}`}>{formatCurrency(target.projected)}</p>
+                              <p className={`text-xs ${onPace ? 'text-emerald-700' : 'text-amber-700'}`}>{onPace ? 'on track for target' : 'below target at this pace'}</p>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                )}
-                
-                {/* Daily Performance Chart */}
-                {dailyChartData && (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="font-semibold text-slate-900 text-sm flex items-center">
-                          <FiBarChart2 className="h-4 w-4 mr-2 text-navy-700" />
-                          Daily Performance
-                        </h3>
-                        <p className="text-slate-500 text-xs">Revenue & Services Trend</p>
-                      </div>
-                      <button
-                        onClick={() => setActiveTab('services')}
-                        className="text-xs text-navy-700 hover:text-navy-800"
-                      >
-                        View Details →
-                      </button>
-                    </div>
-                    <div className="h-80">
-                      <Line data={dailyChartData} options={dailyChartOptions} />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Monthly Trends */}
-                {monthlyTrendsChart && (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6">
-                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
-                      <FiTrendingUp className="h-4 w-4 mr-2 text-navy-700" />
-                      Monthly Performance Trend
-                    </h3>
-                    <div className="h-64">
-                      <Line data={monthlyTrendsChart} options={{ responsive: true, maintainAspectRatio: false }} />
-                    </div>
-                  </div>
-                )}
-                
-                {/* Recent Services */}
-                {data?.recent_services?.length > 0 && (
-                  <div className="bg-white rounded-2xl border border-slate-200 p-5">
-                    <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
-                      <FiClock className="h-4 w-4 mr-2 text-navy-700" />
-                      Recent Services
-                    </h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead className="bg-slate-50 border-b border-slate-200">
-                          <tr>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Date</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Customer</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Service</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Amount</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Your Profit</th>
-                            <th className="py-2 px-3 text-left text-xs font-medium text-slate-500">Status</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {data.recent_services.slice(0, 10).map((service, idx) => (
-                            <tr key={idx} className="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onClick={() => fetchDailyLog(istDay(service.created_at))}>
-                              <td className="py-2 px-3 text-sm text-slate-600">{formatDate(service.created_at)}</td>
-                              <td className="py-2 px-3 text-sm text-slate-900">{service.customer_name}</td>
-                              <td className="py-2 px-3 text-sm text-slate-600">{service.service_name}</td>
-                              <td className="py-2 px-3 font-semibold text-emerald-600 text-sm">{formatCurrency(service.received_amount)}</td>
-                              <td className="py-2 px-3 font-semibold text-navy-700 text-sm">{formatCurrency(service.service_charges)}</td>
-                              <td className="py-2 px-3">
-                                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                                  service.status === 'completed' ? 'bg-emerald-100 text-emerald-700' :
-                                  service.pending_amount > 0 ? 'bg-amber-100 text-amber-700' :
-                                  'bg-slate-100 text-slate-700'
-                                }`}>
-                                  {service.status === 'completed' ? 'Completed' : 
-                                   service.pending_amount > 0 ? `Pending (${formatCurrency(service.pending_amount)})` : 'Completed'}
-                                </span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    {data.recent_services.length > 10 && (
-                      <div className="mt-4 text-center">
-                        <button className="text-sm text-navy-700 hover:text-navy-800">
-                          View All Services →
-                        </button>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-slate-100"><FiTarget className="h-6 w-6 text-navy-700" /></div>
+                        <div>
+                          <p className="font-semibold text-slate-900">No target set for this month</p>
+                          <p className="text-sm text-slate-500">Your target appears here once it is set. Everything below still shows your service charges for the selected period.</p>
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
-              </>
+
+                  {/* Where charges come from + best days */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <h3 className="font-semibold text-slate-900 text-sm">Where your charges come from</h3>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 mb-3">
+                        <span className="text-2xl font-bold text-navy-700">{formatCurrency(summary.total_service_charges)}</span>
+                        <TrendPill value={periodProfitChange} />
+                      </div>
+                      {chargeShare.parts.length > 0 ? (
+                        <>
+                          <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
+                            {chargeShare.parts.map((p, i) => (
+                              <div key={p.name} className={shareColors[i % shareColors.length]} style={{ width: `${p.pct}%` }} title={`${p.name}: ${formatCurrency(p.value)}`} />
+                            ))}
+                          </div>
+                          <ul className="mt-3 space-y-1.5 text-sm">
+                            {chargeShare.parts.map((p, i) => (
+                              <li key={p.name} className="flex items-center justify-between gap-2">
+                                <span className="flex items-center gap-2 min-w-0">
+                                  <span className={`w-2.5 h-2.5 rounded-sm shrink-0 ${shareColors[i % shareColors.length]}`} />
+                                  <span className="truncate text-slate-700">{p.name}</span>
+                                </span>
+                                <span className="font-semibold text-slate-900 shrink-0">{formatCurrency(p.value)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      ) : (
+                        <p className="text-sm text-slate-500 py-4">No service charges in this period.</p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-3">
+                        Department fees handled: {formatCurrency(summary.total_department_charges)} (not your earning)
+                      </p>
+                    </div>
+
+                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                      <h3 className="font-semibold text-slate-900 text-sm mb-3">Your best days</h3>
+                      {bestDays.length > 0 ? (
+                        <ul className="space-y-1">
+                          {bestDays.map((d, i) => (
+                            <li key={d.date}>
+                              <button
+                                type="button"
+                                onClick={() => fetchDailyLog(d.date)}
+                                className="w-full flex items-center justify-between gap-3 px-3 py-2.5 rounded-xl hover:bg-slate-50 text-left min-h-[44px]"
+                              >
+                                <span className="flex items-center gap-2 text-sm text-slate-700">
+                                  <span className="w-6 h-6 rounded-full bg-slate-100 text-navy-700 text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                                  {shortDay(d.date)}
+                                </span>
+                                <span className="font-bold text-navy-700">{formatCurrency(d.service_charges)}</span>
+                                <span className="text-xs text-slate-500 w-20 text-right">{d.services_count} service{d.services_count === 1 ? '' : 's'}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-sm text-slate-500 py-4">No days with service charges in this period.</p>
+                      )}
+                      <p className="text-xs text-slate-500 mt-3">Tap a day to see everything you did that day.</p>
+                    </div>
+                  </div>
+
+                  {/* Service charge per day */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <h3 className="font-semibold text-slate-900 text-sm flex items-center">
+                        <FiBarChart2 className="h-4 w-4 mr-2 text-navy-700" />
+                        Service charge per day
+                      </h3>
+                      {target.has_target && (
+                        <span className="text-xs text-slate-500 flex items-center gap-1.5">
+                          <span className="inline-block w-4 border-t-2 border-dashed border-amber-500" />
+                          daily target {formatCurrency(target.daily_target)}
+                        </span>
+                      )}
+                    </div>
+                    {chargeChartData ? (
+                      <div className="h-64">
+                        <MixedChart type="bar" data={chargeChartData} options={chargeChartOptions} />
+                      </div>
+                    ) : (
+                      <div className="h-40 flex items-center justify-center text-sm text-slate-500">No services in this period</div>
+                    )}
+                  </div>
+                </div>
+
+                {/* ===== RIGHT: history, attention, quick numbers ===== */}
+                <div className="space-y-5 min-w-0">
+                  {/* Needs your attention */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm mb-3">Needs your attention</h3>
+                    <div className="space-y-2.5">
+                      {attentionItems.map(item => (
+                        <button
+                          key={item.key}
+                          type="button"
+                          onClick={() => navigate(item.to)}
+                          className={`w-full flex items-center justify-between gap-3 rounded-xl p-3 text-left min-h-[44px] hover:opacity-90 ${toneBox[item.tone]}`}
+                        >
+                          <span className="min-w-0">
+                            <span className="block font-semibold text-sm">{item.title}</span>
+                            <span className="block text-xs opacity-80">{item.sub}</span>
+                          </span>
+                          <span className="text-xs font-semibold shrink-0 flex items-center">{item.action}<FiChevronRight className="h-4 w-4 ml-0.5" /></span>
+                        </button>
+                      ))}
+                      {target.has_target && target.remaining > 0 && (
+                        <div className={`rounded-xl p-3 ${toneBox.slate}`}>
+                          <p className="font-semibold text-sm">{formatCurrency(target.needed_per_day)} a day to hit your target</p>
+                          <p className="text-xs text-slate-500">You average {formatCurrency(target.daily_avg)} — {target.daily_avg >= target.needed_per_day ? 'on track' : 'a little behind'}</p>
+                        </div>
+                      )}
+                      {attentionItems.length === 0 && !(target.has_target && target.remaining > 0) && (
+                        <div className="rounded-xl bg-emerald-50 text-emerald-700 p-3 flex items-center gap-2 text-sm font-medium">
+                          <FiCheckCircle className="h-4 w-4 shrink-0" /> All clear — nothing needs action right now.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Last 6 months */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm mb-3">Last months vs target</h3>
+                    {target.history?.length > 0 ? (
+                      <ul className="space-y-2.5 text-sm">
+                        {[...target.history].reverse().map(h => {
+                          const pct = h.percent !== null && h.percent !== undefined ? h.percent : (h.target > 0 ? (h.achieved / h.target) * 100 : 0);
+                          const bar = pct >= 100 ? 'bg-emerald-500' : pct >= 90 ? 'bg-amber-400' : 'bg-rose-400';
+                          const txt = pct >= 100 ? 'text-emerald-600' : pct >= 90 ? 'text-amber-600' : 'text-rose-600';
+                          return (
+                            <li key={h.month} className="flex items-center gap-2" title={`${formatCurrency(h.achieved)} of ${formatCurrency(h.target)}`}>
+                              <span className="w-9 text-slate-500">{shortMonth(h.month)}</span>
+                              <div className="flex-1 h-2 rounded-full bg-slate-100">
+                                <div className={`h-2 rounded-full ${bar}`} style={{ width: `${Math.min(Math.max(pct, 0), 100)}%` }} />
+                              </div>
+                              <span className={`w-12 text-right text-xs font-semibold ${txt}`}>{Math.round(pct)}%</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-slate-500">Past months appear here once a month is closed.</p>
+                    )}
+                  </div>
+
+                  {/* Quick numbers */}
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+                    <h3 className="font-semibold text-slate-900 text-sm mb-2">Quick numbers</h3>
+                    <dl className="divide-y divide-slate-100 text-sm">
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Services done</dt>
+                        <dd className="font-semibold text-slate-900 flex items-center gap-2">{summary.total_services || 0}<TrendPill value={comparison?.metrics?.services?.change} label="" /></dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Avg charge / service</dt>
+                        <dd className="font-semibold text-slate-900">{formatCurrency(summary.avg_service_charge_per_service)}</dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Best day</dt>
+                        <dd className="font-semibold text-slate-900">{bestDays[0] ? formatCurrency(bestDays[0].service_charges) : '—'}</dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5" title="Service charges 50% · collection rate 30% · consistency 20%">
+                        <dt className="text-slate-500">Performance score</dt>
+                        <dd className="font-semibold text-slate-900">{summary.incentive_score || 0}/100</dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Customer rating</dt>
+                        <dd className="font-semibold text-slate-900">{ratings.total_reviews > 0 ? `${fixed1(ratings.avg_rating)} ★ (${ratings.total_reviews})` : 'No reviews yet'}</dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Repeat customers</dt>
+                        <dd className="font-semibold text-slate-900">{Math.round(Number(summary.repeat_customer_rate) || 0)}%</dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Collection rate</dt>
+                        <dd className="font-semibold text-slate-900">{Math.round(Number(summary.collection_rate) || 0)}%</dd>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5">
+                        <dt className="text-slate-500">Attendance</dt>
+                        <dd className="font-semibold text-slate-900">{attendance.total_days > 0 ? `${attendance.present_days} / ${attendance.total_days} days` : '—'}</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
             )}
             
             {/* Services Tab */}
@@ -1096,7 +1013,7 @@ const StaffPerformance = () => {
                   <div className="bg-white rounded-2xl border border-slate-200 p-5">
                     <h3 className="font-semibold text-slate-900 text-sm flex items-center mb-4">
                       <FiPieChart className="h-4 w-4 mr-2 text-navy-700" />
-                      Revenue by Service Category
+                      Service Charge by Category
                     </h3>
                     {categoryChartData && serviceBreakdown?.length > 0 ? (
                       <div className="flex flex-col md:flex-row items-center h-auto md:h-80">
@@ -1114,7 +1031,7 @@ const StaffPerformance = () => {
                                   <span className="text-slate-700 truncate max-w-[120px]">{cat.service_name}</span>
                                 </div>
                                 <div className="text-right">
-                                  <p className="font-semibold text-slate-900">{formatCurrency(cat.total_revenue)}</p>
+                                  <p className="font-semibold text-slate-900">{formatCurrency(cat.total_profit)}</p>
                                   <p className="text-xs text-slate-500">{cat.total_services} services</p>
                                 </div>
                               </div>
@@ -1141,7 +1058,7 @@ const StaffPerformance = () => {
                           <div key={idx} className="border-b border-slate-100 pb-3 last:border-0">
                             <div className="flex items-center justify-between mb-2">
                               <span className="font-medium text-slate-900 text-sm">{service.service_name}</span>
-                              <span className="text-xs font-semibold text-emerald-600">{formatCurrency(service.total_revenue)}</span>
+                              <span className="text-xs font-semibold text-navy-700">{formatCurrency(service.total_profit)} earned</span>
                             </div>
                             <div className="grid grid-cols-3 gap-2 text-xs">
                               <div>
@@ -1149,23 +1066,23 @@ const StaffPerformance = () => {
                                 <p className="font-semibold text-slate-700">{service.total_services}</p>
                               </div>
                               <div>
-                                <p className="text-slate-500">Avg Revenue</p>
-                                <p className="font-semibold text-slate-700">{formatCurrency(service.avg_revenue)}</p>
+                                <p className="text-slate-500">Avg Charge</p>
+                                <p className="font-semibold text-navy-700">{formatCurrency(service.avg_profit)}</p>
                               </div>
                               <div>
-                                <p className="text-slate-500">Profit</p>
-                                <p className="font-semibold text-navy-700">{formatCurrency(service.total_profit)}</p>
+                                <p className="text-slate-500">Total billed</p>
+                                <p className="font-semibold text-slate-700">{formatCurrency(service.total_revenue)}</p>
                               </div>
                             </div>
                             <div className="mt-2">
                               <div className="flex justify-between text-xs mb-1">
-                                <span className="text-slate-500">Revenue Share</span>
-                                <span className="text-slate-500">{Math.round(service.revenue_percentage)}%</span>
+                                <span className="text-slate-500">Share of your charges</span>
+                                <span className="text-slate-500">{Math.round(service.profit_percentage || 0)}%</span>
                               </div>
                               <div className="w-full bg-slate-200 rounded-full h-1.5">
                                 <div
                                   className="bg-navy-500 h-1.5 rounded-full"
-                                  style={{ width: `${service.revenue_percentage}%` }}
+                                  style={{ width: `${service.profit_percentage || 0}%` }}
                                 />
                               </div>
                             </div>
