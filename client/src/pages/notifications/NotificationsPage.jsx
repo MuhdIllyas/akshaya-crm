@@ -211,53 +211,56 @@ const matchesTab = (n, tabId) => {
 
 
 // ==========================================================================
-// QUICK PREVIEW COMPONENT
+// NOTIFICATION LIST ROW (left column)
 // ==========================================================================
-const hasPreviewContent = (notification) => {
-  const { preview, metadata } = notification;
-  return !!(
-    preview?.lastMessage || preview?.conversation || preview?.customer ||
-    preview?.currentStep || preview?.receivedAt || metadata?.trackingId
-  );
-};
+const NotificationRow = ({ notification, isSelected, onSelect, onMarkRead, viewMode }) => {
+  const Icon = notification.icon || FiBell;
+  const iconColor = ICON_COLORS[notification.color] || ICON_COLORS.gray;
 
-const QuickPreview = ({ notification }) => {
-  if (!hasPreviewContent(notification)) return null;
-  const { preview, metadata } = notification;
+  const handleSelect = () => {
+    if (viewMode === 'activity') onMarkRead(notification.id);
+    onSelect(notification.id);
+  };
+
+  const stateClass = isSelected
+    ? 'bg-navy-500/10 border-l-navy-700'
+    : notification.isPinned
+      ? 'bg-amber-50 border-l-amber-400 hover:bg-amber-100/60'
+      : !notification.isRead
+        ? 'bg-white border-l-navy-700 hover:bg-slate-50'
+        : 'bg-slate-50/70 border-l-transparent hover:bg-slate-100';
+
   return (
-    <div className="absolute left-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-2xl shadow-xl z-50 p-4 text-sm">
-      <div className="font-semibold text-slate-900 mb-1">{notification.title}</div>
-      {preview.lastMessage && (
-        <p className="text-slate-600 border-l-2 border-slate-300 pl-2 mt-1 italic">{preview.lastMessage}</p>
-      )}
-      {preview.conversation && (
-        <p className="text-slate-600 mt-1">Conversation: <span className="font-medium">{preview.conversation}</span></p>
-      )}
-      {preview.customer && (
-        <p className="text-slate-600">Customer: <span className="font-medium">{preview.customer}</span></p>
-      )}
-      {preview.currentStep && (
-        <p className="text-slate-600">Current Step: <span className="font-medium">{preview.currentStep}</span></p>
-      )}
-      {preview.receivedAt && (
-        <p className="text-xs text-slate-400 mt-2">Received: {preview.receivedAt}</p>
-      )}
-      {metadata?.trackingId && (
-        <p className="text-xs text-slate-400">Tracking: {metadata.trackingId}</p>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={handleSelect}
+      aria-current={isSelected ? 'true' : undefined}
+      className={`w-full text-left flex items-start gap-3 px-4 py-3 border-l-4 border-b border-b-slate-100 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500/40 ${stateClass} ${viewMode === 'activity' ? 'opacity-80' : ''}`}
+    >
+      <div className={`mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm truncate ${notification.isRead ? 'text-slate-700' : 'font-semibold text-slate-900'}`}>{notification.title}</span>
+          {notification.isPinned && <FiMapPin className="h-3 w-3 text-amber-500 fill-current flex-shrink-0" />}
+          {!notification.isRead && <span className="w-2 h-2 rounded-full bg-navy-700 flex-shrink-0" aria-label="Unread"></span>}
+          <span className="text-xs text-slate-400 ml-auto whitespace-nowrap">{notification.time}</span>
+        </div>
+        <p className={`text-xs truncate mt-0.5 ${notification.isRead ? 'text-slate-400' : 'text-slate-500'}`}>{notification.message}</p>
+      </div>
+    </button>
   );
 };
 
 // ==========================================================================
-// NOTIFICATION ITEM COMPONENT
+// NOTIFICATION DETAIL PANEL (right column)
 // ==========================================================================
-const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onTogglePin, viewMode }) => {
+const NotificationDetail = ({ notification, onAction, onClick, onTogglePin, onBack }) => {
   const Icon = notification.icon || FiBell;
   const iconColor = ICON_COLORS[notification.color] || ICON_COLORS.gray;
   const priorityLabel = PRIORITY_LABELS[notification.priority] || 'NORMAL';
   const priorityColor = PRIORITY_COLORS[notification.priority] || PRIORITY_COLORS.normal;
-  const [showPreview, setShowPreview] = useState(false);
 
   const typeActions = TYPE_ACTIONS[notification.type] || ['mark_read'];
   const actions = notification.actions && notification.actions.length > 0
@@ -269,115 +272,102 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
     onAction(notification.id, action);
   };
 
-  const handleClick = () => {
-    if (viewMode === 'activity') onMarkRead(notification.id);
-    onClick(notification.actionUrl, notification.actionState);
-  };
-
-  const handlePin = (e) => {
-    e.stopPropagation();
-    onTogglePin(notification.id);
-  };
-
   // Helper to format camelCase keys (e.g. "dueDate" -> "Due Date")
   const formatKey = (str) => {
     const spaced = str.replace(/([A-Z])/g, ' $1');
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   };
 
+  const metaEntries = notification.metadata
+    ? Object.entries(notification.metadata).filter(([key]) => {
+        // Hide ugly backend IDs
+        if (key.toLowerCase().includes('id')) return false;
+        // Hide 'assignedBy' if we are already rendering the sender
+        if ((key === 'assignedBy' || key === 'Assigned by') && notification.sender) return false;
+        return true;
+      })
+    : [];
+
+  const canGoToPage = notification.actionUrl && notification.actionUrl !== '#';
+
   return (
-    <div
-      className={`relative rounded-2xl border transition-all hover:shadow-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${
-        notification.isPinned ? 'border-amber-300 bg-amber-50' :
-        !notification.isRead ? 'bg-white border-navy-500/30 border-l-4 border-l-navy-700 shadow-sm' : 'bg-slate-50 border-slate-200'
-      } ${viewMode === 'activity' ? 'opacity-80' : ''}`}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => { if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); handleClick(); } }}
-      onMouseEnter={() => setShowPreview(true)}
-      onMouseLeave={() => setShowPreview(false)}
-      onClick={handleClick}
-    >
-      <div className="p-4">
-        <div className="flex items-start gap-4">
-          
-          {/* ICON BADGE */}
-          <div className="relative flex-shrink-0">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${iconColor}`}>
-              <Icon className="h-5 w-5" />
-            </div>
-          </div>
+    <div className="p-5 md:p-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="lg:hidden mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-800"
+      >
+        <FiChevronRight className="h-4 w-4 rotate-180" /> Back to list
+      </button>
 
-          <div className="flex-1 min-w-0">
-            {/* HEADER ROW */}
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="font-semibold text-slate-900 text-sm">{notification.title}</span>
-              {notification.module && (
-                <span className="text-xs font-semibold bg-navy-800 text-white px-2 py-0.5 rounded-full">{notification.module}</span>
-              )}
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>{priorityLabel}</span>
-              {!notification.isRead && <span className="w-2 h-2 rounded-full bg-navy-700 animate-pulse" aria-label="Unread"></span>}
-              {notification.isPinned && <FiMapPin className="h-3 w-3 text-amber-500 fill-current" />}
-              <span className="text-xs text-slate-400 ml-auto">{notification.time}</span>
-            </div>
-
-            {/* MAIN MESSAGE */}
-            <div className="text-sm text-slate-700 mb-3">{notification.message}</div>
-
-            {/* STRUCTURED METADATA CARD */}
-            {notification.metadata && Object.keys(notification.metadata).length > 0 && (
-              <div className="mb-3 bg-slate-50 rounded-xl p-3 text-xs text-slate-700 space-y-1.5 border border-slate-200">
-                {Object.entries(notification.metadata).map(([key, value]) => {
-                  // Hide ugly backend IDs
-                  if (key.toLowerCase().includes('id')) return null;
-                  
-                  // Hide 'assignedBy' if we are already rendering the sender below
-                  if ((key === 'assignedBy' || key === 'Assigned by') && notification.sender) return null;
-
-                  return (
-                    <div key={key} className="flex">
-                      <span className="w-28 shrink-0 font-medium text-slate-500">{formatKey(key)}:</span>
-                      <span className="flex-1 font-semibold text-slate-900">{value}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* FOOTER: SENDER AND CENTRE */}
-            <div className="flex items-center gap-4 text-xs text-slate-500">
-              {notification.sender && (
-                <span className="flex items-center gap-1">
-                  <FiUser className="h-3.5 w-3.5 text-slate-400" /> 
-                  <span className="font-medium text-slate-700">{notification.sender.name}</span>
-                  {notification.sender.role && <span>({notification.sender.role})</span>}
-                </span>
-              )}
-              {notification.centre && (
-                <span className="flex items-center gap-1">
-                  <FiTag className="h-3.5 w-3.5 text-slate-400" /> 
-                  <span className="font-medium text-slate-700">{notification.centre}</span>
-                </span>
-              )}
-            </div>
-
-            {/* ACTION BUTTONS */}
-            {actions && actions.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-slate-100">
-                {actions.includes('reply') && <button className="text-xs font-semibold text-navy-700 hover:text-navy-800 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'reply')}>Reply</button>}
-                {actions.includes('open') && <button className="text-xs font-medium text-slate-700 hover:text-slate-900 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'open')}>Open</button>}
-                {actions.includes('accept') && <button className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100" onClick={(e) => handleAction(e, 'accept')}>Accept</button>}
-                {actions.includes('complete') && <button className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3.5 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100" onClick={(e) => handleAction(e, 'complete')}>Mark Complete</button>}
-                {actions.includes('view') && <button className="text-xs font-medium text-slate-700 hover:text-slate-900 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'view')}>View Details</button>}
-                {actions.includes('mark_read') && !notification.isRead && <button className="text-xs font-medium text-slate-500 hover:text-slate-700 px-3.5 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'mark_read')}>Mark as Read</button>}
-                <button className="text-xs font-medium text-amber-500 hover:text-amber-700 px-2.5 py-2 rounded-lg hover:bg-amber-50 ml-auto" onClick={handlePin} aria-label={notification.isPinned ? "Unpin" : "Pin"} aria-pressed={notification.isPinned}><FiMapPin className={`h-3.5 w-3.5 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-slate-400'}`} /></button>
-                {notification.actionLabel && <span className="text-xs text-navy-700 font-medium flex items-center gap-1 ml-2">{notification.actionLabel} <FiChevronRight className="h-3 w-3" /></span>}
-              </div>
-            )}
-          </div>
+      <div className="flex items-start gap-4">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+          <Icon className="h-5 w-5" />
         </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className={`font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>{priorityLabel}</span>
+            {notification.module && (
+              <span className="font-semibold bg-navy-800 text-white px-2 py-0.5 rounded-full">{notification.module}</span>
+            )}
+            {!notification.isRead && <span className="font-semibold text-navy-700">Unread</span>}
+            <span className="text-slate-400">{notification.time}</span>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mt-2 break-words">{notification.title}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onTogglePin(notification.id); }}
+          aria-label={notification.isPinned ? 'Unpin' : 'Pin'}
+          aria-pressed={notification.isPinned}
+          className="p-2 rounded-lg hover:bg-amber-50 flex-shrink-0"
+        >
+          <FiMapPin className={`h-4 w-4 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-slate-400'}`} />
+        </button>
       </div>
-      {showPreview && <QuickPreview notification={notification} />}
+
+      <p className="text-sm text-slate-700 mt-4 whitespace-pre-line break-words">{notification.message}</p>
+
+      {(notification.sender || notification.centre || metaEntries.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
+          {notification.sender && (
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-xs text-slate-400 flex items-center gap-1"><FiUser className="h-3 w-3" /> From</div>
+              <div className="text-sm font-medium text-slate-800 mt-0.5">
+                {notification.sender.name}{notification.sender.role && <span className="text-slate-500 font-normal"> ({notification.sender.role})</span>}
+              </div>
+            </div>
+          )}
+          {notification.centre && (
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-xs text-slate-400 flex items-center gap-1"><FiTag className="h-3 w-3" /> Centre</div>
+              <div className="text-sm font-medium text-slate-800 mt-0.5">{notification.centre}</div>
+            </div>
+          )}
+          {metaEntries.map(([key, value]) => (
+            <div key={key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-xs text-slate-400">{formatKey(key)}</div>
+              <div className="text-sm font-medium text-slate-800 mt-0.5 break-words">{value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {((actions && actions.length > 0) || canGoToPage) && (
+        <div className="flex flex-wrap items-center gap-2 mt-6 pt-4 border-t border-slate-100">
+          {canGoToPage && (
+            <button className="text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 px-4 py-2 rounded-lg shadow-sm inline-flex items-center gap-1" onClick={() => onClick(notification.actionUrl, notification.actionState)}>
+              Go to page <FiChevronRight className="h-4 w-4" />
+            </button>
+          )}
+          {actions.includes('reply') && <button className="text-sm font-semibold text-navy-700 hover:text-navy-800 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'reply')}>Reply</button>}
+          {actions.includes('open') && <button className="text-sm font-medium text-slate-700 hover:text-slate-900 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'open')}>Open</button>}
+          {actions.includes('accept') && <button className="text-sm font-medium text-emerald-600 hover:text-emerald-800 px-4 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100" onClick={(e) => handleAction(e, 'accept')}>Accept</button>}
+          {actions.includes('complete') && <button className="text-sm font-medium text-emerald-600 hover:text-emerald-800 px-4 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100" onClick={(e) => handleAction(e, 'complete')}>Mark Complete</button>}
+          {actions.includes('view') && <button className="text-sm font-medium text-slate-700 hover:text-slate-900 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'view')}>View Details</button>}
+          {actions.includes('mark_read') && !notification.isRead && <button className="text-sm font-medium text-slate-500 hover:text-slate-700 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'mark_read')}>Mark as Read</button>}
+        </div>
+      )}
     </div>
   );
 };
@@ -393,6 +383,8 @@ const NotificationsPage = () => {
   const [viewMode, setViewMode] = useState('notifications');
   const [searchQuery, setSearchQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState('all');
+  const [selectedId, setSelectedId] = useState(null);
+  const [showDetailMobile, setShowDetailMobile] = useState(false);
 
   const [isReceiptDrawerOpen, setIsReceiptDrawerOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -533,6 +525,13 @@ const NotificationsPage = () => {
   }, [filtered]);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  // Master-detail selection (first item in display order is shown by default)
+  const ordered = Object.values(grouped).flat();
+  const selectedItem = ordered.find(n => n.id === selectedId);
+  const selected = selectedItem || ordered[0];
+  const mobileDetail = showDetailMobile && !!selectedItem;
+  const handleSelect = (id) => { setSelectedId(id); setShowDetailMobile(true); };
 
   // Actions
   const handleMarkRead = async (id) => {
@@ -723,7 +722,7 @@ const NotificationsPage = () => {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-navy-700 rounded-xl">
             <FiBell className="h-6 w-6 text-white" />
@@ -752,87 +751,66 @@ const NotificationsPage = () => {
         </div>
       </div>
 
-      {/* Search and filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex-1 min-w-[200px] relative">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
-          <input
-            type="text"
-            placeholder="Search notifications (title, message, sender, centre, tracking ID, customer…)"
-            value={searchQuery}
-            onChange={handleSearch}
-            aria-label="Search notifications"
-            className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
-          />
+      {/* Inbox card: filters + list + details */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Search and time filter */}
+        <div className="flex flex-wrap items-center gap-3 px-4 md:px-5 py-3 border-b border-slate-200">
+          <div className="flex-1 min-w-[200px] relative">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+            <input
+              type="text"
+              placeholder="Search notifications (title, message, sender, centre, tracking ID, customer…)"
+              value={searchQuery}
+              onChange={handleSearch}
+              aria-label="Search notifications"
+              className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
+            />
+          </div>
+          <select
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value)}
+            aria-label="Filter by time"
+            className="text-sm border border-slate-300 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
+          >
+            <option value="all">All time</option>
+            <option value="today">Today</option>
+            <option value="week">This week</option>
+            <option value="earlier">Earlier</option>
+          </select>
         </div>
-        <select
-          value={timeFilter}
-          onChange={(e) => setTimeFilter(e.target.value)}
-          aria-label="Filter by time"
-          className="text-sm border border-slate-300 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
-        >
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="earlier">Earlier</option>
-        </select>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto pb-1" role="tablist" aria-label="Notification filters">
-        {tabs.map(tab => {
-          const count = getTabCount(tab.id);
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              role="tab"
-              aria-selected={activeTab === tab.id}
-              className={`flex items-center gap-2 px-4 py-2 rounded-full border whitespace-nowrap text-sm font-medium transition ${
-                activeTab === tab.id
-                  ? 'bg-navy-700 text-white border-navy-700'
-                  : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-              {count > 0 && (
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  activeTab === tab.id ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                }`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+        {/* Tabs */}
+        <div className="flex gap-1 px-3 md:px-4 border-b border-slate-200 overflow-x-auto" role="tablist" aria-label="Notification filters">
+          {tabs.map(tab => {
+            const count = getTabCount(tab.id);
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                className={`flex items-center gap-2 px-3 py-3 border-b-2 -mb-px whitespace-nowrap text-sm transition ${
+                  activeTab === tab.id
+                    ? 'border-navy-700 text-navy-700 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 font-medium'
+                }`}
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+                {count > 0 && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    activeTab === tab.id ? 'bg-navy-700 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Grouped list */}
-      <div className="space-y-6">
-        {Object.entries(grouped).map(([group, items]) => {
-          if (items.length === 0) return null;
-          return (
-            <div key={group}>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">{group}</h3>
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-3 items-start">
-                {items.map(n => (
-                  <NotificationItem
-                    key={n.id}
-                    notification={n}
-                    onAction={handleAction}
-                    onMarkRead={handleMarkRead}
-                    onClick={handleClick}
-                    onTogglePin={handleTogglePin}
-                    viewMode={viewMode}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className="text-center py-16">
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 px-4">
             <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
               {viewMode === 'notifications' ? (
                 <FiBell className="h-10 w-10 text-slate-300" />
@@ -848,6 +826,46 @@ const NotificationsPage = () => {
                 ? 'We\'ll notify you when something requires your attention.'
                 : 'Activity from your team will appear here.'}
             </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-5 lg:h-[calc(100vh-20rem)] lg:min-h-[480px]">
+            {/* List */}
+            <div className={`lg:col-span-2 lg:border-r border-slate-200 overflow-y-auto max-h-[70vh] lg:max-h-none ${mobileDetail ? 'hidden lg:block' : ''}`}>
+              {Object.entries(grouped).map(([group, items]) => {
+                if (items.length === 0) return null;
+                return (
+                  <div key={group}>
+                    <h3 className="sticky top-0 z-10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 border-b border-slate-200">{group}</h3>
+                    <div>
+                      {items.map(n => (
+                        <NotificationRow
+                          key={n.id}
+                          notification={n}
+                          isSelected={selected?.id === n.id}
+                          onSelect={handleSelect}
+                          onMarkRead={handleMarkRead}
+                          viewMode={viewMode}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Details */}
+            <div className={`lg:col-span-3 overflow-y-auto ${mobileDetail ? '' : 'hidden lg:block'}`}>
+              {selected && (
+                <NotificationDetail
+                  key={selected.id}
+                  notification={selected}
+                  onAction={handleAction}
+                  onClick={handleClick}
+                  onTogglePin={handleTogglePin}
+                  onBack={() => setShowDetailMobile(false)}
+                />
+              )}
+            </div>
           </div>
         )}
       </div>
