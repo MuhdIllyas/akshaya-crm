@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   FiBell, FiMessageCircle, FiAtSign, FiBriefcase, FiCheckSquare,
   FiCalendar, FiDollarSign, FiUsers, FiStar, FiClock, FiX,
@@ -148,22 +148,22 @@ const PRIORITY_LABELS = {
 
 const PRIORITY_COLORS = {
   high: 'bg-red-100 text-red-700 border-red-200',
-  medium: 'bg-orange-100 text-orange-700 border-orange-200',
-  normal: 'bg-blue-100 text-blue-700 border-blue-200',
-  low: 'bg-gray-100 text-gray-500 border-gray-200',
+  medium: 'bg-amber-100 text-amber-700 border-amber-200',
+  normal: 'bg-slate-100 text-navy-700 border-slate-200',
+  low: 'bg-slate-100 text-slate-500 border-slate-200',
 };
 
 const ICON_COLORS = {
-  blue: 'bg-blue-50 text-blue-600',
-  purple: 'bg-purple-50 text-purple-600',
-  indigo: 'bg-indigo-50 text-indigo-600',
+  blue: 'bg-navy-500/10 text-navy-500',
+  purple: 'bg-slate-100 text-slate-600',
+  indigo: 'bg-slate-100 text-navy-700',
   emerald: 'bg-emerald-50 text-emerald-600',
   orange: 'bg-orange-50 text-orange-600',
   green: 'bg-green-50 text-green-600',
   pink: 'bg-pink-50 text-pink-600',
   yellow: 'bg-yellow-50 text-yellow-600',
   red: 'bg-red-50 text-red-600',
-  gray: 'bg-gray-50 text-gray-600',
+  gray: 'bg-slate-50 text-slate-600',
 };
 
 // ==========================================================================
@@ -193,46 +193,74 @@ const TYPE_ACTIONS = {
   default: ['view', 'mark_read']
 };
 
+// Single source of truth for tab membership (used by both the counts and the list)
+const matchesTab = (n, tabId) => {
+  const type = n.type || '';
+  switch (tabId) {
+    case 'all': return true;
+    case 'unread': return !n.isRead;
+    case 'mentions': return type === 'mention';
+    case 'tasks': return type.includes('task');
+    case 'messages': return type === 'whatsapp_message' || type === 'message';
+    case 'services': return type.includes('service');
+    case 'assignments': return type.includes('task') || type.includes('service');
+    case 'system': return type === 'system';
+    default: return true;
+  }
+};
+
+
 // ==========================================================================
-// QUICK PREVIEW COMPONENT
+// NOTIFICATION LIST ROW (left column)
 // ==========================================================================
-const QuickPreview = ({ notification }) => {
-  if (!notification.preview) return null;
-  const { preview, metadata } = notification;
+const NotificationRow = ({ notification, isSelected, onSelect, onMarkRead, viewMode }) => {
+  const Icon = notification.icon || FiBell;
+  const iconColor = ICON_COLORS[notification.color] || ICON_COLORS.gray;
+
+  const handleSelect = () => {
+    if (viewMode === 'activity') onMarkRead(notification.id);
+    onSelect(notification.id);
+  };
+
+  const stateClass = isSelected
+    ? 'bg-navy-500/10 border-l-navy-700'
+    : notification.isPinned
+      ? 'bg-amber-50 border-l-amber-400 hover:bg-amber-100/60'
+      : !notification.isRead
+        ? 'bg-white border-l-navy-700 hover:bg-slate-50'
+        : 'bg-slate-50/70 border-l-transparent hover:bg-slate-100';
+
   return (
-    <div className="absolute left-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl z-50 p-4 text-sm">
-      <div className="font-semibold text-gray-900 mb-1">{notification.title}</div>
-      {preview.lastMessage && (
-        <p className="text-gray-600 border-l-2 border-indigo-300 pl-2 mt-1 italic">{preview.lastMessage}</p>
-      )}
-      {preview.conversation && (
-        <p className="text-gray-600 mt-1">Conversation: <span className="font-medium">{preview.conversation}</span></p>
-      )}
-      {preview.customer && (
-        <p className="text-gray-600">Customer: <span className="font-medium">{preview.customer}</span></p>
-      )}
-      {preview.currentStep && (
-        <p className="text-gray-600">Current Step: <span className="font-medium">{preview.currentStep}</span></p>
-      )}
-      {preview.receivedAt && (
-        <p className="text-xs text-gray-400 mt-2">Received: {preview.receivedAt}</p>
-      )}
-      {metadata?.trackingId && (
-        <p className="text-xs text-gray-400">Tracking: {metadata.trackingId}</p>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={handleSelect}
+      aria-current={isSelected ? 'true' : undefined}
+      className={`w-full text-left flex items-start gap-3 px-4 py-3 border-l-4 border-b border-b-slate-100 transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-navy-500/40 ${stateClass} ${viewMode === 'activity' ? 'opacity-80' : ''}`}
+    >
+      <div className={`mt-0.5 w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm truncate ${notification.isRead ? 'text-slate-700' : 'font-semibold text-slate-900'}`}>{notification.title}</span>
+          {notification.isPinned && <FiMapPin className="h-3 w-3 text-amber-500 fill-current flex-shrink-0" />}
+          {!notification.isRead && <span className="w-2 h-2 rounded-full bg-navy-700 flex-shrink-0" aria-label="Unread"></span>}
+          <span className="text-xs text-slate-400 ml-auto whitespace-nowrap">{notification.time}</span>
+        </div>
+        <p className={`text-xs truncate mt-0.5 ${notification.isRead ? 'text-slate-400' : 'text-slate-500'}`}>{notification.message}</p>
+      </div>
+    </button>
   );
 };
 
 // ==========================================================================
-// NOTIFICATION ITEM COMPONENT
+// NOTIFICATION DETAIL PANEL (right column)
 // ==========================================================================
-const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onTogglePin, viewMode }) => {
+const NotificationDetail = ({ notification, onAction, onClick, onTogglePin, onBack }) => {
   const Icon = notification.icon || FiBell;
   const iconColor = ICON_COLORS[notification.color] || ICON_COLORS.gray;
   const priorityLabel = PRIORITY_LABELS[notification.priority] || 'NORMAL';
   const priorityColor = PRIORITY_COLORS[notification.priority] || PRIORITY_COLORS.normal;
-  const [showPreview, setShowPreview] = useState(false);
 
   const typeActions = TYPE_ACTIONS[notification.type] || ['mark_read'];
   const actions = notification.actions && notification.actions.length > 0
@@ -244,114 +272,102 @@ const NotificationItem = ({ notification, onAction, onMarkRead, onClick, onToggl
     onAction(notification.id, action);
   };
 
-  const handleClick = () => {
-    if (viewMode === 'activity') onMarkRead(notification.id);
-    onClick(notification.actionUrl, notification.actionState);
-  };
-
-  const handlePin = (e) => {
-    e.stopPropagation();
-    onTogglePin(notification.id);
-  };
-
   // Helper to format camelCase keys (e.g. "dueDate" -> "Due Date")
   const formatKey = (str) => {
     const spaced = str.replace(/([A-Z])/g, ' $1');
     return spaced.charAt(0).toUpperCase() + spaced.slice(1);
   };
 
+  const metaEntries = notification.metadata
+    ? Object.entries(notification.metadata).filter(([key]) => {
+        // Hide ugly backend IDs
+        if (key.toLowerCase().includes('id')) return false;
+        // Hide 'assignedBy' if we are already rendering the sender
+        if ((key === 'assignedBy' || key === 'Assigned by') && notification.sender) return false;
+        return true;
+      })
+    : [];
+
+  const canGoToPage = notification.actionUrl && notification.actionUrl !== '#';
+
   return (
-    <div
-      className={`relative rounded-xl border transition-all hover:shadow-md cursor-pointer ${
-        notification.isPinned ? 'border-amber-300 bg-amber-50' :
-        !notification.isRead ? 'bg-blue-50 border-blue-200' : 'bg-white border-gray-200'
-      } ${viewMode === 'activity' ? 'opacity-80' : ''}`}
-      onMouseEnter={() => setShowPreview(true)}
-      onMouseLeave={() => setShowPreview(false)}
-      onClick={handleClick}
-    >
-      <div className="p-4">
-        <div className="flex items-start gap-4">
-          
-          {/* ICON BADGE */}
-          <div className="relative flex-shrink-0">
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${iconColor}`}>
-              <Icon className="h-5 w-5" />
-            </div>
-            {notification.module && (
-              <span className="absolute -top-1 -right-1 text-[8px] font-bold bg-[#172a45] text-white px-1.5 py-0.5 rounded-full">
-                {notification.module}
-              </span>
-            )}
-          </div>
+    <div className="p-5 md:p-6">
+      <button
+        type="button"
+        onClick={onBack}
+        className="lg:hidden mb-4 inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-800"
+      >
+        <FiChevronRight className="h-4 w-4 rotate-180" /> Back to list
+      </button>
 
-          <div className="flex-1 min-w-0">
-            {/* HEADER ROW */}
-            <div className="flex flex-wrap items-center gap-2 mb-1">
-              <span className="font-semibold text-gray-900 text-sm">{notification.title}</span>
-              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>{priorityLabel}</span>
-              {!notification.isRead && <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>}
-              {notification.isPinned && <FiMapPin className="h-3 w-3 text-amber-500 fill-current" />}
-              <span className="text-xs text-gray-400 ml-auto">{notification.time}</span>
-            </div>
-
-            {/* MAIN MESSAGE */}
-            <div className="text-sm text-gray-700 mb-3">{notification.message}</div>
-
-            {/* STRUCTURED METADATA CARD */}
-            {notification.metadata && Object.keys(notification.metadata).length > 0 && (
-              <div className="mb-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-700 space-y-1.5 border border-gray-100">
-                {Object.entries(notification.metadata).map(([key, value]) => {
-                  // Hide ugly backend IDs
-                  if (key.toLowerCase().includes('id')) return null;
-                  
-                  // Hide 'assignedBy' if we are already rendering the sender below
-                  if ((key === 'assignedBy' || key === 'Assigned by') && notification.sender) return null;
-
-                  return (
-                    <div key={key} className="flex">
-                      <span className="w-28 font-medium text-gray-500">{formatKey(key)}:</span>
-                      <span className="flex-1 font-semibold text-gray-900">{value}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* FOOTER: SENDER AND CENTRE */}
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              {notification.sender && (
-                <span className="flex items-center gap-1">
-                  <FiUser className="h-3.5 w-3.5 text-gray-400" /> 
-                  <span className="font-medium text-gray-700">{notification.sender.name}</span>
-                  {notification.sender.role && <span>({notification.sender.role})</span>}
-                </span>
-              )}
-              {notification.centre && (
-                <span className="flex items-center gap-1">
-                  <FiTag className="h-3.5 w-3.5 text-gray-400" /> 
-                  <span className="font-medium text-gray-700">{notification.centre}</span>
-                </span>
-              )}
-            </div>
-
-            {/* ACTION BUTTONS */}
-            {actions && actions.length > 0 && (
-              <div className="flex flex-wrap items-center gap-2 mt-4 pt-3 border-t border-gray-100">
-                {actions.includes('reply') && <button className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg bg-indigo-50" onClick={(e) => handleAction(e, 'reply')}>Reply</button>}
-                {actions.includes('open') && <button className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg bg-gray-100" onClick={(e) => handleAction(e, 'open')}>Open</button>}
-                {actions.includes('accept') && <button className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1.5 rounded-lg bg-emerald-50" onClick={(e) => handleAction(e, 'accept')}>Accept</button>}
-                {actions.includes('complete') && <button className="text-xs font-medium text-emerald-600 hover:text-emerald-800 px-3 py-1.5 rounded-lg bg-emerald-50" onClick={(e) => handleAction(e, 'complete')}>Mark Complete</button>}
-                {actions.includes('view') && <button className="text-xs font-medium text-gray-700 hover:text-gray-900 px-3 py-1.5 rounded-lg bg-gray-100" onClick={(e) => handleAction(e, 'view')}>View Details</button>}
-                {actions.includes('mark_read') && !notification.isRead && <button className="text-xs font-medium text-gray-500 hover:text-gray-700 px-3 py-1.5 rounded-lg bg-gray-50" onClick={(e) => handleAction(e, 'mark_read')}>Mark as Read</button>}
-                <button className="text-xs font-medium text-amber-500 hover:text-amber-700 px-2 py-1.5 rounded-lg hover:bg-amber-50 ml-auto" onClick={handlePin}><FiMapPin className={`h-3.5 w-3.5 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-gray-400'}`} /></button>
-                {notification.actionLabel && <span className="text-xs text-indigo-600 font-medium flex items-center gap-1 ml-2">{notification.actionLabel} <FiChevronRight className="h-3 w-3" /></span>}
-              </div>
-            )}
-          </div>
+      <div className="flex items-start gap-4">
+        <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${iconColor}`}>
+          <Icon className="h-5 w-5" />
         </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className={`font-bold px-2 py-0.5 rounded-full border ${priorityColor}`}>{priorityLabel}</span>
+            {notification.module && (
+              <span className="font-semibold bg-navy-800 text-white px-2 py-0.5 rounded-full">{notification.module}</span>
+            )}
+            {!notification.isRead && <span className="font-semibold text-navy-700">Unread</span>}
+            <span className="text-slate-400">{notification.time}</span>
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mt-2 break-words">{notification.title}</h2>
+        </div>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onTogglePin(notification.id); }}
+          aria-label={notification.isPinned ? 'Unpin' : 'Pin'}
+          aria-pressed={notification.isPinned}
+          className="p-2 rounded-lg hover:bg-amber-50 flex-shrink-0"
+        >
+          <FiMapPin className={`h-4 w-4 ${notification.isPinned ? 'fill-current text-amber-500' : 'text-slate-400'}`} />
+        </button>
       </div>
-      {showPreview && <QuickPreview notification={notification} />}
+
+      <p className="text-sm text-slate-700 mt-4 whitespace-pre-line break-words">{notification.message}</p>
+
+      {(notification.sender || notification.centre || metaEntries.length > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-5">
+          {notification.sender && (
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-xs text-slate-400 flex items-center gap-1"><FiUser className="h-3 w-3" /> From</div>
+              <div className="text-sm font-medium text-slate-800 mt-0.5">
+                {notification.sender.name}{notification.sender.role && <span className="text-slate-500 font-normal"> ({notification.sender.role})</span>}
+              </div>
+            </div>
+          )}
+          {notification.centre && (
+            <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-xs text-slate-400 flex items-center gap-1"><FiTag className="h-3 w-3" /> Centre</div>
+              <div className="text-sm font-medium text-slate-800 mt-0.5">{notification.centre}</div>
+            </div>
+          )}
+          {metaEntries.map(([key, value]) => (
+            <div key={key} className="rounded-xl bg-slate-50 border border-slate-100 p-3">
+              <div className="text-xs text-slate-400">{formatKey(key)}</div>
+              <div className="text-sm font-medium text-slate-800 mt-0.5 break-words">{value}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {((actions && actions.length > 0) || canGoToPage) && (
+        <div className="flex flex-wrap items-center gap-2 mt-6 pt-4 border-t border-slate-100">
+          {canGoToPage && (
+            <button className="text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 px-4 py-2 rounded-lg shadow-sm inline-flex items-center gap-1" onClick={() => onClick(notification.actionUrl, notification.actionState)}>
+              Go to page <FiChevronRight className="h-4 w-4" />
+            </button>
+          )}
+          {actions.includes('reply') && <button className="text-sm font-semibold text-navy-700 hover:text-navy-800 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'reply')}>Reply</button>}
+          {actions.includes('open') && <button className="text-sm font-medium text-slate-700 hover:text-slate-900 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'open')}>Open</button>}
+          {actions.includes('accept') && <button className="text-sm font-medium text-emerald-600 hover:text-emerald-800 px-4 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100" onClick={(e) => handleAction(e, 'accept')}>Accept</button>}
+          {actions.includes('complete') && <button className="text-sm font-medium text-emerald-600 hover:text-emerald-800 px-4 py-2 rounded-lg bg-emerald-50 hover:bg-emerald-100" onClick={(e) => handleAction(e, 'complete')}>Mark Complete</button>}
+          {actions.includes('view') && <button className="text-sm font-medium text-slate-700 hover:text-slate-900 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'view')}>View Details</button>}
+          {actions.includes('mark_read') && !notification.isRead && <button className="text-sm font-medium text-slate-500 hover:text-slate-700 px-4 py-2 rounded-lg bg-slate-100 hover:bg-slate-200" onClick={(e) => handleAction(e, 'mark_read')}>Mark as Read</button>}
+        </div>
+      )}
     </div>
   );
 };
@@ -367,7 +383,8 @@ const NotificationsPage = () => {
   const [viewMode, setViewMode] = useState('notifications');
   const [searchQuery, setSearchQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState('all');
-  const [showFilters, setShowFilters] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);
+  const [showDetailMobile, setShowDetailMobile] = useState(false);
 
   const [isReceiptDrawerOpen, setIsReceiptDrawerOpen] = useState(false);
   const [selectedPaymentId, setSelectedPaymentId] = useState(null);
@@ -375,6 +392,10 @@ const NotificationsPage = () => {
   // 🔥 Review Drawer State
   const [isReviewDrawerOpen, setIsReviewDrawerOpen] = useState(false);
   const [selectedReviewId, setSelectedReviewId] = useState(null);
+
+  // Stable references so the drawers don't refetch on every page re-render
+  const closeReceiptDrawer = useCallback(() => setIsReceiptDrawerOpen(false), []);
+  const closeReviewDrawer = useCallback(() => setIsReviewDrawerOpen(false), []);
 
   // --- NEW: HOOKS & VARIABLES ---
   const { decrementUnread, clearUnread } = useNotifications();
@@ -443,32 +464,13 @@ const NotificationsPage = () => {
     { id: 'system', label: 'System', icon: FiActivity },
   ];
 
-  // Helper to get count for assignment tab
-  const getTabCount = (tabId) => {
-    if (tabId === 'all') return notifications.length;
-    if (tabId === 'unread') return notifications.filter(n => !n.isRead).length;
-    if (tabId === 'assignments') {
-      // Tasks + Services
-      return notifications.filter(n => n.type === 'task' || n.type === 'service').length;
-    }
-    return notifications.filter(n => n.type === tabId).length;
-  };
+  const getTabCount = (tabId) => notifications.filter(n => matchesTab(n, tabId)).length;
 
   // Filter logic
   const filtered = useMemo(() => {
     let items = notifications;
 
-    switch (activeTab) {
-      case 'all': break;
-      case 'unread': items = items.filter(n => !n.isRead); break;
-      case 'mentions': items = items.filter(n => n.type === 'mention'); break;
-      case 'tasks': items = items.filter(n => n.type.includes('task')); break;
-      case 'messages': items = items.filter(n => n.type === 'whatsapp_message' || n.type === 'message'); break;
-      case 'services': items = items.filter(n => n.type.includes('service')); break;
-      case 'assignments': items = items.filter(n => n.type.includes('task') || n.type.includes('service')); break;
-      case 'system': items = items.filter(n => n.type === 'system'); break;
-      default: break;
-    }
+    items = items.filter(n => matchesTab(n, activeTab));
 
     // Search – include metadata
     if (searchQuery.trim()) {
@@ -524,8 +526,19 @@ const NotificationsPage = () => {
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
+  // Master-detail selection (first item in display order is shown by default)
+  const ordered = Object.values(grouped).flat();
+  const selectedItem = ordered.find(n => n.id === selectedId);
+  const selected = selectedItem || ordered[0];
+  const mobileDetail = showDetailMobile && !!selectedItem;
+  const handleSelect = (id) => { setSelectedId(id); setShowDetailMobile(true); };
+
   // Actions
   const handleMarkRead = async (id) => {
+    // Already read: nothing to update, and the global bell count must not drop again
+    const existing = notifications.find(n => n.id === id);
+    if (existing?.isRead) return;
+
     // Optimistic UI update
     setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     decrementUnread(); // Instantly lower the global sidebar bell count
@@ -701,35 +714,35 @@ const NotificationsPage = () => {
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <FiRefreshCw className="h-8 w-8 animate-spin text-indigo-500" />
+        <FiRefreshCw className="h-8 w-8 animate-spin text-navy-700" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="w-full">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-5">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-indigo-50 rounded-xl">
-            <FiBell className="h-6 w-6 text-indigo-600" />
+          <div className="p-2.5 bg-navy-700 rounded-xl">
+            <FiBell className="h-6 w-6 text-white" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
-            <p className="text-sm text-gray-500">
+            <h1 className="text-2xl font-bold text-slate-900">Notifications</h1>
+            <p className="text-sm text-slate-500">
               {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'} • {notifications.length} total
             </p>
           </div>
         </div>
         <div className="flex items-center gap-3">
           <button
-            className="text-sm text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border border-indigo-200 hover:bg-indigo-50 transition"
+            className="text-sm text-white bg-navy-700 hover:bg-navy-800 font-semibold flex items-center gap-1.5 px-4 py-2.5 rounded-xl shadow-sm transition"
             onClick={handleMarkAllRead}
           >
             <FiCheck className="h-4 w-4" /> Mark all read
           </button>
           <button
-            className="text-sm text-gray-500 hover:text-gray-700 font-medium flex items-center gap-1 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+            className="text-sm text-slate-600 hover:text-slate-800 font-medium flex items-center gap-1.5 px-4 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 transition"
             onClick={() => setViewMode(prev => prev === 'notifications' ? 'activity' : 'notifications')}
           >
             {viewMode === 'notifications' ? '📊' : '🔔'}
@@ -738,113 +751,129 @@ const NotificationsPage = () => {
         </div>
       </div>
 
-      {/* Search and filters */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="flex-1 min-w-[200px] relative">
-          <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
-          <input
-            type="text"
-            placeholder="Search notifications (title, message, sender, centre, tracking ID, customer…)"
-            value={searchQuery}
-            onChange={handleSearch}
-            className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
-          />
+      {/* Inbox card: filters + list + details */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Search and time filter */}
+        <div className="flex flex-wrap items-center gap-3 px-4 md:px-5 py-3 border-b border-slate-200">
+          <div className="flex-1 min-w-[200px] relative">
+            <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
+            <input
+              type="text"
+              placeholder="Search notifications (title, message, sender, centre, tracking ID, customer…)"
+              value={searchQuery}
+              onChange={handleSearch}
+              aria-label="Search notifications"
+              className="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
+            />
+          </div>
+          <select
+            value={timeFilter}
+            onChange={(e) => setTimeFilter(e.target.value)}
+            aria-label="Filter by time"
+            className="text-sm border border-slate-300 rounded-xl px-3 py-2.5 bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none"
+          >
+            <option value="all">All time</option>
+            <option value="today">Today</option>
+            <option value="week">This week</option>
+            <option value="earlier">Earlier</option>
+          </select>
         </div>
-        <button
-          className="text-sm text-gray-500 hover:text-gray-700 flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
-          onClick={() => setShowFilters(!showFilters)}
-        >
-          <FiFilter className="h-4 w-4" />
-          Filters
-        </button>
-        <select
-          value={timeFilter}
-          onChange={(e) => setTimeFilter(e.target.value)}
-          className="text-sm border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 outline-none"
-        >
-          <option value="all">All time</option>
-          <option value="today">Today</option>
-          <option value="week">This week</option>
-          <option value="earlier">Earlier</option>
-        </select>
-      </div>
 
-      {/* Tabs */}
-      <div className="flex flex-wrap gap-1 mb-6 border-b border-gray-200 pb-0.5">
-        {tabs.map(tab => {
-          const count = getTabCount(tab.id);
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-                activeTab === tab.id
-                  ? 'bg-indigo-50 text-indigo-600 border-b-2 border-indigo-500'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <tab.icon className="h-4 w-4" />
-              {tab.label}
-              {count > 0 && (
-                <span className={`text-xs px-2 py-0.5 rounded-full ${
-                  activeTab === tab.id ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-600'
-                }`}>
-                  {count}
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+        {/* Tabs */}
+        <div className="flex gap-1 px-3 md:px-4 border-b border-slate-200 overflow-x-auto" role="tablist" aria-label="Notification filters">
+          {tabs.map(tab => {
+            const count = getTabCount(tab.id);
+            return (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                className={`flex items-center gap-2 px-3 py-3 border-b-2 -mb-px whitespace-nowrap text-sm transition ${
+                  activeTab === tab.id
+                    ? 'border-navy-700 text-navy-700 font-semibold'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 font-medium'
+                }`}
+              >
+                <tab.icon className="h-4 w-4" />
+                {tab.label}
+                {count > 0 && (
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    activeTab === tab.id ? 'bg-navy-700 text-white' : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-      {/* Grouped list */}
-      <div className="space-y-6">
-        {Object.entries(grouped).map(([group, items]) => {
-          if (items.length === 0) return null;
-          return (
-            <div key={group}>
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">{group}</h3>
-              <div className="space-y-3">
-                {items.map(n => (
-                  <NotificationItem
-                    key={n.id}
-                    notification={n}
-                    onAction={handleAction}
-                    onMarkRead={handleMarkRead}
-                    onClick={handleClick}
-                    onTogglePin={handleTogglePin}
-                    viewMode={viewMode}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className="text-center py-16">
-            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+        {filtered.length === 0 ? (
+          <div className="text-center py-16 px-4">
+            <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
               {viewMode === 'notifications' ? (
-                <FiBell className="h-10 w-10 text-gray-300" />
+                <FiBell className="h-10 w-10 text-slate-300" />
               ) : (
-                <FiActivity className="h-10 w-10 text-gray-300" />
+                <FiActivity className="h-10 w-10 text-slate-300" />
               )}
             </div>
-            <h3 className="text-lg font-semibold text-gray-700">
+            <h3 className="text-lg font-semibold text-slate-700">
               {viewMode === 'notifications' ? '🎉 You\'re all caught up!' : 'No activity yet'}
             </h3>
-            <p className="text-sm text-gray-400 mt-1">
+            <p className="text-sm text-slate-400 mt-1">
               {viewMode === 'notifications'
                 ? 'We\'ll notify you when something requires your attention.'
                 : 'Activity from your team will appear here.'}
             </p>
           </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-5 lg:h-[calc(100vh-20rem)] lg:min-h-[480px]">
+            {/* List */}
+            <div className={`lg:col-span-2 lg:border-r border-slate-200 overflow-y-auto max-h-[70vh] lg:max-h-none ${mobileDetail ? 'hidden lg:block' : ''}`}>
+              {Object.entries(grouped).map(([group, items]) => {
+                if (items.length === 0) return null;
+                return (
+                  <div key={group}>
+                    <h3 className="sticky top-0 z-10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-slate-500 bg-slate-100 border-b border-slate-200">{group}</h3>
+                    <div>
+                      {items.map(n => (
+                        <NotificationRow
+                          key={n.id}
+                          notification={n}
+                          isSelected={selected?.id === n.id}
+                          onSelect={handleSelect}
+                          onMarkRead={handleMarkRead}
+                          viewMode={viewMode}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Details */}
+            <div className={`lg:col-span-3 overflow-y-auto ${mobileDetail ? '' : 'hidden lg:block'}`}>
+              {selected && (
+                <NotificationDetail
+                  key={selected.id}
+                  notification={selected}
+                  onAction={handleAction}
+                  onClick={handleClick}
+                  onTogglePin={handleTogglePin}
+                  onBack={() => setShowDetailMobile(false)}
+                />
+              )}
+            </div>
+          </div>
         )}
       </div>
 
       {/* Notification Preferences */}
-      <div className="mt-8 text-center border-t border-gray-200 pt-4">
+      <div className="mt-8 text-center border-t border-slate-200 pt-4">
         <button
-          className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 mx-auto"
+          className="text-xs text-slate-500 hover:text-slate-700 flex items-center gap-1 mx-auto py-2"
           onClick={() => toast.info('Notification preferences dialog (demo)')}
         >
           <FiSettings className="h-3 w-3" /> Manage preferences
@@ -854,13 +883,13 @@ const NotificationsPage = () => {
       {/* Pending Payments Drawer */}
       <PaymentReceiptDrawer 
         isOpen={isReceiptDrawerOpen} 
-        onClose={() => setIsReceiptDrawerOpen(false)} 
+        onClose={closeReceiptDrawer} 
         paymentId={selectedPaymentId} 
       />
       {/* Review Details Drawer */}
       <ReviewDetailsDrawer
         isOpen={isReviewDrawerOpen}
-        onClose={() => setIsReviewDrawerOpen(false)}
+        onClose={closeReviewDrawer}
         reviewId={selectedReviewId}
       />
     </div>
