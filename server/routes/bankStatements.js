@@ -86,9 +86,10 @@ const APP_DEBITS_SQL = `
   LEFT JOIN staff st ON st.id = x.staff_id
   WHERE x.is_reversal IS NOT TRUE
     AND COALESCE(x.description, '') NOT ILIKE 'Correction reversal%'
-    -- an expense deleted in Expense Management is not a payment any more
+    -- an expense deleted in Expense Management (is_reversal on the expense, and this debit is still
+    -- the latest of its group, i.e. it was not replaced by a correction) is not a payment any more
     AND NOT (x.category = 'Expense' AND EXISTS (
-          SELECT 1 FROM expenses de WHERE de.id = x.reference_id AND de.status = 'deleted'))
+          SELECT 1 FROM expenses de WHERE de.id = x.reference_id AND de.is_reversal IS TRUE))
   ORDER BY x.created_at
 `;
 

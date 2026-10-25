@@ -267,7 +267,7 @@ router.get("/my", async (req, res) => {
    - pending (never debited): the owner or an admin can delete it, as before
    - approved / auto approved: ADMIN only. The amount goes back to the wallet
      (a credit posted today, so today's cash count is right), the expense is kept
-     as status 'deleted' (hidden from lists and reports, still there for the audit
+     hidden (is_reversal, "Deleted by …" in remarks — kept for the audit
      trail) and any bank statement match on it is removed.
 ====================================================== */
 router.delete("/:id", async (req, res) => {
@@ -369,8 +369,10 @@ router.delete("/:id", async (req, res) => {
     }
 
     await client.query(
+      // status stays as it was (the status column only allows its fixed values); is_reversal hides it
+      // from every list and report, the same way a corrected original is hidden
       `UPDATE expenses
-          SET status = 'deleted', is_reversal = TRUE,
+          SET is_reversal = TRUE,
               remarks = CONCAT_WS(' | ', NULLIF(remarks, ''), $2::text), updated_at = NOW()
         WHERE id = $1`,
       [expenseId, `Deleted by ${req.user.username || req.user.id}: ${reason}`]
