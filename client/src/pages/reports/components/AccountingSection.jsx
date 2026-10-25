@@ -4479,7 +4479,6 @@ const handleExportExcel = () => {
                   wallets={wallets}
                   categories={[]}
                   teams={expenseTeams}
-                  teams={teams}
                   onSubmit={handleAdminExpenseSubmit}
                   onCancel={() => setShowAdminExpenseModal(false)}
                   submitButtonText="Add Expense"
