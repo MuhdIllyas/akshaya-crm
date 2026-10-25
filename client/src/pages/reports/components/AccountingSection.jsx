@@ -4478,6 +4478,7 @@ const handleExportExcel = () => {
                 <AdminExpenseEntry
                   wallets={wallets}
                   categories={[]}
+                  teams={expenseTeams}
                   teams={teams}
                   onSubmit={handleAdminExpenseSubmit}
                   onCancel={() => setShowAdminExpenseModal(false)}

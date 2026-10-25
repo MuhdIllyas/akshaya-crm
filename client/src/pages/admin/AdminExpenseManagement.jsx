@@ -972,6 +972,7 @@ const AdminExpenseManagement = () => {
               submitButtonText="Create Expense"
               wallets={wallets}
               categories={CATEGORIES}
+              teams={teams}
               onSubmit={handleAddExpenseSubmit}
               onCancel={() => setShowAddModal(false)}
               isLoading={saving}

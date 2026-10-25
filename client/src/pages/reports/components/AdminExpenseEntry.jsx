@@ -25,6 +25,7 @@ const DEFAULT_CATEGORIES = [
   { id: 17, name: "Daily Adjustment", color: "#F59E0B", icon: "⚖️", requires_approval: false },
   { id: 18, name: "Refreshments / Pantry", color: "#0EA5E9", icon: "💧", requires_approval: false },
   { id: 19, name: "Software Subscriptions", color: "#8B5CF6", icon: "☁️", requires_approval: false },
+  { id: 20, name: "Donations", color: "#DB2777", icon: "🤝", requires_approval: false },
 ];
 
 const PAYMENT_METHODS = [
@@ -279,7 +280,7 @@ const AdminExpenseEntry = ({
           <Field label="Assign team" hint="Optional: assign this expense to a specific team">
             <select name="team_id" value={formData.team_id} onChange={handleInputChange} className={`${inputCls} border-slate-200`}>
               <option value="">No team (general expense)</option>
-              {teams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
+              {teams.map((team) => <option key={team.id} value={team.id}>{team.name}{team.is_global || team.centre_id == null ? " (Global)" : ""}</option>)}
             </select>
           </Field>
         )}
