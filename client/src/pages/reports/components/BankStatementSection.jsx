@@ -501,6 +501,20 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
                   <span className="mx-1 text-slate-400">↔</span>
                   {m.tx_ids.map((id) => A[id] && `${A[id].service_name || A[id].category} ${inr(A[id].amount)}`).filter(Boolean).join(' + ')}
                   {m.adjustment_tx_id && Number(m.diff) !== 0 && <span className="ml-2 text-amber-700">· {Number(m.diff) > 0 ? '+' : '−'}{inr(Math.abs(m.diff))} {Number(m.diff) > 0 ? 'added to' : 'taken off'} entry</span>}
+                  {m.moved?.length > 0 && (
+                    <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-rose-700">
+                      <FiAlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                      The entry was moved to another wallet after matching — this bank debit is no longer covered. Undo the match.
+                    </span>
+                  )}
+                  {m.changed?.length > 0 && (
+                    <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-amber-700">
+                      <FiAlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+                      Entry corrected after matching: now {m.changed.map((c) => inr(c.now)).join(' + ')}
+                      {Math.abs(m.changed.reduce((t, c) => t + c.now, 0) + m.tx_ids.filter((t) => !m.changed.some((c) => c.id === t)).reduce((t, id) => t + Number(A[id]?.amount || 0), 0) - Number(m.bank_total)) < 0.005
+                        ? ' — agrees with the bank ✓' : ' — still differs from the bank'}
+                    </span>
+                  )}
                 </div>
                 {!readOnly && !m.adjustment_tx_id && (
                   <button type="button" className={`${btnGhost} flex-shrink-0`} disabled={!!busy}

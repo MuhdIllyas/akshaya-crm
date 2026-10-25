@@ -274,6 +274,47 @@ async function postDifferenceTx(client, wallet, diff, staffId, category, referen
   return tx.rows[0].id;
 }
 
+/* Change a department fee the way the app's own "Correct" does: reverse the current
+   transaction and post the new amount in the SAME correction group. Then every screen that
+   shows "the latest transaction of the group" (entry list, ledger, daily summary) shows the
+   new amount — a separate adjustment transaction was invisible on the entry screens. */
+async function correctDeptTx(client, wallet, depTx, diff, staffId, description) {
+  let groupId = depTx.correction_group_id;
+  if (!groupId) {
+    groupId = crypto.randomUUID();
+    await client.query('UPDATE wallet_transactions SET correction_group_id = $1 WHERE id = $2', [groupId, depTx.id]);
+  }
+  const cur = (await client.query(
+    `SELECT id, wallet_id, type, amount::numeric AS amount, reference_id, team_id
+     FROM wallet_transactions
+     WHERE correction_group_id = $1 AND is_reversal IS NOT TRUE
+     ORDER BY created_at DESC, id DESC LIMIT 1 FOR UPDATE`,
+    [groupId]
+  )).rows[0];
+  if (!cur || cur.type !== 'debit') throw httpError(409, 'The department fee of this entry was changed — re-run matching and try again');
+  if (cur.wallet_id !== wallet.id) {
+    throw httpError(409, 'The department fee of this entry was moved to another wallet after matching. Undo this match first.');
+  }
+  const oldAmt = r2(cur.amount);
+  const newAmt = r2(oldAmt + diff);
+  if (!(newAmt > 0)) throw httpError(409, 'The department fee would become ₹0 or less — correct the entry by hand');
+  await client.query(
+    `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type,
+                                      is_reversal, correction_group_id, team_id, created_at)
+     VALUES ($1, $2, 'credit', $3, $4, 'Department Payment', $5, 'department', TRUE, $6, $7, NOW())`,
+    [wallet.id, staffId, oldAmt, `Correction reversal: ${description}`.slice(0, 500), cur.reference_id, groupId, cur.team_id]
+  );
+  const tx = await client.query(
+    `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, reference_id, reference_type,
+                                      correction_group_id, team_id, created_at)
+     VALUES ($1, $2, 'debit', $3, $4, 'Department Payment', $5, 'department', $6, $7, NOW()) RETURNING id`,
+    [wallet.id, staffId, newAmt, description.slice(0, 500), cur.reference_id, groupId, cur.team_id]
+  );
+  // net change on the wallet = the difference only
+  await client.query(`UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2`, [r2(newAmt - oldAmt), wallet.id]);
+  return { txId: tx.rows[0].id, oldAmt, newAmt };
+}
+
 async function auditLog(client, req, wallet, action, details) {
   // best effort — never let the audit row break the booking
   await client.query('SAVEPOINT audit_sp');
@@ -300,6 +341,7 @@ async function bookDifference(client, req, wallet, m, dates) {
   if (!diff) throw httpError(400, 'There is no difference to book');
   const txs = (await client.query(
     `SELECT wt.id, wt.amount::numeric AS amount, wt.category, wt.reference_id, wt.staff_id, wt.description,
+            wt.correction_group_id,
             to_char(wt.created_at AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD') AS d
      FROM bank_statement_match_items i JOIN wallet_transactions wt ON wt.id = i.wallet_tx_id
      WHERE i.match_id = $1 ORDER BY wt.amount DESC, wt.id`,
@@ -330,9 +372,9 @@ async function bookDifference(client, req, wallet, m, dates) {
         `UPDATE service_entries SET department_charges = $1, service_charges = $2, updated_at = NOW() WHERE id = $3`,
         [newDept, newSvc, se.id]
       );
-      const txId = await postDifferenceTx(
-        client, wallet, diff, se.staff_id || dep.staff_id, 'Department Payment', se.id,
-        `Department charge adjustment for ${se.service_name || 'service'} (#${se.id}) ${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)} — ${note}`
+      const { txId } = await correctDeptTx(
+        client, wallet, dep, diff, se.staff_id || dep.staff_id,
+        `Department charge for ${se.service_name || 'service'} (#${se.id}) ${diff > 0 ? '+' : '−'}₹${Math.abs(diff).toFixed(2)} — ${note}`
       );
       await auditLog(client, req, wallet, 'Department Charge Adjusted',
         `Entry #${se.id}: department ₹${Number(se.department_charges).toFixed(2)} → ₹${newDept.toFixed(2)}, service ₹${Number(se.service_charges).toFixed(2)} → ₹${newSvc.toFixed(2)} (${note})`);
@@ -511,11 +553,44 @@ router.get('/:id', async (req, res) => {
     const missingTx = [...new Set(matches.flatMap((m) => m.tx_ids))].filter((t) => !appById[t]);
     if (missingTx.length) {
       (await req.db.query(
-        `SELECT wt.id, wt.amount::numeric AS amount, wt.category, wt.description,
+        `SELECT wt.id, wt.amount::numeric AS amount, wt.category, wt.description, wt.reference_id,
                 to_char(wt.created_at AT TIME ZONE 'Asia/Kolkata','YYYY-MM-DD') AS date,
-                to_char(wt.created_at AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS time
-         FROM wallet_transactions wt WHERE wt.id = ANY($1::int[])`, [missingTx]
+                to_char(wt.created_at AT TIME ZONE 'Asia/Kolkata','HH24:MI') AS time,
+                se.id AS entry_id, se.customer_name, se.service_charges::numeric AS service_charges,
+                sv.name AS service_name, sc.name AS subcategory_name, st.name AS staff_name
+         FROM wallet_transactions wt
+         LEFT JOIN service_entries se ON se.id = wt.reference_id
+               AND wt.category IN ('Department Payment', 'Service Payment', 'Service Charge')
+         LEFT JOIN services sv ON sv.id = se.category_id
+         LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+         LEFT JOIN staff st ON st.id = wt.staff_id
+         WHERE wt.id = ANY($1::int[])`, [missingTx]
       )).rows.forEach((t) => { appById[t.id] = t; });
+    }
+
+    // A matched entry that was corrected afterwards: moved to another wallet, or amount changed
+    const matchedTx = [...new Set(matches.flatMap((m) => m.tx_ids))];
+    const latestOf = {};
+    if (matchedTx.length) {
+      (await req.db.query(
+        `SELECT o.id, l.wallet_id, l.amount::numeric AS amount
+         FROM wallet_transactions o
+         JOIN LATERAL (
+           SELECT x.wallet_id, x.amount FROM wallet_transactions x
+           WHERE NULLIF(o.correction_group_id::text, '') IS NOT NULL
+             AND x.correction_group_id = o.correction_group_id AND x.is_reversal IS NOT TRUE
+           ORDER BY x.created_at DESC, x.id DESC LIMIT 1
+         ) l ON true
+         WHERE o.id = ANY($1::int[])`,
+        [matchedTx]
+      )).rows.forEach((r) => { latestOf[r.id] = r; });
+    }
+    for (const m of matches) {
+      if (m.adjustment_tx_id) continue; // our own correction made the latest one
+      m.moved = m.tx_ids.filter((t) => latestOf[t] && latestOf[t].wallet_id !== wallet.id);
+      m.changed = m.tx_ids
+        .filter((t) => latestOf[t] && latestOf[t].wallet_id === wallet.id && appById[t] && r2(latestOf[t].amount) !== r2(appById[t].amount))
+        .map((t) => ({ id: t, now: r2(latestOf[t].amount) }));
     }
 
     const inMatch = new Set(matches.flatMap((m) => m.tx_ids));
