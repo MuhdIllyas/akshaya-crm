@@ -86,6 +86,9 @@ const APP_DEBITS_SQL = `
   LEFT JOIN staff st ON st.id = x.staff_id
   WHERE x.is_reversal IS NOT TRUE
     AND COALESCE(x.description, '') NOT ILIKE 'Correction reversal%'
+    -- an expense deleted in Expense Management is not a payment any more
+    AND NOT (x.category = 'Expense' AND EXISTS (
+          SELECT 1 FROM expenses de WHERE de.id = x.reference_id AND de.status = 'deleted'))
   ORDER BY x.created_at
 `;
 
@@ -103,6 +106,20 @@ const REVERSAL_CREDITS_SQL = `
     AND wt.created_at >= (($2::date - 1)::timestamp AT TIME ZONE 'Asia/Kolkata')
     AND wt.created_at <  (($3::date + 2)::timestamp AT TIME ZONE 'Asia/Kolkata')
   ORDER BY wt.created_at, wt.id`;
+
+/* Transactions corrected AFTER they were matched / checked get a new id in the same correction
+   group (e.g. an expense team or amount correction). The new version is still that same payment,
+   so it counts as matched too — otherwise it would show again as "In app, not in bank". */
+async function groupMates(db, walletId, txIds) {
+  if (!txIds.length) return [];
+  return (await db.query(
+    `SELECT x.id FROM wallet_transactions x
+     JOIN wallet_transactions o ON NULLIF(o.correction_group_id::text, '') IS NOT NULL
+                               AND x.correction_group_id = o.correction_group_id
+     WHERE o.id = ANY($1::int[]) AND x.wallet_id = $2 AND x.id <> o.id`,
+    [txIds, walletId]
+  )).rows.map((r) => r.id);
+}
 
 async function loadAppDebits(db, walletId, from, to) {
   const debits = (await db.query(APP_DEBITS_SQL, [walletId, from, to])).rows;
@@ -155,13 +172,14 @@ async function runMatching(client, wallet, from, to) {
     [wallet.id, from, to]
   )).rows.map((l) => ({ ...l, debit: Number(l.debit) }));
 
-  const used = new Set((await client.query(
+  const usedIds = (await client.query(
     `SELECT i.wallet_tx_id FROM bank_statement_match_items i
      JOIN bank_statement_matches m ON m.id = i.match_id
      WHERE m.wallet_id = $1 AND m.status IN ('proposed', 'confirmed') AND i.wallet_tx_id IS NOT NULL
      UNION SELECT wallet_tx_id FROM bank_statement_app_checks WHERE wallet_id = $1`,
     [wallet.id]
-  )).rows.map((r) => r.wallet_tx_id));
+  )).rows.map((r) => r.wallet_tx_id);
+  const used = new Set([...usedIds, ...(await groupMates(client, wallet.id, usedIds))]);
 
   const app = (await loadAppDebits(client, wallet.id, from, to))
     .filter((a) => !used.has(a.id))
@@ -235,16 +253,22 @@ async function bookAdjustment(client, req, wallet, amount, category, description
   if (!(amt > 0)) throw httpError(400, 'Nothing to book');
   if (amount > 0) {
     await client.query('UPDATE wallets SET balance = balance - $1, updated_at = NOW() WHERE id = $2', [amt, wallet.id]);
-    const tx = await client.query(
-      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category, created_at)
-       VALUES ($1, $2, 'debit', $3, $4, $5, NOW()) RETURNING id`,
-      [wallet.id, staffId, amt, description, category]
-    );
-    await client.query(
+    // same shape as an expense entered on the Expense page (linked both ways, one correction group),
+    // so it can be corrected or deleted from Expense Management later
+    const groupId = crypto.randomUUID();
+    const ex = await client.query(
       `INSERT INTO expenses (centre_id, staff_id, category, amount, description, wallet_id,
-                             payment_method, expense_date, status, requires_approval, submitted_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'online', CURRENT_DATE, 'auto_approved', false, NOW())`,
-      [wallet.centre_id, staffId, category, amt, description, wallet.id]
+                             payment_method, expense_date, status, requires_approval, submitted_at,
+                             correction_group_id, is_reversal)
+       VALUES ($1, $2, $3, $4, $5, $6, 'online', CURRENT_DATE, 'auto_approved', false, NOW(), $7, FALSE)
+       RETURNING id`,
+      [wallet.centre_id, staffId, category, amt, description, wallet.id, groupId]
+    );
+    const tx = await client.query(
+      `INSERT INTO wallet_transactions (wallet_id, staff_id, type, amount, description, category,
+                                        reference_id, reference_type, correction_group_id, created_at)
+       VALUES ($1, $2, 'debit', $3, $4, 'Expense', $5, 'expense', $6, NOW()) RETURNING id`,
+      [wallet.id, staffId, amt, description, ex.rows[0].id, groupId]
     );
     return tx.rows[0].id;
   }
@@ -601,8 +625,12 @@ router.get('/:id', async (req, res) => {
        WHERE m.wallet_id = $1 AND m.status IN ('proposed', 'confirmed') AND i.wallet_tx_id IS NOT NULL`,
       [wallet.id]
     )).rows.forEach((r) => inMatch.add(r.wallet_tx_id));
+    (await groupMates(req.db, wallet.id, [...inMatch])).forEach((id) => inMatch.add(id));
     const checks = (await req.db.query('SELECT wallet_tx_id, note FROM bank_statement_app_checks WHERE wallet_id = $1', [wallet.id])).rows;
     const checkedNote = Object.fromEntries(checks.map((c) => [c.wallet_tx_id, c.note]));
+    for (const c of checks) {
+      (await groupMates(req.db, wallet.id, [c.wallet_tx_id])).forEach((id) => { if (!checkedNote[id]) checkedNote[id] = c.note; });
+    }
     const appInPeriod = app.filter((a) => a.date >= s.period_from && a.date <= s.period_to);
 
     const debitLines = lines.filter((l) => Number(l.debit) > 0);

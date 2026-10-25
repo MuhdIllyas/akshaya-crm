@@ -89,6 +89,7 @@ const CATEGORIES = [
   { id: 17, name: "Daily Adjustment", color: "#F59E0B", icon: "⚖️", requires_approval: false },
   { id: 18, name: "Refreshments / Pantry", color: "#0EA5E9", icon: "💧", requires_approval: false },
   { id: 19, name: "Software Subscriptions", color: "#8B5CF6", icon: "☁️", requires_approval: false },
+  { id: 20, name: "Donations", color: "#DB2777", icon: "🤝", requires_approval: false },
 ];
 
 const WALLET_TYPE_META = {
@@ -332,7 +333,9 @@ const AdminExpenseManagement = () => {
   const [selectedWallet, setSelectedWallet] = useState("all");
   const [visible, setVisible] = useState(PAGE_SIZE);
 
-  const [correctionForm, setCorrectionForm] = useState({ amount: "", wallet_id: "", reason: "" });
+  const [correctionForm, setCorrectionForm] = useState({ amount: "", wallet_id: "", team_id: "", reason: "" });
+  const [teams, setTeams] = useState([]);
+  const [deleteReason, setDeleteReason] = useState("");
 
   const [showFutureAnalysis, setShowFutureAnalysis] = useState(false);
   const [showCharts, setShowCharts] = useState(true);
@@ -381,15 +384,22 @@ const AdminExpenseManagement = () => {
     if (isRefresh) setRefreshing(true);
     setLoadError(false);
     try {
-      const [expRes, walletRes] = await Promise.allSettled([
+      const [expRes, walletRes, teamRes] = await Promise.allSettled([
         api(`/api/expense?${buildQueryString()}`),
         isSuperAdmin && selectedCentreId ? getWalletsByCentre(selectedCentreId) : getWalletsForCentre(),
+        api(`/api/teams${selectedCentreId ? `?centre_id=${selectedCentreId}` : ""}`),
       ]);
       if (req !== reqRef.current) return;
       if (expRes.status === "fulfilled") setExpenses(toList(expRes.value, "expenses"));
       else { setLoadError(true); toast.error("Failed to load expenses"); }
       if (walletRes.status === "fulfilled") setWallets(toList(walletRes.value, "wallets"));
       else toast.error("Failed to load wallets");
+      // teams of this centre + global teams (for the correction form)
+      if (teamRes.status === "fulfilled") {
+        const cid = Number(selectedCentreId);
+        setTeams(toList(teamRes.value, "teams").filter((t) =>
+          t.status !== "inactive" && (t.is_global || t.centre_id == null || Number(t.centre_id) === cid)));
+      }
     } catch {
       if (req === reqRef.current) { setLoadError(true); toast.error("Network error while loading data"); }
     } finally {
@@ -432,7 +442,7 @@ const AdminExpenseManagement = () => {
     const q = searchQuery.trim().toLowerCase();
     return expenses.filter((expense) => {
       if (q) {
-        const hit = [expense.description, expense.receipt_number, expense.category, expense.remarks, expense.wallet_name, expense.staff_name]
+        const hit = [expense.description, expense.receipt_number, expense.category, expense.remarks, expense.wallet_name, expense.staff_name, expense.team_name]
           .some((f) => f && String(f).toLowerCase().includes(q));
         if (!hit) return false;
       }
@@ -532,15 +542,30 @@ const AdminExpenseManagement = () => {
   };
   const handleApprove = (id) => runAction(id, () => api(`/api/expense/${id}/approve`, { method: "PUT" }), "Expense approved", "Approval failed");
   const handleReject = (id) => runAction(id, () => api(`/api/expense/${id}/reject`, { method: "PUT" }), "Expense rejected", "Rejection failed");
+  const isPostedTarget = deleteTarget && deleteTarget.status !== "pending";
   const confirmDelete = async () => {
     const target = deleteTarget;
+    const posted = target && target.status !== "pending";
+    if (posted && deleteReason.trim().length < 3) { toast.error("Add a short reason"); return; }
     setDeleteTarget(null);
-    if (target) await runAction(target.id, () => api(`/api/expense/${target.id}`, { method: "DELETE" }), "Expense deleted", "Delete failed");
+    if (!target) return;
+    await runAction(
+      target.id,
+      () => api(`/api/expense/${target.id}`, { method: "DELETE", body: posted ? { reason: deleteReason.trim() } : undefined }),
+      posted ? `Expense deleted — ${formatCurrency(target.amount)} returned to ${target.wallet_name}` : "Expense deleted",
+      "Delete failed"
+    );
+    setDeleteReason("");
   };
 
   const openCorrectModal = (expense) => {
     setCorrectingExpense(expense);
-    setCorrectionForm({ amount: String(expense.amount ?? ""), wallet_id: expense.wallet_id != null ? String(expense.wallet_id) : "", reason: "" });
+    setCorrectionForm({
+      amount: String(expense.amount ?? ""),
+      wallet_id: expense.wallet_id != null ? String(expense.wallet_id) : "",
+      team_id: expense.team_id != null ? String(expense.team_id) : "",
+      reason: "",
+    });
     setShowCorrectModal(true);
   };
 
@@ -557,6 +582,7 @@ const AdminExpenseManagement = () => {
         body: {
           amount: Number(correctionForm.amount),
           wallet_id: Number(correctionForm.wallet_id),
+          team_id: correctionForm.team_id ? Number(correctionForm.team_id) : null,
           reason: correctionForm.reason || "Admin correction",
         },
       });
@@ -587,8 +613,8 @@ const AdminExpenseManagement = () => {
   const exportToCSV = () => {
     if (filteredExpenses.length === 0) { toast.info("Nothing to export for this selection"); return; }
     const rows = [
-      ["Date", "Category", "Description", "Amount", "Wallet", "Status", "Staff", "Receipt", "Remarks"],
-      ...filteredExpenses.map((e) => [ymd(e.expense_date), e.category, e.description, e.amount, e.wallet_name, e.status, e.staff_name, e.receipt_number, e.remarks]),
+      ["Date", "Category", "Description", "Amount", "Wallet", "Team", "Status", "Staff", "Receipt", "Remarks"],
+      ...filteredExpenses.map((e) => [ymd(e.expense_date), e.category, e.description, e.amount, e.wallet_name, e.team_name, e.status, e.staff_name, e.receipt_number, e.remarks]),
     ];
     const csv = rows.map((r) => r.map(csvCell).join(",")).join("\n");
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
@@ -640,6 +666,9 @@ const AdminExpenseManagement = () => {
         {!pending && (
           <button type="button" disabled={busy} onClick={() => openCorrectModal(expense)} className={`${btn} text-navy-700 hover:bg-slate-100`} title="Correct" aria-label="Correct"><FiEdit3 className="h-[18px] w-[18px]" /></button>
         )}
+        {!pending && (expense.status === "approved" || expense.status === "auto_approved") && (
+          <button type="button" disabled={busy} onClick={() => { setDeleteReason(""); setDeleteTarget(expense); }} className={`${btn} text-rose-600 hover:bg-rose-50`} title="Delete and return the amount to the wallet" aria-label="Delete"><FiTrash2 className="h-[18px] w-[18px]" /></button>
+        )}
       </div>
     );
   };
@@ -655,6 +684,7 @@ const AdminExpenseManagement = () => {
             <span className="inline-flex items-center gap-1"><FiCalendar className="h-3 w-3" />{formatDate(expense.expense_date)}</span>
             <span className="rounded-full px-2 py-0.5 font-medium" style={{ backgroundColor: `${category?.color || "#6B7280"}1f`, color: category?.color || "#6B7280" }}>{expense.category}</span>
             {expense.receipt_number && <span>#{expense.receipt_number}</span>}
+            {expense.team_name && <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-medium text-slate-600" title="Team">👥 {expense.team_name}</span>}
           </div>
         </div>
       </div>
@@ -957,10 +987,29 @@ const AdminExpenseManagement = () => {
             <div className="p-6">
               <span className="flex h-11 w-11 items-center justify-center rounded-full bg-rose-50 text-rose-600"><FiTrash2 className="h-5 w-5" /></span>
               <h2 className="mt-4 text-lg font-semibold text-slate-900">Delete this expense?</h2>
-              <p className="mt-1 text-sm text-slate-500">{deleteTarget.description} · {formatCurrency(deleteTarget.amount)}. Only pending expenses can be deleted. This cannot be undone.</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {deleteTarget.description} · {formatCurrency(deleteTarget.amount)}
+                {deleteTarget.team_name ? ` · ${deleteTarget.team_name}` : ""}
+              </p>
+              {isPostedTarget ? (
+                <>
+                  <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    {formatCurrency(deleteTarget.amount)} goes back to <b>{deleteTarget.wallet_name}</b> today. The expense is removed from
+                    lists and reports; who deleted it and why stays in the audit log. If it was matched on a bank statement, that match is removed too.
+                  </p>
+                  <label className="mt-3 block space-y-1.5">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Reason *</span>
+                    <textarea value={deleteReason} onChange={(e) => setDeleteReason(e.target.value)} className={inputCls} rows="2" placeholder="e.g. entered twice, not a real expense…" autoFocus />
+                  </label>
+                </>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500">It was never debited from a wallet. This cannot be undone.</p>
+              )}
               <div className="mt-5 flex justify-end gap-2">
                 <button type="button" onClick={() => setDeleteTarget(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Cancel</button>
-                <button type="button" onClick={confirmDelete} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700">Delete</button>
+                <button type="button" onClick={confirmDelete} disabled={isPostedTarget && deleteReason.trim().length < 3} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-50">
+                  {isPostedTarget ? "Delete & return amount" : "Delete"}
+                </button>
               </div>
             </div>
           </Modal>
@@ -975,6 +1024,7 @@ const AdminExpenseManagement = () => {
               <h2 className="text-lg font-semibold text-slate-900">Correct expense</h2>
               <p className="mt-1 text-sm text-slate-500">
                 Original: {correctingExpense.description} · {formatCurrency(correctingExpense.amount)} on {formatDate(correctingExpense.expense_date)}
+                {correctingExpense.team_name ? ` · ${correctingExpense.team_name}` : ""}
               </p>
             </div>
             <form onSubmit={handleCorrectExpense} className="space-y-4 p-6">
@@ -1003,6 +1053,17 @@ const AdminExpenseManagement = () => {
                   })}
                 </div>
               </div>
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Team</span>
+                <select value={correctionForm.team_id} onChange={(e) => setCorrectionForm((p) => ({ ...p, team_id: e.target.value }))} className={inputCls}>
+                  <option value="">No team</option>
+                  {teams.map((t) => <option key={t.id} value={String(t.id)}>{t.name}{t.is_global || t.centre_id == null ? " (Global)" : ""}</option>)}
+                  {correctionForm.team_id && !teams.some((t) => String(t.id) === correctionForm.team_id) && (
+                    <option value={correctionForm.team_id}>{correctingExpense.team_name || `Team #${correctionForm.team_id}`}</option>
+                  )}
+                </select>
+                <span className="block text-xs text-slate-400">Changing only the team moves no money — it just fixes which team the expense counts for.</span>
+              </label>
               <label className="block space-y-1.5">
                 <span className="text-xs font-medium uppercase tracking-wide text-slate-500">Reason for correction</span>
                 <textarea value={correctionForm.reason} onChange={(e) => setCorrectionForm((p) => ({ ...p, reason: e.target.value }))} className={inputCls} rows="3" placeholder="Explain why…" />
