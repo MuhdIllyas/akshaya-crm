@@ -139,8 +139,15 @@ router.get('/daily-summary', requireAccounting, async (req, res) => {
       const isDigital = !isCash && !isBank;
       
       const isTransfer = row.category === 'Transfer' || row.category === 'Internal Transfer';
+      // An 'Expense' credit is money returned when an approved expense is deleted.
+      // It is not a collection: it cancels part of the outflow. Closing balance is unchanged.
+      const isExpenseRefund = row.category === 'Expense' && row.type === 'credit';
 
-      if (isTransfer) {
+      if (isExpenseRefund) {
+        if (isCash) cashOutflow -= amount;
+        else if (isBank) bankOutflow -= amount;
+        else if (isDigital) digitalOutflow -= amount;
+      } else if (isTransfer) {
         if (row.type === 'credit') {
           if (isCash) cashTransferIn += amount;
           else if (isBank) bankTransferIn += amount;
@@ -394,7 +401,7 @@ router.get('/ledger', requireAccounting, async (req, res) => {
 
     const ledgerRes = await client.query(
       `
-      SELECT * FROM (
+      WITH latest AS (
         SELECT DISTINCT ON (COALESCE(wt.correction_group_id::text, wt.id::text))
           wt.id,
           wt.created_at,
@@ -404,6 +411,7 @@ router.get('/ledger', requireAccounting, async (req, res) => {
           wt.correction_group_id,
           wt.is_reversal,
           wt.reference_type,
+          wt.reference_id,
 
           w.id AS wallet_id,
           w.name AS wallet_name,
@@ -428,9 +436,20 @@ router.get('/ledger', requireAccounting, async (req, res) => {
         ${whereClause}
           AND (wt.is_reversal IS NULL OR wt.is_reversal = FALSE)
 
-        ORDER BY COALESCE(wt.correction_group_id::text, wt.id::text), wt.created_at DESC
-      ) AS distinct_transactions
-      ORDER BY created_at DESC
+        ORDER BY COALESCE(wt.correction_group_id::text, wt.id::text), wt.created_at DESC, wt.id DESC
+      ),
+      -- deleted expenses whose debit and refund are both in this range: they cancel out, hide both lines
+      cancelled AS (
+        SELECT l.reference_id
+        FROM latest l
+        JOIN expenses ex ON ex.id = l.reference_id AND ex.is_reversal IS TRUE
+        WHERE l.category = 'Expense'
+        GROUP BY l.reference_id
+        HAVING SUM(CASE WHEN l.type = 'credit' THEN l.amount ELSE -l.amount END) = 0
+      )
+      SELECT * FROM latest l
+      WHERE NOT (l.category = 'Expense' AND l.reference_id IN (SELECT reference_id FROM cancelled))
+      ORDER BY l.created_at DESC
       LIMIT 500
       `,
       params
