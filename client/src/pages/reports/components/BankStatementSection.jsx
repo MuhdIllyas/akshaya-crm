@@ -168,6 +168,8 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
   const [selApp, setSelApp] = useState([]);
   const [open, setOpen] = useState({ review: true, bank: true, app: true, matched: false, checked: false });
   const [uploadErrors, setUploadErrors] = useState(null);
+  const [pwFile, setPwFile] = useState(null); // { file, wrong } — a locked file waiting for its password
+  const [pw, setPw] = useState('');
 
   useEffect(() => {
     if (!walletId && bankWallets.length) {
@@ -209,19 +211,34 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
 
-  const onUpload = async (file) => {
+  const onUpload = async (file, password) => {
     if (!file) return;
-    if (file.type && file.type !== 'application/pdf') return toast.error('Choose the statement PDF');
+    if (!/\.(pdf|xlsx|xls)$/i.test(file.name)) return toast.error('Choose the statement PDF or Excel file');
+    const isPdf = /\.pdf$/i.test(file.name);
     setUploading(true); setUploadErrors(null);
     try {
       const r = await api(`/upload?wallet_id=${walletId}&file_name=${encodeURIComponent(file.name)}`, {
-        method: 'POST', raw: file, headers: { 'Content-Type': 'application/pdf' },
+        method: 'POST', raw: file,
+        headers: {
+          'Content-Type': isPdf ? 'application/pdf' : 'application/octet-stream',
+          // only sent for a locked file; never kept anywhere
+          ...(password ? { 'X-File-Password': encodeURIComponent(password) } : {}),
+        },
       });
+      setPwFile(null); setPw('');
       toast.success(`Read ${r.rows} rows: ${r.auto} matched automatically, ${r.suggested} to review${r.already_uploaded_rows ? `, ${r.already_uploaded_rows} already uploaded before` : ''}`);
       await loadStatements(r.statement_id);
     } catch (e) {
-      if (e.data?.statement_id) { toast.info('This statement was already uploaded — opening it'); await loadStatements(e.data.statement_id); }
-      else { setUploadErrors({ message: e.message, details: e.details || [] }); toast.error(e.message); }
+      if (e.data?.needs_password) {
+        setPwFile({ file, wrong: !!e.data.wrong_password }); setPw('');
+        if (e.data.wrong_password) toast.error('Wrong password');
+      } else if (e.data?.statement_id) {
+        setPwFile(null); setPw('');
+        toast.info('This statement was already uploaded — opening it'); await loadStatements(e.data.statement_id);
+      } else {
+        setPwFile(null); setPw('');
+        setUploadErrors({ message: e.message, details: e.details || [] }); toast.error(e.message);
+      }
     } finally {
       setUploading(false);
     }
@@ -276,7 +293,7 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h3 className="flex items-center text-sm font-bold text-slate-900"><FiCreditCard className="mr-2 h-4 w-4 text-navy-700" />Bank Statement Check</h3>
-            <p className="mt-0.5 text-xs text-slate-500">Upload the SBI statement PDF. Debits are checked against what was entered in the app.</p>
+            <p className="mt-0.5 text-xs text-slate-500">Upload the SBI statement (PDF or Excel, as downloaded from net banking). Debits are checked against what was entered in the app.</p>
           </div>
           <div className="flex flex-wrap items-end gap-2">
             <label className="text-xs font-medium text-slate-600">
@@ -300,8 +317,9 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
             {!readOnly && (
               <label className={`${btnPrimary} cursor-pointer py-2`}>
                 {uploading ? <FiRefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FiUploadCloud className="h-3.5 w-3.5" />}
-                {uploading ? 'Reading…' : 'Upload PDF'}
-                <input type="file" accept="application/pdf,.pdf" className="hidden" disabled={uploading}
+                {uploading ? 'Reading…' : 'Upload statement'}
+                <input type="file" className="hidden" disabled={uploading}
+                  accept=".pdf,.xlsx,.xls,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                   onChange={(e) => { onUpload(e.target.files?.[0]); e.target.value = ''; }} />
               </label>
             )}
@@ -315,11 +333,40 @@ const BankStatementSection = ({ wallets = [], readOnly = false }) => {
           </div>
         </div>
 
+        {pwFile && (
+          <form
+            className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900"
+            onSubmit={(e) => { e.preventDefault(); if (pw) onUpload(pwFile.file, pw); }}
+          >
+            <p className="flex items-center gap-1.5 font-semibold">
+              <FiAlertTriangle className="h-3.5 w-3.5" />
+              {pwFile.wrong ? 'Wrong password — try again' : 'This file is password protected'}
+            </p>
+            <p className="mt-0.5 text-amber-800">{pwFile.file.name} · the password is only used to open the file now; it is not saved.</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <label htmlFor="stmt-file-pw" className="sr-only">File password</label>
+              <input
+                id="stmt-file-pw" type="password" autoComplete="off" autoFocus value={pw}
+                onChange={(e) => setPw(e.target.value)} disabled={uploading}
+                placeholder="File password"
+                className="w-56 rounded-lg border border-amber-300 bg-white px-2 py-1.5 text-sm text-slate-900"
+              />
+              <button type="submit" className={`${btnPrimary} py-1.5`} disabled={!pw || uploading}>
+                {uploading ? <FiRefreshCw className="h-3.5 w-3.5 animate-spin" /> : <FiUploadCloud className="h-3.5 w-3.5" />}
+                Open & read
+              </button>
+              <button type="button" className={`${btnGhost} py-1.5`} disabled={uploading} onClick={() => { setPwFile(null); setPw(''); }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+
         {uploadErrors && (
           <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">
             <p className="flex items-center gap-1.5 font-semibold"><FiAlertTriangle className="h-3.5 w-3.5" />{uploadErrors.message}</p>
             {uploadErrors.details?.length > 0 && <ul className="mt-1 list-disc pl-5">{uploadErrors.details.map((d, i) => <li key={i}>{d}</li>)}</ul>}
-            <p className="mt-1 text-rose-700">Nothing was saved. Download the statement again from net banking as PDF (not a photo or scan).</p>
+            <p className="mt-1 text-rose-700">Nothing was saved. Download the statement again from net banking (PDF or Excel) and upload that file as it is — not a "Print to PDF" copy, photo or scan.</p>
           </div>
         )}
 

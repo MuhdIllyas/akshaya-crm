@@ -3,13 +3,13 @@
 //
 // Mount in server.js:   import bankStatementsRouter from './routes/bankStatements.js';
 //                       app.use('/api/bank-statements', bankStatementsRouter);
-// Needs:                npm install pdfjs-dist@4.10.38
+// Needs:                npm install pdfjs-dist@4.10.38 exceljs@4.4.0 officecrypto-tool@0.0.19
 //                       services/statementParser.js, services/statementMatcher.js
 //                       bank-statements.sql (run once)
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
-import { parseStatementPdf } from '../services/statementParser.js';
+import { parseStatementFile } from '../services/statementParser.js';
 import { matchStatement } from '../services/statementMatcher.js';
 
 const router = express.Router();
@@ -444,22 +444,42 @@ async function bookDifference(client, req, wallet, m, dates) {
 }
 
 /* =========================================================
-   POST /upload?wallet_id=…   body: the PDF (Content-Type: application/pdf)
+   POST /upload?wallet_id=…   body: the statement file — PDF or Excel (.xlsx) from net banking
+   Locked file: the password comes in the X-File-Password header (URI-encoded). It is used
+   in memory to open the file and is never stored, logged or returned.
 ========================================================= */
-router.post('/upload', requireWriter, express.raw({ type: ['application/pdf', 'application/octet-stream'], limit: '10mb' }), async (req, res) => {
+const UPLOAD_TYPES = [
+  'application/pdf',
+  'application/octet-stream',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel',
+];
+router.post('/upload', requireWriter, express.raw({ type: UPLOAD_TYPES, limit: '10mb' }), async (req, res) => {
   const buf = req.body;
-  if (!Buffer.isBuffer(buf) || buf.length < 100) return res.status(400).json({ error: 'Send the statement PDF as the request body' });
-  if (buf.subarray(0, 5).toString() !== '%PDF-') return res.status(400).json({ error: 'That file is not a PDF' });
+  if (!Buffer.isBuffer(buf) || buf.length < 100) return res.status(400).json({ error: 'Send the statement file (PDF or Excel) as the request body' });
+
+  let password = req.get('x-file-password') || '';
+  try { password = decodeURIComponent(password); } catch { /* keep as sent */ }
+  password = password.slice(0, 200);
 
   const client = await req.db.connect();
   try {
     const wallet = await loadWallet(client, req, req.query.wallet_id);
-    const parsed = await parseStatementPdf(buf);
+    const parsed = await parseStatementFile(buf, { password: password || undefined });
+    password = '';
+    if (parsed.needsPassword) {
+      return res.status(422).json({
+        error: parsed.wrongPassword ? 'Wrong password' : 'This file is password protected',
+        details: parsed.errors,
+        needs_password: true,
+        wrong_password: !!parsed.wrongPassword,
+      });
+    }
     if (!parsed.ok) {
       return res.status(422).json({ error: 'The statement could not be read reliably', details: parsed.errors });
     }
     const fileHash = crypto.createHash('sha256').update(buf).digest('hex');
-    const fileName = String(req.query.file_name || 'statement.pdf').slice(0, 200);
+    const fileName = String(req.query.file_name || 'statement').slice(0, 200);
 
     await client.query('BEGIN');
 
