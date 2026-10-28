@@ -285,13 +285,13 @@ const AdminPrintSettings = () => {
             <div className="max-w-7xl mx-auto">
                 
                 {/* Header Section */}
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 sm:mb-8">
+                <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 mb-6 sm:mb-8">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-bold text-slate-900">Print Settings</h1>
                         <p className="text-slate-600 mt-1 text-sm sm:text-base">Manage printing prices, hardware, and routing rules</p>
                     </div>
                     
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3 shrink-0">
                         {/* Tab Switcher */}
                         <div className="flex bg-white rounded-xl p-1 border border-slate-200">
                             <button
