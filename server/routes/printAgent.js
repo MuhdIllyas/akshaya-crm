@@ -256,7 +256,8 @@ router.post('/jobs/:id/status', agentAuth, async (req, res, next) => {
     const error = completed ? null : String(req.body.error || 'Unknown error').slice(0, 1000);
     const { rows } = await pool.query(
       `UPDATE print_jobs
-          SET status = $3, error_message = $4, printed_at = CASE WHEN $3 = 'COMPLETED' THEN now() ELSE printed_at END
+          SET status = $3::text, error_message = $4::text,
+              printed_at = CASE WHEN $3::text = 'COMPLETED' THEN now() ELSE printed_at END
         WHERE id = $1 AND station_id = $2 AND status = 'PRINTING'
         RETURNING id`,
       [req.params.id, req.station.id, completed ? 'COMPLETED' : 'FAILED', error],

@@ -272,9 +272,10 @@ router.get('/status/:jobId', async (req, res) => {
     if (job.status === 'WAITING') {
       const q = await pool.query(
         `SELECT count(*)::int AS n FROM print_jobs
-          WHERE centre_id = $1 AND status IN ('WAITING','PRINTING')
-            AND coalesce(confirmed_at, created_at) < coalesce($2, $3)`,
-        [job.centre_id, job.confirmed_at, job.created_at],
+          WHERE centre_id = $1 AND status IN ('WAITING','PRINTING') AND id <> $2
+            AND coalesce(confirmed_at, created_at) <=
+                (SELECT coalesce(confirmed_at, created_at) FROM print_jobs WHERE id = $2)`,
+        [job.centre_id, job.id],
       );
       queueAhead = q.rows[0].n;
     }
