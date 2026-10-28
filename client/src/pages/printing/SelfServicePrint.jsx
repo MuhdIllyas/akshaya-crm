@@ -11,8 +11,8 @@ const MAX_MB = 50;
 const JOB_KEY = 'sahayi_print_job';
 
 const params = new URLSearchParams(window.location.search);
-const centreId = params.get('centre_id') || localStorage.getItem('centre_id');
-if (params.get('centre_id')) localStorage.setItem('centre_id', params.get('centre_id'));
+const centreId = params.get('centre_id') || localStorage.getItem('print_centre_id');
+if (params.get('centre_id')) localStorage.setItem('print_centre_id', params.get('centre_id'));
 
 const money = v => `₹${Number(v || 0).toFixed(2)}`;
 const fileSize = b => (b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);

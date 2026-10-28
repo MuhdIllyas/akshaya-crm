@@ -14,8 +14,10 @@ import {
     FiEdit2,
     FiTrash2,
     FiSmartphone,
-    FiDownload
+    FiDownload,
+    FiMonitor
 } from 'react-icons/fi';
+import PrintStations, { PrinterNamePicker } from './PrintStations';
 
 /* ================================
    QR POSTER COMPONENT
@@ -130,7 +132,7 @@ const GeneratePrintQR = ({ centreId }) => {
    MAIN SETTINGS COMPONENT
 ================================ */
 const AdminPrintSettings = () => {
-    const [activeTab, setActiveTab] = useState('pricing'); // 'pricing', 'routing', or 'qr'
+    const [activeTab, setActiveTab] = useState('pricing'); // 'pricing', 'routing', 'stations' or 'qr'
     const [loading, setLoading] = useState(true);
     const [printers, setPrinters] = useState([]);
     const [prices, setPrices] = useState([]);
@@ -313,6 +315,15 @@ const AdminPrintSettings = () => {
                                 <span className="text-sm font-medium hidden sm:inline">Hardware</span>
                             </button>
                             <button
+                                onClick={() => setActiveTab('stations')}
+                                className={`px-3 py-2 min-h-[40px] rounded-lg flex items-center gap-2 transition-all ${
+                                    activeTab === 'stations' ? "bg-navy-700 text-white shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
+                                }`}
+                            >
+                                <FiMonitor className="text-lg" />
+                                <span className="text-sm font-medium hidden sm:inline">Print Stations</span>
+                            </button>
+                            <button
                                 onClick={() => setActiveTab('qr')}
                                 className={`px-3 py-2 min-h-[40px] rounded-lg flex items-center gap-2 transition-all ${
                                     activeTab === 'qr' ? "bg-navy-700 text-white shadow-sm" : "text-slate-500 hover:text-slate-700 hover:bg-slate-50"
@@ -491,11 +502,16 @@ const AdminPrintSettings = () => {
                                 <div className="flex flex-col items-center">
                                     <div className="bg-slate-100 border-2 border-dashed border-slate-300 rounded-2xl w-20 h-20 flex items-center justify-center mb-6"><FiPrinter className="text-slate-400 text-3xl" /></div>
                                     <h3 className="text-xl font-semibold text-slate-900 mb-2">No Printers Connected</h3>
-                                    <p className="text-slate-600 mb-6">Click 'Add Printer' to register hardware connected to your local Windows Print Spooler.</p>
+                                    <p className="text-slate-600 mb-6">Pair the shop PC in the 'Print Stations' tab first, then click 'Add Printer' and pick it from the list.</p>
                                 </div>
                             </div>
                         )}
                     </div>
+                )}
+
+                {/* TAB: PRINT STATIONS (PCs running the print agent) */}
+                {activeTab === 'stations' && (
+                    <PrintStations centreId={centreId} />
                 )}
 
                 {/* TAB: QR POSTER */}
@@ -523,9 +539,14 @@ const AdminPrintSettings = () => {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Windows Spooler Driver Name</label>
-                                    <input type="text" required placeholder="e.g., Canon iR2270/2870 PCL5e" className="w-full px-4 py-3 text-base sm:text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition-all bg-white font-mono text-sm" value={printerForm.driver_name} onChange={(e) => setPrinterForm({...printerForm, driver_name: e.target.value})} />
-                                    <p className="text-xs text-slate-500 mt-1">Must exactly match the name shown in the local PC's "Printers & scanners" settings.</p>
+                                    <label className="block text-sm font-semibold text-slate-700 mb-2">Windows Printer</label>
+                                    <PrinterNamePicker
+                                        centreId={centreId}
+                                        value={printerForm.driver_name}
+                                        onChange={(v) => setPrinterForm({...printerForm, driver_name: v})}
+                                        className="w-full px-4 py-3 text-base sm:text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 transition-all bg-white font-mono text-sm"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-1">Printers reported by this centre's paired PCs. Not listed? Pair the PC in 'Print Stations'.</p>
                                 </div>
 
                                 <div>
