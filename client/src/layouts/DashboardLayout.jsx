@@ -227,9 +227,9 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/superadmin/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/superadmin/campaigns", label: "Campaigns", icon: CampaignIcon },
-      { path: "/dashboard/superadmin/settings", label: "Settings", icon: SettingsIcon },
       { path: "/dashboard/superadmin/reports", label: "Reports", icon: ReportsIcon },
-      { path: "/dashboard/superadmin/analytics", label: "Analytics", icon: AnalyticsIcon }
+      { path: "/dashboard/superadmin/analytics", label: "Analytics", icon: AnalyticsIcon },
+      { path: "/dashboard/superadmin/settings", label: "Settings", icon: SettingsIcon }
     ],
     
     admin: [
@@ -248,9 +248,9 @@ const DashboardLayout = () => {
       { path: "/dashboard/admin/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/admin/teams", label: "Teams", icon: TeamIcon },
       { path: "/dashboard/admin/campaigns", label: "Campaigns", icon: CampaignIcon },
-      { path: "/dashboard/admin/settings", label: "Settings", icon: SettingsIcon },
       { path: "/dashboard/admin/reports", label: "Reports", icon: ReportsIcon },
-      { path: "/dashboard/admin/analytics", label: "Analytics", icon: AnalyticsIcon }
+      { path: "/dashboard/admin/analytics", label: "Analytics", icon: AnalyticsIcon },
+      { path: "/dashboard/admin/settings", label: "Settings", icon: SettingsIcon }
     ],
     staff: [
       { path: "/dashboard/staff", label: "My Dashboard", icon: DashboardIcon },
