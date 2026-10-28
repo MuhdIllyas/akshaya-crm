@@ -9,30 +9,30 @@ const AdminSettings = () => {
     const [activeTab, setActiveTab] = useState('companion'); // 'companion', 'print', 'security'
 
     return (
-        <div className="min-h-screen bg-gray-50 flex flex-col md:flex-row">
+        <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
             
             {/* Sidebar Navigation */}
-            <div className="w-full md:w-64 bg-white border-r border-gray-200 p-6 flex-shrink-0">
-                <h1 className="text-2xl font-bold text-gray-900 mb-8">Settings</h1>
+            <div className="w-full md:w-64 bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 sm:p-6 flex-shrink-0">
+                <h1 className="text-2xl font-bold text-slate-900 mb-4 md:mb-8">Settings</h1>
                 
-                <nav className="space-y-2">
+                <nav className="flex gap-2 overflow-x-auto md:block md:space-y-2 md:overflow-visible -mx-1 px-1 pb-1 md:pb-0" aria-label="Settings sections">
                     <button 
                         onClick={() => setActiveTab('companion')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === 'companion' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'companion' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                     >
                         <FiSmartphone className="text-lg" />
                         Companion App
                     </button>
                     <button 
                         onClick={() => setActiveTab('print')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === 'print' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'print' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                     >
                         <FiPrinter className="text-lg" />
                         Print Routing
                     </button>
                     <button 
                         onClick={() => setActiveTab('security')}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${activeTab === 'security' ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}
+                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'security' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                     >
                         <FiShield className="text-lg" />
                         Security (Soon)
@@ -41,11 +41,11 @@ const AdminSettings = () => {
             </div>
 
             {/* Main Content Area */}
-            <div className="flex-1 p-6 md:p-8 overflow-y-auto">
+            <div className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto">
                 {activeTab === 'companion' && <CompanionSetupTab />}
                 {activeTab === 'print' && <AdminPrintSettings />}
                 {activeTab === 'security' && (
-                    <div className="text-gray-500 text-center py-20">Security settings coming soon...</div>
+                    <div className="text-slate-500 text-center py-20">Security settings coming soon...</div>
                 )}
             </div>
         </div>
@@ -125,25 +125,25 @@ const CompanionSetupTab = () => {
 
     return (
         <div className="max-w-4xl">
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Companion Devices</h2>
-            <p className="text-gray-600 mb-8">Manage physical Android phones acting as hardware gateways for your centre.</p>
+            <h2 className="text-2xl font-bold text-slate-900 mb-2">Companion Devices</h2>
+            <p className="text-slate-600 mb-6 sm:mb-8">Manage physical Android phones acting as hardware gateways for your centre.</p>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 sm:gap-8">
                 {/* QR Code Section */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col items-center text-center">
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-5 sm:p-8 flex flex-col items-center text-center">
                     {loading ? (
                         <div className="h-64 flex flex-col items-center justify-center">
-                            <FiRefreshCw className="animate-spin text-3xl text-blue-600 mb-4" />
-                            <p className="text-gray-500">Generating secure pairing token...</p>
+                            <FiRefreshCw className="animate-spin text-3xl text-navy-700 mb-4" />
+                            <p className="text-slate-500">Generating secure pairing token...</p>
                         </div>
                     ) : (
                         <>
-                            <div className="p-4 bg-white border-4 border-blue-50 rounded-2xl mb-6 inline-block">
+                            <div className="p-4 bg-white border-4 border-slate-100 rounded-2xl mb-6 inline-block max-w-full">
                                 <QRCodeCanvas value={qrPayload} size={200} level={"H"} />
                             </div>
-                            <h3 className="font-semibold text-gray-900 text-lg mb-2">Setup New Device</h3>
-                            <p className="text-sm text-gray-500 max-w-sm mb-6">Scan this 15-minute token with the Companion App to link a new phone.</p>
-                            <button onClick={fetchData} className="flex items-center gap-2 text-blue-600 hover:text-blue-700 font-medium transition-colors">
+                            <h3 className="font-semibold text-slate-900 text-lg mb-2">Setup New Device</h3>
+                            <p className="text-sm text-slate-500 max-w-sm mb-6">Scan this 15-minute token with the Companion App to link a new phone.</p>
+                            <button onClick={fetchData} className="flex items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] rounded-xl border border-slate-300 text-navy-700 hover:bg-slate-50 font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40">
                                 <FiRefreshCw /> Refresh Data
                             </button>
                         </>
@@ -151,38 +151,38 @@ const CompanionSetupTab = () => {
                 </div>
 
                 {/* Connected Devices List */}
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
-                    <h3 className="font-semibold text-gray-900 text-lg mb-4">Active Gateways</h3>
+                <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6">
+                    <h3 className="font-semibold text-slate-900 text-lg mb-4">Active Gateways</h3>
                     {devices.length === 0 ? (
-                        <div className="text-center text-gray-500 py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <div className="text-center text-slate-500 py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200">
                             No active devices found.
                         </div>
                     ) : (
                         <div className="space-y-4">
                             {devices.map(device => (
-                                <div key={device.id} className="p-4 border border-gray-100 rounded-xl bg-gray-50 hover:bg-gray-100 transition-colors relative group">
+                                <div key={device.id} className="p-4 border border-slate-200 rounded-xl bg-slate-50 hover:bg-slate-100 transition-colors relative group">
                                     
                                     {/* ---> NEW: Delete Button <--- */}
                                     <button 
                                         onClick={() => handleRemoveDevice(device.id, device.device_name)}
-                                        className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                        className="absolute top-2 right-2 sm:top-4 sm:right-4 p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100 focus:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-rose-500/40"
                                         title="Unpair Device"
                                     >
                                         <FiTrash2 className="text-lg" />
                                     </button>
 
                                     <div className="flex justify-between items-start mb-2 pr-10">
-                                        <div className="font-semibold text-gray-900 flex items-center gap-2">
-                                            <FiSmartphone className="text-blue-600" />
+                                        <div className="font-semibold text-slate-900 flex items-center gap-2 min-w-0 break-words">
+                                            <FiSmartphone className="text-navy-700 shrink-0" />
                                             {device.device_name}
                                         </div>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mt-3">
-                                        <div><strong>Battery:</strong> {device.battery_level ? `${device.battery_level}%` : 'Unknown'}</div>
-                                        <div><strong>Network:</strong> {device.network_status || 'Unknown'}</div>
-                                        <div><strong>App Version:</strong> v{device.app_version || '1.0.0'}</div>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-2 gap-y-1.5 text-sm text-slate-600 mt-3">
+                                        <div><strong className="text-slate-700">Battery:</strong> {device.battery_level ? `${device.battery_level}%` : 'Unknown'}</div>
+                                        <div><strong className="text-slate-700">Network:</strong> {device.network_status || 'Unknown'}</div>
+                                        <div><strong className="text-slate-700">App Version:</strong> v{device.app_version || '1.0.0'}</div>
                                         <div className="truncate" title={new Date(device.last_seen).toLocaleString()}>
-                                            <strong>Last Seen:</strong> {new Date(device.last_seen).toLocaleTimeString()}
+                                            <strong className="text-slate-700">Last Seen:</strong> {new Date(device.last_seen).toLocaleTimeString()}
                                         </div>
                                     </div>
                                 </div>

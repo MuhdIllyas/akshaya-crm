@@ -59,6 +59,7 @@ import eventsRoutes from "./routes/events.js";
 import notesRoutes from "./routes/notes.js";
 
 import printingRoutes from "./routes/printing.js"
+import printAgentRoutes from "./routes/printAgent.js";
 
 //communication routes
 import communicationRoutes from "./routes/communication.js";
@@ -450,6 +451,7 @@ app.use("/api/notes", notesRoutes);
 
 /* Printing */
 app.use("/api/printing", printingRoutes);
+app.use('/api/print-agent', printAgentRoutes);
 
 /* Communication */
 app.use("/api/communication", communicationRoutes);
