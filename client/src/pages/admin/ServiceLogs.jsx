@@ -850,6 +850,11 @@ const ServiceLogs = () => {
         assignedToId: t.assigned_to,
         staffId: t.assigned_to ? `EMP-${t.assigned_to}` : 'N/A',
         cost: totalCharge,
+        // needed by Admin override edit (ServiceEntry.jsx): without them the form opened with ₹0 / ₹0 and no expiry
+        serviceCharge: parseFloat(t.service_charges || 0),
+        departmentCharge: parseFloat(t.department_charges || 0),
+        expiryDate: t.expiry_date || 'Not set',
+        phone: t.phone || '',
         totalCharge,
         totalReceived,
         status,

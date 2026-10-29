@@ -1026,7 +1026,7 @@ const ServiceEntry = () => {
         id: adminEntry.serviceEntryId || adminEntry.id, 
         tokenId: adminEntry.tokenId || '',
         customerName: adminEntry.customerName || '',
-        phone: adminEntry.customerPhone || adminEntry.phone || '',
+        phone: adminEntry.phone || (adminEntry.customerPhone !== 'N/A' ? adminEntry.customerPhone : '') || '', // 'N/A' is a display label, never save it
         category: adminEntry.categoryId || adminEntry.category || '',
         subcategory: adminEntry.subcategoryId || adminEntry.subcategory || '',
         serviceCharge: adminEntry.serviceCharge || 0,

@@ -2119,8 +2119,10 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     }
     // ====================================================================
 
-    // Update Token Status using the newly calculated status
-    if (updatedEntry.status && updatedEntry.token_id) {
+    // Update Token Status — only when the entry status really changed
+    // (a name/phone/expiry edit must not reset the token or the tracking status)
+    const statusChanged = updatedEntry.status !== existingEntry.status;
+    if (statusChanged && updatedEntry.token_id) {
       let tokenStatus = 'pending';
       if (updatedEntry.status === 'completed') tokenStatus = 'completed';
       else if (updatedEntry.status === 'not_received') tokenStatus = 'processed';
@@ -2131,8 +2133,8 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       io.to(`centre_${centreId}`).emit(`tokenUpdate:${centreId}`, { tokenId: updatedEntry.token_id, status: tokenStatus });
     }
 
-    // Update Tracking Status using the newly calculated status
-    if (updatedEntry.status) {
+    // Update Tracking Status — only when the entry status really changed
+    if (statusChanged) {
       const trackingResult = await client.query('SELECT id, status, application_number FROM service_tracking WHERE service_entry_id = $1', [parseInt(id)]);
       if (trackingResult.rows.length > 0) {
         const trackingStatus = updatedEntry.status === 'completed' ? 'completed' : updatedEntry.status === 'not_received' ? 'rejected' : 'pending';
@@ -4449,13 +4451,40 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
     await client.query("BEGIN");
 
+    // lock the entry: a double tap waits here, then finds nothing pending
     const serviceRes = await client.query(
-      `SELECT id FROM service_entries WHERE id = $1`,
+      `SELECT se.id, se.total_charges, st.centre_id
+       FROM service_entries se
+       JOIN staff st ON st.id = se.staff_id
+       WHERE se.id = $1
+       FOR UPDATE OF se`,
       [serviceEntryId]
     );
+    if (serviceRes.rows.length === 0) throw httpErr(404, "Service entry not found");
 
-    if (serviceRes.rows.length === 0) {
-      throw new Error("Service entry not found");
+    const entryCentreId = serviceRes.rows[0].centre_id;
+    if (req.user.role !== "superadmin" && Number(entryCentreId) !== Number(req.user.centre_id)) {
+      throw httpErr(403, "This service entry belongs to another centre");
+    }
+    await assertOwnWallets(client, [wallet_id], entryCentreId);
+
+    const paidRes = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS paid
+       FROM payments
+       WHERE service_entry_id = $1
+         AND status = 'received'
+         AND COALESCE(is_reversal, FALSE) = FALSE
+         AND NOT EXISTS (
+           SELECT 1 FROM wallet_transactions wt
+           WHERE wt.reference_payment_id = payments.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+         )`,
+      [serviceEntryId]
+    );
+    const pendingNow =
+      Math.round((Number(serviceRes.rows[0].total_charges) - Number(paidRes.rows[0].paid)) * 100) / 100;
+    if (pendingNow <= 0) throw httpErr(409, "This payment has already been collected");
+    if (Number(amount) > pendingNow + 0.009) {
+      throw httpErr(400, `Only ₹${pendingNow} is pending on this service`);
     }
 
     const groupId = crypto.randomUUID();
@@ -4617,7 +4646,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Receive payment error:", err);
-    res.status(500).json({
+    res.status(err.status || 500).json({
       error: err.message || "Failed to receive payment"
     });
   } finally {
