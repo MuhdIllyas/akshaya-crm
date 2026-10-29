@@ -861,8 +861,9 @@ const ServiceLogs = () => {
         currentStep: t.current_step || 'Submitted',
         progress,
         priority: t.priority || 'medium',
-        date: istYmd(updatedAt),
-        time: istTime(updatedAt),
+        // "Logged" = when the service was entered (the date filters use the same date)
+        date: istYmd(t.created_at || updatedAt),
+        time: istTime(t.created_at || updatedAt),
         createdAt: t.created_at || null,
         updatedAt,
         estimatedDelivery: estimated,

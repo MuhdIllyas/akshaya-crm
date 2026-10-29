@@ -760,8 +760,10 @@ function buildTrackingFilters(query, user) {
 
   if (status && status !== 'all') add(`st.status = ?`, status);
   if (priority && priority !== 'all') add(`st.priority = ?`, priority);
-  if (start_date) add(`st.updated_at >= ?`, start_date);
-  if (end_date) add(`st.updated_at <= ?`, end_date);
+  // Date range = the day the service was ENTERED, so changing a status later
+  // does not move an old service into "Today" on Service Logs.
+  if (start_date) add(`se.created_at >= ?`, start_date);
+  if (end_date) add(`se.created_at <= ?`, end_date);
   if (TIME_RANGE_SQL[timeRange]) conditions.push(TIME_RANGE_SQL[timeRange]);
 
   if (service && service !== 'all') {
