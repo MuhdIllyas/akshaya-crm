@@ -39,6 +39,7 @@ import { validateDraft, toApiAction } from '@/utils/automations/automationUtils'
 import { getPresets , createAutomations } from '@/services/automationService';
 import { todayIST, addDays } from "@/utils/dates";
 import { printServiceChecklist } from '@/utils/pdf/requiredDocumentsPdf';
+import ServiceFilesPopover from '@/components/files/ServiceFilesPopover';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -1756,11 +1757,15 @@ const ServiceEntry = () => {
                               {svc.category ? getCategoryName(svc.category) : 'Configure New Service'}
                             </h4>
                           </div>
-                          {!isEditMode && formData.services.length > 1 && (
-                            <button type="button" onClick={() => removeServiceFromCart(index)} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2.5 sm:p-1.5 rounded transition">
-                              <FiTrash2 className="h-4 w-4" />
-                            </button>
-                          )}
+                          <div className="flex items-center gap-2">
+                            {/* Forms linked to this service in the File Repository (view-only, not part of the entry) */}
+                            <ServiceFilesPopover categoryId={svc.category} />
+                            {!isEditMode && formData.services.length > 1 && (
+                              <button type="button" onClick={() => removeServiceFromCart(index)} className="text-slate-400 hover:text-rose-500 hover:bg-rose-50 p-2.5 sm:p-1.5 rounded transition">
+                                <FiTrash2 className="h-4 w-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* ===== TABS ===== */}
