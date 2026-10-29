@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useParams, useNavigate, Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
@@ -88,6 +88,211 @@ const getLatestTransactions = (transactions) => {
   });
   
   return Array.from(map.values());
+};
+
+
+// ========== ADMIN: STAFF / WALLET MONEY FILTER (today's entries) ==========
+// Built only from the entries already on the page, so the numbers always match the table.
+// Collected = received payments (corrected/reversed ones are already removed by the server).
+// Dept fee  = the live department-fee transaction and the wallet it was debited from.
+const inrFmt = (n) => (Number(n) < 0 ? '−₹' : '₹') + Math.abs(Number(n || 0)).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+
+const entryMoney = (entry) => {
+  const received = getLatestTransactions(entry.payments || [])
+    .filter((p) => p.status === 'received' && Number(p.amount) > 0)
+    .map((p) => ({ wallet: p.walletName || `Wallet #${p.wallet}`, amount: Number(p.amount) }));
+  const d = entry.departmentChargeTransaction;
+  const dept = d && d.id && Number(d.amount) > 0
+    ? { wallet: d.wallet_name || `Wallet #${d.wallet_id}`, amount: Number(d.amount) }
+    : null;
+  return { received, dept };
+};
+
+const entryTouchesWallet = (entry, wallet) => {
+  const m = entryMoney(entry);
+  return m.received.some((r) => r.wallet === wallet) || (m.dept && m.dept.wallet === wallet);
+};
+
+const AdminMoneyFilter = ({ entries, filtered, selStaff, setSelStaff, selWallet, setSelWallet }) => {
+  // staff and wallets that appear in today's entries
+  const staffOptions = useMemo(() => {
+    const m = new Map();
+    entries.forEach((e) => {
+      const k = String(e.staffId);
+      if (!m.has(k)) m.set(k, { id: k, name: e.staffName || 'Unknown', count: 0 });
+      m.get(k).count += 1;
+    });
+    return [...m.values()].sort((a, b) => b.count - a.count);
+  }, [entries]);
+
+  const walletOptions = useMemo(() => {
+    const set = new Set();
+    entries.forEach((e) => {
+      const m = entryMoney(e);
+      m.received.forEach((r) => set.add(r.wallet));
+      if (m.dept) set.add(m.dept.wallet);
+    });
+    return [...set].sort();
+  }, [entries]);
+
+  const active = selStaff.length > 0 || Boolean(selWallet);
+
+  const totals = useMemo(() => {
+    const t = { sc: 0, dc: 0, collected: 0, due: 0, deptNoWallet: 0, rows: [] };
+    const byKey = new Map();
+    const bump = (key, field, amount) => {
+      if (!byKey.has(key)) byKey.set(key, { name: key, in: 0, out: 0 });
+      byKey.get(key)[field] += amount;
+    };
+    filtered.forEach((e) => {
+      const m = entryMoney(e);
+      t.sc += Number(e.serviceCharge || 0);
+      t.dc += Number(e.departmentCharge || 0);
+      t.due += Math.max(Number(e.balanceAmount || 0), 0);
+      if (!m.dept && Number(e.departmentCharge || 0) > 0) t.deptNoWallet += Number(e.departmentCharge);
+      if (selWallet) {
+        // one wallet: who put money in / took money out of it
+        const who = e.staffName || 'Unknown';
+        m.received.forEach((r) => { if (r.wallet === selWallet) { bump(who, 'in', r.amount); t.collected += r.amount; } });
+        if (m.dept && m.dept.wallet === selWallet) bump(who, 'out', m.dept.amount);
+      } else {
+        // staff picked: which wallets their money went into / came out of
+        m.received.forEach((r) => { bump(r.wallet, 'in', r.amount); t.collected += r.amount; });
+        if (m.dept) bump(m.dept.wallet, 'out', m.dept.amount);
+      }
+    });
+    t.rows = [...byKey.values()].sort((a, b) => (b.in + b.out) - (a.in + a.out));
+    return t;
+  }, [filtered, selWallet]);
+
+  const toggleStaff = (id) =>
+    setSelStaff((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const totalIn = totals.rows.reduce((a, r) => a + r.in, 0);
+  const totalOut = totals.rows.reduce((a, r) => a + r.out, 0);
+  const staffLabel = selStaff.length
+    ? staffOptions.filter((s) => selStaff.includes(s.id)).map((s) => s.name).join(', ')
+    : 'All staff';
+
+  return (
+    <div className="mb-5">
+      {/* filter bar */}
+      <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-14">Staff</span>
+          {staffOptions.map((s) => {
+            const on = selStaff.includes(s.id);
+            return (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => toggleStaff(s.id)}
+                className={`px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
+                  on ? 'bg-navy-700 border-navy-700 text-white' : 'bg-white border-slate-300 text-slate-600 hover:bg-slate-100'
+                }`}
+              >
+                {on && <FiCheck className="inline h-3 w-3 mr-1 -mt-0.5" />}
+                {s.name} <span className={on ? 'text-white/70' : 'text-slate-400'}>({s.count})</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider w-14">Wallet</span>
+          <select
+            value={selWallet}
+            onChange={(e) => setSelWallet(e.target.value)}
+            className="px-3 py-1.5 border border-slate-300 rounded-lg text-sm bg-white"
+          >
+            <option value="">All wallets</option>
+            {walletOptions.map((w) => <option key={w} value={w}>{w}</option>)}
+          </select>
+          {active && (
+            <button
+              type="button"
+              onClick={() => { setSelStaff([]); setSelWallet(''); }}
+              className="inline-flex items-center gap-1 text-xs font-medium text-navy-700 hover:text-navy-800 ml-1"
+            >
+              <FiX className="h-3 w-3" /> Clear filters
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* summary, only when a filter is picked */}
+      {active && (
+        <div className="mt-3">
+          <div className="text-xs text-slate-500 mb-2">
+            <span className="font-semibold text-slate-700">{staffLabel}</span>
+            {selWallet && <> · wallet <span className="font-semibold text-slate-700">{selWallet}</span></>}
+            {' '}· {filtered.length} {filtered.length === 1 ? 'entry' : 'entries'}
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+            <div className="rounded-xl border p-3 bg-navy-500/5 border-navy-500/15 text-navy-800">
+              <div className="text-xs">Service charge</div>
+              <div className="text-lg font-bold">{inrFmt(totals.sc)}</div>
+            </div>
+            <div className="rounded-xl border p-3 bg-slate-50 border-slate-200 text-slate-800">
+              <div className="text-xs">Dept fees</div>
+              <div className="text-lg font-bold">{inrFmt(totals.dc)}</div>
+            </div>
+            <div className="rounded-xl border p-3 bg-emerald-50 border-emerald-100 text-emerald-700">
+              <div className="text-xs">{selWallet ? `Collected into ${selWallet}` : 'Collected'}</div>
+              <div className="text-lg font-bold">{inrFmt(totals.collected)}</div>
+            </div>
+            <div className="rounded-xl border p-3 bg-amber-50 border-amber-100 text-amber-700">
+              <div className="text-xs">Balance due</div>
+              <div className="text-lg font-bold">{inrFmt(totals.due)}</div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-slate-200 overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                    {selWallet ? `Staff (${selWallet})` : 'Wallet'}
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">In</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Out</th>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-slate-500 uppercase tracking-wider">Net</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {totals.rows.length === 0 ? (
+                  <tr><td colSpan={4} className="px-3 py-3 text-slate-400">No money movement</td></tr>
+                ) : totals.rows.map((r) => (
+                  <tr key={r.name}>
+                    <td className="px-3 py-1.5 text-slate-700">{r.name}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-emerald-700">{r.in ? inrFmt(r.in) : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-rose-600">{r.out ? inrFmt(r.out) : '—'}</td>
+                    <td className="px-3 py-1.5 text-right font-semibold text-slate-800">{inrFmt(r.in - r.out)}</td>
+                  </tr>
+                ))}
+                {totals.rows.length > 1 && (
+                  <tr className="bg-slate-50 font-bold">
+                    <td className="px-3 py-1.5">Total</td>
+                    <td className="px-3 py-1.5 text-right text-emerald-700">{inrFmt(totalIn)}</td>
+                    <td className="px-3 py-1.5 text-right text-rose-600">{inrFmt(totalOut)}</td>
+                    <td className="px-3 py-1.5 text-right">{inrFmt(totalIn - totalOut)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-slate-500 mt-1.5">
+            In = customer payments received into the wallet · Out = department fees paid from it
+          </p>
+          {totals.deptNoWallet > 0 && (
+            <p className="text-xs text-amber-700 mt-1">
+              {inrFmt(totals.deptNoWallet)} of department fees in these entries was not debited from any wallet.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const getBase64ImageFromUrl = (imageUrl) => {
@@ -282,6 +487,17 @@ const ServiceEntry = () => {
   
   const userRole = localStorage.getItem('role') || 'staff';
   const userId = localStorage.getItem('id');
+  const isAdminUser = userRole === 'admin' || userRole === 'superadmin';
+
+  // Admin-only staff / wallet filter for today's entries (staff always see all of their own)
+  const [moneyStaff, setMoneyStaff] = useState([]);   // staff ids as strings, more than one allowed
+  const [moneyWallet, setMoneyWallet] = useState(''); // wallet name
+  const visibleEntries = useMemo(() => {
+    if (!isAdminUser) return serviceEntries;
+    return serviceEntries.filter((e) =>
+      (moneyStaff.length === 0 || moneyStaff.includes(String(e.staffId))) &&
+      (!moneyWallet || entryTouchesWallet(e, moneyWallet)));
+  }, [serviceEntries, moneyStaff, moneyWallet, isAdminUser]);
 
   const handleEditEntry = (entry) => {
     setEditingEntryId(entry.id);
@@ -2440,7 +2656,11 @@ const ServiceEntry = () => {
         <div className="flex flex-wrap justify-between items-center gap-2 mb-5">
           <h3 className="text-lg font-semibold text-slate-900">Today's Service Entries</h3>
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-            <div className="text-sm text-slate-500">{serviceEntries.length} records</div>
+            <div className="text-sm text-slate-500">
+              {visibleEntries.length !== serviceEntries.length
+                ? `${visibleEntries.length} of ${serviceEntries.length} records`
+                : `${serviceEntries.length} records`}
+            </div>
             <Link
               to="/dashboard/staff/all-entries"
               className="text-navy-700 hover:text-navy-800 text-sm font-medium flex items-center gap-2"
@@ -2451,17 +2671,32 @@ const ServiceEntry = () => {
           </div>
         </div>
         
-        {serviceEntries.length === 0 ? (
+        {isAdminUser && serviceEntries.length > 0 && (
+          <AdminMoneyFilter
+            entries={serviceEntries}
+            filtered={visibleEntries}
+            selStaff={moneyStaff}
+            setSelStaff={setMoneyStaff}
+            selWallet={moneyWallet}
+            setSelWallet={setMoneyWallet}
+          />
+        )}
+
+        {visibleEntries.length === 0 ? (
           <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-xl p-8 text-center">
             <FiEye className="mx-auto h-12 w-12 text-slate-400 mb-3" />
-            <p className="text-slate-600 font-medium">No service entries found for today</p>
-            <p className="text-slate-500 text-sm mt-1">Today's submitted service entries will appear here</p>
+            <p className="text-slate-600 font-medium">
+              {serviceEntries.length > 0 ? 'No entries match the staff / wallet filter' : 'No service entries found for today'}
+            </p>
+            <p className="text-slate-500 text-sm mt-1">
+              {serviceEntries.length > 0 ? 'Change or clear the filter above' : "Today's submitted service entries will appear here"}
+            </p>
           </div>
         ) : (
           <>
           {/* Phones: one card per entry */}
           <div className="md:hidden space-y-3">
-            {serviceEntries.map((entry) => {
+            {visibleEntries.map((entry) => {
               const deptTx = entry.departmentChargeTransaction;
               const serviceTx = entry.serviceChargeTransaction;
               const safePayments = getLatestTransactions(entry.payments || []);
@@ -2607,7 +2842,7 @@ const ServiceEntry = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-slate-200">
-                {serviceEntries.map((entry, index) => {
+                {visibleEntries.map((entry, index) => {
                   const deptTx = entry.departmentChargeTransaction;
                   const serviceTx = entry.serviceChargeTransaction;
                   const safePayments = getLatestTransactions(entry.payments || []);
