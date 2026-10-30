@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
@@ -55,77 +55,91 @@ const AllEntries = () => {
     expiryDate: ''
   });
   const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);      // first load finished
+  const entriesRequestRef = useRef(0);               // ignores out-of-order responses
+  const tokensLoadedRef = useRef(false);
   const user = JSON.parse(localStorage.getItem('user') || '{}');
 
+  // Categories: once on mount
   useEffect(() => {
-    fetchData();
-  }, []);
-
-  // 1. Fetch static data only once on mount
-  useEffect(() => {
-    const fetchInitialData = async () => {
+    const fetchCategories = async () => {
       try {
         const categoriesResponse = await getCategories();
         setCategories(categoriesResponse.data);
-
-        const centreId = user.role === 'superadmin' ? 'all' : user.centre_id;
-        const tokensResponse = await getTokens(centreId, 'all');
-        setTokens(tokensResponse.data);
       } catch (error) {
-        console.error('Error fetching categories/tokens:', error);
+        console.error('Error fetching categories:', error);
       }
     };
-    fetchInitialData();
+    fetchCategories();
   }, []);
 
-  // 2. Fetch entries whenever the date filters change
-  useEffect(() => {
-    const fetchEntries = async () => {
-      try {
-        setLoading(true);
-        // Format dates as YYYY-MM-DD for the backend, using the picked calendar day.
-        // (The date picker gives local midnight; toISOString() turned that into the previous day in India.)
-        const formattedStart = filters.startDate ? filters.startDate.toLocaleDateString('en-CA') : null;
-        const formattedEnd = filters.endDate ? filters.endDate.toLocaleDateString('en-CA') : null;
-        
-        // Pass false for 'today' since we are sending explicit dates now
-        const entriesResponse = await getServiceEntries(false, null, null, formattedStart, formattedEnd);
-        setEntries(entriesResponse.data);
-      } catch (error) {
-        console.error('Error fetching entries:', error);
-        toast.error('Failed to load entries');
-      } finally {
+  // Tokens are only needed to tell Normal / Campaign tokens apart. The entries API now sends
+  // `tokenType` itself, so tokens are fetched only for older responses that don't include it.
+  const loadTokens = async () => {
+    try {
+      const centreId = user.role === 'superadmin' ? 'all' : user.centre_id;
+      const tokensResponse = await getTokens(centreId, 'all');
+      setTokens(tokensResponse.data);
+      tokensLoadedRef.current = true;
+    } catch (error) {
+      console.error('Error fetching tokens:', error);
+    }
+  };
+
+  // Entries for the selected dates (also used by Refresh)
+  const loadEntries = async () => {
+    const requestId = ++entriesRequestRef.current;
+    try {
+      setLoading(true);
+      // Format dates as YYYY-MM-DD for the backend, using the picked calendar day.
+      // (The date picker gives local midnight; toISOString() turned that into the previous day in India.)
+      const formattedStart = filters.startDate ? filters.startDate.toLocaleDateString('en-CA') : null;
+      const formattedEnd = filters.endDate ? filters.endDate.toLocaleDateString('en-CA') : null;
+
+      // Pass false for 'today' since we are sending explicit dates now
+      const entriesResponse = await getServiceEntries(false, null, null, formattedStart, formattedEnd);
+      if (requestId !== entriesRequestRef.current) return; // a newer request superseded this one
+      setEntries(entriesResponse.data);
+    } catch (error) {
+      if (requestId !== entriesRequestRef.current) return;
+      console.error('Error fetching entries:', error);
+      toast.error('Failed to load entries');
+    } finally {
+      if (requestId === entriesRequestRef.current) {
         setLoading(false);
+        setLoaded(true);
       }
-    };
-    fetchEntries();
+    }
+  };
+
+  // Fetch entries whenever the date filters change (this also covers the first load)
+  useEffect(() => {
+    loadEntries();
   }, [filters.startDate, filters.endDate]);
+
+  // Only look tokens up when some entry has a token but no tokenType from the server
+  useEffect(() => {
+    if (!tokensLoadedRef.current && entries.some(e => e.tokenId && !e.tokenType)) {
+      loadTokens();
+    }
+  }, [entries]);
 
   // Keep this exactly as it is - it handles the non-date frontend filters
   useEffect(() => {
     applyFilters();
   }, [filters, entries, tokens]);
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      // Fetch only today's entries to drastically reduce load time
-      const entriesResponse = await getServiceEntries(true); 
-      const entriesData = entriesResponse.data;
-      setEntries(entriesData);
+  // Refresh: reload the entries for the CURRENT filters (it used to jump back to today's entries)
+  const handleRefresh = () => {
+    loadEntries();
+    if (tokensLoadedRef.current) loadTokens();
+  };
 
-      const categoriesResponse = await getCategories();
-      setCategories(categoriesResponse.data);
-
-      const centreId = user.role === 'superadmin' ? 'all' : user.centre_id;
-      const tokensResponse = await getTokens(centreId, 'all');
-      setTokens(tokensResponse.data);
-    } catch (error) {
-      console.error('AllEntries.jsx: Error fetching data:', error);
-      toast.error('Failed to load entries or categories');
-    } finally {
-      setLoading(false);
-    }
+  const getEntryTokenType = (entry) => {
+    if (!entry.tokenId) return null;
+    if (entry.tokenType) return entry.tokenType;
+    const token = tokens.find(t => t.tokenId === entry.tokenId);
+    return token ? token.type : null;
   };
 
   const applyFilters = () => {
@@ -134,8 +148,8 @@ const AllEntries = () => {
     if (filters.searchQuery) {
       const query = filters.searchQuery.toLowerCase();
       filtered = filtered.filter(entry => 
-        entry.customerName.toLowerCase().includes(query) ||
-        entry.phone.includes(query) ||
+        (entry.customerName || '').toLowerCase().includes(query) ||
+        (entry.phone || '').includes(query) ||
         (entry.tokenId && entry.tokenId.toString().includes(query))
       );
     }
@@ -145,8 +159,7 @@ const AllEntries = () => {
         if (filters.tokenType === 'direct') {
           return !entry.tokenId;
         } else {
-          const token = tokens.find(t => t.tokenId === entry.tokenId);
-          return token && token.type === filters.tokenType;
+          return getEntryTokenType(entry) === filters.tokenType;
         }
       });
     }
@@ -191,29 +204,28 @@ const AllEntries = () => {
 
   const getStatusBadge = (status) => {
     const statusClasses = {
-      pending: 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400',
-      completed: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-      cancelled: 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400'
+      pending: 'bg-amber-100 text-amber-800',
+      completed: 'bg-emerald-100 text-emerald-800',
+      cancelled: 'bg-rose-100 text-rose-800'
     };
     
     return (
-      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${statusClasses[status] || 'bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}>
-        {status.charAt(0).toUpperCase() + status.slice(1)}
+      <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${statusClasses[status] || 'bg-slate-200 text-slate-700'}`}>
+        {(status || 'unknown').charAt(0).toUpperCase() + (status || 'unknown').slice(1)}
       </span>
     );
   };
 
   const getTokenTypeBadge = (entry) => {
     if (!entry.tokenId) {
-      return <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">Direct</span>;
+      return <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-slate-100 text-navy-700">Direct</span>;
     }
     
-    const token = tokens.find(t => t.tokenId === entry.tokenId);
-    if (token && token.type === 'campaign') {
-      return <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400">Campaign</span>;
+    if (getEntryTokenType(entry) === 'campaign') {
+      return <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-navy-500/10 text-navy-700">Campaign</span>;
     }
     
-    return <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400">Normal</span>;
+    return <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-emerald-100 text-emerald-800">Normal</span>;
   };
 
   const formatCurrency = (amount) => {
@@ -305,6 +317,50 @@ const AllEntries = () => {
   const modalCategory = selectedEntry ? categories.find(cat => cat.id === selectedEntry.category) : null;
   const requiresExpiry = modalCategory ? modalCategory.has_expiry : false;
 
+  // Money totals: cancelled entries are not income
+  const countedEntries = entries.filter(e => e.status !== 'cancelled');
+  const totalServiceCharges = countedEntries.reduce((sum, e) => sum + (e.serviceCharge || 0), 0);
+  const totalBilled = countedEntries.reduce((sum, e) => sum + (e.totalCharge || 0), 0);
+
+  // --- Export the entries currently shown as a CSV (opens in Excel) ---
+  const exportCsv = () => {
+    if (!filteredEntries.length) {
+      toast.info('No entries to export');
+      return;
+    }
+    const cell = (v) => {
+      let t = v === null || v === undefined ? '' : String(v);
+      if (/^[=@]|^[+-](?!\d)/.test(t)) t = `'${t}`; // stop spreadsheet formulas
+      return `"${t.replace(/"/g, '""')}"`;
+    };
+    const header = ['Date', 'Customer', 'Phone', 'Token', 'Type', 'Category', 'Subcategory', 'Status', 'Service Charge', 'Department Charge', 'Total', 'Pending'];
+    const rows = filteredEntries.map(entry => [
+      entry.created_at ? new Date(entry.created_at).toLocaleString('en-CA', { timeZone: 'Asia/Kolkata', hour12: false }).replace(', ', ' ') : '',
+      entry.customerName,
+      entry.phone,
+      entry.tokenId || '',
+      !entry.tokenId ? 'Direct' : (getEntryTokenType(entry) === 'campaign' ? 'Campaign' : 'Normal'),
+      getCategoryName(entry.category),
+      getSubcategoryName(entry.category, entry.subcategory),
+      entry.status,
+      entry.serviceCharge ?? 0,
+      entry.departmentCharge ?? 0,
+      entry.totalCharge ?? 0,
+      entry.pendingAmount ?? 0
+    ]);
+    const csv = '\uFEFF' + [header, ...rows].map(r => r.map(cell).join(',')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    const link = document.createElement('a');
+    const from = filters.startDate ? filters.startDate.toLocaleDateString('en-CA') : 'all';
+    const to = filters.endDate ? filters.endDate.toLocaleDateString('en-CA') : 'all';
+    link.href = url;
+    link.download = `service-entries_${from}_to_${to}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   // --- Calculate Analytics for Visuals ---
   const statusCounts = filteredEntries.reduce((acc, entry) => {
     acc[entry.status] = (acc[entry.status] || 0) + 1;
@@ -322,40 +378,40 @@ const AllEntries = () => {
     .slice(0, 4); // Get top 4 services
   // ---------------------------------------
 
-  if (loading) {
+  if (loading && !loaded) {
     return (
       <div className="max-w-7xl mx-auto p-6 flex justify-center items-center h-96">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400 font-medium">Loading service entries...</p>
+          <div className="w-16 h-16 border-[3px] border-navy-700 border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="mt-4 text-slate-600 font-medium">Loading service entries...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
-      <div className="max-w-7xl mx-auto p-4 sm:p-6">
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-7xl mx-auto p-3 sm:p-6">
         {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 sm:mb-8 gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Service Entries Dashboard</h1>
-            <p className="text-gray-600 dark:text-gray-400 mt-1">
+            <h1 className="text-2xl font-bold text-slate-900">Service Entries Dashboard</h1>
+            <p className="text-slate-600 mt-1">
               Manage and analyze all service entries in one place
             </p>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 w-full md:w-auto">
             <button
-              onClick={fetchData}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+              onClick={handleRefresh}
+              className="flex flex-1 md:flex-none items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-white text-slate-700 rounded-xl border border-slate-300 hover:bg-slate-50 transition-colors"
             >
               <FiRefreshCw className="h-4 w-4" />
               Refresh
             </button>
             <Link
               to="/dashboard/staff/service_entry"
-              className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg shadow-sm hover:bg-indigo-700 transition-colors"
+              className="flex flex-1 md:flex-none items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-navy-700 text-white rounded-xl shadow-sm hover:bg-navy-800 transition-colors"
             >
               <FiPlus className="h-4 w-4" />
               New Entry
@@ -364,63 +420,63 @@ const AllEntries = () => {
         </div>
 
         {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 mb-6 sm:mb-8">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Entries</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">{entries.length}</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">All time</p>
+                <p className="text-sm font-medium text-slate-600">Total Entries</p>
+                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 break-words">{entries.length}</p>
+                <p className="text-xs text-slate-500 mt-1">In selected dates</p>
               </div>
-              <div className="bg-indigo-100 dark:bg-indigo-900/30 p-2.5 rounded-lg">
-                <FiFileText className="h-5 w-5 text-indigo-600 dark:text-indigo-400" />
+              <div className="bg-slate-100 p-2.5 rounded-xl shrink-0">
+                <FiFileText className="h-5 w-5 text-navy-700" />
               </div>
             </div>
           </div>
           
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Completed</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                <p className="text-sm font-medium text-slate-600">Completed</p>
+                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 break-words">
                   {entries.filter(e => e.status === 'completed').length}
                 </p>
-                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                  {entries.length > 0 ? Math.round((entries.filter(e => e.status === 'completed').length / entries.length) * 100) : 0}% success rate
+                <p className="text-xs text-emerald-600 mt-1">
+                  {entries.length > 0 ? Math.round((entries.filter(e => e.status === 'completed').length / entries.length) * 100) : 0}% completed
                 </p>
               </div>
-              <div className="bg-green-100 dark:bg-green-900/30 p-2.5 rounded-lg">
-                <FiCheckCircle className="h-5 w-5 text-green-600 dark:text-green-400" />
+              <div className="bg-emerald-50 p-2.5 rounded-xl shrink-0">
+                <FiCheckCircle className="h-5 w-5 text-emerald-600" />
               </div>
             </div>
           </div>
           
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Pending</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                <p className="text-sm font-medium text-slate-600">Pending</p>
+                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 break-words">
                   {entries.filter(e => e.status === 'pending').length}
                 </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Needs attention</p>
+                <p className="text-xs text-amber-600 mt-1">Needs attention</p>
               </div>
-              <div className="bg-amber-100 dark:bg-amber-900/30 p-2.5 rounded-lg">
-                <FiClock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              <div className="bg-amber-50 p-2.5 rounded-xl shrink-0">
+                <FiClock className="h-5 w-5 text-amber-600" />
               </div>
             </div>
           </div>
           
-          <div className="bg-gradient-to-br from-white to-gray-50 dark:from-gray-800 dark:to-gray-700 rounded-xl p-5 shadow-sm border border-gray-100 dark:border-gray-700">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
             <div className="flex justify-between items-start">
               <div>
-                <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Total Revenue</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
-                  {formatCurrency(entries.reduce((sum, entry) => sum + (entry.totalCharge || 0), 0))}
+                <p className="text-sm font-medium text-slate-600">Service Charges</p>
+                <p className="text-xl sm:text-2xl font-bold text-slate-900 mt-1 break-words">
+                  {formatCurrency(totalServiceCharges)}
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Lifetime value</p>
+                <p className="text-xs text-slate-500 mt-1">Billed {formatCurrency(totalBilled)}</p>
               </div>
-              <div className="bg-purple-100 dark:bg-purple-900/30 p-2.5 rounded-lg">
-                <FiDollarSign className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+              <div className="bg-slate-100 p-2.5 rounded-xl shrink-0">
+                <FiDollarSign className="h-5 w-5 text-navy-700" />
               </div>
             </div>
           </div>
@@ -428,24 +484,24 @@ const AllEntries = () => {
 
         {/* NEW: Analytics Visuals */}
         {filteredEntries.length > 0 && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-5 mb-6 sm:mb-8">
             
             {/* Chart 1: Top Services Progress Bars */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <FiPieChart className="text-indigo-500" /> Top Services
+            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <FiPieChart className="text-navy-700" /> Top Services
               </h3>
               <div className="space-y-4">
                 {topCategories.map(([name, count], index) => {
                   const percentage = Math.round((count / filteredEntries.length) * 100);
-                  const colors = ['bg-indigo-500', 'bg-purple-500', 'bg-emerald-500', 'bg-amber-500'];
+                  const colors = ['bg-navy-700', 'bg-navy-500', 'bg-emerald-500', 'bg-amber-500'];
                   return (
                     <div key={name}>
                       <div className="flex justify-between text-xs mb-1">
-                        <span className="font-medium text-gray-700 dark:text-gray-300 truncate pr-2">{name}</span>
-                        <span className="text-gray-500">{percentage}% ({count})</span>
+                        <span className="font-medium text-slate-700 truncate pr-2">{name}</span>
+                        <span className="text-slate-500">{percentage}% ({count})</span>
                       </div>
-                      <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-2">
+                      <div className="w-full bg-slate-100 rounded-full h-2">
                         <div className={`${colors[index % colors.length]} h-2 rounded-full`} style={{ width: `${percentage}%` }}></div>
                       </div>
                     </div>
@@ -455,9 +511,9 @@ const AllEntries = () => {
             </div>
 
             {/* Chart 2: Status Breakdown */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700">
-              <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                <FiBarChart2 className="text-indigo-500" /> Pipeline Status
+            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200">
+              <h3 className="text-sm font-semibold text-slate-900 mb-4 flex items-center gap-2">
+                <FiBarChart2 className="text-navy-700" /> Pipeline Status
               </h3>
               <div className="flex h-4 rounded-full overflow-hidden mb-4">
                 <div style={{ width: `${(statusCounts.completed / filteredEntries.length) * 100}%` }} className="bg-emerald-500 transition-all"></div>
@@ -465,17 +521,17 @@ const AllEntries = () => {
                 <div style={{ width: `${(statusCounts.cancelled / filteredEntries.length) * 100}%` }} className="bg-rose-500 transition-all"></div>
               </div>
               <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                <div className="bg-emerald-50 dark:bg-emerald-900/20 p-2 rounded-lg">
-                  <p className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mb-1">Completed</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{statusCounts.completed}</p>
+                <div className="bg-emerald-50 p-2 rounded-lg">
+                  <p className="text-xs text-emerald-600 font-medium mb-1">Completed</p>
+                  <p className="text-lg font-bold text-slate-900">{statusCounts.completed}</p>
                 </div>
-                <div className="bg-amber-50 dark:bg-amber-900/20 p-2 rounded-lg">
-                  <p className="text-xs text-amber-600 dark:text-amber-400 font-medium mb-1">Pending</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{statusCounts.pending}</p>
+                <div className="bg-amber-50 p-2 rounded-lg">
+                  <p className="text-xs text-amber-600 font-medium mb-1">Pending</p>
+                  <p className="text-lg font-bold text-slate-900">{statusCounts.pending}</p>
                 </div>
-                <div className="bg-rose-50 dark:bg-rose-900/20 p-2 rounded-lg">
-                  <p className="text-xs text-rose-600 dark:text-rose-400 font-medium mb-1">Cancelled</p>
-                  <p className="text-lg font-bold text-gray-900 dark:text-white">{statusCounts.cancelled}</p>
+                <div className="bg-rose-50 p-2 rounded-lg">
+                  <p className="text-xs text-rose-600 font-medium mb-1">Cancelled</p>
+                  <p className="text-lg font-bold text-slate-900">{statusCounts.cancelled}</p>
                 </div>
               </div>
             </div>
@@ -484,17 +540,17 @@ const AllEntries = () => {
         )}
 
         {/* Search and Filter Section */}
-        <div className="bg-white dark:bg-gray-800 rounded-xl p-5 mb-6 shadow-sm border border-gray-200 dark:border-gray-700">
-          <div className="flex flex-col md:flex-row gap-4 mb-4">
+        <div className="bg-white rounded-2xl p-4 sm:p-5 mb-6 shadow-sm border border-slate-200">
+          <div className="flex flex-col md:flex-row gap-3 md:gap-4 mb-4">
             <div className="relative flex-grow">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <FiSearch className="h-5 w-5 text-gray-400" />
+                <FiSearch className="h-5 w-5 text-slate-400" />
               </div>
               <input
                 type="text"
                 value={filters.searchQuery}
                 onChange={e => handleFilterChange('searchQuery', e.target.value)}
-                className="w-full pl-10 pr-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white"
+                className="w-full pl-10 pr-4 py-2.5 min-h-[44px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm"
                 placeholder="Search by customer name, phone, or token ID..."
               />
             </div>
@@ -502,24 +558,24 @@ const AllEntries = () => {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
+                className="flex flex-1 md:flex-none items-center justify-center gap-2 px-4 py-2.5 min-h-[44px] bg-slate-50 border border-slate-200 rounded-xl hover:bg-slate-100 transition-colors text-slate-700"
               >
                 <FiFilter className="h-4 w-4" />
                 Filters
                 {showFilters ? <FiChevronUp className="h-4 w-4" /> : <FiChevronDown className="h-4 w-4" />}
               </button>
               
-              <div className="flex bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
+              <div className="flex bg-slate-100 rounded-xl p-1">
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-2 rounded-md ${viewMode === 'list' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+                  className={`p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg ${viewMode === 'list' ? 'bg-white shadow-sm text-navy-700' : 'text-slate-600 hover:text-slate-900'}`}
                   aria-label="List view"
                 >
                   <FiList className="h-4 w-4" />
                 </button>
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded-md ${viewMode === 'grid' ? 'bg-white dark:bg-gray-600 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+                  className={`p-2.5 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg ${viewMode === 'grid' ? 'bg-white shadow-sm text-navy-700' : 'text-slate-600 hover:text-slate-900'}`}
                   aria-label="Grid view"
                 >
                   <FiGrid className="h-4 w-4" />
@@ -530,13 +586,13 @@ const AllEntries = () => {
 
           {/* Advanced Filters */}
           {showFilters && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-4 border-t border-slate-200">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Entry Type</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Entry Type</label>
                 <select
                   value={filters.tokenType}
                   onChange={e => handleFilterChange('tokenType', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white"
+                  className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm"
                 >
                   <option value="all">All Types</option>
                   <option value="normal">Normal Tokens</option>
@@ -546,11 +602,11 @@ const AllEntries = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Status</label>
                 <select
                   value={filters.status}
                   onChange={e => handleFilterChange('status', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white"
+                  className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm"
                 >
                   <option value="all">All Statuses</option>
                   <option value="pending">Pending</option>
@@ -560,11 +616,11 @@ const AllEntries = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Category</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Category</label>
                 <select
                   value={filters.categoryId}
                   onChange={e => handleFilterChange('categoryId', e.target.value)}
-                  className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white"
+                  className="w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm"
                 >
                   <option value="">All Categories</option>
                   {categories.map(category => (
@@ -576,12 +632,12 @@ const AllEntries = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Subcategory</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Subcategory</label>
                 <select
                   value={filters.subcategoryId}
                   onChange={e => handleFilterChange('subcategoryId', e.target.value)}
                   disabled={!filters.categoryId}
-                  className={`w-full px-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white ${!filters.categoryId ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`w-full px-3 py-2 min-h-[42px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm ${!filters.categoryId ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <option value="">All Subcategories</option>
                   {subcategories.map(sub => (
@@ -593,10 +649,10 @@ const AllEntries = () => {
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Start Date</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FiCalendar className="h-4 w-4 text-gray-400" />
+                    <FiCalendar className="h-4 w-4 text-slate-400" />
                   </div>
                   <DatePicker
                     selected={filters.startDate}
@@ -605,17 +661,17 @@ const AllEntries = () => {
                     startDate={filters.startDate}
                     endDate={filters.endDate}
                     maxDate={new Date()}
-                    className="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white"
+                    className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm"
                     placeholderText="Select start date"
                   />
                 </div>
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
+                <label className="block text-sm font-medium text-slate-700 mb-2">End Date</label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                    <FiCalendar className="h-4 w-4 text-gray-400" />
+                    <FiCalendar className="h-4 w-4 text-slate-400" />
                   </div>
                   <DatePicker
                     selected={filters.endDate}
@@ -625,20 +681,20 @@ const AllEntries = () => {
                     endDate={filters.endDate}
                     minDate={filters.startDate}
                     maxDate={new Date()}
-                    className="w-full pl-10 pr-3 py-2 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 dark:text-white"
+                    className="w-full pl-10 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 text-base sm:text-sm"
                     placeholderText="Select end date"
                   />
                 </div>
               </div>
               
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-1">
                 <button
                   onClick={resetFilters}
-                  className="flex-1 px-4 py-2 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  className="flex-1 px-4 py-2 min-h-[42px] bg-slate-100 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors"
                 >
                   Reset
                 </button>
-                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors">
+                <button onClick={exportCsv} disabled={filteredEntries.length === 0} className="flex flex-1 items-center justify-center gap-2 px-4 py-2 min-h-[42px] bg-navy-700 text-white rounded-xl hover:bg-navy-800 transition-colors disabled:opacity-50">
                   <FiDownload className="h-4 w-4" />
                   Export
                 </button>
@@ -649,10 +705,11 @@ const AllEntries = () => {
 
         {/* Results Header */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-slate-600">
             Showing <span className="font-medium">{filteredEntries.length}</span> of <span className="font-medium">{entries.length}</span> entries
+            {loading && <span className="ml-2 text-navy-700">· Updating…</span>}
           </p>
-          <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
+          <div className="flex items-center gap-2 text-sm text-slate-600">
             <span>View:</span>
             <span className="font-medium capitalize">{viewMode}</span>
           </div>
@@ -660,26 +717,26 @@ const AllEntries = () => {
 
         {/* Entries Display */}
         {filteredEntries.length === 0 ? (
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-8 text-center shadow-sm border border-gray-200 dark:border-gray-700">
-            <FiSearch className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-            <p className="font-medium text-gray-900 dark:text-white">No entries match your filters</p>
-            <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">Try adjusting your filters or search term</p>
+          <div className="bg-white rounded-2xl p-8 text-center shadow-sm border border-slate-200">
+            <FiSearch className="mx-auto h-12 w-12 text-slate-400 mb-3" />
+            <p className="font-medium text-slate-900">No entries match your filters</p>
+            <p className="text-slate-600 text-sm mt-1">Try adjusting your filters or search term</p>
             <button
               onClick={resetFilters}
-              className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="mt-4 px-4 py-2.5 min-h-[44px] bg-navy-700 text-white rounded-xl hover:bg-navy-800 transition-colors"
             >
               Reset Filters
             </button>
           </div>
         ) : viewMode === 'grid' ? (
           // Grid View
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
             {filteredEntries.map(entry => (
-              <div key={entry.id} className="bg-white dark:bg-gray-800 rounded-xl p-5 shadow-sm border border-gray-200 dark:border-gray-700 hover:shadow-md transition-all">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 dark:text-white">{entry.customerName}</h3>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-1">
+              <div key={entry.id} className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-200 hover:shadow-md transition-all">
+                <div className="flex justify-between items-start gap-3 mb-4">
+                  <div className="min-w-0">
+                    <h3 className="font-semibold text-slate-900 break-words">{entry.customerName}</h3>
+                    <p className="text-sm text-slate-500 mt-1 flex items-center gap-1">
                       <FiPhone className="h-3 w-3" /> {entry.phone}
                     </p>
                   </div>
@@ -690,29 +747,29 @@ const AllEntries = () => {
                 </div>
                 
                 <div className="mb-4">
-                  <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Service</p>
-                  <p className="font-medium text-gray-900 dark:text-white mt-1">{getCategoryName(entry.category)}</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">{getSubcategoryName(entry.category, entry.subcategory)}</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide">Service</p>
+                  <p className="font-medium text-slate-900 mt-1">{getCategoryName(entry.category)}</p>
+                  <p className="text-sm text-slate-500">{getSubcategoryName(entry.category, entry.subcategory)}</p>
                 </div>
                 
                 <div className="flex justify-between items-center mb-4">
                   <div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Amount</p>
-                    <p className="font-bold text-lg text-gray-900 dark:text-white">{formatCurrency(entry.totalCharge)}</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">Amount</p>
+                    <p className="font-bold text-lg text-slate-900">{formatCurrency(entry.totalCharge)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-gray-500 dark:text-gray-400 uppercase tracking-wide">Created</p>
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{formatDate(entry.created_at)}</p>
+                    <p className="text-xs text-slate-500 uppercase tracking-wide">Created</p>
+                    <p className="text-sm text-slate-500">{formatDate(entry.created_at)}</p>
                   </div>
                 </div>
                 
-                <div className="flex justify-between items-center pt-3 border-t border-gray-100 dark:border-gray-700">
-                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                <div className="flex justify-between items-center pt-3 border-t border-slate-100">
+                  <span className="text-xs text-slate-500">
                     ID: #{entry.id}{entry.tokenId && ` (Token: ${entry.tokenId})`}
                   </span>
                   <button 
                     onClick={() => setSelectedEntry(entry)}
-                    className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 transition-colors flex items-center gap-1 text-sm"
+                    className="text-navy-700 hover:text-navy-800 transition-colors flex items-center gap-1 text-sm font-medium px-3 py-2 min-h-[40px] rounded-lg hover:bg-slate-100"
                   >
                     <FiEye className="h-4 w-4" />
                     Details
@@ -724,54 +781,102 @@ const AllEntries = () => {
         ) : (
 
           // Upgraded List View
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+          <>
+          {/* Phone: one card per entry */}
+          <div className="md:hidden space-y-3">
+            {filteredEntries.map(entry => (
+              <div key={entry.id} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-200">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center min-w-0">
+                    <div className="h-10 w-10 rounded-full bg-navy-700 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {getInitials(entry.customerName)}
+                    </div>
+                    <div className="ml-3 min-w-0">
+                      <p className="font-semibold text-slate-900 break-words leading-tight">{entry.customerName}</p>
+                      <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
+                        <FiPhone className="h-3 w-3 shrink-0" /> {entry.phone}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="shrink-0">{getStatusBadge(entry.status)}</div>
+                </div>
+                <div className="mt-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-slate-900">{getCategoryName(entry.category)}</p>
+                    <p className="text-xs text-slate-500 mt-0.5">{getSubcategoryName(entry.category, entry.subcategory)}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-semibold text-slate-900">{formatCurrency(entry.totalCharge)}</p>
+                    {entry.pendingAmount > 0 && (
+                      <p className="text-xs text-rose-600 font-medium mt-0.5">Pending: {formatCurrency(entry.pendingAmount)}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
+                    {getTokenTypeBadge(entry)}
+                    <span>{formatDate(entry.created_at)}</span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedEntry(entry)}
+                    className="flex items-center gap-1 px-3 py-2 min-h-[40px] text-sm font-medium text-navy-700 rounded-lg hover:bg-slate-100 shrink-0"
+                  >
+                    <FiEye className="h-4 w-4" /> Details
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Tablet / desktop: table */}
+          <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50/50 dark:bg-gray-800/50">
+              <table className="min-w-full divide-y divide-slate-200">
+                <thead className="bg-slate-50/50">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Customer</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Service Details</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Actions</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Service Details</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-100 dark:divide-gray-700/50">
+                <tbody className="bg-white divide-y divide-slate-100">
                   {filteredEntries.map(entry => (
-                    <tr key={entry.id} className="hover:bg-gray-50/80 dark:hover:bg-gray-700/50 transition-colors group">
+                    <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors group">
                       <td className="px-4 py-4">
                         <div className="flex items-center">
                           <div className="flex-shrink-0 h-9 w-9">
-                            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-inner">
+                            <div className="h-9 w-9 rounded-full bg-navy-700 flex items-center justify-center text-white font-bold text-sm">
                               {getInitials(entry.customerName)}
                             </div>
                           </div>
                           <div className="ml-3 min-w-0">
                             {/* Changed to allow multi-line wrapping */}
-                            <div className="font-semibold text-gray-900 dark:text-white whitespace-normal break-words leading-tight">
+                            <div className="font-semibold text-slate-900 whitespace-normal break-words leading-tight">
                               {entry.customerName}
                             </div>
-                            <div className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1 mt-1 whitespace-nowrap">
+                            <div className="text-xs text-slate-500 flex items-center gap-1 mt-1 whitespace-nowrap">
                               <FiPhone className="h-3 w-3 flex-shrink-0" /> {entry.phone}
                             </div>
                           </div>
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="font-medium text-gray-900 dark:text-white">{getCategoryName(entry.category)}</div>
-                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
+                        <div className="font-medium text-slate-900">{getCategoryName(entry.category)}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getTokenTypeBadge(entry)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="font-semibold text-gray-900 dark:text-white">
+                        <div className="font-semibold text-slate-900">
                           {formatCurrency(entry.totalCharge)}
                         </div>
                         {entry.pendingAmount > 0 && (
-                          <div className="text-xs text-rose-500 dark:text-rose-400 mt-0.5 font-medium">
+                          <div className="text-xs text-rose-500 mt-0.5 font-medium">
                             Pending: {formatCurrency(entry.pendingAmount)}
                           </div>
                         )}
@@ -779,13 +884,14 @@ const AllEntries = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         {getStatusBadge(entry.status)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-300">
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
                         {formatDate(entry.created_at)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                         <button 
                           onClick={() => setSelectedEntry(entry)}
-                          className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 transition-colors p-2 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                          className="text-navy-700 hover:text-navy-800 transition-colors p-2.5 rounded-lg hover:bg-slate-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100"
+                          aria-label="View details"
                         >
                           <FiEye className="h-5 w-5" />
                         </button>
@@ -796,19 +902,20 @@ const AllEntries = () => {
               </table>
             </div>
           </div>
+          </>
         )}
 
         {/* Entry Detail Modal */}
         {selectedEntry && (
-          <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-all duration-300">
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-              <div className="flex justify-between items-center mb-6 pb-4 border-b border-gray-200 dark:border-gray-700">
-                <div className="flex items-center gap-4">
-                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Service Entry Details</h2>
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-3 sm:p-4 transition-all duration-300">
+            <div className="bg-white rounded-2xl p-4 sm:p-6 max-w-4xl w-full max-h-[90dvh] overflow-y-auto scroll-smooth [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+              <div className="flex justify-between items-center mb-6 pb-4 border-b border-slate-200 gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                  <h2 className="text-lg sm:text-xl font-bold text-slate-900">Service Entry Details</h2>
                   {!isEditing && (
                     <button 
                       onClick={handleEditToggle}
-                      className="px-3 py-1.5 text-sm bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-md hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors border border-indigo-200 dark:border-indigo-800 font-medium"
+                      className="px-3 py-2 min-h-[40px] text-sm bg-slate-100 text-navy-700 rounded-lg hover:bg-slate-200 transition-colors border border-slate-200 font-medium"
                     >
                       Edit Info
                     </button>
@@ -816,7 +923,7 @@ const AllEntries = () => {
                 </div>
                 <button 
                   onClick={() => { setSelectedEntry(null); setIsEditing(false); }}
-                  className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                  className="text-slate-500 hover:text-slate-700 p-2 min-h-[44px] min-w-[44px] flex items-center justify-center rounded-lg hover:bg-slate-100 transition-colors shrink-0" aria-label="Close"
                 >
                   <FiX className="h-6 w-6" />
                 </button>
@@ -824,57 +931,57 @@ const AllEntries = () => {
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-5">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <FiUser className="h-5 w-5 text-indigo-500" />
+                  <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <FiUser className="h-5 w-5 text-navy-700" />
                     Customer Information
                   </h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     {isEditing ? (
                       <div className="space-y-3">
                         <div>
-                          <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Customer Name</label>
+                          <label className="block text-sm text-slate-600 mb-1">Customer Name</label>
                           <input 
                             type="text" 
                             name="customerName"
                             value={editForm.customerName} 
                             onChange={handleEditChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-3 py-2 min-h-[42px] border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none text-base sm:text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Phone Number</label>
+                          <label className="block text-sm text-slate-600 mb-1">Phone Number</label>
                           <input 
                             type="text" 
                             name="phone"
                             value={editForm.phone} 
                             onChange={handleEditChange}
-                            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                            className="w-full px-3 py-2 min-h-[42px] border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none text-base sm:text-sm"
                           />
                         </div>
                         {requiresExpiry && (
                           <div>
-                            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">Expiry Date</label>
+                            <label className="block text-sm text-slate-600 mb-1">Expiry Date</label>
                             <input 
                               type="date" 
                               name="expiryDate"
                               value={editForm.expiryDate} 
                               onChange={handleEditChange}
-                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 dark:text-white focus:ring-2 focus:ring-indigo-500 outline-none"
+                              className="w-full px-3 py-2 min-h-[42px] border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 outline-none text-base sm:text-sm"
                             />
                           </div>
                         )}
-                        <div className="flex gap-2 pt-3 mt-2 border-t border-gray-200 dark:border-gray-600">
+                        <div className="flex gap-2 pt-3 mt-2 border-t border-slate-200">
                           <button 
                             onClick={submitEdit} 
                             disabled={saving} 
-                            className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm font-medium transition-colors"
+                            className="px-4 py-2 min-h-[42px] bg-navy-700 text-white rounded-xl hover:bg-navy-800 text-sm font-medium transition-colors disabled:opacity-50"
                           >
                             {saving ? 'Saving...' : 'Save Changes'}
                           </button>
                           <button 
                             onClick={handleEditToggle} 
                             disabled={saving} 
-                            className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 text-sm font-medium transition-colors"
+                            className="px-4 py-2 min-h-[42px] bg-slate-100 border border-slate-200 text-slate-800 rounded-xl hover:bg-slate-200 text-sm font-medium transition-colors disabled:opacity-50"
                           >
                             Cancel
                           </button>
@@ -883,15 +990,15 @@ const AllEntries = () => {
                     ) : (
                       <>
                         <div className="mb-3">
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Customer Name</p>
-                          <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.customerName}</p>
+                          <p className="text-sm text-slate-600">Customer Name</p>
+                          <p className="font-medium text-slate-900">{selectedEntry.customerName}</p>
                         </div>
                         <div className="mb-3">
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Phone Number</p>
-                          <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.phone}</p>
+                          <p className="text-sm text-slate-600">Phone Number</p>
+                          <p className="font-medium text-slate-900">{selectedEntry.phone}</p>
                         </div>
                         <div>
-                          <p className="text-sm text-gray-600 dark:text-gray-400">Entry Type</p>
+                          <p className="text-sm text-slate-600">Entry Type</p>
                           <div className="mt-1">{getTokenTypeBadge(selectedEntry)}</div>
                         </div>
                       </>
@@ -900,67 +1007,67 @@ const AllEntries = () => {
                 </div>
                 
                 <div className="space-y-5">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <FiBarChart2 className="h-5 w-5 text-indigo-500" />
+                  <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <FiBarChart2 className="h-5 w-5 text-navy-700" />
                     Service Information
                   </h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Category</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{getCategoryName(selectedEntry.category)}</p>
+                      <p className="text-sm text-slate-600">Category</p>
+                      <p className="font-medium text-slate-900">{getCategoryName(selectedEntry.category)}</p>
                     </div>
                     <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Subcategory</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{getSubcategoryName(selectedEntry.category, selectedEntry.subcategory)}</p>
+                      <p className="text-sm text-slate-600">Subcategory</p>
+                      <p className="font-medium text-slate-900">{getSubcategoryName(selectedEntry.category, selectedEntry.subcategory)}</p>
                     </div>
                     <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Status</p>
+                      <p className="text-sm text-slate-600">Status</p>
                       <div className="mt-1">{getStatusBadge(selectedEntry.status)}</div>
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Created On</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{formatDate(selectedEntry.created_at)}</p>
+                      <p className="text-sm text-slate-600">Created On</p>
+                      <p className="font-medium text-slate-900">{formatDate(selectedEntry.created_at)}</p>
                     </div>
                   </div>
                 </div>
                 
                 <div className="space-y-5">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <FiDollarSign className="h-5 w-5 text-indigo-500" />
+                  <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <FiDollarSign className="h-5 w-5 text-navy-700" />
                     Payment Details
                   </h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Service Charge</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(selectedEntry.serviceCharge)}</p>
+                      <p className="text-sm text-slate-600">Service Charge</p>
+                      <p className="font-medium text-slate-900">{formatCurrency(selectedEntry.serviceCharge)}</p>
                     </div>
                     <div className="mb-3">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Department Charge</p>
-                      <p className="font-medium text-gray-900 dark:text-white">{formatCurrency(selectedEntry.departmentCharge)}</p>
+                      <p className="text-sm text-slate-600">Department Charge</p>
+                      <p className="font-medium text-slate-900">{formatCurrency(selectedEntry.departmentCharge)}</p>
                     </div>
-                    <div className="pt-3 border-t border-gray-200 dark:border-gray-600">
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Total Amount</p>
-                      <p className="font-bold text-lg text-gray-900 dark:text-white">{formatCurrency(selectedEntry.totalCharge)}</p>
+                    <div className="pt-3 border-t border-slate-200">
+                      <p className="text-sm text-slate-600">Total Amount</p>
+                      <p className="font-bold text-lg text-slate-900">{formatCurrency(selectedEntry.totalCharge)}</p>
                     </div>
                   </div>
                 </div>
                 
                 <div className="space-y-5">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
-                    <FiPieChart className="h-5 w-5 text-indigo-500" />
+                  <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
+                    <FiPieChart className="h-5 w-5 text-navy-700" />
                     Additional Information
                   </h3>
-                  <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
                     {selectedEntry.expiryDate && (
                       <div className="mb-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Expiry Date</p>
-                        <p className="font-medium text-gray-900 dark:text-white">{formatDate(selectedEntry.expiryDate)}</p>
+                        <p className="text-sm text-slate-600">Expiry Date</p>
+                        <p className="font-medium text-slate-900">{formatDate(selectedEntry.expiryDate)}</p>
                       </div>
                     )}
                     {selectedEntry.serviceWalletId && (
                       <div className="mb-3">
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Service Wallet</p>
-                        <p className="font-medium text-gray-900 dark:text-white">
+                        <p className="text-sm text-slate-600">Service Wallet</p>
+                        <p className="font-medium text-slate-900">
                           {selectedEntry.serviceWalletName 
                             ? `${selectedEntry.serviceWalletName} (#${selectedEntry.serviceWalletId})` 
                             : `Wallet #${selectedEntry.serviceWalletId}`}
@@ -969,8 +1076,8 @@ const AllEntries = () => {
                     )}
                     {selectedEntry.notes && (
                       <div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Notes</p>
-                        <p className="font-medium text-gray-900 dark:text-white">{selectedEntry.notes}</p>
+                        <p className="text-sm text-slate-600">Notes</p>
+                        <p className="font-medium text-slate-900">{selectedEntry.notes}</p>
                       </div>
                     )}
                   </div>
@@ -978,22 +1085,22 @@ const AllEntries = () => {
               </div>
               
               {selectedEntry.payments && selectedEntry.payments.length > 0 && (
-                <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-white">Payment Methods</h3>
+                <div className="mt-6 pt-6 border-t border-slate-200">
+                  <h3 className="text-lg font-semibold mb-4 text-slate-900">Payment Methods</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {selectedEntry.payments.map((payment, index) => (
-                      <div key={index} className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                      <div key={index} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                         <div className="flex justify-between items-start">
                           <div>
-                            <p className="font-medium capitalize text-gray-900 dark:text-white">{payment.method}</p>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Wallet: {payment.walletName}</p>
+                            <p className="font-medium capitalize text-slate-900">{payment.method}</p>
+                            <p className="text-sm text-slate-600">Wallet: {payment.walletName}</p>
                           </div>
                           <div className="text-right">
-                            <p className="font-medium text-lg text-gray-900 dark:text-white">{formatCurrency(payment.amount)}</p>
+                            <p className="font-medium text-lg text-slate-900">{formatCurrency(payment.amount)}</p>
                             <span className={`px-2 py-0.5 text-xs rounded-full ${
-                              payment.status === 'received' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
-                              payment.status === 'pending' ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400' :
-                              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                              payment.status === 'received' ? 'bg-emerald-100 text-emerald-800' :
+                              payment.status === 'pending' ? 'bg-amber-100 text-amber-800' :
+                              'bg-rose-100 text-rose-800'
                             }`}>
                               {payment.status}
                             </span>
@@ -1005,10 +1112,10 @@ const AllEntries = () => {
                 </div>
               )}
               
-              <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+              <div className="mt-6 pt-6 border-t border-slate-200 flex justify-end">
                 <button 
                   onClick={() => { setSelectedEntry(null); setIsEditing(false); }}
-                  className="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors"
+                  className="px-5 py-2.5 min-h-[44px] bg-slate-100 border border-slate-200 text-slate-700 rounded-xl hover:bg-slate-200 transition-colors w-full sm:w-auto"
                 >
                   Close
                 </button>

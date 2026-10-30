@@ -1040,6 +1040,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
              s.name AS service_name,
              st.name AS staff_name,
              tr.id AS tracking_id,
+             tk.type AS token_type,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
@@ -1047,6 +1048,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       JOIN staff st ON se.staff_id = st.id
       LEFT JOIN wallets w ON se.service_wallet_id = w.id -- 🔥 NEW: Join the wallets table
       LEFT JOIN service_tracking tr ON tr.service_entry_id = se.id
+      LEFT JOIN tokens tk ON tk.token_id = se.token_id -- token type (normal / campaign) for the All Entries page
     `;
 
     let values = [];
@@ -1196,6 +1198,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       entries.push({
         id: entry.id,
         tokenId: entry.token_id,
+        tokenType: entry.token_type || null,
         customerName: entry.customer_name,
         phone: entry.phone,
         category: entry.category_id,
