@@ -322,6 +322,24 @@ const AllEntries = () => {
   const totalServiceCharges = countedEntries.reduce((sum, e) => sum + (e.serviceCharge || 0), 0);
   const totalBilled = countedEntries.reduce((sum, e) => sum + (e.totalCharge || 0), 0);
 
+  // Totals of the rows currently shown in the table (cancelled entries are left out)
+  const shownCounted = filteredEntries.filter(e => e.status !== 'cancelled');
+  const shownTotals = {
+    service: shownCounted.reduce((sum, e) => sum + (e.serviceCharge || 0), 0),
+    dept: shownCounted.reduce((sum, e) => sum + (e.departmentCharge || 0), 0),
+    total: shownCounted.reduce((sum, e) => sum + (e.totalCharge || 0), 0),
+    pending: shownCounted.reduce((sum, e) => sum + (e.pendingAmount || 0), 0)
+  };
+
+  const formatTime = (dateString) => {
+    return new Date(dateString).toLocaleTimeString('en-IN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+      timeZone: 'Asia/Kolkata'
+    });
+  };
+
   // --- Export the entries currently shown as a CSV (opens in Excel) ---
   const exportCsv = () => {
     if (!filteredEntries.length) {
@@ -391,7 +409,7 @@ const AllEntries = () => {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-7xl mx-auto p-3 sm:p-6">
+      <div className="p-4 sm:p-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 sm:mb-8 gap-4">
           <div>
@@ -828,69 +846,64 @@ const AllEntries = () => {
             ))}
           </div>
 
-          {/* Tablet / desktop: table */}
+          {/* Tablet / desktop: compact table */}
           <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50/50">
+              <table className="min-w-full">
+                <thead className="bg-slate-50">
                   <tr>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Service Details</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Type</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Amount</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-4 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
-                    <th className="px-6 py-4 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-left">Date</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-left">Customer</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-left">Service</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-left">Type</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-right">Service Charge</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-right">Dept. Fee</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-right">Total</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-right">Pending</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-left">Status</th>
+                    <th className="px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider whitespace-nowrap text-right"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-slate-100">
+                <tbody className="bg-white">
                   {filteredEntries.map(entry => (
-                    <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors group">
-                      <td className="px-4 py-4">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-9 w-9">
-                            <div className="h-9 w-9 rounded-full bg-navy-700 flex items-center justify-center text-white font-bold text-sm">
-                              {getInitials(entry.customerName)}
-                            </div>
+                    <tr key={entry.id} className="border-t border-slate-100 hover:bg-slate-50/80 transition-colors">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
+                        <div className="text-sm text-slate-700">{formatDate(entry.created_at)}</div>
+                        <div className="text-xs text-slate-500">{formatTime(entry.created_at)}</div>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2.5">
+                          <div className="h-9 w-9 shrink-0 rounded-full bg-navy-700 flex items-center justify-center text-white font-semibold text-xs">
+                            {getInitials(entry.customerName)}
                           </div>
-                          <div className="ml-3 min-w-0">
-                            {/* Changed to allow multi-line wrapping */}
-                            <div className="font-semibold text-slate-900 whitespace-normal break-words leading-tight">
-                              {entry.customerName}
-                            </div>
-                            <div className="text-xs text-slate-500 flex items-center gap-1 mt-1 whitespace-nowrap">
-                              <FiPhone className="h-3 w-3 flex-shrink-0" /> {entry.phone}
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-slate-900 leading-tight break-words">{entry.customerName}</div>
+                            <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5 whitespace-nowrap">
+                              <FiPhone className="h-3 w-3 shrink-0" /> {entry.phone}
                             </div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-slate-900">{getCategoryName(entry.category)}</div>
-                        <div className="text-xs text-slate-500 mt-0.5">{getSubcategoryName(entry.category, entry.subcategory)}</div>
+                      <td className="px-4 py-2.5 min-w-[170px]">
+                        <div className="text-sm text-slate-800">{getCategoryName(entry.category)}</div>
+                        <div className="text-xs text-slate-500">{getSubcategoryName(entry.category, entry.subcategory)}</div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
                         {getTokenTypeBadge(entry)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        <div className="font-semibold text-slate-900">
-                          {formatCurrency(entry.totalCharge)}
-                        </div>
-                        {entry.pendingAmount > 0 && (
-                          <div className="text-xs text-rose-500 mt-0.5 font-medium">
-                            Pending: {formatCurrency(entry.pendingAmount)}
-                          </div>
-                        )}
+                      <td className="px-4 py-2.5 whitespace-nowrap text-right text-sm text-slate-700">{formatCurrency(entry.serviceCharge || 0)}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-right text-sm text-slate-500">{formatCurrency(entry.departmentCharge || 0)}</td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-right text-sm font-semibold text-slate-900">{formatCurrency(entry.totalCharge || 0)}</td>
+                      <td className={`px-4 py-2.5 whitespace-nowrap text-right text-sm ${entry.pendingAmount > 0 ? 'text-rose-600 font-medium' : 'text-slate-300'}`}>
+                        {entry.pendingAmount > 0 ? formatCurrency(entry.pendingAmount) : '–'}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
+                      <td className="px-4 py-2.5 whitespace-nowrap">
                         {getStatusBadge(entry.status)}
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600">
-                        {formatDate(entry.created_at)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                        <button 
+                      <td className="px-2 py-2.5 whitespace-nowrap text-right">
+                        <button
                           onClick={() => setSelectedEntry(entry)}
-                          className="text-navy-700 hover:text-navy-800 transition-colors p-2.5 rounded-lg hover:bg-slate-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 focus:opacity-100"
+                          className="text-navy-700 hover:text-navy-800 transition-colors p-2.5 rounded-lg hover:bg-slate-100"
                           aria-label="View details"
                         >
                           <FiEye className="h-5 w-5" />
@@ -899,6 +912,16 @@ const AllEntries = () => {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  <tr className="border-t border-slate-200 bg-slate-50 text-sm font-semibold text-slate-900">
+                    <td colSpan={4} className="px-4 py-3 text-slate-600">Totals (cancelled entries not counted)</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(shownTotals.service)}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(shownTotals.dept)}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">{formatCurrency(shownTotals.total)}</td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap text-rose-600">{formatCurrency(shownTotals.pending)}</td>
+                    <td colSpan={2}></td>
+                  </tr>
+                </tfoot>
               </table>
             </div>
           </div>
