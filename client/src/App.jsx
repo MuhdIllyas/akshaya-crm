@@ -434,7 +434,12 @@ const App = () => {
             <Route
               path="superadmin/operationshub"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
-            /> 
+            />
+            {/* Operations Hub: direct links to a service (e.g. /operationshub/49) */}
+            <Route
+              path="superadmin/operationshub/:serviceId"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
+            />
             <Route
               path="superadmin/notifications"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><NotificationsPage /></ProtectedRoute>}
@@ -518,6 +523,11 @@ const App = () => {
             />
             <Route
               path="staff/operationshub"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
+            />
+            {/* Operations Hub: direct links to a service (e.g. /operationshub/49) */}
+            <Route
+              path="staff/operationshub/:serviceId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
             <Route
