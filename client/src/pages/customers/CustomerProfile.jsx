@@ -266,32 +266,32 @@ const CustomerProfile = () => {
 
   const getGenderIcon = (gender) => {
     switch(gender?.toLowerCase()) {
-      case 'male': return <FaMars className="text-blue-500" />;
-      case 'female': return <FaVenus className="text-pink-500" />;
-      case 'other': return <FaTransgender className="text-purple-500" />;
-      default: return <FaVenusMars className="text-gray-500" />;
+      case 'male': return <FaMars className="text-navy-700" />;
+      case 'female': return <FaVenus className="text-navy-700" />;
+      case 'other': return <FaTransgender className="text-navy-700" />;
+      default: return <FaVenusMars className="text-slate-500" />;
     }
   };
 
   const getMaritalStatusIcon = (status) => {
     switch(status?.toLowerCase()) {
-      case 'married': return <FiHeart className="text-red-500" />;
-      case 'single': return <FiUser className="text-blue-500" />;
-      case 'divorced': return <FiX className="text-orange-500" />;
-      case 'widowed': return <FiUser className="text-gray-500" />;
-      default: return <FiUser className="text-gray-500" />;
+      case 'married': return <FiHeart className="text-rose-500" />;
+      case 'single': return <FiUser className="text-navy-700" />;
+      case 'divorced': return <FiX className="text-amber-500" />;
+      case 'widowed': return <FiUser className="text-slate-500" />;
+      default: return <FiUser className="text-slate-500" />;
     }
   };
 
   const getDocumentIcon = (docName) => {
     const name = docName?.toLowerCase();
-    if (name.includes('aadhaar') || name.includes('aadhar')) return <FiCreditCard className="text-blue-500" />;
-    if (name.includes('pan')) return <FiCreditCard className="text-green-500" />;
-    if (name.includes('voter')) return <FiCreditCard className="text-orange-500" />;
-    if (name.includes('passport')) return <FiGlobe className="text-purple-500" />;
-    if (name.includes('driving') || name.includes('license')) return <FiBriefcase className="text-red-500" />;
+    if (name.includes('aadhaar') || name.includes('aadhar')) return <FiCreditCard className="text-navy-700" />;
+    if (name.includes('pan')) return <FiCreditCard className="text-emerald-500" />;
+    if (name.includes('voter')) return <FiCreditCard className="text-amber-500" />;
+    if (name.includes('passport')) return <FiGlobe className="text-navy-700" />;
+    if (name.includes('driving') || name.includes('license')) return <FiBriefcase className="text-rose-500" />;
     if (name.includes('ration')) return <FiHome className="text-amber-500" />;
-    return <FiFileText className="text-gray-500" />;
+    return <FiFileText className="text-slate-500" />;
   };
 
   const formatDate = (dateString) => {
@@ -317,43 +317,98 @@ const CustomerProfile = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-[400px] flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy-700 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading profile...</p>
+          <p className="mt-4 text-slate-600">Loading profile...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      
+    <div className={isEditing ? 'pb-24 sm:pb-0' : ''}>
       {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-800">My Profile</h1>
-            <p className="text-gray-600 mt-2">Manage your personal information and documents</p>
+      <div className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="h-20 bg-navy-700 sm:h-24"></div>
+        <div className="flex flex-col gap-4 px-4 pb-5 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+          <div className="-mt-12 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            {/* Profile Photo Display */}
+            <div className="relative self-start">
+              {profile.profile_photo_url ? (
+                <div className="relative">
+                  <img
+                    src={profile.profile_photo_url}
+                    alt="Profile"
+                    className="h-24 w-24 rounded-full border-4 border-white object-cover shadow-md"
+                  />
+                  {!isDeletingPhoto && (
+                    <button
+                      onClick={handlePhotoDelete}
+                      className="absolute -right-1 -top-1 grid h-9 w-9 place-items-center rounded-full bg-rose-500 text-white shadow hover:bg-rose-600 transition-colors"
+                      title="Delete photo"
+                      disabled={isDeletingPhoto}
+                    >
+                      <FiTrash2 className="text-base" />
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid h-24 w-24 place-items-center rounded-full border-4 border-white bg-slate-200 shadow-md">
+                  <FiUser className="text-4xl text-slate-400" />
+                </div>
+              )}
+
+              {/* Upload Button */}
+              <label className={`absolute bottom-0 right-0 grid h-9 w-9 cursor-pointer place-items-center rounded-full text-white shadow hover:opacity-90 transition-all ${profile.profile_photo_url ? 'bg-navy-700' : 'bg-emerald-600'} ${(isUploadingPhoto || isDeletingPhoto) && 'opacity-50 cursor-not-allowed'}`}>
+                {isUploadingPhoto ? (
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
+                ) : (
+                  <FiCamera className="text-lg" />
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handlePhotoUpload}
+                  disabled={isUploadingPhoto || isDeletingPhoto}
+                />
+              </label>
+            </div>
+
+            <div className="min-w-0 pb-1">
+              <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl">{profile.name || 'My Profile'}</h1>
+              <p className="text-sm text-slate-500">Manage your personal information and documents</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Click the camera icon to upload a new photo · JPEG, PNG, GIF, WebP (Max 5MB)
+              </p>
+              {isUploadingPhoto && (
+                <p className="text-sm text-navy-700 mt-1">Uploading photo...</p>
+              )}
+              {isDeletingPhoto && (
+                <p className="text-sm text-rose-600 mt-1">Deleting photo...</p>
+              )}
+            </div>
           </div>
-          
-          <div className="flex items-center space-x-3">
+
+          <div className={`${isEditing ? 'hidden sm:flex' : 'flex'} items-center gap-2`}>
             {!isEditing ? (
               <button
                 onClick={() => setIsEditing(true)}
-                className="inline-flex items-center px-5 py-2.5 bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors"
+                className="inline-flex h-11 w-full items-center justify-center px-4 text-sm bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors sm:h-10 sm:w-auto"
               >
                 <FiEdit2 className="mr-2" />
                 Edit Profile
               </button>
             ) : (
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
                     setIsEditing(false);
                     fetchProfile(); // Reload original data
                   }}
-                  className="inline-flex items-center px-5 py-2.5 border border-gray-300 text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors"
+                  className="inline-flex h-10 items-center px-4 text-sm border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors"
                   disabled={isSaving}
                 >
                   <FiX className="mr-2" />
@@ -361,7 +416,7 @@ const CustomerProfile = () => {
                 </button>
                 <button
                   onClick={handleSaveProfile}
-                  className="inline-flex items-center px-5 py-2.5 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+                  className="inline-flex h-10 items-center px-4 text-sm bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
                   disabled={isSaving}
                 >
                   <FiSave className="mr-2" />
@@ -373,107 +428,51 @@ const CustomerProfile = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Phone save bar while editing */}
+      {isEditing && (
+        <div className="fixed inset-x-0 bottom-0 z-30 flex gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur sm:hidden">
+          <button
+            onClick={() => {
+              setIsEditing(false);
+              fetchProfile(); // Reload original data
+            }}
+            className="inline-flex h-11 flex-1 items-center justify-center text-sm border border-slate-300 text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors"
+            disabled={isSaving}
+          >
+            <FiX className="mr-2" />
+            Cancel
+          </button>
+          <button
+            onClick={handleSaveProfile}
+            className="inline-flex h-11 flex-1 items-center justify-center text-sm bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 transition-colors"
+            disabled={isSaving}
+          >
+            <FiSave className="mr-2" />
+            {isSaving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Left Column - Profile Info */}
-        <div className="lg:col-span-2 space-y-8">
-          {/* Profile Photo Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-navy-700 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Profile Photo</h2>
-                  <p className="text-blue-200 mt-1">Upload your profile picture</p>
-                </div>
-                <div className="bg-white/10 p-3 rounded-xl">
-                  <FiCamera className="text-2xl text-white" />
-                </div>
-              </div>
-            </div>
-            
-            <div className="p-6">
-              <div className="flex flex-col items-center">
-                {/* Profile Photo Display */}
-                <div className="relative mb-6">
-                  {profile.profile_photo_url ? (
-                    <div className="relative">
-                      <img 
-                        src={profile.profile_photo_url} 
-                        alt="Profile" 
-                        className="w-40 h-40 rounded-full object-cover border-4 border-white shadow-lg"
-                      />
-                      {!isDeletingPhoto && (
-                        <button
-                          onClick={handlePhotoDelete}
-                          className="absolute top-0 right-0 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors shadow-lg"
-                          title="Delete photo"
-                          disabled={isDeletingPhoto}
-                        >
-                          <FiTrash2 className="text-lg" />
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="w-40 h-40 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 border-4 border-white shadow-lg flex items-center justify-center">
-                      <FiUser className="text-6xl text-gray-400" />
-                    </div>
-                  )}
-                  
-                  {/* Upload Button */}
-                  <label className={`absolute bottom-0 right-0 ${profile.profile_photo_url ? 'bg-navy-700' : 'bg-emerald-600'} text-white p-3 rounded-full cursor-pointer hover:opacity-90 transition-all shadow-lg ${(isUploadingPhoto || isDeletingPhoto) && 'opacity-50 cursor-not-allowed'}`}>
-                    {isUploadingPhoto ? (
-                      <div className="animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
-                    ) : (
-                      <FiCamera className="text-xl" />
-                    )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
-                      className="hidden"
-                      onChange={handlePhotoUpload}
-                      disabled={isUploadingPhoto || isDeletingPhoto}
-                    />
-                  </label>
-                </div>
-
-                {/* Photo Instructions */}
-                <div className="text-center">
-                  <p className="text-sm text-gray-600 mb-2">
-                    Click the camera icon to upload a new photo
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Supported formats: JPEG, PNG, GIF, WebP (Max 5MB)
-                  </p>
-                  {isUploadingPhoto && (
-                    <p className="text-sm text-blue-600 mt-2">Uploading photo...</p>
-                  )}
-                  {isDeletingPhoto && (
-                    <p className="text-sm text-red-600 mt-2">Deleting photo...</p>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
+        <div className="lg:col-span-2 space-y-4">
           {/* Personal Information Card */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-navy-700 to-navy-800 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Personal Information</h2>
-                  <p className="text-navy-200 mt-1">Basic details and contact information</p>
-                </div>
-                <div className="bg-white/10 p-3 rounded-xl">
-                  <FiUser className="text-2xl text-white" />
-                </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-6">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-slate-900 sm:text-lg">Personal Information</h2>
+                <p className="text-sm text-slate-500">Basic details and contact information</p>
               </div>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-500/10 text-navy-700">
+                <FiUser className="text-xl" />
+              </span>
             </div>
             
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Full Name *
                   </label>
                   {isEditing ? (
@@ -482,30 +481,30 @@ const CustomerProfile = () => {
                       name="name"
                       value={profile.name}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       required
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="font-medium text-gray-800">{profile.name || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <p className="font-medium text-slate-800">{profile.name || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Phone (read-only from registration) */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Phone Number
                   </label>
-                  <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
-                    <FiPhone className="text-gray-500 mr-3" />
-                    <p className="font-medium text-gray-800">{profile.phone || 'Not provided'}</p>
+                  <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                    <FiPhone className="text-slate-500 mr-3" />
+                    <p className="font-medium text-slate-800">{profile.phone || 'Not provided'}</p>
                   </div>
                 </div>
 
                 {/* Email */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Email Address
                   </label>
                   {isEditing ? (
@@ -514,23 +513,23 @@ const CustomerProfile = () => {
                       name="email"
                       value={profile.email}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       placeholder="Enter email (optional)"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
-                      <FiMail className="text-gray-500 mr-3" />
-                      <p className="font-medium text-gray-800">{profile.email || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <FiMail className="text-slate-500 mr-3" />
+                      <p className="font-medium text-slate-800">{profile.email || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Date of Birth */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Date of Birth
                     {profile.date_of_birth && (
-                      <span className="ml-2 text-sm text-gray-500">
+                      <span className="ml-2 text-sm text-slate-500">
                         ({calculateAge(profile.date_of_birth)} years)
                       </span>
                     )}
@@ -541,13 +540,13 @@ const CustomerProfile = () => {
                       name="date_of_birth"
                       value={profile.date_of_birth}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       max={todayIST()}
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
-                      <FiCalendar className="text-gray-500 mr-3" />
-                      <p className="font-medium text-gray-800">
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <FiCalendar className="text-slate-500 mr-3" />
+                      <p className="font-medium text-slate-800">
                         {profile.date_of_birth ? formatDate(profile.date_of_birth) : 'Not provided'}
                       </p>
                     </div>
@@ -556,7 +555,7 @@ const CustomerProfile = () => {
 
                 {/* Gender */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Gender
                   </label>
                   {isEditing ? (
@@ -564,7 +563,7 @@ const CustomerProfile = () => {
                       name="gender"
                       value={profile.gender}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     >
                       <option value="">Select gender</option>
                       <option value="male">Male</option>
@@ -573,9 +572,9 @@ const CustomerProfile = () => {
                       <option value="prefer-not-to-say">Prefer not to say</option>
                     </select>
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
                       {getGenderIcon(profile.gender)}
-                      <p className="font-medium text-gray-800 ml-3 capitalize">
+                      <p className="font-medium text-slate-800 ml-3 capitalize">
                         {profile.gender || 'Not specified'}
                       </p>
                     </div>
@@ -584,7 +583,7 @@ const CustomerProfile = () => {
 
                 {/* Marital Status */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Marital Status
                   </label>
                   {isEditing ? (
@@ -592,7 +591,7 @@ const CustomerProfile = () => {
                       name="marital_status"
                       value={profile.marital_status}
                       onChange={handleInputChange}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     >
                       <option value="">Select status</option>
                       <option value="single">Single</option>
@@ -601,9 +600,9 @@ const CustomerProfile = () => {
                       <option value="widowed">Widowed</option>
                     </select>
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
                       {getMaritalStatusIcon(profile.marital_status)}
-                      <p className="font-medium text-gray-800 ml-3 capitalize">
+                      <p className="font-medium text-slate-800 ml-3 capitalize">
                         {profile.marital_status || 'Not specified'}
                       </p>
                     </div>
@@ -613,7 +612,7 @@ const CustomerProfile = () => {
                 {/* Date of Marriage (conditional) */}
                 {profile.marital_status === 'married' && (
                   <div className="md:col-span-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Date of Marriage
                     </label>
                     {isEditing ? (
@@ -622,13 +621,13 @@ const CustomerProfile = () => {
                         name="date_of_marriage"
                         value={profile.date_of_marriage}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                        className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                         max={todayIST()}
                       />
                     ) : (
-                      <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
-                        <FiHeart className="text-red-500 mr-3" />
-                        <p className="font-medium text-gray-800">
+                      <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                        <FiHeart className="text-rose-500 mr-3" />
+                        <p className="font-medium text-slate-800">
                           {profile.date_of_marriage ? formatDate(profile.date_of_marriage) : 'Not provided'}
                         </p>
                       </div>
@@ -638,7 +637,7 @@ const CustomerProfile = () => {
 
                 {/* Occupation */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Occupation
                   </label>
                   {isEditing ? (
@@ -648,18 +647,18 @@ const CustomerProfile = () => {
                       value={profile.occupation}
                       onChange={handleInputChange}
                       placeholder="Enter your occupation/profession"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="font-medium text-gray-800">{profile.occupation || 'Not specified'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <p className="font-medium text-slate-800">{profile.occupation || 'Not specified'}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Address */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Address
                   </label>
                   {isEditing ? (
@@ -669,18 +668,18 @@ const CustomerProfile = () => {
                       onChange={handleInputChange}
                       rows="3"
                       placeholder="Enter your complete address"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="font-medium text-gray-800">{profile.address || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <p className="font-medium text-slate-800">{profile.address || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
 
                 {/* State, District, Pincode */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     State
                   </label>
                   {isEditing ? (
@@ -690,17 +689,17 @@ const CustomerProfile = () => {
                       value={profile.state}
                       onChange={handleInputChange}
                       placeholder="Enter state"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="font-medium text-gray-800">{profile.state || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <p className="font-medium text-slate-800">{profile.state || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     District
                   </label>
                   {isEditing ? (
@@ -710,17 +709,17 @@ const CustomerProfile = () => {
                       value={profile.district}
                       onChange={handleInputChange}
                       placeholder="Enter district"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="font-medium text-gray-800">{profile.district || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <p className="font-medium text-slate-800">{profile.district || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Pincode
                   </label>
                   {isEditing ? (
@@ -730,20 +729,20 @@ const CustomerProfile = () => {
                       value={profile.pincode}
                       onChange={handleInputChange}
                       placeholder="Enter pincode"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       maxLength="6"
                       pattern="[0-9]{6}"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200">
-                      <p className="font-medium text-gray-800">{profile.pincode || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <p className="font-medium text-slate-800">{profile.pincode || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
 
                 {/* Emergency Contact */}
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Emergency Contact
                   </label>
                   {isEditing ? (
@@ -753,12 +752,12 @@ const CustomerProfile = () => {
                       value={profile.emergency_contact}
                       onChange={handleInputChange}
                       placeholder="Enter emergency contact number"
-                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-xl focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     />
                   ) : (
-                    <div className="px-4 py-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center">
-                      <FiPhone className="text-gray-500 mr-3" />
-                      <p className="font-medium text-gray-800">{profile.emergency_contact || 'Not provided'}</p>
+                    <div className="min-h-[44px] px-3 py-2 bg-slate-50 rounded-xl border border-slate-200 flex items-center">
+                      <FiPhone className="text-slate-500 mr-3" />
+                      <p className="font-medium text-slate-800">{profile.emergency_contact || 'Not provided'}</p>
                     </div>
                   )}
                 </div>
@@ -767,20 +766,18 @@ const CustomerProfile = () => {
           </div>
 
           {/* Verified Documents Section */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-            <div className="bg-gradient-to-r from-emerald-600 to-emerald-700 p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Verified Documents</h2>
-                  <p className="text-emerald-200 mt-1">Approved documents with document numbers</p>
-                </div>
-                <div className="bg-white/10 p-3 rounded-xl">
-                  <FiShield className="text-2xl text-white" />
-                </div>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-4 sm:px-6">
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-slate-900 sm:text-lg">Verified Documents</h2>
+                <p className="text-sm text-slate-500">Approved documents with document numbers</p>
               </div>
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-500/10 text-navy-700">
+                <FiShield className="text-xl" />
+              </span>
             </div>
             
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               {verifiedDocuments.length > 0 ? (
                 <div className="space-y-4">
                   {verifiedDocuments.map((doc) => (
@@ -788,29 +785,29 @@ const CustomerProfile = () => {
                       key={doc.id} 
                       className="border border-emerald-200 bg-emerald-50 rounded-xl p-4 hover:bg-emerald-100 transition-colors"
                     >
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start space-x-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex min-w-0 items-start space-x-3">
                           <div className="p-2 bg-white rounded-lg border border-emerald-200">
                             {getDocumentIcon(doc.document_name)}
                           </div>
                           <div>
-                            <h3 className="font-bold text-gray-800">{doc.document_name}</h3>
+                            <h3 className="font-bold text-slate-800">{doc.document_name}</h3>
                             {doc.document_number_last4 && (
-                              <p className="text-sm text-gray-600 mt-1">
+                              <p className="text-sm text-slate-600 mt-1">
                                 Number: <span className="font-mono font-medium">****{doc.document_number_last4}</span>
                               </p>
                             )}
                             {doc.expiry_date && (
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-xs text-slate-500 mt-1">
                                 Expires: {formatDate(doc.expiry_date)}
                               </p>
                             )}
-                            <p className="text-xs text-gray-500 mt-2">
+                            <p className="text-xs text-slate-500 mt-2">
                               Verified on {formatDate(doc.verified_at || doc.updated_at)}
                             </p>
                           </div>
                         </div>
-                        <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <span className="inline-flex shrink-0 items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
                           <FiCheck className="mr-1" /> Verified
                         </span>
                       </div>
@@ -819,11 +816,11 @@ const CustomerProfile = () => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <div className="bg-gray-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <FiFileText className="text-2xl text-gray-400" />
+                  <div className="bg-slate-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <FiFileText className="text-2xl text-slate-400" />
                   </div>
-                  <h3 className="text-lg font-medium text-gray-800 mb-2">No Verified Documents</h3>
-                  <p className="text-gray-600 mb-4">
+                  <h3 className="text-lg font-medium text-slate-800 mb-2">No Verified Documents</h3>
+                  <p className="text-slate-600 mb-4">
                     Your uploaded documents will appear here once they are verified by the Akshaya Centre staff.
                   </p>
                   <a 
@@ -839,36 +836,36 @@ const CustomerProfile = () => {
         </div>
 
         {/* Right Column - Stats and Actions */}
-        <div className="space-y-8">
+        <div className="space-y-4">
           {/* Profile Stats */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Profile Status</h3>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Profile Status</h3>
             
             <div className="space-y-4">
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm text-gray-600">Profile Completion</span>
-                  <span className="text-sm font-medium text-gray-800">{
+                  <span className="text-sm text-slate-600">Profile Completion</span>
+                  <span className="text-sm font-medium text-slate-800">{
                     calculateCompletion(profile)
                   }%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
+                <div className="w-full bg-slate-200 rounded-full h-2">
                   <div 
-                    className="bg-navy-600 h-2 rounded-full" 
+                    className="bg-navy-700 h-2 rounded-full" 
                     style={{ width: `${calculateCompletion(profile)}%` }}
                   ></div>
                 </div>
               </div>
               
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg border border-blue-100">
+                <div className="flex items-center justify-between p-3 bg-navy-500/10 rounded-lg border border-navy-500/10">
                   <div className="flex items-center">
-                    <div className="p-2 bg-blue-100 rounded-lg mr-3">
-                      <FiFileText className="text-blue-600" />
+                    <div className="p-2 bg-navy-500/10 rounded-lg mr-3">
+                      <FiFileText className="text-navy-700" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Total Documents</p>
-                      <p className="text-xl font-bold text-gray-800">{stats.total}</p>
+                      <p className="text-sm text-slate-600">Total Documents</p>
+                      <p className="text-xl font-bold text-slate-800">{stats.total}</p>
                     </div>
                   </div>
                 </div>
@@ -879,8 +876,8 @@ const CustomerProfile = () => {
                       <FiCheck className="text-emerald-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Verified</p>
-                      <p className="text-xl font-bold text-gray-800">{stats.verified}</p>
+                      <p className="text-sm text-slate-600">Verified</p>
+                      <p className="text-xl font-bold text-slate-800">{stats.verified}</p>
                     </div>
                   </div>
                 </div>
@@ -891,8 +888,8 @@ const CustomerProfile = () => {
                       <FiCalendar className="text-amber-600" />
                     </div>
                     <div>
-                      <p className="text-sm text-gray-600">Pending Review</p>
-                      <p className="text-xl font-bold text-gray-800">{stats.pending}</p>
+                      <p className="text-sm text-slate-600">Pending Review</p>
+                      <p className="text-xl font-bold text-slate-800">{stats.pending}</p>
                     </div>
                   </div>
                 </div>
@@ -901,59 +898,59 @@ const CustomerProfile = () => {
           </div>
 
           {/* Quick Actions */}
-          <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">Quick Actions</h3>
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">Quick Actions</h3>
             
             <div className="space-y-3">
               <a 
                 href="/customer/documents" 
-                className="flex items-center p-3 border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all group"
+                className="flex items-center p-3 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all group"
               >
-                <div className="p-2 bg-blue-100 rounded-lg mr-3 group-hover:bg-blue-200 transition-colors">
-                  <FiUpload className="text-blue-600" />
+                <div className="p-2 bg-navy-500/10 rounded-lg mr-3 group-hover:bg-navy-500/20 transition-colors">
+                  <FiUpload className="text-navy-700" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800">Upload Documents</p>
-                  <p className="text-xs text-gray-500">Add new documents for verification</p>
+                  <p className="font-medium text-slate-800">Upload Documents</p>
+                  <p className="text-xs text-slate-500">Add new documents for verification</p>
                 </div>
               </a>
               
               <a 
                 href="/customer/dashboard" 
-                className="flex items-center p-3 border border-gray-200 rounded-xl hover:bg-gray-50 hover:border-gray-300 transition-all group"
+                className="flex items-center p-3 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all group"
               >
-                <div className="p-2 bg-green-100 rounded-lg mr-3 group-hover:bg-green-200 transition-colors">
-                  <FiBriefcase className="text-green-600" />
+                <div className="p-2 bg-emerald-100 rounded-lg mr-3 group-hover:bg-emerald-200 transition-colors">
+                  <FiBriefcase className="text-emerald-600" />
                 </div>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800">Services Dashboard</p>
-                  <p className="text-xs text-gray-500">Apply for government services</p>
+                  <p className="font-medium text-slate-800">Services Dashboard</p>
+                  <p className="text-xs text-slate-500">Apply for government services</p>
                 </div>
               </a>
             </div>
           </div>
 
           {/* Account Info */}
-          <div className="bg-gradient-to-br from-navy-900 to-navy-800 rounded-2xl p-6">
+          <div className="bg-navy-800 rounded-2xl p-4 sm:p-5">
             <h3 className="text-lg font-bold text-white mb-4">Account Information</h3>
             
             <div className="space-y-4">
               <div>
-                <p className="text-sm text-navy-300">Customer ID</p>
+                <p className="text-sm text-white/60">Customer ID</p>
                 <p className="font-mono font-bold text-white mt-1">
                   {localStorage.getItem("customer_id") || 'N/A'}
                 </p>
               </div>
               
               <div>
-                <p className="text-sm text-navy-300">Account Created</p>
+                <p className="text-sm text-white/60">Account Created</p>
                 <p className="font-medium text-white mt-1">
                   {profile.created_at ? formatDate(profile.created_at) : 'N/A'}
                 </p>
               </div>
               
               <div>
-                <p className="text-sm text-navy-300">Last Updated</p>
+                <p className="text-sm text-white/60">Last Updated</p>
                 <p className="font-medium text-white mt-1">
                   {profile.updated_at ? formatDate(profile.updated_at) : 'N/A'}
                 </p>

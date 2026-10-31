@@ -187,13 +187,13 @@ const MyServices = () => {
   const getStatusColor = (status) => {
     switch(status) {
       case 'draft':
-        return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
+        return { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' };
       case 'pending_documents':
       case 'action_required':
-        return { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' };
+        return { bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' };
       case 'under_review':
       case 'in_progress':
-        return { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' };
+        return { bg: 'bg-navy-500/10', text: 'text-navy-700', border: 'border-navy-500/20' };
       case 'payment_pending':
         return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
       case 'completed':
@@ -202,7 +202,7 @@ const MyServices = () => {
       case 'cancelled':
         return { bg: 'bg-rose-50', text: 'text-rose-700', border: 'border-rose-200' };
       default:
-        return { bg: 'bg-gray-50', text: 'text-gray-700', border: 'border-gray-200' };
+        return { bg: 'bg-slate-50', text: 'text-slate-700', border: 'border-slate-200' };
     }
   };
 
@@ -391,7 +391,7 @@ const MyServices = () => {
     if (status === 'completed') {
       return 'bg-emerald-600 text-white hover:bg-emerald-700 border border-emerald-600';
     }
-    return 'bg-white text-navy-700 hover:bg-gray-50 border border-gray-300';
+    return 'bg-white text-navy-700 hover:bg-slate-50 border border-slate-300';
   };
 
   // Get completion date display
@@ -460,34 +460,33 @@ const MyServices = () => {
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy-700 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Loading your services...</p>
+          <p className="mt-4 text-slate-600">Loading your services...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="max-w-6xl mx-auto">
-      
+    <div>
       {/* Page Header with Apply Button */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">My Services</h1>
-            <p className="text-gray-600 mt-1">Track all your service applications</p>
+            <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">My Services</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Track all your service applications</p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
               onClick={handleRefresh}
               disabled={refreshing}
-              className="inline-flex items-center justify-center px-4 py-2.5 text-sm bg-white text-gray-700 rounded-xl font-medium hover:bg-gray-50 transition-colors duration-200 border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="inline-flex h-11 sm:h-10 items-center justify-center px-4 text-sm bg-white text-slate-700 rounded-xl font-medium hover:bg-slate-50 transition-colors duration-200 border border-slate-300 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <FiRefreshCw className={`mr-2 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh'}
             </button>
             <button
               onClick={() => setShowApplyModal(true)}
-              className="inline-flex items-center justify-center px-5 py-2.5 bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors duration-200 shadow-sm"
+              className="inline-flex h-11 sm:h-10 items-center justify-center px-4 text-sm bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors duration-200 shadow-sm"
             >
               <FiPlusCircle className="mr-2" />
               Apply for New Service
@@ -499,16 +498,16 @@ const MyServices = () => {
       {/* Filter Tabs with Service Count */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div className="flex space-x-2 bg-gray-100 p-1 rounded-xl max-w-md">
+          <div className="inline-flex max-w-full gap-1 overflow-x-auto bg-slate-100 p-1 rounded-xl">
             {['all', 'active', 'completed'].map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
                 disabled={isLoading}
-                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-200 ${
+                className={`whitespace-nowrap min-h-[40px] sm:min-h-0 flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all duration-200 ${
                   activeFilter === filter
                     ? 'bg-white text-navy-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                 } ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 {filter.charAt(0).toUpperCase() + filter.slice(1)}
@@ -522,7 +521,7 @@ const MyServices = () => {
           </div>
           
           {/* Last Updated Time */}
-          <div className="flex items-center text-sm text-gray-500">
+          <div className="flex items-center text-sm text-slate-500">
             <FiRefreshCw className="mr-2" />
             <span>Last updated: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
           </div>
@@ -531,16 +530,16 @@ const MyServices = () => {
 
       {/* Review Summary Banner - Show if there are reviewed services */}
       {reviewedCount > 0 && (
-        <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg flex items-center justify-between">
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center">
-            <FiStar className="text-yellow-500 mr-2" />
-            <span className="text-sm text-gray-700">
+            <FiStar className="text-amber-500 mr-2" />
+            <span className="text-sm text-slate-700">
               You have <span className="font-semibold">{reviewedCount}</span> reviewed service{reviewedCount > 1 ? 's' : ''}
             </span>
           </div>
           <button
             onClick={() => setActiveFilter('completed')}
-            className="text-xs text-navy-600 hover:text-navy-800 font-medium"
+            className="text-xs text-navy-700 hover:text-navy-800 font-medium"
           >
             View completed services
           </button>
@@ -549,7 +548,7 @@ const MyServices = () => {
 
       {/* Services List or Empty State */}
       {filteredServices.length > 0 ? (
-        <div className="space-y-3 mb-8">
+        <div className="grid gap-4 lg:grid-cols-2 mb-6">
           {filteredServices.map((service) => {
             const statusColors = getStatusColor(service.status);
             const primaryAction = getPrimaryAction(service);
@@ -560,76 +559,71 @@ const MyServices = () => {
             return (
               <div
                 key={service.id}
-                className={`bg-white rounded-xl p-5 shadow-sm border ${statusColors.border} hover:shadow-md transition-all duration-200`}
+                className={`flex flex-col bg-white rounded-2xl p-4 sm:p-5 shadow-sm border ${statusColors.border} hover:shadow-md transition-shadow duration-200`}
               >
-                <div className="flex flex-col lg:flex-row gap-5">
+                <div className="flex flex-1 flex-col gap-4">
                   {/* Left Column: Service Details */}
-                  <div className="lg:w-2/3">
+                  <div>
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-3 mb-2">
-                          <span className="inline-flex items-center bg-gray-100 px-2.5 py-1 rounded-lg text-xs text-gray-700">
+                      <div className="flex-1 min-w-0">
+                        <h3 className="mb-1 truncate font-semibold text-slate-900">
+                          {service.service_name || service.category || 'Service'}
+                        </h3>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <span className="inline-flex items-center bg-slate-100 px-2.5 py-1 rounded-lg text-xs text-slate-700">
                             <FiHash className="mr-1.5" />
                             {service.application_number || `TEMP-${service.id}`}
                           </span>
 
-                          <span className="inline-flex items-center bg-blue-50 px-2.5 py-1 rounded-lg text-xs text-blue-700 border border-blue-100">
+                          <span className="inline-flex items-center bg-navy-500/10 px-2.5 py-1 rounded-lg text-xs text-navy-700 border border-navy-500/10">
                             {service.category || 'Service'}
                           </span>
                           {service.subcategory_name && (
-                            <span className="inline-flex items-center bg-purple-50 px-2.5 py-1 rounded-lg text-xs text-purple-700 border border-purple-100">
+                            <span className="inline-flex items-center bg-navy-500/10 px-2.5 py-1 rounded-lg text-xs text-navy-700 border border-navy-500/10">
                               {service.subcategory_name}
                             </span>
                           )}
                           
                           {/* Review Badge for completed services */}
                           {service.status === 'completed' && hasReview && (
-                            <span className="inline-flex items-center bg-yellow-100 px-2.5 py-1 rounded-lg text-xs text-yellow-700 border border-yellow-200">
+                            <span className="inline-flex items-center bg-amber-100 px-2.5 py-1 rounded-lg text-xs text-amber-700 border border-amber-200">
                               <FiStar className="mr-1.5" />
                               Reviewed
                             </span>
                           )}
                         </div>
                         {service.service_description && (
-                          <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                          <p className="text-sm text-slate-600 mb-2 line-clamp-2">
                             {service.service_description}
                           </p>
                         )}
                       </div>
                       
                       {/* Status Badge */}
-                      <div className={`inline-flex items-center self-start px-3 py-1.5 rounded-lg ${statusColors.bg} ${statusColors.text} border ${statusColors.border}`}>
+                      <div className={`inline-flex items-center self-start px-2.5 py-1 rounded-full ${statusColors.bg} ${statusColors.text} border ${statusColors.border}`}>
                         {getStatusIcon(service.status)}
-                        <span className="ml-2 font-medium text-sm">{getStatusLabel(service.status)}</span>
+                        <span className="ml-1.5 font-medium text-xs">{getStatusLabel(service.status)}</span>
                       </div>
                     </div>
 
                     {/* Progress Bar */}
                     {service.status !== 'completed' && service.status !== 'rejected' && service.status !== 'cancelled' && (
                       <div className="mb-4">
-                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                        <div className="flex justify-between text-xs text-slate-600 mb-1">
                           <span>Progress</span>
                           <span className={`font-semibold ${
                             progress < 30 ? 'text-amber-600' :
-                            progress < 60 ? 'text-blue-600' :
-                            progress < 90 ? 'text-indigo-600' :
+                            progress < 60 ? 'text-navy-700' :
+                            progress < 90 ? 'text-navy-700' :
                             'text-emerald-600'
                           }`}>{progress}%</span>
                         </div>
-                        <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden shadow-inner">
-                          <div 
-                            className="h-3 rounded-full transition-all duration-700 ease-out"
-                            style={{ 
-                              width: `${progress}%`,
-                              background: progress < 30 
-                                ? 'linear-gradient(90deg, #f59e0b 0%, #d97706 100%)'
-                                : progress < 60
-                                ? 'linear-gradient(90deg, #3b82f6 0%, #2563eb 100%)'
-                                : progress < 90
-                                ? 'linear-gradient(90deg, #6366f1 0%, #4f46e5 100%)'
-                                : 'linear-gradient(90deg, #10b981 0%, #059669 100%)',
-                              boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
-                            }}
+                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                          <div
+                            className={`h-2 rounded-full transition-all duration-700 ease-out ${
+                              progress < 30 ? 'bg-amber-500' : progress < 90 ? 'bg-navy-500' : 'bg-emerald-500'
+                            }`}
+                            style={{ width: `${progress}%` }}
                           ></div>
                         </div>
                         {/* Show current step from tracking */}
@@ -637,7 +631,7 @@ const MyServices = () => {
                           service.tracking_current_step || 
                           service.service_data?.current_step || 
                           service.service_data?.tracking?.current_step) && (
-                          <p className="text-xs text-gray-500 mt-1">
+                          <p className="text-xs text-slate-500 mt-1">
                             Current step: <span className="font-medium">
                               {service.current_step || 
                               service.tracking_current_step || 
@@ -645,7 +639,7 @@ const MyServices = () => {
                               service.service_data?.tracking?.current_step}
                             </span>
                             {(service.assigned_staff_name || service.service_data?.tracking?.assigned_staff_name) && (
-                              <span className="ml-2 text-navy-600">
+                              <span className="ml-2 text-navy-700">
                                 • Assigned to: {service.assigned_staff_name || service.service_data?.tracking?.assigned_staff_name}
                               </span>
                             )}
@@ -655,45 +649,45 @@ const MyServices = () => {
                     )}
 
                     {/* Service Metadata */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div className="grid grid-cols-2 gap-3 mb-4">
                       <div className="flex items-center">
-                        <div className="bg-gray-100 p-2 rounded-lg mr-3">
-                          <FiCalendar className="text-gray-600" />
+                        <div className="hidden sm:block bg-slate-100 p-2 rounded-lg mr-3">
+                          <FiCalendar className="text-slate-600" />
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">Applied On</p>
-                          <p className="text-sm font-medium text-gray-800">
+                          <p className="text-xs text-slate-500">Applied On</p>
+                          <p className="text-sm font-medium text-slate-800">
                             {formatDate(service.applied_at)}
                           </p>
                         </div>
                       </div>
                       
                       <div className="flex items-center">
-                        <div className="bg-gray-100 p-2 rounded-lg mr-3">
-                          <FiRefreshCw className="text-gray-600" />
+                        <div className="hidden sm:block bg-slate-100 p-2 rounded-lg mr-3">
+                          <FiRefreshCw className="text-slate-600" />
                         </div>
                         <div>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-xs text-slate-500">
                             {service.status === 'completed' ? 'Completed On' : 'Estimated Completion'}
                           </p>
                           <p className={`text-sm font-medium ${
                             service.status === 'completed' ? 'text-emerald-600' : 
                             service.status === 'rejected' || service.status === 'cancelled' ? 'text-rose-600' : 
-                            'text-gray-800'
+                            'text-slate-800'
                           }`}>
                             {completionDisplay}
                           </p>
                         </div>
                       </div>
                       {service.assigned_staff_name && (
-                        <div className="flex items-center text-sm text-gray-600 mt-1">
-                          <FiUser className="mr-2 text-gray-400" />
+                        <div className="flex items-center text-sm text-slate-600 mt-1">
+                          <FiUser className="mr-2 text-slate-400" />
                           <span>Assigned to: <span className="font-medium">{service.assigned_staff_name}</span></span>
                         </div>
                       )}
                       {service.service_data?.tracking?.estimated_delivery && (
-                        <div className="flex items-center text-sm text-gray-600 mt-1">
-                          <FiCalendar className="mr-2 text-gray-400" />
+                        <div className="flex items-center text-sm text-slate-600 mt-1">
+                          <FiCalendar className="mr-2 text-slate-400" />
                           <span>Est. Delivery: {formatDate(service.service_data.tracking.estimated_delivery)}</span>
                         </div>
                       )}
@@ -701,15 +695,15 @@ const MyServices = () => {
 
                     {/* Action Message */}
                     {service.status === 'pending_documents' && (
-                      <div className="flex items-start bg-orange-50 p-3 rounded-lg border border-orange-100 mb-3">
-                        <FiAlertCircle className="text-orange-600 mt-0.5 mr-2 flex-shrink-0" />
+                      <div className="flex items-start bg-amber-50 p-3 rounded-lg border border-amber-100 mb-3">
+                        <FiAlertCircle className="text-amber-600 mt-0.5 mr-2 flex-shrink-0" />
                         <div className="flex-1">
-                          <p className="text-sm text-orange-700">
+                          <p className="text-sm text-amber-700">
                             <span className="font-medium">Documents Required:</span> Please upload the required documents to continue processing.
                           </p>
                           <button 
                             onClick={() => handleUploadDocuments(service.id)}
-                            className="inline-flex items-center text-xs text-orange-800 font-medium mt-1 hover:text-orange-900"
+                            className="inline-flex items-center text-xs text-amber-800 font-medium mt-1 hover:text-amber-900"
                           >
                             <FiExternalLink className="mr-1" />
                             View required documents
@@ -747,18 +741,18 @@ const MyServices = () => {
 
                     {/* Remarks if any */}
                     {service.remarks && service.status !== 'rejected' && (
-                      <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded-lg">
+                      <div className="text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">
                         <span className="font-medium">Note:</span> {service.remarks}
                       </div>
                     )}
                   </div>
 
                   {/* Right Column: Action Button */}
-                  <div className="lg:w-1/3 lg:border-l lg:border-gray-200 lg:pl-5">
+                  <div className="mt-auto border-t border-slate-100 pt-4">
                     <div className="flex flex-col h-full">
-                      <div className="mb-4">
-                        <p className="text-xs text-gray-500 mb-2">Last Updated</p>
-                        <p className="text-sm font-medium text-gray-800">
+                      <div className="mb-3 flex flex-wrap items-baseline gap-x-2">
+                        <p className="text-xs text-slate-500">Last Updated</p>
+                        <p className="text-sm font-medium text-slate-800">
                           {formatDateTime(service.last_updated)}
                         </p>
                       </div>
@@ -766,17 +760,17 @@ const MyServices = () => {
                       <div className="mt-auto space-y-2">
                         <button
                           onClick={primaryAction.onClick}
-                          className={`inline-flex items-center justify-center w-full py-3 rounded-lg font-medium transition-colors duration-200 ${getActionButtonClass(service.status)}`}
+                          className={`inline-flex items-center justify-center w-full h-11 rounded-xl text-sm font-medium transition-colors duration-200 ${getActionButtonClass(service.status)}`}
                         >
                           {getActionIcon(primaryAction.type)}
                           <span className="ml-2">{primaryAction.label}</span>
                         </button>
                         
                         {/* Secondary Actions */}
-                        <div className="flex space-x-2">
+                        <div className="flex gap-2">
                           <button
                             onClick={() => navigate(`/customer/myservices/${service.id}/timeline`)}
-                            className="inline-flex items-center justify-center flex-1 py-2 text-sm text-navy-600 hover:text-navy-800 hover:bg-navy-50 rounded-lg transition-colors duration-200 border border-gray-200"
+                            className="inline-flex items-center justify-center flex-1 h-10 rounded-xl text-sm text-navy-700 hover:text-navy-800 hover:bg-navy-500/10 rounded-lg transition-colors duration-200 border border-slate-200"
                           >
                             <FiEye className="mr-1.5" />
                             View Details
@@ -785,7 +779,7 @@ const MyServices = () => {
                           {(service.status === 'draft' || service.status === 'pending_documents' || service.status === 'payment_pending') && (
                             <button
                               onClick={() => handleCancelService(service.id, service.service_name || service.application_number)}
-                              className="inline-flex items-center justify-center flex-1 py-2 text-sm text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-lg transition-colors duration-200 border border-rose-200"
+                              className="inline-flex items-center justify-center flex-1 h-10 rounded-xl text-sm text-rose-600 hover:text-rose-800 hover:bg-rose-50 transition-colors duration-200 border border-rose-200"
                             >
                               <FiXCircle className="mr-1.5" />
                               Cancel
@@ -802,13 +796,13 @@ const MyServices = () => {
         </div>
       ) : (
         /* Empty State */
-        <div className="bg-white rounded-xl p-8 shadow-sm border border-gray-200 text-center mb-8">
+        <div className="bg-white rounded-xl p-8 shadow-sm border border-slate-200 text-center mb-8">
           <div className="max-w-md mx-auto">
-            <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <FiFileText className="text-gray-400 text-3xl" />
+            <div className="bg-slate-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <FiFileText className="text-slate-400 text-3xl" />
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-2">No services found</h3>
-            <p className="text-gray-600 mb-6">
+            <h3 className="text-xl font-bold text-slate-800 mb-2">No services found</h3>
+            <p className="text-slate-600 mb-6">
               {activeFilter === 'all'
                 ? "You haven't applied for any services yet. Get started with our digital services!"
                 : `You don't have any ${activeFilter} services at the moment.`}
@@ -821,7 +815,7 @@ const MyServices = () => {
                 <FiPlusCircle className="mr-2" />
                 Apply for a New Service
               </button>
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-slate-500">
                 Browse available services and apply online
               </p>
             </div>
@@ -831,22 +825,22 @@ const MyServices = () => {
 
       {/* Help Section */}
       {filteredServices.length > 0 && (
-        <div className="mt-8 p-5 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl border border-blue-100">
+        <div className="mt-6 p-4 sm:p-5 bg-white rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex flex-col md:flex-row items-start gap-5">
-            <div className="bg-white p-3 rounded-xl shadow-sm flex-shrink-0">
-              <FiInfo className="text-blue-600 text-xl" />
+            <div className="bg-navy-500/10 p-3 rounded-xl flex-shrink-0">
+              <FiInfo className="text-navy-700 text-xl" />
             </div>
             <div className="flex-1">
-              <h4 className="font-semibold text-blue-800 mb-2 text-lg">Need help with your services?</h4>
+              <h4 className="font-semibold text-navy-800 mb-2 text-lg">Need help with your services?</h4>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
                 <div className="space-y-3">
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-navy-700">
                     <span className="font-medium">Service Queries:</span> Have questions about your application status or requirements?
                   </p>
-                  <div className="flex items-center space-x-4">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button 
                       onClick={() => navigate('/customer/support')}
-                      className="text-sm bg-white text-navy-700 font-medium hover:text-navy-800 hover:bg-gray-50 px-4 py-2 rounded-lg border border-gray-300 transition-colors"
+                      className="text-sm bg-white text-navy-700 font-medium hover:text-navy-800 hover:bg-slate-50 min-h-[40px] px-4 py-2 rounded-xl border border-slate-300 transition-colors"
                     >
                       Submit Support Ticket
                     </button>
@@ -859,10 +853,10 @@ const MyServices = () => {
                   </div>
                 </div>
                 <div className="space-y-3">
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-navy-700">
                     <span className="font-medium">Support Hours:</span> Monday to Saturday, 9 AM to 6 PM
                   </p>
-                  <p className="text-sm text-blue-700">
+                  <p className="text-sm text-navy-700">
                     <span className="font-medium">Email:</span> support@akshayacentre.gov.in
                   </p>
                 </div>
@@ -874,18 +868,18 @@ const MyServices = () => {
 
       {/* Apply for Service Modal */}
       {showApplyModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
-              <h3 className="text-xl font-bold text-gray-800">Apply for Service</h3>
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-4xl w-full max-h-[90dvh] overflow-y-auto">
+            <div className="p-4 border-b border-slate-200 flex justify-between items-center sticky top-0 bg-white z-10">
+              <h3 className="text-xl font-bold text-slate-800">Apply for Service</h3>
               <button
                 onClick={() => setShowApplyModal(false)}
-                className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
+                className="grid h-10 w-10 place-items-center text-slate-500 hover:text-slate-700 rounded-full hover:bg-slate-100"
               >
                 ✕
               </button>
             </div>
-            <div className="p-6">
+            <div className="p-4 sm:p-6">
               <ApplyForService 
                 onSuccess={handleServiceApplicationSuccess}
                 onCancel={() => setShowApplyModal(false)}

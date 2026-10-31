@@ -90,36 +90,36 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
   // Render view mode
   if (mode === 'view' && review) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4">
+        <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
           {/* Header */}
-          <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
-            <h3 className="text-xl font-bold text-gray-800">Your Review</h3>
+          <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+            <h3 className="text-lg font-semibold text-slate-900">Your Review</h3>
             <button
               onClick={onClose}
-              className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
+              className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700"
             >
               <FiX className="h-5 w-5" />
             </button>
           </div>
 
           {/* Body */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {/* Service Info */}
-            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 mb-6">
               <div className="flex items-center space-x-3">
-                <div className="bg-navy-100 p-2 rounded-lg">
+                <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-500/10">
                   <FiBriefcase className="h-5 w-5 text-navy-700" />
                 </div>
                 <div>
-                  <p className="text-sm text-gray-600">Service</p>
-                  <p className="font-medium text-gray-900">
+                  <p className="text-sm text-slate-600">Service</p>
+                  <p className="font-medium text-slate-900">
                     {booking.service_name || booking.category || 'Service'}
                   </p>
                 </div>
               </div>
               {booking.application_number && (
-                <div className="flex items-center mt-2 text-xs text-gray-500">
+                <div className="flex items-center mt-2 text-xs text-slate-500">
                   <FiCalendar className="mr-1" />
                   Application: {booking.application_number}
                 </div>
@@ -128,7 +128,7 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
 
             {/* Review Date */}
             <div className="mb-4 text-right">
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-slate-500">
                 Submitted on {format(new Date(review.submitted_at), 'dd MMM yyyy, hh:mm a')}
               </p>
             </div>
@@ -136,24 +136,24 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
             {/* Service Rating */}
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2">
-                <FiStar className="h-5 w-5 text-yellow-500" />
-                <span className="font-medium text-gray-700">Service Rating</span>
+                <FiStar className="h-5 w-5 text-amber-500" />
+                <span className="font-medium text-slate-700">Service Rating</span>
               </div>
               <StarRating rating={review.service_rating} size="lg" editable={false} showLabel={false} />
-              <p className="mt-1 text-sm text-gray-600">{review.service_rating}/5</p>
+              <p className="mt-1 text-sm text-slate-600">{review.service_rating}/5</p>
             </div>
 
             {/* Staff Rating (if provided) */}
             {review.staff_rating > 0 && (
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
-                  <FiUser className="h-5 w-5 text-blue-500" />
-                  <span className="font-medium text-gray-700">Staff Rating</span>
+                  <FiUser className="h-5 w-5 text-navy-500" />
+                  <span className="font-medium text-slate-700">Staff Rating</span>
                 </div>
                 <StarRating rating={review.staff_rating} size="lg" editable={false} showLabel={false} />
-                <p className="mt-1 text-sm text-gray-600">{review.staff_rating}/5</p>
+                <p className="mt-1 text-sm text-slate-600">{review.staff_rating}/5</p>
                 {review.staff_name && (
-                  <p className="text-xs text-gray-500 mt-1">Staff: {review.staff_name}</p>
+                  <p className="text-xs text-slate-500 mt-1">Staff: {review.staff_name}</p>
                 )}
               </div>
             )}
@@ -161,18 +161,18 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
             {/* Review Text */}
             <div className="mb-6">
               <div className="flex items-center gap-2 mb-2">
-                <FiMessageSquare className="h-5 w-5 text-gray-500" />
-                <span className="font-medium text-gray-700">Your Feedback</span>
+                <FiMessageSquare className="h-5 w-5 text-slate-500" />
+                <span className="font-medium text-slate-700">Your Feedback</span>
               </div>
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                <p className="text-gray-800 italic">"{review.review_text}"</p>
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-slate-800 italic">"{review.review_text}"</p>
               </div>
             </div>
 
             {/* Close Button */}
             <button
               onClick={onClose}
-              className="w-full py-3 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition-colors"
+              className="min-h-[44px] w-full rounded-xl bg-navy-700 py-3 font-medium text-white transition-colors hover:bg-navy-800"
             >
               Close
             </button>
@@ -184,40 +184,40 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
 
   // Render submit mode (existing code)
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4">
+      <div className="w-full max-w-lg max-h-[90dvh] overflow-y-auto rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
         {/* Header */}
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center sticky top-0 bg-white z-10">
-          <h3 className="text-xl font-bold text-gray-800">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+          <h3 className="text-lg font-semibold text-slate-900">
             {step === 'form' ? 'Rate Your Experience' : 'Thank You!'}
           </h3>
           <button
             onClick={handleClose}
-            className="text-gray-500 hover:text-gray-700 p-1 rounded-full hover:bg-gray-100"
+            className="grid h-10 w-10 place-items-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700"
           >
             <FiX className="h-5 w-5" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {step === 'form' ? (
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Service Info */}
-              <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
                 <div className="flex items-center space-x-3">
-                  <div className="bg-navy-100 p-2 rounded-lg">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-500/10">
                     <FiBriefcase className="h-5 w-5 text-navy-700" />
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Service</p>
-                    <p className="font-medium text-gray-900">
+                    <p className="text-sm text-slate-600">Service</p>
+                    <p className="font-medium text-slate-900">
                       {booking.service_name || booking.category || 'Service'}
                     </p>
                   </div>
                 </div>
                 {booking.application_number && (
-                  <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs text-slate-500 mt-2">
                     Application: {booking.application_number}
                   </p>
                 )}
@@ -248,7 +248,7 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
 
               {/* Review Text */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   Your Feedback <span className="text-rose-500">*</span>
                 </label>
                 <textarea
@@ -256,8 +256,8 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
                   value={formData.review_text}
                   onChange={handleInputChange}
                   rows="4"
-                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-navy-500 transition-colors ${
-                    errors.review_text ? 'border-rose-500' : 'border-gray-300'
+                  className={`w-full rounded-xl border px-3 py-2.5 text-base sm:text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30 transition-colors ${
+                    errors.review_text ? 'border-rose-500' : 'border-slate-300'
                   }`}
                   placeholder="Please share your experience with us..."
                 ></textarea>
@@ -267,7 +267,7 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
               </div>
 
               {errors.submit && (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg">
+                <div className="rounded-xl border border-rose-200 bg-rose-50 p-3">
                   <p className="text-sm text-rose-700">{errors.submit}</p>
                 </div>
               )}
@@ -276,7 +276,7 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
               <button
                 type="submit"
                 disabled={submitting}
-                className="w-full py-3 bg-navy-700 text-white rounded-lg font-medium hover:bg-navy-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
+                className="flex min-h-[44px] w-full items-center justify-center rounded-xl bg-navy-700 py-3 font-medium text-white transition-colors hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {submitting ? (
                   <>
@@ -294,13 +294,13 @@ const ReviewModal = ({ isOpen, onClose, booking, mode = 'submit', onSuccess }) =
               <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <FiCheckCircle className="h-10 w-10 text-emerald-600" />
               </div>
-              <h4 className="text-xl font-bold text-gray-900 mb-2">Review Submitted!</h4>
-              <p className="text-gray-600 mb-8">
+              <h4 className="text-xl font-bold text-slate-900 mb-2">Review Submitted!</h4>
+              <p className="text-slate-600 mb-8">
                 Thank you for taking the time to share your feedback. We truly appreciate your input!
               </p>
               <button
                 onClick={handleClose}
-                className="px-6 py-3 bg-navy-700 text-white rounded-lg hover:bg-navy-800 transition-colors"
+                className="min-h-[44px] w-full rounded-xl bg-navy-700 px-6 py-3 font-medium text-white transition-colors hover:bg-navy-800 sm:w-auto"
               >
                 Close
               </button>
