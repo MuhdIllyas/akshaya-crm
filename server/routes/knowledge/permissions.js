@@ -28,7 +28,7 @@ export const PERMISSIONS = {
 
     // Hub-wide content
     'announcement.create': MANAGERS,
-    'training.create':     MANAGERS,
+    'training.create':     EVERYONE, // staff can share good training material too
 
     // Discussions
     'discussion.create':   EVERYONE,

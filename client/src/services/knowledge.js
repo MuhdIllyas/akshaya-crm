@@ -38,6 +38,19 @@ export const createDocument = async (payload) => {
   return data;
 };
 
+// ==========================================
+// CONTRIBUTORS (admins / superadmins)
+// ==========================================
+export const addContributor = async (workspaceId, staffId, role = 'EDITOR') => {
+  const { data } = await api.post(`/workspace/${workspaceId}/contributors`, { staffId, role });
+  return data;
+};
+
+export const removeContributor = async (workspaceId, staffId) => {
+  const { data } = await api.delete(`/workspace/${workspaceId}/contributors/${staffId}`);
+  return data;
+};
+
 export const fetchDiscussions = async (workspaceId) => {
   const { data } = await api.get(`/workspaces/${workspaceId}/discussions`);
   return data;

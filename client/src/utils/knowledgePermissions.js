@@ -24,7 +24,7 @@ export const PERMISSIONS = {
   'contributor.manage':  MANAGERS,
 
   'announcement.create': MANAGERS,
-  'training.create':     MANAGERS,
+  'training.create':     EVERYONE, // staff can share good training material too
 
   'discussion.create':   EVERYONE,
   'discussion.reply':    EVERYONE,

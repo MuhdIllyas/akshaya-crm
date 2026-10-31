@@ -94,7 +94,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   // 3. Document Router
   const renderContent = () => {
     if (activeTab === 'dashboard') {
-      return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
+      return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} onUpdate={loadWorkspaceData} />;
     }
     if (activeTab === 'discussions') { 
       return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} serviceName={mockService?.name} />;

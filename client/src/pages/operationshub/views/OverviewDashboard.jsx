@@ -1,11 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   FiUsers, FiMessageSquare, FiCheckCircle, FiLink, 
-  FiFileText, FiArrowRight, FiPlus 
+  FiFileText, FiArrowRight, FiPlus, FiX 
 } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import { can } from '@/utils/knowledgePermissions';
+import { removeContributor } from '@/services/knowledge';
+import AddContributorModal from './AddContributorModal';
 
-const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents = [], setActiveTab }) => {
+const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents = [], setActiveTab, onUpdate }) => {
+  const [showAddContributor, setShowAddContributor] = useState(false);
   
   // Find specific system documents for quick access
   const sopDoc = documents.find(d => d.system_key === 'sop');
@@ -14,6 +18,18 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
   // PHASE 2: labels match what this user can actually do
   const canEditDocs = can('document.edit', { workspace });
   const canAddResource = can('resource.add', { workspace });
+  const canManageContributors = can('contributor.manage', { workspace });
+
+  const handleRemoveContributor = async (c) => {
+    if (!window.confirm(`Remove ${c.staff_name} from this service's contributors?`)) return;
+    try {
+      await removeContributor(workspace.id, c.staff_id);
+      toast.success(`${c.staff_name} removed`);
+      onUpdate?.();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to remove contributor');
+    }
+  };
 
   return (
     <div className="animate-in fade-in duration-300 space-y-6">
@@ -136,7 +152,14 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
         <div className="bg-white border border-slate-200 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold text-slate-900">Ownership & Contributors</h3>
-            {/* PHASE 2: "Add Staff" hidden until the contributor picker is built (it did nothing) */}
+            {canManageContributors && (
+              <button
+                onClick={() => setShowAddContributor(true)}
+                className="text-xs font-semibold text-navy-700 hover:underline flex items-center gap-1"
+              >
+                <FiPlus className="h-3 w-3" /> Add Staff
+              </button>
+            )}
           </div>
           
           {contributors.length === 0 ? (
@@ -146,7 +169,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
           ) : (
             <div className="space-y-3">
               {contributors.map(c => (
-                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-colors">
+                <div key={c.id || c.staff_id} className="group flex items-center justify-between p-3 bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="w-8 h-8 bg-gradient-to-br from-navy-500 to-navy-700 rounded-full flex items-center justify-center text-white text-xs font-bold shadow-sm">
                       {c.staff_name ? c.staff_name.charAt(0).toUpperCase() : 'U'}
@@ -156,6 +179,15 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
                       <div className="text-[11px] font-semibold text-navy-700 uppercase tracking-wider">{c.role}</div>
                     </div>
                   </div>
+                  {canManageContributors && (
+                    <button
+                      onClick={() => handleRemoveContributor(c)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition"
+                      title="Remove contributor"
+                    >
+                      <FiX className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -163,6 +195,15 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
         </div>
 
       </div>
+
+      {showAddContributor && (
+        <AddContributorModal
+          workspaceId={workspace.id}
+          existingStaffIds={contributors.map(c => c.staff_id)}
+          onClose={() => setShowAddContributor(false)}
+          onAdded={() => { setShowAddContributor(false); onUpdate?.(); }}
+        />
+      )}
     </div>
   );
 };
