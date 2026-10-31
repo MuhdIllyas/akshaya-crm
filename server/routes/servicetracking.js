@@ -1868,7 +1868,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
   const aadhaar = typeof req.body.aadhaar === 'string' ? req.body.aadhaar.replace(/[\s-]/g, '') : req.body.aadhaar;
   const email = typeof req.body.email === 'string' ? req.body.email.trim() : req.body.email;
   const applicationNumber = typeof req.body.applicationNumber === 'string'
-    ? req.body.applicationNumber.replace(/[\s\u200B-\u200D\uFEFF\-\u2013\u2014]+/g, '').toUpperCase()
+    ? req.body.applicationNumber
+      .replace(/[\u2010-\u2015\u2212]/g, '-') // pasted en/em dashes -> plain hyphen; hyphens are valid (CRB-M0122121-2026)
+      .replace(/[\s\u200B-\u200D\uFEFF]+/g, '')
+      .toUpperCase()
     : req.body.applicationNumber;
 
   if (isNaN(parseInt(id, 10))) {
