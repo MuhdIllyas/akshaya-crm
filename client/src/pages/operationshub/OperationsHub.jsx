@@ -14,7 +14,7 @@ import {
   FiArchive, FiClipboard, FiVideo, FiFileText, FiLifeBuoy,
   FiUsers, FiBriefcase, FiTarget, FiCheckSquare, FiMessageCircle as FiMessageCircleOutline,
   FiGrid, FiList, FiFilePlus, FiDatabase, FiServer, FiCloud,
-  FiMessageCircle as FiChat, FiFileMinus, FiFilePlus as FiFileAdd,
+  FiMessageCircle as FiChat, FiFileMinus, FiFilePlus as FiFileAdd, FiInbox,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -30,6 +30,7 @@ import DraftsPage from './views/DraftsPage';
 import AnnouncementsView from './views/AnnouncementsView';
 import CreateDiscussionModal from './views/discussions/CreateDiscussionModal';
 import ServiceWorkspace from './ServiceWorkspace'; 
+import SuggestionsView from './views/SuggestionsView'; // PHASE 3
 import { getWorkflowServices } from '@/services/serviceService';
 import {
   fetchGlobalHubStats,
@@ -57,6 +58,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
     { id: 'ai-assistant', label: 'AI Assistant', icon: FiZap },
   ];
   const workspaceItems = [
+    { id: 'suggestions', label: 'Suggestions', icon: FiInbox, count: hubStats.pendingReviews }, // PHASE 3: waiting for my review
     { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: hubStats.mentions },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
     { id: 'drafts', label: 'Drafts', icon: FiFile, count: hubStats.drafts || 0 }, 
@@ -641,6 +643,11 @@ const OperationsHub = () => { // <--- Removed the prop!
     fetchDashboardData();
   }, []);
 
+  // PHASE 3: refresh sidebar counts after reviewing a suggestion
+  const refreshHubStats = async () => {
+    try { setHubStats(await fetchGlobalHubStats()); } catch { /* keep old counts */ }
+  };
+
   // Sync with URL changes
   useEffect(() => {
       if (urlDiscussionId) {
@@ -730,6 +737,17 @@ const OperationsHub = () => { // <--- Removed the prop!
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
       case 'bookmarks': return <BookmarksPage navigateTo={navigateTo} />;
       case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
+      case 'suggestions': {
+        const isManager = ['admin', 'superadmin'].includes(currentUser.role);
+        const showReview = isManager || (hubStats.pendingReviews || 0) > 0;
+        return (
+          <SuggestionsView
+            showReviewTab={showReview}
+            defaultScope={showReview ? 'review' : 'mine'}
+            onChanged={refreshHubStats}
+          />
+        );
+      }
       case 'drafts': 
         return <DraftsPage navigateTo={navigateTo} onResumeDraft={(draft) => { 
           setEditingDraft(draft); 

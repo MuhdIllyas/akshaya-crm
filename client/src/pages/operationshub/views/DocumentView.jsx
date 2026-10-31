@@ -1,109 +1,135 @@
 import React, { useState } from 'react';
-import { FiEdit2, FiInfo, FiAlertTriangle, FiCheckCircle, FiFileText } from 'react-icons/fi';
+import { FiEdit2, FiFileText, FiEdit3, FiClock, FiInbox, FiAward } from 'react-icons/fi';
+import { toast } from 'react-toastify';
 import BlockEditor from './BlockEditor';
+import { BlocksView } from './knowledgeBlocks';
 import { can } from '@/utils/knowledgePermissions';
+import { fetchMySuggestionForDocument } from '@/services/knowledge';
 
-const DocumentView = ({ document, workspace, workspaceId, onUpdate }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  // PHASE 2: staff can read; admins/superadmins can edit
-  const canEdit = can('document.edit', { workspace });
+const DocumentView = ({ document, workspace, workspaceId, contributorRole, onUpdate, onOpenSuggestions }) => {
+  // 'edit' (admins / service editors), 'suggest' (everyone else), or null
+  const [editorMode, setEditorMode] = useState(null);
+  const [draft, setDraft] = useState(null); // my pending suggestion, when continuing it
+  const [opening, setOpening] = useState(false);
 
-  // If the user clicks Edit, we will eventually show the interactive Block Editor
-  if (isEditing && canEdit) {
-      return (
-        <BlockEditor 
-          document={document} 
-          workspaceId={workspaceId} 
-          onCancel={() => setIsEditing(false)} 
-          onSaveSuccess={() => {
-            setIsEditing(false);
-            onUpdate(); // Reloads the latest JSON from Postgres!
-          }} 
-        />
-      );
+  // PHASE 2/3: admins + the service's OWNER/EDITOR edit directly; everyone else suggests
+  const canEdit = can('document.edit', { workspace, contributorRole });
+  const canReview = can('suggestion.review', { workspace, contributorRole });
+  const pendingCount = document.pending_suggestions || 0;
+
+  const openSuggest = async () => {
+    if (!document.my_pending_suggestion) {
+      setDraft(null);
+      setEditorMode('suggest');
+      return;
     }
-
-  // ==========================================
-  // THE RENDERING ENGINE
-  // Translates database JSON into beautiful UI
-  // ==========================================
-  const renderBlock = (block) => {
-    // Safely parse the JSON content if it came back as a string from the DB
-    let content = block.content;
-    if (typeof content === 'string') {
-      try { content = JSON.parse(content); } catch (e) { content = { text: content }; }
-    }
-
-    switch (block.block_type) {
-      case 'h1':
-        return <h1 className="text-3xl font-bold text-slate-900 mt-8 mb-4 tracking-tight">{content.text}</h1>;
-      case 'h2':
-        return <h2 className="text-2xl font-bold text-slate-800 mt-8 mb-3 border-b border-slate-100 pb-2">{content.text}</h2>;
-      case 'h3':
-        return <h3 className="text-xl font-bold text-slate-800 mt-6 mb-2">{content.text}</h3>;
-      case 'paragraph':
-        return <p className="text-slate-700 leading-relaxed mb-4 text-[15px]">{content.text}</p>;
-      case 'list':
-        return (
-          <ul className="list-disc list-inside space-y-2 mb-4 text-slate-700 ml-2">
-            {content.items?.map((item, i) => <li key={i} className="leading-relaxed">{item}</li>)}
-          </ul>
-        );
-      case 'callout':
-        const isWarning = content.style === 'warning';
-        return (
-          <div className={`p-4 rounded-xl mb-6 flex gap-3 ${isWarning ? 'bg-amber-50 text-amber-900' : 'bg-navy-500/10 text-navy-700'}`}>
-            {isWarning ? <FiAlertTriangle className="flex-shrink-0 mt-0.5 text-amber-600 h-5 w-5" /> : <FiInfo className="flex-shrink-0 mt-0.5 text-navy-700 h-5 w-5" />}
-            <div className="text-[15px] leading-relaxed font-medium">{content.text}</div>
-          </div>
-        );
-      default:
-        return null;
+    // Continue editing my waiting suggestion instead of starting over
+    try {
+      setOpening(true);
+      const mine = await fetchMySuggestionForDocument(document.id);
+      setDraft(mine || null);
+      setEditorMode('suggest');
+    } catch (err) {
+      toast.error('Could not load your suggestion');
+    } finally {
+      setOpening(false);
     }
   };
 
+  if (editorMode) {
+    return (
+      <BlockEditor
+        document={document}
+        workspaceId={workspaceId}
+        mode={editorMode}
+        initialBlocks={editorMode === 'suggest' && draft ? draft.proposed_blocks : null}
+        initialNote={editorMode === 'suggest' && draft ? (draft.note || '') : ''}
+        onCancel={() => setEditorMode(null)}
+        onSaveSuccess={() => {
+          setEditorMode(null);
+          onUpdate(); // reload the latest document + suggestion counts
+        }}
+      />
+    );
+  }
+
+  const last = document.last_contribution;
+
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden animate-in fade-in duration-300">
-      {/* Document Header */}
-      <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+    <div className="animate-in fade-in overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm duration-300">
+      {/* Header */}
+      <div className="flex flex-col gap-3 border-b border-slate-100 bg-slate-50/50 px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-navy-500/10 text-navy-700 rounded-lg">
+          <div className="rounded-lg bg-navy-500/10 p-2 text-navy-700">
             <FiFileText className="h-5 w-5" />
           </div>
           <div>
             <h2 className="text-xl font-bold text-slate-900">{document.title}</h2>
-            <p className="text-xs text-slate-500 uppercase tracking-wider font-semibold mt-0.5">
-              Last updated: {new Date(document.updated_at || document.created_at).toLocaleDateString()}
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-3 text-xs font-medium text-slate-500">
+              <span className="flex items-center gap-1">
+                <FiClock className="h-3 w-3" />
+                Updated {new Date(document.updated_at || document.created_at).toLocaleDateString('en-IN')}
+              </span>
+              {last?.author && (
+                <span className="flex items-center gap-1">
+                  <FiAward className="h-3 w-3 text-amber-500" />
+                  Last improved by {last.author}{last.reviewer ? `, approved by ${last.reviewer}` : ''}
+                </span>
+              )}
             </p>
           </div>
         </div>
-        
-        {canEdit && (
-          <button 
-            onClick={() => setIsEditing(true)} 
-            className="flex items-center gap-2 px-4 py-2 bg-navy-500/10 text-navy-700 font-medium text-sm rounded-xl hover:bg-navy-500/10 transition-colors"
+
+        {canEdit ? (
+          <button
+            onClick={() => setEditorMode('edit')}
+            className="flex items-center justify-center gap-2 rounded-xl bg-navy-500/10 px-4 py-2 text-sm font-medium text-navy-700 transition-colors hover:bg-navy-500/20"
           >
             <FiEdit2 className="h-4 w-4" /> Edit Document
+          </button>
+        ) : (
+          <button
+            onClick={openSuggest}
+            disabled={opening}
+            className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-100 disabled:opacity-50"
+          >
+            <FiEdit3 className="h-4 w-4" />
+            {document.my_pending_suggestion ? 'Edit My Suggestion' : 'Suggest an Edit'}
           </button>
         )}
       </div>
 
-      {/* Document Body (Block Renderer) */}
-      <div className="px-8 py-8 max-w-3xl mx-auto min-h-[400px]">
+      {/* Banners */}
+      {document.my_pending_suggestion && !canEdit && (
+        <div className="flex items-center gap-2 border-b border-amber-100 bg-amber-50/60 px-4 py-2.5 text-sm text-amber-800 sm:px-8">
+          <FiClock className="h-4 w-4 flex-shrink-0" />
+          Your suggestion for this document is waiting for review.
+        </div>
+      )}
+      {canReview && pendingCount > 0 && (
+        <button
+          onClick={onOpenSuggestions}
+          className="flex w-full items-center gap-2 border-b border-navy-500/10 bg-navy-500/5 px-4 py-2.5 text-left text-sm font-medium text-navy-700 hover:bg-navy-500/10 sm:px-8"
+        >
+          <FiInbox className="h-4 w-4 flex-shrink-0" />
+          {pendingCount} suggestion{pendingCount > 1 ? 's' : ''} waiting for review on this document →
+        </button>
+      )}
+
+      {/* Body */}
+      <div className="mx-auto min-h-[400px] max-w-3xl px-4 py-8 sm:px-8">
         {!document.blocks || document.blocks.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-slate-400 text-lg">This document is currently empty.</p>
-            <p className="text-slate-400 text-sm mt-2">
-              {canEdit ? 'Click edit to start adding content.' : 'An admin has not added content here yet.'}
+          <div className="py-20 text-center">
+            <p className="text-lg text-slate-400">This document is currently empty.</p>
+            <p className="mt-2 text-sm text-slate-400">
+              {canEdit
+                ? 'Click "Edit Document" to start adding steps, required documents, fees and FAQs.'
+                : 'Know how this service works? Click "Suggest an Edit" to help your team.'}
             </p>
           </div>
         ) : (
           <div className="pb-12">
-            {document.blocks.map(block => (
-              <React.Fragment key={block.id || block.block_key}>
-                {renderBlock(block)}
-              </React.Fragment>
-            ))}
+            <BlocksView blocks={document.blocks} showCredit />
           </div>
         )}
       </div>

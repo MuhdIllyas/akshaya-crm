@@ -16,7 +16,7 @@ export const PERMISSIONS = {
   'workspace.publish':   [SUPERADMIN],
 
   'document.create':     MANAGERS,
-  'document.edit':       MANAGERS,
+  'document.edit':       MANAGERS, // + contributors with role OWNER / EDITOR
   'document.delete':     MANAGERS,
 
   'resource.add':        MANAGERS,
@@ -29,7 +29,13 @@ export const PERMISSIONS = {
   'discussion.create':   EVERYONE,
   'discussion.reply':    EVERYONE,
   'discussion.solve':    MANAGERS, // + the discussion's author
+
+  'suggestion.create':   EVERYONE,
+  'suggestion.review':   MANAGERS, // + contributors with role OWNER / EDITOR / REVIEWER
 };
+
+export const EDITOR_ROLES = ['OWNER', 'EDITOR'];
+export const REVIEWER_ROLES = ['OWNER', 'EDITOR', 'REVIEWER'];
 
 export const getCurrentUser = () => ({
   id: localStorage.getItem('id'),
@@ -40,6 +46,7 @@ export const getCurrentUser = () => ({
 /**
  * can('document.edit', { workspace })
  * can('discussion.solve', { authorId })
+ * can('suggestion.review', { workspace, contributorRole })
  */
 export const can = (action, ctx = {}, user = getCurrentUser()) => {
   if (!user?.role) return false;
@@ -48,6 +55,11 @@ export const can = (action, ctx = {}, user = getCurrentUser()) => {
       String(ctx.authorId) === String(user.id)) {
     return true;
   }
+
+  // Per-service contributor roles (OWNER / EDITOR / REVIEWER) for this workspace
+  const cRole = String(ctx.contributorRole || '').toUpperCase();
+  if (action === 'document.edit' && EDITOR_ROLES.includes(cRole)) return true;
+  if (action === 'suggestion.review' && REVIEWER_ROLES.includes(cRole)) return true;
 
   const allowed = PERMISSIONS[action];
   if (!allowed || !allowed.includes(user.role)) return false;

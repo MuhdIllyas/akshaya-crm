@@ -94,13 +94,27 @@ router.delete('/workspace/:workspaceId/contributors/:staffId', requirePermission
 // DOCUMENTS 
 // ==========================================
 router.post('/documents', requirePermission('document.create'), knowledgeController.createDocument);
-router.put('/documents/:id', requirePermission('document.edit'), knowledgeController.updateDocument);
+// PHASE 3: open at the route; the controller checks admin OR the service's OWNER/EDITOR contributors
+router.put('/documents/:id', authorizeRoles(ALL_STAFF), knowledgeController.updateDocument);
 router.delete('/documents/:id', requirePermission('document.delete'), knowledgeController.deleteDocument); 
 
 // ==========================================
 // BLOCKS 
 // ==========================================
-router.post('/documents/:documentId/blocks/batch', requirePermission('document.edit'), knowledgeController.batchUpdateBlocks);
+router.post('/documents/:documentId/blocks/batch', authorizeRoles(ALL_STAFF), knowledgeController.batchUpdateBlocks);
+
+// ==========================================
+// PHASE 3: SUGGESTIONS & REVIEW QUEUE
+// (each handler checks author / reviewer rights itself)
+// ==========================================
+router.post('/documents/:documentId/suggestions', authorizeRoles(ALL_STAFF), knowledgeController.createSuggestion);
+router.get('/documents/:documentId/suggestions/mine', authorizeRoles(ALL_STAFF), knowledgeController.getMySuggestionForDocument);
+router.get('/suggestions', authorizeRoles(ALL_STAFF), knowledgeController.listSuggestions);
+router.get('/suggestions/:id', authorizeRoles(ALL_STAFF), knowledgeController.getSuggestion);
+router.put('/suggestions/:id/approve', authorizeRoles(ALL_STAFF), knowledgeController.approveSuggestion);
+router.put('/suggestions/:id/reject', authorizeRoles(ALL_STAFF), knowledgeController.rejectSuggestion);
+router.put('/suggestions/:id/withdraw', authorizeRoles(ALL_STAFF), knowledgeController.withdrawSuggestion);
+router.post('/discussions/:discussionId/faq', authorizeRoles(ALL_STAFF), knowledgeController.promoteDiscussionToFaq);
 
 // ==========================================
 // RESOURCES

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FiGrid, FiFileText, FiMessageSquare, FiLink, 
-  FiGlobe, FiCheckCircle, FiClock, FiChevronLeft, FiLoader, FiAlertCircle, FiAward, FiBriefcase, FiFolder
+  FiGlobe, FiCheckCircle, FiClock, FiChevronLeft, FiLoader, FiAlertCircle, FiAward, FiBriefcase, FiFolder, FiInbox
 } from 'react-icons/fi';
 import { fetchWorkspace, updateWorkspaceStatus } from '@/services/knowledge'; 
 import { toast } from 'react-toastify';
@@ -14,6 +14,7 @@ import ResourcesGrid from './views/ResourcesGrid';
 import ComingSoon from './views/ComingSoon';
 import DiscussionsView from './views/discussions/DiscussionsView';
 import CasesView from './views/CasesView';
+import SuggestionsView from './views/SuggestionsView';
 
 const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [resources, setResources] = useState([]);
   const [stats, setStats] = useState({});
   const [contributors, setContributors] = useState([]);
+  const [myContributorRole, setMyContributorRole] = useState(null); // PHASE 3
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -42,6 +44,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       setResources(data.resources || []);
       setStats(data.stats || {});
       setContributors(data.contributors || []);
+      setMyContributorRole(data.myContributorRole || null);
     } catch (err) {
       console.error(err);
       setError('Failed to load workspace from database.');
@@ -83,24 +86,39 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   }).filter(tab => tab.id !== 'overview'); // Keep Overview separate as 'dashboard'
 
   // 2. Build Final Tabs Array
+  const pendingSuggestions = documents.reduce((sum, d) => sum + (d.pending_suggestions || 0), 0);
+  const canReviewHere = can('suggestion.review', { workspace, contributorRole: myContributorRole });
+
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: FiGrid },
     ...documentTabs,
     { id: 'discussions', label: 'Discussions', icon: FiMessageSquare }, // <--- Add this!
     { id: 'resources', label: 'Resources', icon: FiLink },
     { id: 'cases', label: 'Cases', icon: FiCheckCircle },
+    // PHASE 3: staff improvements waiting for review (badge = pending count)
+    { id: 'suggestions', label: 'Suggestions', icon: FiInbox, badge: pendingSuggestions },
   ];
 
   // 3. Document Router
   const renderContent = () => {
     if (activeTab === 'dashboard') {
-      return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} onUpdate={loadWorkspaceData} />;
+      return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} onUpdate={loadWorkspaceData} contributorRole={myContributorRole} />;
     }
     if (activeTab === 'discussions') { 
       return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} serviceName={mockService?.name} />;
     }
     if (activeTab === 'resources') {
       return <ResourcesGrid resources={resources} workspace={workspace} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+    }
+    if (activeTab === 'suggestions') {
+      return (
+        <SuggestionsView
+          workspaceId={workspace.id}
+          showReviewTab={canReviewHere}
+          defaultScope={canReviewHere ? 'review' : 'mine'}
+          onChanged={loadWorkspaceData}
+        />
+      );
     }
     if (activeTab === 'cases') {
       return <CasesView workspaceId={workspace.id} />;
@@ -109,7 +127,17 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     const activeDoc = documents.find(d => d.system_key === activeTab || `doc-${d.id}` === activeTab);
     if (activeDoc) {
       // DocumentView now handles its own Edit mode and block rendering!
-      return <DocumentView key={activeDoc.id} document={activeDoc} workspace={workspace} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+      return (
+        <DocumentView
+          key={activeDoc.id}
+          document={activeDoc}
+          workspace={workspace}
+          workspaceId={workspace.id}
+          contributorRole={myContributorRole}
+          onUpdate={loadWorkspaceData}
+          onOpenSuggestions={() => setActiveTab('suggestions')}
+        />
+      );
     }
 
     return <div className="text-center text-slate-500 py-12">Tab content not found.</div>;
@@ -173,6 +201,9 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
               onClick={() => setActiveTab(tab.id)}
             >
               <tab.icon className="h-4 w-4" /> {tab.label}
+              {tab.badge > 0 && (
+                <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">{tab.badge}</span>
+              )}
             </button>
           ))}
         </div>

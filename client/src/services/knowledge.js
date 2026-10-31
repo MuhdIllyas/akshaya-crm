@@ -245,4 +245,49 @@ export const uploadKnowledgeFiles = async (files) => {
   return data.urls; // Returns: [{ url: '/uploads/...', name: '...' }]
 };
 
+// ==========================================
+// PHASE 3: SUGGESTIONS & REVIEW QUEUE
+// ==========================================
+export const createSuggestion = async (documentId, { blocks, note }) => {
+  const { data } = await api.post(`/documents/${documentId}/suggestions`, { blocks, note });
+  return data;
+};
+
+export const fetchMySuggestionForDocument = async (documentId) => {
+  const { data } = await api.get(`/documents/${documentId}/suggestions/mine`);
+  return data;
+};
+
+// params: { scope: 'review' | 'mine', status: 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'all', workspaceId }
+export const fetchSuggestions = async (params = {}) => {
+  const { data } = await api.get('/suggestions', { params });
+  return data;
+};
+
+export const fetchSuggestion = async (id) => {
+  const { data } = await api.get(`/suggestions/${id}`);
+  return data;
+};
+
+export const approveSuggestion = async (id, note = '') => {
+  const { data } = await api.put(`/suggestions/${id}/approve`, { note });
+  return data;
+};
+
+export const rejectSuggestion = async (id, note) => {
+  const { data } = await api.put(`/suggestions/${id}/reject`, { note });
+  return data;
+};
+
+export const withdrawSuggestion = async (id) => {
+  const { data } = await api.put(`/suggestions/${id}/withdraw`);
+  return data;
+};
+
+// "Add to FAQ" from a solved discussion → { mode: 'published' | 'suggested' }
+export const promoteDiscussionToFaq = async (discussionId, { question, answer }) => {
+  const { data } = await api.post(`/discussions/${discussionId}/faq`, { question, answer });
+  return data;
+};
+
 export default api;

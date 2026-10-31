@@ -3,7 +3,7 @@ import {
   FiArrowLeft, FiMoreHorizontal, FiShare2, FiMessageSquare, 
   FiCheckCircle, FiImage, FiPaperclip, FiSmile, FiArrowUp, FiArrowDown, FiX,
   FiLink, FiMessageCircle, FiMail, // 🔥 Added new icons for the Share Menu
-  FiBookmark, FiEye
+  FiBookmark, FiEye, FiHelpCircle
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -12,6 +12,7 @@ import {
   addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions, markDiscussionSolved,
   toggleBookmark, toggleFollow
 } from '@/services/knowledge';
+import PromoteFaqModal from '../PromoteFaqModal'; // PHASE 3
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -77,6 +78,8 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
   const [localVotes, setLocalVotes] = useState({ discussion: { total: 0, userVote: 0 }, replies: {} });
   const [localReactions, setLocalReactions] = useState({});
+
+  const [showFaqModal, setShowFaqModal] = useState(false); // PHASE 3: Add to FAQ
 
   // 🔥 SHARE MENU STATE
   const [showShareMenu, setShowShareMenu] = useState(false);
@@ -338,9 +341,19 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         <div className="flex items-center gap-2">
           
           {discussion.solved ? (
-            <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
-              <FiCheckCircle /> Solved
-            </span>
+            <>
+              <span className="bg-emerald-100 text-emerald-700 text-xs font-bold px-2.5 py-1 rounded-full flex items-center gap-1">
+                <FiCheckCircle /> Solved
+              </span>
+              {/* PHASE 3: turn the solution into an FAQ entry (reviewed if you're not an editor) */}
+              <button
+                onClick={() => setShowFaqModal(true)}
+                className="bg-navy-500/10 text-navy-700 text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-navy-500/20 transition flex items-center gap-1 mr-2"
+                title="Add this solution to the service FAQ"
+              >
+                <FiHelpCircle className="h-3.5 w-3.5" /> Add to FAQ
+              </button>
+            </>
           ) : (
             canSolve && (
               <button 
@@ -640,6 +653,13 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         </div>
       )}
 
+      {showFaqModal && (
+        <PromoteFaqModal
+          discussion={discussion}
+          onClose={() => setShowFaqModal(false)}
+          onDone={() => setShowFaqModal(false)}
+        />
+      )}
     </div>
   );
 };

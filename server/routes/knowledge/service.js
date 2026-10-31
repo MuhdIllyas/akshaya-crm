@@ -2,7 +2,7 @@
 import pool from '../../db.js';
 import notificationService from '../../utils/notificationService.js'; 
 import { notificationTemplates } from '../../utils/notificationTemplates.js';
-import { KnowledgeError } from './permissions.js';
+import { KnowledgeError, can, REVIEWER_ROLES } from './permissions.js';
 
 // ==========================================
 // PHASE 2: lookups used for permission checks
@@ -40,7 +40,7 @@ export const getResourceWorkspace = async (resourceId) => {
 // ==========================================
 // WORKSPACE & STATS (Inheritance Logic)
 // ==========================================
-export const getWorkspaceData = async (serviceId, centreId, staffId) => {
+export const getWorkspaceData = async (serviceId, centreId, staffId, role = null) => {
     let workspaceRes = await pool.query(
         `SELECT * FROM knowledge_workspaces 
          WHERE service_id = $1 AND centre_id = $2 AND scope = 'CENTRE' AND deleted_at IS NULL`,
@@ -77,13 +77,16 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
             if (insertWs.rows.length > 0) {
                 workspace = insertWs.rows[0];
 
-                // Owner = the person who created it. Admins/superadmins will
-                // manage ownership properly in Phase 2.
-                await client.query(
-                    `INSERT INTO knowledge_contributors (workspace_id, staff_id, role) VALUES ($1, $2, 'OWNER')
-                     ON CONFLICT (workspace_id, staff_id) DO NOTHING`,
-                    [workspace.id, staffId]
-                );
+                // PHASE 3 FIX: OWNER now means "can edit", so only an admin /
+                // superadmin who opens a service first becomes its owner.
+                // Staff opening it first no longer get edit rights by accident.
+                if (['admin', 'superadmin'].includes(role)) {
+                    await client.query(
+                        `INSERT INTO knowledge_contributors (workspace_id, staff_id, role) VALUES ($1, $2, 'OWNER')
+                         ON CONFLICT (workspace_id, staff_id) DO NOTHING`,
+                        [workspace.id, staffId]
+                    );
+                }
 
                 const defaultDocs = [
                     { title: 'Overview', slug: 'overview', key: 'overview', sort: 1000 },
@@ -121,7 +124,25 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
     }
 
     const [docsRes, blocksRes, resourcesRes, contributorsRes, discussionsRes, casesRes] = await Promise.all([
-        pool.query('SELECT * FROM knowledge_documents WHERE workspace_id = $1 AND deleted_at IS NULL ORDER BY sort_order ASC', [workspace.id]),
+        // PHASE 3: each document also carries its pending suggestion count,
+        // whether *I* have one waiting, and who last improved it.
+        pool.query(
+            `SELECT kd.*,
+                (SELECT COUNT(*)::int FROM knowledge_suggestions ks
+                  WHERE ks.document_id = kd.id AND ks.status = 'pending') AS pending_suggestions,
+                EXISTS(SELECT 1 FROM knowledge_suggestions ks
+                  WHERE ks.document_id = kd.id AND ks.status = 'pending' AND ks.author_id = $2) AS my_pending_suggestion,
+                (SELECT json_build_object('author', a.name, 'reviewer', r.name, 'at', ks.reviewed_at)
+                   FROM knowledge_suggestions ks
+                   JOIN staff a ON a.id = ks.author_id
+                   LEFT JOIN staff r ON r.id = ks.reviewed_by
+                  WHERE ks.document_id = kd.id AND ks.status = 'approved'
+                  ORDER BY ks.reviewed_at DESC LIMIT 1) AS last_contribution
+             FROM knowledge_documents kd
+             WHERE kd.workspace_id = $1 AND kd.deleted_at IS NULL
+             ORDER BY kd.sort_order ASC`,
+            [workspace.id, staffId]
+        ),
         pool.query(
             `SELECT kb.* FROM knowledge_blocks kb
              JOIN knowledge_documents kd ON kb.document_id = kd.id
@@ -148,9 +169,12 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
         lastUpdated: workspace.updated_at
     };
 
+    const me = contributorsRes.rows.find(c => String(c.staff_id) === String(staffId));
+
     return {
         workspace,
         contributors: contributorsRes.rows,
+        myContributorRole: me ? me.role : null, // PHASE 3: OWNER / EDITOR / REVIEWER / VIEWER
         documents: formattedDocs,
         resources: resourcesRes.rows,
         stats
@@ -252,26 +276,78 @@ export const softDeleteDocument = async (id, staffId) => {
 // ==========================================
 // BLOCKS 
 // ==========================================
+// PHASE 3: the block types the editor can produce. Anything else is rejected.
+export const ALLOWED_BLOCK_TYPES = [
+    'h1', 'h2', 'h3', 'paragraph', 'list', 'callout',
+    'faq_item', 'step', 'required_document', 'fee', 'checklist', 'link',
+];
+
+// Cleans and checks blocks coming from the browser
+export const normalizeBlocks = (blocks) => {
+    if (!Array.isArray(blocks)) throw new KnowledgeError(400, 'blocks must be an array.');
+    if (blocks.length > 500) throw new KnowledgeError(400, 'A document can have at most 500 blocks.');
+
+    return blocks.map((b, index) => {
+        if (!ALLOWED_BLOCK_TYPES.includes(b.block_type)) {
+            throw new KnowledgeError(400, `Unknown block type: ${b.block_type}`);
+        }
+        let content = b.content;
+        if (typeof content === 'string') {
+            try { content = JSON.parse(content); } catch { content = { text: content }; }
+        }
+        let metadata = b.metadata;
+        if (typeof metadata === 'string') {
+            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+        }
+        if (b.block_type === 'link' && content?.url && !/^https?:\/\//i.test(content.url)) {
+            throw new KnowledgeError(400, 'Links must start with http:// or https://');
+        }
+        return {
+            block_key: String(b.block_key || `blk-${Date.now()}-${index}`),
+            block_type: b.block_type,
+            content: content || {},
+            metadata: metadata || {},
+            sort_order: index + 1,
+        };
+    });
+};
+
+const getBlocksWithClient = async (client, documentId) => {
+    const res = await client.query(
+        'SELECT block_key, block_type, content, metadata, sort_order FROM knowledge_blocks WHERE document_id = $1 AND deleted_at IS NULL ORDER BY sort_order ASC',
+        [documentId]
+    );
+    return res.rows;
+};
+
+export const getDocumentBlocks = async (documentId) => getBlocksWithClient(pool, documentId);
+
+// Replaces a document's blocks inside an open transaction (used by direct
+// edits AND by approving a suggestion), with a history entry.
+const writeBlocks = async (client, workspaceId, documentId, newBlocks, staffId, action = 'batch_update') => {
+    const oldContent = await getBlocksWithClient(client, documentId);
+
+    await client.query('DELETE FROM knowledge_blocks WHERE document_id = $1', [documentId]);
+
+    for (const block of newBlocks) {
+        await client.query(
+            `INSERT INTO knowledge_blocks (document_id, block_key, block_type, content, metadata, sort_order) 
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [documentId, block.block_key, block.block_type, JSON.stringify(block.content), JSON.stringify(block.metadata || {}), block.sort_order]
+        );
+    }
+
+    await logHistoryTransaction(client, workspaceId, 'document_blocks', documentId, action, oldContent, newBlocks, staffId);
+    await client.query(`UPDATE knowledge_documents SET updated_at = NOW() WHERE id = $1`, [documentId]);
+    await client.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
+};
+
 export const batchUpdateBlocks = async (workspaceId, documentId, newBlocks, staffId) => {
+    const blocks = normalizeBlocks(newBlocks);
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-
-        const oldBlocksRes = await client.query('SELECT * FROM knowledge_blocks WHERE document_id = $1 AND deleted_at IS NULL ORDER BY sort_order ASC', [documentId]);
-        const oldContent = oldBlocksRes.rows;
-
-        await client.query('DELETE FROM knowledge_blocks WHERE document_id = $1', [documentId]);
-
-        for (let block of newBlocks) {
-            await client.query(
-                `INSERT INTO knowledge_blocks (document_id, block_key, block_type, content, metadata, sort_order) 
-                 VALUES ($1, $2, $3, $4, $5, $6)`,
-                [documentId, block.block_key, block.block_type, JSON.stringify(block.content), JSON.stringify(block.metadata || {}), block.sort_order]
-            );
-        }
-
-        await logHistoryTransaction(client, workspaceId, 'document_blocks', documentId, 'batch_update', oldContent, newBlocks, staffId);
-        await client.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
+        await writeBlocks(client, workspaceId, documentId, blocks, staffId);
         await client.query('COMMIT');
     } catch (err) {
         await client.query('ROLLBACK');
@@ -662,15 +738,19 @@ export const getAnnouncements = async (teamId = null) => {
     return res.rows;
 };
 
-export const getGlobalStats = async (staffId) => { 
-    const [discussions, cases, resources, announcements, trainings, mentions, drafts] = await Promise.all([
+export const getGlobalStats = async (staffId, user = null) => { 
+    const pendingReviewsPromise = user
+        ? countReviewableSuggestions(user).catch(() => 0)
+        : Promise.resolve(0);
+    const [discussions, cases, resources, announcements, trainings, mentions, drafts, pendingReviews] = await Promise.all([
         pool.query("SELECT COUNT(*) FROM knowledge_discussions WHERE deleted_at IS NULL"),
         pool.query("SELECT COUNT(*) FROM knowledge_cases"),
         pool.query("SELECT COUNT(*) FROM knowledge_resources WHERE deleted_at IS NULL"),
         pool.query("SELECT COUNT(*) FROM knowledge_announcements"),
         pool.query("SELECT COUNT(*) FROM knowledge_trainings"),
         pool.query("SELECT COUNT(*) FROM knowledge_mentions WHERE staff_id = $1 AND is_read = false", [staffId]),
-        pool.query("SELECT COUNT(*) FROM knowledge_drafts WHERE staff_id = $1", [staffId]) 
+        pool.query("SELECT COUNT(*) FROM knowledge_drafts WHERE staff_id = $1", [staffId]),
+        pendingReviewsPromise
     ]);
 
     return {
@@ -680,7 +760,8 @@ export const getGlobalStats = async (staffId) => {
         announcements: parseInt(announcements.rows[0].count, 10) || 0,
         trainings: parseInt(trainings.rows[0].count, 10) || 0,
         mentions: parseInt(mentions.rows[0].count, 10) || 0,
-        drafts: parseInt(drafts.rows[0].count, 10) || 0 
+        drafts: parseInt(drafts.rows[0].count, 10) || 0,
+        pendingReviews: pendingReviews || 0 // PHASE 3: suggestions waiting for *me* to review
     };
 };
 
@@ -1120,4 +1201,415 @@ export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
 
         return { action: 'added', emoji };
     }
+};
+// =====================================================================
+// PHASE 3: SUGGESTIONS & REVIEW QUEUE
+// Staff suggest changes to a document → Owners / Editors / Reviewers of
+// that service (or admins / superadmins) approve or reject them.
+// Only approved content goes live, so everything in knowledge_blocks is
+// reviewed content the future AI can trust.
+// =====================================================================
+
+// Sends a notification only if the template exists in notificationTemplates.js
+// (see the install notes: add knowledgeSuggestionApproved / Rejected there).
+const notifySafe = async (templateName, args, payload) => {
+    const tpl = notificationTemplates[templateName];
+    if (typeof tpl !== 'function') return;
+    try {
+        await notificationService.createNotification({ ...payload, ...tpl(args) });
+    } catch (err) {
+        console.error(`Failed to send ${templateName} notification`, err);
+    }
+};
+
+export const getContributorRole = async (workspaceId, staffId, client = pool) => {
+    const res = await client.query(
+        'SELECT role FROM knowledge_contributors WHERE workspace_id = $1 AND staff_id = $2',
+        [workspaceId, staffId]
+    );
+    return res.rows[0]?.role || null;
+};
+
+// JSON with sorted keys, so {a,b} and {b,a} compare as equal
+const stableStringify = (value) => {
+    if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+    if (value && typeof value === 'object') {
+        return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+    }
+    return JSON.stringify(value);
+};
+
+const parseMaybe = (c) => (typeof c === 'string' ? (() => { try { return JSON.parse(c); } catch { return { text: c }; } })() : c);
+
+// Same content, ignoring keys/metadata/order numbers?
+const blocksSignature = (blocks) => stableStringify(
+    (blocks || []).map(b => ({ t: b.block_type, c: parseMaybe(b.content) }))
+);
+const blockFingerprint = (b) => stableStringify({ t: b.block_type, c: parseMaybe(b.content) });
+
+// SQL condition: suggestions `user` is allowed to review.
+// `add` pushes a parameter and returns its $n placeholder.
+const reviewableCondition = (user, add) => {
+    if (user.role === 'superadmin') return 'TRUE';
+    const contributorCheck = `EXISTS (
+        SELECT 1 FROM knowledge_contributors kc
+        WHERE kc.workspace_id = ks.workspace_id
+          AND kc.staff_id = ${add(user.id)}
+          AND UPPER(kc.role::text) = ANY(${add(REVIEWER_ROLES)}::text[]))`; // role is an enum → cast to text
+    if (user.role === 'admin') {
+        // Admins: global workspaces + their own centre's workspaces
+        return `(kw.scope <> 'CENTRE' OR kw.centre_id::text = ${add(String(user.centre_id))} OR ${contributorCheck})`;
+    }
+    return contributorCheck;
+};
+
+export const countReviewableSuggestions = async (user) => {
+    const params = [];
+    const add = (v) => { params.push(v); return `$${params.length}`; };
+    const res = await pool.query(
+        `SELECT COUNT(*)::int AS count
+         FROM knowledge_suggestions ks
+         JOIN knowledge_workspaces kw ON kw.id = ks.workspace_id
+         WHERE ks.status = 'pending'
+           AND ks.author_id <> ${add(user.id)}
+           AND ${reviewableCondition(user, add)}`,
+        params
+    );
+    return res.rows[0].count;
+};
+
+/**
+ * scope: 'review' → suggestions I can review (not my own)
+ *        'mine'   → suggestions I made
+ */
+export const listSuggestions = async (user, { workspaceId = null, status = 'pending', scope = 'review' } = {}) => {
+    const params = [];
+    const add = (v) => { params.push(v); return `$${params.length}`; };
+    const where = [];
+
+    if (workspaceId) where.push(`ks.workspace_id = ${add(workspaceId)}`);
+    if (status && status !== 'all') where.push(`ks.status = ${add(status)}`);
+
+    if (scope === 'mine') {
+        where.push(`ks.author_id = ${add(user.id)}`);
+    } else {
+        where.push(`ks.author_id <> ${add(user.id)}`);
+        where.push(reviewableCondition(user, add));
+    }
+
+    const res = await pool.query(
+        `SELECT ks.id, ks.workspace_id, ks.document_id, ks.author_id, ks.note, ks.status,
+                ks.source_type, ks.source_id, ks.created_at, ks.updated_at,
+                ks.reviewed_at, ks.review_note,
+                jsonb_array_length(ks.proposed_blocks) AS proposed_count,
+                jsonb_array_length(ks.base_blocks) AS base_count,
+                kd.title AS document_title, kw.service_id, srv.name AS service_name,
+                a.name AS author_name, r.name AS reviewer_name
+         FROM knowledge_suggestions ks
+         JOIN knowledge_workspaces kw ON kw.id = ks.workspace_id
+         JOIN knowledge_documents kd ON kd.id = ks.document_id
+         LEFT JOIN services srv ON srv.id = kw.service_id
+         JOIN staff a ON a.id = ks.author_id
+         LEFT JOIN staff r ON r.id = ks.reviewed_by
+         WHERE ${where.join(' AND ')}
+         ORDER BY ks.created_at DESC
+         LIMIT 100`,
+        params
+    );
+    return res.rows;
+};
+
+export const getSuggestionDetail = async (id, user) => {
+    const res = await pool.query(
+        `SELECT ks.*, kd.title AS document_title, kd.deleted_at AS document_deleted_at,
+                kw.service_id, srv.name AS service_name,
+                a.name AS author_name, r.name AS reviewer_name
+         FROM knowledge_suggestions ks
+         JOIN knowledge_workspaces kw ON kw.id = ks.workspace_id
+         JOIN knowledge_documents kd ON kd.id = ks.document_id
+         LEFT JOIN services srv ON srv.id = kw.service_id
+         JOIN staff a ON a.id = ks.author_id
+         LEFT JOIN staff r ON r.id = ks.reviewed_by
+         WHERE ks.id = $1`,
+        [id]
+    );
+    if (res.rows.length === 0) throw new KnowledgeError(404, 'Suggestion not found.');
+    const s = res.rows[0];
+
+    const workspace = await getWorkspaceById(s.workspace_id);
+    const contributorRole = await getContributorRole(s.workspace_id, user.id);
+    const isAuthor = String(s.author_id) === String(user.id);
+    const isReviewer = can(user, 'suggestion.review', { workspace, contributorRole });
+
+    if (!isAuthor && !isReviewer) {
+        throw new KnowledgeError(403, 'You can only view your own suggestions or ones you review.');
+    }
+
+    const currentBlocks = await getDocumentBlocks(s.document_id);
+
+    return {
+        ...s,
+        current_blocks: currentBlocks,
+        // The document changed after this suggestion was made
+        document_changed: s.status === 'pending' && s.source_type === 'edit' &&
+            blocksSignature(currentBlocks) !== blocksSignature(s.base_blocks),
+        can_review: s.status === 'pending' && isReviewer && !isAuthor,
+        can_withdraw: s.status === 'pending' && isAuthor,
+    };
+};
+
+export const getMyPendingSuggestion = async (documentId, userId) => {
+    const res = await pool.query(
+        `SELECT * FROM knowledge_suggestions
+         WHERE document_id = $1 AND author_id = $2 AND status = 'pending' AND source_type = 'edit'
+         ORDER BY updated_at DESC LIMIT 1`,
+        [documentId, userId]
+    );
+    return res.rows[0] || null;
+};
+
+/**
+ * Creates a suggestion. For normal edits, a second suggestion from the same
+ * person on the same document updates their first one instead.
+ */
+export const createSuggestion = async ({
+    workspace, documentId, user, note = null, proposedBlocks,
+    sourceType = 'edit', sourceId = null,
+}) => {
+    const proposed = normalizeBlocks(proposedBlocks);
+    const current = await getDocumentBlocks(documentId);
+
+    if (blocksSignature(proposed) === blocksSignature(current)) {
+        throw new KnowledgeError(400, 'Nothing has changed compared to the current document.');
+    }
+
+    if (sourceType === 'edit') {
+        const existing = await getMyPendingSuggestion(documentId, user.id);
+        if (existing) {
+            const upd = await pool.query(
+                `UPDATE knowledge_suggestions
+                 SET proposed_blocks = $1, base_blocks = $2, note = $3, updated_at = NOW()
+                 WHERE id = $4 RETURNING *`,
+                [JSON.stringify(proposed), JSON.stringify(current), note, existing.id]
+            );
+            return { ...upd.rows[0], updated: true };
+        }
+    }
+
+    const ins = await pool.query(
+        `INSERT INTO knowledge_suggestions
+            (workspace_id, document_id, author_id, note, base_blocks, proposed_blocks, source_type, source_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+        [workspace.id, documentId, user.id, note, JSON.stringify(current), JSON.stringify(proposed), sourceType, sourceId]
+    );
+    return ins.rows[0];
+};
+
+// Loads a pending suggestion inside a transaction and checks the reviewer
+const lockSuggestionForReview = async (client, id, user) => {
+    const res = await client.query(
+        `SELECT ks.*, a.name AS author_name, kd.title AS document_title, kd.deleted_at AS document_deleted_at
+         FROM knowledge_suggestions ks
+         JOIN staff a ON a.id = ks.author_id
+         JOIN knowledge_documents kd ON kd.id = ks.document_id
+         WHERE ks.id = $1
+         FOR UPDATE OF ks`,
+        [id]
+    );
+    if (res.rows.length === 0) throw new KnowledgeError(404, 'Suggestion not found.');
+    const s = res.rows[0];
+
+    if (s.status !== 'pending') throw new KnowledgeError(400, `This suggestion was already ${s.status}.`);
+    if (String(s.author_id) === String(user.id)) throw new KnowledgeError(400, 'You cannot review your own suggestion.');
+
+    const wsRes = await client.query('SELECT * FROM knowledge_workspaces WHERE id = $1', [s.workspace_id]);
+    const workspace = wsRes.rows[0];
+    const contributorRole = await getContributorRole(s.workspace_id, user.id, client);
+    if (!can(user, 'suggestion.review', { workspace, contributorRole })) {
+        throw new KnowledgeError(403, 'You are not a reviewer for this service.');
+    }
+    return { suggestion: s, workspace };
+};
+
+export const approveSuggestion = async (id, user, reviewNote = null) => {
+    const client = await pool.connect();
+    let suggestion;
+    try {
+        await client.query('BEGIN');
+        const locked = await lockSuggestionForReview(client, id, user);
+        suggestion = locked.suggestion;
+
+        if (suggestion.document_deleted_at) {
+            throw new KnowledgeError(400, 'This document has been deleted.');
+        }
+
+        const reviewerRes = await client.query('SELECT name FROM staff WHERE id = $1', [user.id]);
+        const reviewerName = reviewerRes.rows[0]?.name || 'Reviewer';
+
+        const base = suggestion.base_blocks || [];
+        const proposed = suggestion.proposed_blocks || [];
+        const baseByKey = new Map(base.map(b => [String(b.block_key), blockFingerprint(b)]));
+
+        // Credit: blocks this suggestion added or changed remember who
+        // suggested and who approved them (shown in the UI, useful for the AI)
+        const credit = {
+            suggested_by: suggestion.author_name,
+            suggested_by_id: suggestion.author_id,
+            approved_by: reviewerName,
+            approved_by_id: user.id,
+            approved_at: new Date().toISOString(),
+            suggestion_id: suggestion.id,
+        };
+        const isChanged = (b) => baseByKey.get(String(b.block_key)) !== blockFingerprint(b);
+
+        let finalBlocks;
+        if (suggestion.source_type === 'discussion') {
+            // "Add to FAQ" only appends, so add the new block(s) to the
+            // document as it is NOW (keeps any edits made in the meantime)
+            const current = await getBlocksWithClient(client, suggestion.document_id);
+            const added = proposed
+                .filter(b => !baseByKey.has(String(b.block_key)))
+                .map(b => ({ ...b, metadata: { ...(b.metadata || {}), ...credit } }));
+            finalBlocks = [...current, ...added];
+        } else {
+            finalBlocks = proposed.map(b => (isChanged(b) ? { ...b, metadata: { ...(b.metadata || {}), ...credit } } : b));
+        }
+        finalBlocks = finalBlocks.map((b, i) => ({ ...b, sort_order: i + 1 }));
+
+        await writeBlocks(client, suggestion.workspace_id, suggestion.document_id, finalBlocks, user.id, 'suggestion_approved');
+
+        await client.query(
+            `UPDATE knowledge_suggestions
+             SET status = 'approved', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [user.id, reviewNote, id]
+        );
+        await client.query('COMMIT');
+        suggestion.reviewerName = reviewerName;
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+
+    await notifySafe('knowledgeSuggestionApproved',
+        { reviewerName: suggestion.reviewerName, documentTitle: suggestion.document_title },
+        { recipientStaffId: suggestion.author_id, senderStaffId: user.id,
+          relatedEntityType: 'knowledge_suggestion', relatedEntityId: suggestion.id });
+
+    return { message: 'Suggestion approved and published.' };
+};
+
+export const rejectSuggestion = async (id, user, reviewNote) => {
+    if (!reviewNote || !reviewNote.trim()) {
+        throw new KnowledgeError(400, 'Please add a short reason so the author knows what to fix.');
+    }
+    const client = await pool.connect();
+    let suggestion;
+    try {
+        await client.query('BEGIN');
+        ({ suggestion } = await lockSuggestionForReview(client, id, user));
+        await client.query(
+            `UPDATE knowledge_suggestions
+             SET status = 'rejected', reviewed_by = $1, reviewed_at = NOW(), review_note = $2, updated_at = NOW()
+             WHERE id = $3`,
+            [user.id, reviewNote.trim(), id]
+        );
+        await client.query('COMMIT');
+    } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+    } finally {
+        client.release();
+    }
+
+    const reviewerRes = await pool.query('SELECT name FROM staff WHERE id = $1', [user.id]);
+    await notifySafe('knowledgeSuggestionRejected',
+        { reviewerName: reviewerRes.rows[0]?.name, documentTitle: suggestion.document_title, reason: reviewNote.trim() },
+        { recipientStaffId: suggestion.author_id, senderStaffId: user.id,
+          relatedEntityType: 'knowledge_suggestion', relatedEntityId: suggestion.id });
+
+    return { message: 'Suggestion rejected.' };
+};
+
+export const withdrawSuggestion = async (id, user) => {
+    const res = await pool.query(
+        `UPDATE knowledge_suggestions SET status = 'withdrawn', updated_at = NOW()
+         WHERE id = $1 AND author_id = $2 AND status = 'pending' RETURNING id`,
+        [id, user.id]
+    );
+    if (res.rows.length === 0) throw new KnowledgeError(400, 'Only your own pending suggestions can be withdrawn.');
+    return { message: 'Suggestion withdrawn.' };
+};
+
+/**
+ * "Add to FAQ" from a solved discussion.
+ * Editors (and admins) → added straight to the FAQ.
+ * Everyone else → becomes a suggestion for reviewers.
+ */
+export const promoteDiscussionToFaq = async (discussionId, { question, answer }, user) => {
+    if (!question?.trim() || !answer?.trim()) {
+        throw new KnowledgeError(400, 'Both the question and the answer are required.');
+    }
+
+    const dRes = await pool.query('SELECT id, workspace_id, status FROM knowledge_discussions WHERE id = $1', [discussionId]);
+    if (dRes.rows.length === 0) throw new KnowledgeError(404, 'Discussion not found.');
+    const discussion = dRes.rows[0];
+    if (discussion.status !== 'solved') throw new KnowledgeError(400, 'Only solved discussions can be added to the FAQ.');
+
+    const docRes = await pool.query(
+        `SELECT id FROM knowledge_documents WHERE workspace_id = $1 AND system_key = 'faq' AND deleted_at IS NULL LIMIT 1`,
+        [discussion.workspace_id]
+    );
+    if (docRes.rows.length === 0) throw new KnowledgeError(404, 'This service has no FAQ document.');
+    const faqDocId = docRes.rows[0].id;
+
+    // Don't add the same discussion twice
+    const dup = await pool.query(
+        `SELECT 1 FROM knowledge_blocks WHERE document_id = $1 AND deleted_at IS NULL AND metadata->>'discussion_id' = $2
+         UNION ALL
+         SELECT 1 FROM knowledge_suggestions WHERE source_type = 'discussion' AND source_id = $3 AND status = 'pending'
+         LIMIT 1`,
+        [faqDocId, String(discussionId), discussionId]
+    );
+    if (dup.rows.length > 0) throw new KnowledgeError(409, 'This discussion is already in the FAQ or waiting for review.');
+
+    const newBlock = {
+        block_key: `faq-d${discussionId}-${Date.now()}`,
+        block_type: 'faq_item',
+        content: { question: question.trim(), answer: answer.trim() },
+        metadata: { source: 'discussion', discussion_id: Number(discussionId) },
+    };
+
+    const workspace = await getWorkspaceById(discussion.workspace_id);
+    const contributorRole = await getContributorRole(workspace.id, user.id);
+    const current = await getDocumentBlocks(faqDocId);
+
+    if (can(user, 'document.edit', { workspace, contributorRole })) {
+        const staffRes = await pool.query('SELECT name FROM staff WHERE id = $1', [user.id]);
+        newBlock.metadata.added_by = staffRes.rows[0]?.name;
+        newBlock.metadata.added_by_id = user.id;
+        const blocks = normalizeBlocks([...current, newBlock]);
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
+            await writeBlocks(client, workspace.id, faqDocId, blocks, user.id, 'faq_from_discussion');
+            await client.query('COMMIT');
+        } catch (err) {
+            await client.query('ROLLBACK');
+            throw err;
+        } finally {
+            client.release();
+        }
+        return { mode: 'published', documentId: faqDocId };
+    }
+
+    const suggestion = await createSuggestion({
+        workspace, documentId: faqDocId, user,
+        note: 'FAQ entry from a solved discussion',
+        proposedBlocks: [...current, newBlock],
+        sourceType: 'discussion', sourceId: Number(discussionId),
+    });
+    return { mode: 'suggested', suggestionId: suggestion.id, documentId: faqDocId };
 };

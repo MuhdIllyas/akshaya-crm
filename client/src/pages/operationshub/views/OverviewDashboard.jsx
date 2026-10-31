@@ -8,7 +8,7 @@ import { can } from '@/utils/knowledgePermissions';
 import { removeContributor } from '@/services/knowledge';
 import AddContributorModal from './AddContributorModal';
 
-const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents = [], setActiveTab, onUpdate }) => {
+const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents = [], setActiveTab, onUpdate, contributorRole = null }) => {
   const [showAddContributor, setShowAddContributor] = useState(false);
   
   // Find specific system documents for quick access
@@ -16,7 +16,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
   const faqDoc = documents.find(d => d.system_key === 'faq');
 
   // PHASE 2: labels match what this user can actually do
-  const canEditDocs = can('document.edit', { workspace });
+  const canEditDocs = can('document.edit', { workspace, contributorRole });
   const canAddResource = can('resource.add', { workspace });
   const canManageContributors = can('contributor.manage', { workspace });
 
@@ -101,7 +101,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
             disabled={!sopDoc}
           >
             <FiFileText className="h-5 w-5" />
-            <span className="text-xs font-semibold">{canEditDocs ? 'Update SOP' : 'Read SOP'}</span>
+            <span className="text-xs font-semibold">{canEditDocs ? 'Update SOP' : 'Read / Suggest SOP'}</span>
           </button>
           <button 
             onClick={() => faqDoc && setActiveTab(faqDoc.system_key || `doc-${faqDoc.id}`)}
@@ -109,7 +109,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
             disabled={!faqDoc}
           >
             <FiCheckCircle className="h-5 w-5" />
-            <span className="text-xs font-semibold">{canEditDocs ? 'Edit FAQ' : 'Read FAQ'}</span>
+            <span className="text-xs font-semibold">{canEditDocs ? 'Edit FAQ' : 'Read / Suggest FAQ'}</span>
           </button>
         </div>
       </div>

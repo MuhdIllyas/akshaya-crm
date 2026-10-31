@@ -18,7 +18,7 @@ export const PERMISSIONS = {
 
     // SOP / FAQ / custom documents (global, written by admins + superadmins)
     'document.create':     MANAGERS,
-    'document.edit':       MANAGERS,
+    'document.edit':       MANAGERS, // + contributors with role OWNER / EDITOR
     'document.delete':     MANAGERS,
 
     // Resources & contributors
@@ -34,7 +34,15 @@ export const PERMISSIONS = {
     'discussion.create':   EVERYONE,
     'discussion.reply':    EVERYONE,
     'discussion.solve':    MANAGERS, // + the discussion's author (see can())
+
+    // Suggestions (Phase 3): anyone can suggest; reviewers approve
+    'suggestion.create':   EVERYONE,
+    'suggestion.review':   MANAGERS, // + contributors with role OWNER / EDITOR / REVIEWER
 };
+
+// Per-service contributor roles that add rights on top of staff/admin/superadmin
+export const EDITOR_ROLES = ['OWNER', 'EDITOR'];
+export const REVIEWER_ROLES = ['OWNER', 'EDITOR', 'REVIEWER'];
 
 export const WORKSPACE_STATUSES = ['draft', 'in_review', 'published'];
 export const CONTRIBUTOR_ROLES = ['OWNER', 'EDITOR', 'REVIEWER', 'VIEWER'];
@@ -44,6 +52,7 @@ export const CONTRIBUTOR_ROLES = ['OWNER', 'EDITOR', 'REVIEWER', 'VIEWER'];
  *   user: req.user ({ id, role, centre_id })
  *   ctx (optional):
  *     authorId  — for discussion.solve: the author may solve their own thread
+ *     contributorRole — the user's OWNER/EDITOR/REVIEWER/VIEWER role in this workspace
  *     workspace — a knowledge_workspaces row; an admin may only change a
  *                 CENTRE-scoped workspace that belongs to their own centre
  */
@@ -55,6 +64,11 @@ export const can = (user, action, ctx = {}) => {
         String(ctx.authorId) === String(user.id)) {
         return true;
     }
+
+    // Per-service contributor roles (OWNER / EDITOR / REVIEWER) for this workspace
+    const cRole = String(ctx.contributorRole || '').toUpperCase();
+    if (action === 'document.edit' && EDITOR_ROLES.includes(cRole)) return true;
+    if (action === 'suggestion.review' && REVIEWER_ROLES.includes(cRole)) return true;
 
     const allowed = PERMISSIONS[action];
     if (!allowed || !allowed.includes(role)) return false;
