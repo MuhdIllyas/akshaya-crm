@@ -8,17 +8,20 @@ import { FiCopy, FiCheck } from 'react-icons/fi';
 
 const LONG_AT = 10; // group numbers longer than this
 
-/** Remove spaces, dashes, line breaks, etc. Letters are upper-cased. Keeps / . _ which some portals use. */
+/** Remove spaces, line breaks and zero-width characters. Letters are upper-cased.
+ *  Keeps - / . _ because many portals use them (e.g. CRB-M0122121-2026, PSK/2026/123).
+ *  Typographic dashes (en/em dash, minus sign) from copy-paste are normalised to a plain "-". */
 export const cleanAppNo = (v) =>
   String(v ?? '')
-    .replace(/[\s​-‍﻿\-–—]+/g, '')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    .replace(/[\s\u200B-\u200D\uFEFF]+/g, '')
     .toUpperCase();
 
 /** Split into groups of 4 for reading: 2003 7006 3049 ... */
 export const groupAppNo = (v, size = 4) => {
   const s = cleanAppNo(v);
   if (!s) return [];
-  if (s.length <= LONG_AT || /[/._]/.test(s)) return [s]; // short or already structured (PSK/2026/123)
+  if (s.length <= LONG_AT || /[/._-]/.test(s)) return [s]; // short or already structured (PSK/2026/123, CRB-M0122121-2026)
   const out = [];
   for (let i = 0; i < s.length; i += size) out.push(s.slice(i, i + size));
   return out;
