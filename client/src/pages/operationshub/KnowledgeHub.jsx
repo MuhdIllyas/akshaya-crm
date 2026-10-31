@@ -667,64 +667,64 @@ const Sidebar = ({ active, onNavigate }) => {
   ];
 
   return (
-    <div className="w-60 h-full bg-white border-r border-gray-200 flex flex-col overflow-y-auto flex-shrink-0">
+    <div className="w-60 h-full bg-white border-r border-slate-200 flex flex-col overflow-y-auto flex-shrink-0">
       {/* Brand */}
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
-        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm">
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-200">
+        <div className="w-8 h-8 bg-gradient-to-br from-navy-500 to-navy-700 rounded-lg flex items-center justify-center text-white text-sm">
           <FiZap className="h-5 w-5" />
         </div>
-        <h1 className="text-lg font-bold text-gray-900">Operations Hub</h1>
-        <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-auto">v4.0</span>
+        <h1 className="text-lg font-bold text-slate-900">Operations Hub</h1>
+        <span className="text-[10px] font-semibold bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full ml-auto">v4.0</span>
       </div>
 
       {/* Navigation */}
       <div className="flex-1 px-2.5 py-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5">⚡ Operations</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5">⚡ Operations</div>
         {mainNav.map(item => (
           <a
             key={item.id}
             className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
               active === item.id
-                ? 'bg-indigo-50 text-indigo-600'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? 'bg-navy-500/10 text-navy-700'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
             onClick={() => onNavigate(item.id)}
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count && <span className="ml-auto bg-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
 
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5 mt-4">⭐ My Workspace</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5 mt-4">⭐ My Workspace</div>
         {workspaceItems.map(item => (
           <a
             key={item.id}
             className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
               active === item.id
-                ? 'bg-indigo-50 text-indigo-600'
-                : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                ? 'bg-navy-500/10 text-navy-700'
+                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
             onClick={() => onNavigate(item.id)}
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count && <span className="ml-auto bg-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
 
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5 mt-4">🏷 Tags</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5 mt-4">🏷 Tags</div>
         <a
           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
             active === 'tags'
-              ? 'bg-indigo-50 text-indigo-600'
-              : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+              ? 'bg-navy-500/10 text-navy-700'
+              : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
           }`}
           onClick={() => onNavigate('tags')}
         >
           <FiTag className="h-4 w-4" />
           <span>Tags</span>
-          <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{DATA.allTags.length}</span>
+          <span className="ml-auto bg-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{DATA.allTags.length}</span>
         </a>
       </div>
     </div>
@@ -747,41 +747,41 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
   }, []);
 
   return (
-    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-      <button className="lg:hidden text-gray-500 hover:text-gray-700" onClick={toggleMobileSidebar}>
+    <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <button className="lg:hidden text-slate-500 hover:text-slate-700" onClick={toggleMobileSidebar}>
         <FiMenu className="h-5 w-5" />
       </button>
       <div className="flex-1 min-w-[180px] max-w-xl relative">
-        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
         <input
           ref={inputRef}
           type="text"
           placeholder="Ask Operations Hub (e.g., 'How to correct Aadhaar DOB?')"
           value={query}
           onChange={(e) => onSearch(e.target.value)}
-          className="w-full pl-9 pr-14 py-2 bg-gray-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-gray-300 transition-all shadow-inner"
+          className="w-full pl-9 pr-14 py-2 bg-slate-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-slate-300 transition-all shadow-inner"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded border border-gray-300 font-mono">⌘K</span>
+        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-mono">⌘K</span>
       </div>
       <div className="flex items-center gap-1.5">
         <button
           onClick={onAIAssistant}
-          className="relative p-2 rounded-full hover:bg-indigo-50 text-indigo-500 hover:text-indigo-700 transition"
+          className="relative p-2 rounded-full hover:bg-navy-500/10 text-navy-500 hover:text-navy-700 transition"
           title="Ask Akshaya Assistant"
         >
           <FiZap className="h-5 w-5" />
         </button>
-        <button onClick={() => onNavigate('notifications')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+        <button onClick={() => onNavigate('notifications')} className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiBell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
         </button>
-        <button onClick={() => onNavigate('bookmarks')} className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+        <button onClick={() => onNavigate('bookmarks')} className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiBookmark className="h-5 w-5" />
         </button>
-        <button onClick={() => onNavigate('mentions')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+        <button onClick={() => onNavigate('mentions')} className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiAtSign className="h-5 w-5" />
           {DATA.stats.unreadMentions > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
           )}
         </button>
       </div>
@@ -792,21 +792,21 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
 // Stat Card (unchanged)
 const StatCard = ({ label, value, icon: Icon, color }) => {
   const colorMap = {
-    blue: 'bg-blue-50 text-blue-600',
-    green: 'bg-green-50 text-green-600',
+    blue: 'bg-navy-500/10 text-navy-700',
+    green: 'bg-emerald-50 text-emerald-600',
     amber: 'bg-amber-50 text-amber-600',
-    purple: 'bg-purple-50 text-purple-600',
+    purple: 'bg-navy-500/10 text-navy-700',
     rose: 'bg-rose-50 text-rose-600',
-    indigo: 'bg-indigo-50 text-indigo-600',
+    indigo: 'bg-navy-500/10 text-navy-700',
   };
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
-      <div className={`p-2.5 rounded-xl ${colorMap[color] || 'bg-gray-50 text-gray-600'}`}>
+    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-shadow">
+      <div className={`p-2.5 rounded-xl ${colorMap[color] || 'bg-slate-50 text-slate-600'}`}>
         <Icon className="h-5 w-5" />
       </div>
       <div>
-        <div className="text-xl font-bold text-gray-900">{value}</div>
-        <div className="text-xs text-gray-500">{label}</div>
+        <div className="text-xl font-bold text-slate-900">{value}</div>
+        <div className="text-xs text-slate-500">{label}</div>
       </div>
     </div>
   );
@@ -818,10 +818,10 @@ const TrendingTags = ({ tags, onTagClick }) => (
     {tags.map(tag => (
       <span
         key={tag.name}
-        className="px-3 py-1.5 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-200 rounded-full text-sm font-medium text-gray-700 cursor-pointer transition-all"
+        className="px-3 py-1.5 bg-slate-100 hover:bg-navy-500/10 hover:text-navy-700 border border-transparent hover:border-navy-500/20 rounded-full text-sm font-medium text-slate-700 cursor-pointer transition-all"
         onClick={() => onTagClick(tag.name)}
       >
-        {tag.name} <span className="text-gray-400 font-normal ml-1">{tag.count}</span>
+        {tag.name} <span className="text-slate-400 font-normal ml-1">{tag.count}</span>
       </span>
     ))}
   </div>
@@ -830,18 +830,18 @@ const TrendingTags = ({ tags, onTagClick }) => (
 // Announcement Item (unchanged)
 const AnnouncementItem = ({ announcement, onClick }) => {
   const categoryColors = {
-    government: 'bg-red-100 text-red-700',
-    centre: 'bg-blue-100 text-blue-700',
-    software: 'bg-green-100 text-green-700',
-    training: 'bg-purple-100 text-purple-700',
+    government: 'bg-rose-100 text-rose-700',
+    centre: 'bg-navy-500/10 text-navy-700',
+    software: 'bg-emerald-100 text-emerald-700',
+    training: 'bg-navy-500/10 text-navy-700',
   };
-  const color = categoryColors[announcement.category] || 'bg-gray-100 text-gray-700';
+  const color = categoryColors[announcement.category] || 'bg-slate-100 text-slate-700';
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg transition" onClick={onClick}>
+    <div className="flex items-center gap-3 py-3 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg transition" onClick={onClick}>
       {announcement.pinned ? <FiHeart className="text-amber-500 h-4 w-4 flex-shrink-0" /> : <span className="w-4 flex-shrink-0"></span>}
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-900">{announcement.title}</div>
-        <div className="text-xs text-gray-400">{announcement.time}</div>
+        <div className="text-sm font-medium text-slate-900">{announcement.title}</div>
+        <div className="text-xs text-slate-400">{announcement.time}</div>
       </div>
       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${color}`}>
         {announcement.category}
@@ -854,30 +854,30 @@ const AnnouncementItem = ({ announcement, onClick }) => {
 const DiscussionCard = ({ discussion, onClick }) => {
   // map type to icon
   const typeMap = {
-    question: { icon: FiMessageSquare, color: 'bg-blue-50 text-blue-600' },
+    question: { icon: FiMessageSquare, color: 'bg-navy-500/10 text-navy-700' },
     'solved case': { icon: FiCheckCircle, color: 'bg-emerald-50 text-emerald-600' },
     'customer issue': { icon: FiUser, color: 'bg-amber-50 text-amber-600' },
-    'government order': { icon: FiFileText, color: 'bg-purple-50 text-purple-600' },
-    bug: { icon: FiAlertCircle, color: 'bg-yellow-50 text-yellow-600' },
-    feature: { icon: FiZap, color: 'bg-cyan-50 text-cyan-600' },
-    discussion: { icon: FiMessageCircleOutline, color: 'bg-red-50 text-red-600' },
-    suggestion: { icon: FiThumbsUp, color: 'bg-green-50 text-green-600' },
+    'government order': { icon: FiFileText, color: 'bg-navy-500/10 text-navy-700' },
+    bug: { icon: FiAlertCircle, color: 'bg-amber-50 text-amber-600' },
+    feature: { icon: FiZap, color: 'bg-navy-500/10 text-navy-700' },
+    discussion: { icon: FiMessageCircleOutline, color: 'bg-rose-50 text-rose-600' },
+    suggestion: { icon: FiThumbsUp, color: 'bg-emerald-50 text-emerald-600' },
   };
-  const defaultType = { icon: FiMessageSquare, color: 'bg-gray-50 text-gray-600' };
+  const defaultType = { icon: FiMessageSquare, color: 'bg-slate-50 text-slate-600' };
   const { icon: Icon, color: typeClass } = typeMap[discussion.type] || defaultType;
 
   const serviceObj = DATA.services.find(s => s.id === discussion.service);
   const serviceName = serviceObj ? serviceObj.name : null;
 
   return (
-    <div className="p-3 bg-white border border-gray-200 rounded-xl mb-2.5 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={() => onClick(discussion.id)}>
+    <div className="p-3 bg-white border border-slate-200 rounded-xl mb-2.5 hover:border-navy-500/20 hover:shadow-sm transition-all cursor-pointer" onClick={() => onClick(discussion.id)}>
       <div className="flex gap-3">
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${typeClass}`}>
           <Icon className="h-4 w-4" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center flex-wrap gap-1.5">
-            <span className="text-sm font-semibold text-gray-900">{discussion.title}</span>
+            <span className="text-sm font-semibold text-slate-900">{discussion.title}</span>
             {discussion.solved !== undefined && (
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
                 discussion.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
@@ -886,24 +886,24 @@ const DiscussionCard = ({ discussion, onClick }) => {
               </span>
             )}
             {serviceName && (
-              <span className="text-[10px] font-medium bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{serviceName}</span>
+              <span className="text-[10px] font-medium bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full">{serviceName}</span>
             )}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
+          <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
           {(discussion.customer || discussion.applicationNumber || discussion.trackingStatus) && (
-            <div className="flex flex-wrap gap-3 mt-1 text-xs text-gray-500">
+            <div className="flex flex-wrap gap-3 mt-1 text-xs text-slate-500">
               {discussion.customer && <span><FiUser className="inline h-3 w-3 mr-0.5" /> {discussion.customer}</span>}
               {discussion.applicationNumber && <span><FiFile className="inline h-3 w-3 mr-0.5" /> {discussion.applicationNumber}</span>}
               {discussion.trackingStatus && <span><FiTarget className="inline h-3 w-3 mr-0.5" /> {discussion.trackingStatus}</span>}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-400">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-400">
             <span><FiUser className="inline h-3 w-3 mr-0.5" /> {discussion.author}</span>
             <span><FiClock className="inline h-3 w-3 mr-0.5" /> {discussion.lastReply}</span>
             <span><FiMessageSquare className="inline h-3 w-3 mr-0.5" /> {discussion.replies}</span>
             <span><FiEye className="inline h-3 w-3 mr-0.5" /> {discussion.views}</span>
             <div className="flex gap-1">
-              {discussion.tags.map(t => <span key={t} className="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">#{t}</span>)}
+              {discussion.tags.map(t => <span key={t} className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">#{t}</span>)}
             </div>
           </div>
         </div>
@@ -917,15 +917,15 @@ const ArticleCard = ({ article, onClick }) => {
   const serviceObj = DATA.services.find(s => s.id === article.service);
   const serviceName = serviceObj ? serviceObj.name : null;
   return (
-    <div className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
-      <div className="font-semibold text-sm text-gray-900">{article.title}</div>
-      <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{article.desc}</div>
-      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-gray-400">
+    <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-navy-500/20 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
+      <div className="font-semibold text-sm text-slate-900">{article.title}</div>
+      <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{article.desc}</div>
+      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-slate-400">
         <span><FiFolder className="inline h-3 w-3 mr-0.5" /> {article.category}</span>
         <span><FiUser className="inline h-3 w-3 mr-0.5" /> {article.author}</span>
         <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.updated}</span>
         <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.readingTime}</span>
-        {serviceName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">{serviceName}</span>}
+        {serviceName && <span className="bg-navy-500/10 text-navy-700 px-1.5 py-0.5 rounded">{serviceName}</span>}
       </div>
     </div>
   );
@@ -933,9 +933,9 @@ const ArticleCard = ({ article, onClick }) => {
 
 // Activity Feed (unchanged)
 const ActivityFeed = ({ activities }) => (
-  <div className="bg-white border border-gray-200 rounded-xl p-4">
-    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
-      <FiRefreshCw className="h-4 w-4 text-indigo-500" />
+  <div className="bg-white border border-slate-200 rounded-xl p-4">
+    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
+      <FiRefreshCw className="h-4 w-4 text-navy-500" />
       Recent Activity
     </h3>
     <div className="space-y-2">
@@ -943,16 +943,16 @@ const ActivityFeed = ({ activities }) => (
         <div key={act.id} className="flex items-start gap-2 text-sm">
           <span className="mt-0.5">
             {act.type === 'solved' && <FiCheckCircle className="h-4 w-4 text-emerald-500" />}
-            {act.type === 'article' && <FiFileText className="h-4 w-4 text-blue-500" />}
-            {act.type === 'circular' && <FiFile className="h-4 w-4 text-purple-500" />}
+            {act.type === 'article' && <FiFileText className="h-4 w-4 text-navy-500" />}
+            {act.type === 'circular' && <FiFile className="h-4 w-4 text-navy-500" />}
             {act.type === 'update' && <FiTrendingUp className="h-4 w-4 text-amber-500" />}
           </span>
           <div className="flex-1 min-w-0">
-            <span className="text-gray-700">
+            <span className="text-slate-700">
               <strong>{act.user}</strong> {act.type === 'solved' ? 'solved' : act.type === 'article' ? 'updated article' : act.type === 'circular' ? 'added circular' : 'updated'}{' '}
-              <span className="text-indigo-600 font-medium">{act.target}</span>
+              <span className="text-navy-700 font-medium">{act.target}</span>
             </span>
-            <span className="block text-xs text-gray-400">{act.time}</span>
+            <span className="block text-xs text-slate-400">{act.time}</span>
           </div>
         </div>
       ))}
@@ -975,16 +975,16 @@ const ConvertDropdown = ({ onConvert }) => {
     <div className="relative inline-block">
       <button
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition"
+        className="flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-700 bg-navy-500/10 hover:bg-navy-500/10 px-3 py-1.5 rounded-lg transition"
       >
         <FiMoreHorizontal className="h-4 w-4" /> Convert
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+        <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-10 py-1">
           {options.map(opt => (
             <div
               key={opt.action}
-              className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer transition"
+              className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer transition"
               onClick={() => { onConvert(opt.action); setOpen(false); }}
             >
               <opt.icon className="h-4 w-4" /> {opt.label}
@@ -1118,7 +1118,7 @@ const KnowledgeHub = () => {
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Desktop Sidebar - fixed */}
       <div className="hidden lg:block flex-shrink-0">
         <Sidebar active={page} onNavigate={navigateTo} />
@@ -1149,7 +1149,7 @@ const KnowledgeHub = () => {
 
       {/* Floating Action Button */}
       <button
-        className="fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white shadow-lg hover:scale-105 transition-all flex items-center justify-center"
+        className="fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-gradient-to-br from-navy-500 to-navy-700 text-white shadow-lg hover:scale-105 transition-all flex items-center justify-center"
         onClick={() => setShowCreateModal(true)}
       >
         <FiPlus className="h-6 w-6" />
@@ -1163,29 +1163,29 @@ const KnowledgeHub = () => {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl max-h-[90dvh] overflow-y-auto"
               onClick={e => e.stopPropagation()}
             >
-              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">Create Discussion</h2>
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => setShowCreateModal(false)}>
-                  <FiX className="h-5 w-5 text-gray-500" />
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+                <h2 className="text-xl font-bold text-slate-900">Create Discussion</h2>
+                <button className="p-2 hover:bg-slate-100 rounded-lg transition" onClick={() => setShowCreateModal(false)}>
+                  <FiX className="h-5 w-5 text-slate-500" />
                 </button>
               </div>
               <form onSubmit={handleCreateSubmit} className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Title *</label>
                   <input
                     type="text"
                     value={newDiscussion.title}
                     onChange={e => setNewDiscussion(prev => ({ ...prev, title: e.target.value }))}
                     placeholder="What's your question or idea?"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none"
+                    className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 focus:border-transparent outline-none text-base sm:text-sm"
                     required
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
                   <MentionsInput
                     value={newDiscussion.content}
                     onChange={(e, newValue) => setNewDiscussion(prev => ({ ...prev, content: newValue }))}
@@ -1203,21 +1203,21 @@ const KnowledgeHub = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
                     <select
                       value={newDiscussion.category}
                       onChange={e => setNewDiscussion(prev => ({ ...prev, category: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
                     >
                       {DATA.categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.label}</option>))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Priority</label>
                     <select
                       value={newDiscussion.priority}
                       onChange={e => setNewDiscussion(prev => ({ ...prev, priority: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
                     >
                       <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="critical">Critical</option>
                     </select>
@@ -1225,22 +1225,22 @@ const KnowledgeHub = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Service</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Service</label>
                     <select
                       value={newDiscussion.service}
                       onChange={e => setNewDiscussion(prev => ({ ...prev, service: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
                     >
                       <option value="">None</option>
                       {DATA.services.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Visibility</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Visibility</label>
                     <select
                       value={newDiscussion.visibility}
                       onChange={e => setNewDiscussion(prev => ({ ...prev, visibility: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
                     >
                       <option value="everyone">Everyone</option><option value="centre">Centre</option><option value="private">Private</option><option value="admins">Admins</option>
                     </select>
@@ -1248,11 +1248,11 @@ const KnowledgeHub = () => {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Related To</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Related To</label>
                     <select
                       value={newDiscussion.relatedTo}
                       onChange={e => setNewDiscussion(prev => ({ ...prev, relatedTo: e.target.value }))}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
                     >
                       <option value="none">None</option>
                       <option value="customer">Customer</option>
@@ -1262,21 +1262,21 @@ const KnowledgeHub = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Related ID (optional)</label>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Related ID (optional)</label>
                     <input
                       type="text"
                       value={newDiscussion.relatedId}
                       onChange={e => setNewDiscussion(prev => ({ ...prev, relatedId: e.target.value }))}
                       placeholder="e.g., CUST-123"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+                      className="min-h-[44px] w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Tags</label>
-                  <div className="flex flex-wrap gap-1.5 p-2 border border-gray-300 rounded-lg focus-within:ring-2 focus-within:ring-indigo-500">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tags</label>
+                  <div className="flex flex-wrap gap-1.5 p-2 border border-slate-300 rounded-lg focus-within:ring-2 focus-within:ring-navy-500">
                     {newDiscussion.tags.map(tag => (
-                      <span key={tag} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 text-xs font-medium px-2 py-1 rounded-full">
+                      <span key={tag} className="inline-flex items-center gap-1 bg-navy-500/10 text-navy-700 text-xs font-medium px-2 py-1 rounded-full">
                         {tag} <FiX className="h-3 w-3 cursor-pointer" onClick={() => removeTag(tag)} />
                       </span>
                     ))}
@@ -1288,19 +1288,19 @@ const KnowledgeHub = () => {
                       placeholder="Add a tag..."
                       className="flex-1 min-w-[80px] border-none outline-none text-sm py-1"
                     />
-                    <button type="button" onClick={addTag} className="text-xs font-medium text-indigo-600 hover:text-indigo-800 px-2">Add</button>
+                    <button type="button" onClick={addTag} className="text-xs font-medium text-navy-700 hover:text-navy-700 px-2">Add</button>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Attach Files</label>
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center text-gray-500 hover:border-indigo-400 transition cursor-pointer">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Attach Files</label>
+                  <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center text-slate-500 hover:border-navy-500 transition cursor-pointer">
                     <FiPaperclip className="h-6 w-6 mx-auto mb-1" />
                     <p className="text-sm">Click or drag files to upload</p>
                   </div>
                 </div>
-                <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                  <button type="button" className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition" onClick={() => setShowCreateModal(false)}>Cancel</button>
-                  <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">Publish</button>
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                  <button type="button" className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 transition" onClick={() => setShowCreateModal(false)}>Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-navy-700 text-white rounded-lg text-sm font-medium hover:bg-navy-700 transition">Publish</button>
                 </div>
               </form>
             </motion.div>
@@ -1319,8 +1319,8 @@ const KnowledgeHub = () => {
 const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
   <div className="space-y-6">
     <div>
-      <h2 className="text-2xl font-bold text-gray-900">Welcome back, Admin 👋</h2>
-      <p className="text-gray-500">Your operations hub – everything about your services at a glance.</p>
+      <h2 className="text-2xl font-bold text-slate-900">Welcome back, Admin 👋</h2>
+      <p className="text-slate-500">Your operations hub – everything about your services at a glance.</p>
     </div>
 
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -1342,14 +1342,14 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
         return (
           <div
             key={service.id}
-            className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer"
+            className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer"
             onClick={() => navigateTo('service-detail', service.id)}
           >
             <div className="flex items-center gap-3">
-              <service.icon className="h-8 w-8 text-indigo-500" />
+              <service.icon className="h-8 w-8 text-navy-500" />
               <div>
-                <h4 className="font-bold text-gray-900">{service.name}</h4>
-                <div className="text-xs text-gray-500 flex gap-2 flex-wrap">
+                <h4 className="font-bold text-slate-900">{service.name}</h4>
+                <div className="text-xs text-slate-500 flex gap-2 flex-wrap">
                   <span>{articleCount} articles</span>
                   <span>{discussionCount} discussions</span>
                   <span>{trainingCount} trainings</span>
@@ -1358,11 +1358,11 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
               </div>
             </div>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-              <span className="bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Today: {service.todayApplications}</span>
+              <span className="bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded">Today: {service.todayApplications}</span>
               <span className="bg-amber-50 text-amber-600 px-2 py-0.5 rounded">Pending: {service.pending}</span>
-              <span className="text-gray-400 truncate max-w-[150px]">{service.latestCircular}</span>
+              <span className="text-slate-400 truncate max-w-[150px]">{service.latestCircular}</span>
             </div>
-            <div className="mt-2 text-xs text-gray-400">
+            <div className="mt-2 text-xs text-slate-400">
               {service.relatedTags.slice(0, 3).map(t => `#${t}`).join(' ')}
             </div>
           </div>
@@ -1371,21 +1371,21 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
     </div>
 
     {/* Government Updates */}
-    <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-4">
+    <div className="bg-white border-l-4 border-rose-500 rounded-xl shadow-sm p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-          <FiFileText className="h-4 w-4 text-red-500" /> Government Updates
+        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+          <FiFileText className="h-4 w-4 text-rose-500" /> Government Updates
         </h3>
-        <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer font-medium" onClick={() => navigateTo('announcements')}>View all →</span>
+        <span className="text-xs text-navy-700 hover:text-navy-700 cursor-pointer font-medium" onClick={() => navigateTo('announcements')}>View all →</span>
       </div>
       <div className="space-y-2">
         {DATA.governmentUpdates.map(update => (
           <div key={update.id} className="flex items-center gap-3 text-sm">
             <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
-              update.priority === 'high' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'
+              update.priority === 'high' ? 'bg-rose-100 text-rose-700' : 'bg-amber-100 text-amber-700'
             }`}>{update.priority}</span>
-            <span className="text-gray-700 flex-1">{update.title}</span>
-            <span className="text-xs text-gray-400">{update.date}</span>
+            <span className="text-slate-700 flex-1">{update.title}</span>
+            <span className="text-xs text-slate-400">{update.date}</span>
           </div>
         ))}
       </div>
@@ -1394,52 +1394,52 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
     {/* Activity and other sections could remain similar, but we'll keep it concise */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div className="space-y-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FiMessageCircle className="h-4 w-4 text-indigo-500" /> Unread Discussions</h3>
-            <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer" onClick={() => navigateTo('discussions')}>View all →</span>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2"><FiMessageCircle className="h-4 w-4 text-navy-500" /> Unread Discussions</h3>
+            <span className="text-xs text-navy-700 hover:text-navy-700 cursor-pointer" onClick={() => navigateTo('discussions')}>View all →</span>
           </div>
           {DATA.discussions.slice(0, 3).map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FiClock className="h-4 w-4 text-gray-500" /> Recent Discussions</h3>
-            <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer" onClick={() => navigateTo('discussions')}>View all →</span>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2"><FiClock className="h-4 w-4 text-slate-500" /> Recent Discussions</h3>
+            <span className="text-xs text-navy-700 hover:text-navy-700 cursor-pointer" onClick={() => navigateTo('discussions')}>View all →</span>
           </div>
           {DATA.discussions.slice(3, 6).map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
         </div>
       </div>
       <div className="space-y-6">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FiAtSign className="h-4 w-4 text-purple-500" /> My Mentions</h3>
-            <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer" onClick={() => navigateTo('mentions')}>View all →</span>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2"><FiAtSign className="h-4 w-4 text-navy-500" /> My Mentions</h3>
+            <span className="text-xs text-navy-700 hover:text-navy-700 cursor-pointer" onClick={() => navigateTo('mentions')}>View all →</span>
           </div>
           {DATA.myMentions.map((m, idx) => (
-            <div key={idx} className="p-2 bg-white border border-gray-200 rounded-xl mb-2 hover:border-indigo-200 transition cursor-pointer" onClick={() => navigateTo('mentions')}>
+            <div key={idx} className="p-2 bg-white border border-slate-200 rounded-xl mb-2 hover:border-navy-500/20 transition cursor-pointer" onClick={() => navigateTo('mentions')}>
               <div className="flex gap-2">
-                <div className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><FiAtSign className="h-4 w-4" /></div>
+                <div className="w-6 h-6 rounded-lg bg-navy-500/10 text-navy-700 flex items-center justify-center"><FiAtSign className="h-4 w-4" /></div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900">{m.title}</div>
-                  <div className="text-xs text-gray-500 line-clamp-1">{m.excerpt}</div>
-                  <div className="text-[10px] text-gray-400 mt-0.5">{m.time}</div>
+                  <div className="text-sm font-medium text-slate-900">{m.title}</div>
+                  <div className="text-xs text-slate-500 line-clamp-1">{m.excerpt}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{m.time}</div>
                 </div>
               </div>
             </div>
           ))}
         </div>
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FiEdit2 className="h-4 w-4 text-gray-500" /> My Drafts</h3>
-            <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer" onClick={() => navigateTo('drafts')}>View all →</span>
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2"><FiEdit2 className="h-4 w-4 text-slate-500" /> My Drafts</h3>
+            <span className="text-xs text-navy-700 hover:text-navy-700 cursor-pointer" onClick={() => navigateTo('drafts')}>View all →</span>
           </div>
           {DATA.drafts.map((d, idx) => (
-            <div key={idx} className="p-2 bg-white border border-gray-200 rounded-xl mb-2 opacity-70">
+            <div key={idx} className="p-2 bg-white border border-slate-200 rounded-xl mb-2 opacity-70">
               <div className="flex gap-2">
-                <div className="w-6 h-6 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center"><FiFile className="h-4 w-4" /></div>
+                <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center"><FiFile className="h-4 w-4" /></div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-gray-900">{d.title}</div>
-                  <div className="text-[10px] text-gray-400">Updated {d.updated}</div>
+                  <div className="text-sm font-medium text-slate-900">{d.title}</div>
+                  <div className="text-[10px] text-slate-400">Updated {d.updated}</div>
                 </div>
               </div>
             </div>
@@ -1449,10 +1449,10 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
       </div>
     </div>
 
-    <div className="bg-white border border-gray-200 rounded-xl p-4">
+    <div className="bg-white border border-slate-200 rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><FiBell className="h-4 w-4 text-amber-500" /> Latest Announcements</h3>
-        <span className="text-xs text-indigo-600 hover:text-indigo-800 cursor-pointer" onClick={() => navigateTo('announcements')}>View all →</span>
+        <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2"><FiBell className="h-4 w-4 text-amber-500" /> Latest Announcements</h3>
+        <span className="text-xs text-navy-700 hover:text-navy-700 cursor-pointer" onClick={() => navigateTo('announcements')}>View all →</span>
       </div>
       {DATA.announcements.map((a, idx) => <AnnouncementItem key={idx} announcement={a} onClick={() => navigateTo('announcements')} />)}
     </div>
@@ -1463,29 +1463,29 @@ const HomePage = ({ navigateTo, handleTagClick, openDiscussion }) => (
 const ServicesPage = ({ navigateTo, openServiceDetail }) => {
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-4">All Services</h2>
+      <h2 className="text-xl font-bold text-slate-900 mb-4">All Services</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {DATA.services.map(service => (
           <div
             key={service.id}
-            className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer"
+            className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer"
             onClick={() => openServiceDetail(service.id)}
           >
             <div className="flex items-center gap-3">
-              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+              <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl">
                 <service.icon className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="font-semibold text-gray-900">{service.name}</h3>
-                <p className="text-xs text-gray-500">{service.description}</p>
+                <h3 className="font-semibold text-slate-900">{service.name}</h3>
+                <p className="text-xs text-slate-500">{service.description}</p>
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-1">
               {service.relatedTags.map(tag => (
-                <span key={tag} className="text-[10px] bg-gray-100 text-gray-600 px-2 py-0.5 rounded">#{tag}</span>
+                <span key={tag} className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded">#{tag}</span>
               ))}
             </div>
-            <div className="mt-2 text-xs text-gray-400">
+            <div className="mt-2 text-xs text-slate-400">
               {DATA.articles.filter(a => a.service === service.id).length} articles ·{' '}
               {DATA.training.filter(t => t.service === service.id).length} trainings ·{' '}
               {DATA.discussions.filter(d => d.service === service.id).length} discussions
@@ -1500,7 +1500,7 @@ const ServicesPage = ({ navigateTo, openServiceDetail }) => {
 // Service Detail Page - completely revamped with dashboard, structured SOP, official resources, cases, history, ownership
 const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
   const service = DATA.services.find(s => s.id === serviceId);
-  if (!service) return <div className="text-center py-12 text-gray-500">Service not found</div>;
+  if (!service) return <div className="text-center py-12 text-slate-500">Service not found</div>;
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const tabs = [
@@ -1521,25 +1521,25 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
   return (
     <div>
       <div className="flex items-center gap-3 mb-4">
-        <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => navigateTo('services')}>
-          <FiChevronLeft className="h-5 w-5 text-gray-500" />
+        <button className="p-2 hover:bg-slate-100 rounded-lg transition" onClick={() => navigateTo('services')}>
+          <FiChevronLeft className="h-5 w-5 text-slate-500" />
         </button>
-        <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+        <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl">
           <service.icon className="h-6 w-6" />
         </div>
-        <h2 className="text-xl font-bold text-gray-900">{service.name}</h2>
-        <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">Service</span>
+        <h2 className="text-xl font-bold text-slate-900">{service.name}</h2>
+        <span className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">Service</span>
       </div>
 
-      <div className="border-b border-gray-200 mb-4">
+      <div className="border-b border-slate-200 mb-4">
         <div className="flex flex-wrap gap-2">
           {tabs.map(tab => (
             <button
               key={tab.id}
               className={`flex items-center gap-1.5 px-4 py-2 text-sm font-medium border-b-2 transition ${
                 activeTab === tab.id
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'border-navy-500 text-navy-700'
+                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
@@ -1549,43 +1549,43 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
         </div>
       </div>
 
-      <div className="bg-white border border-gray-200 rounded-xl p-4 min-h-[400px]">
+      <div className="bg-white border border-slate-200 rounded-xl p-4 min-h-[400px]">
         {/* DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-              <div className="bg-indigo-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-indigo-600">{service.todayApplications}</div>
-                <div className="text-xs text-gray-600">Today's Applications</div>
+              <div className="bg-navy-500/10 p-3 rounded-lg text-center">
+                <div className="text-2xl font-bold text-navy-700">{service.todayApplications}</div>
+                <div className="text-xs text-slate-600">Today's Applications</div>
               </div>
               <div className="bg-amber-50 p-3 rounded-lg text-center">
                 <div className="text-2xl font-bold text-amber-600">{service.pending}</div>
-                <div className="text-xs text-gray-600">Pending</div>
+                <div className="text-xs text-slate-600">Pending</div>
               </div>
-              <div className="bg-green-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-green-600">{relatedDiscussions.length}</div>
-                <div className="text-xs text-gray-600">Discussions</div>
+              <div className="bg-emerald-50 p-3 rounded-lg text-center">
+                <div className="text-2xl font-bold text-emerald-600">{relatedDiscussions.length}</div>
+                <div className="text-xs text-slate-600">Discussions</div>
               </div>
-              <div className="bg-purple-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-purple-600">{serviceCases.length}</div>
-                <div className="text-xs text-gray-600">Solved Cases</div>
+              <div className="bg-navy-500/10 p-3 rounded-lg text-center">
+                <div className="text-2xl font-bold text-navy-700">{serviceCases.length}</div>
+                <div className="text-xs text-slate-600">Solved Cases</div>
               </div>
             </div>
             <div className="mb-4">
-              <h4 className="font-semibold text-sm text-gray-900">Latest Circular</h4>
-              <p className="text-sm text-gray-700">{service.latestCircular}</p>
+              <h4 className="font-semibold text-sm text-slate-900">Latest Circular</h4>
+              <p className="text-sm text-slate-700">{service.latestCircular}</p>
             </div>
             <div className="mb-4">
-              <h4 className="font-semibold text-sm text-gray-900">Recent Discussions</h4>
+              <h4 className="font-semibold text-sm text-slate-900">Recent Discussions</h4>
               {relatedDiscussions.slice(0, 3).map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
-              {relatedDiscussions.length === 0 && <p className="text-sm text-gray-500">No discussions yet.</p>}
+              {relatedDiscussions.length === 0 && <p className="text-sm text-slate-500">No discussions yet.</p>}
             </div>
             <div>
-              <h4 className="font-semibold text-sm text-gray-900">Quick Actions</h4>
+              <h4 className="font-semibold text-sm text-slate-900">Quick Actions</h4>
               <div className="flex gap-2 mt-1">
-                <button className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg hover:bg-indigo-100" onClick={() => setActiveTab('sop')}>View SOP</button>
-                <button className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg hover:bg-indigo-100" onClick={() => navigateTo('discussions')}>Start Discussion</button>
-                <button className="text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded-lg hover:bg-indigo-100" onClick={() => setActiveTab('cases')}>View Cases</button>
+                <button className="text-xs bg-navy-500/10 text-navy-700 px-3 py-1 rounded-lg hover:bg-navy-500/10" onClick={() => setActiveTab('sop')}>View SOP</button>
+                <button className="text-xs bg-navy-500/10 text-navy-700 px-3 py-1 rounded-lg hover:bg-navy-500/10" onClick={() => navigateTo('discussions')}>Start Discussion</button>
+                <button className="text-xs bg-navy-500/10 text-navy-700 px-3 py-1 rounded-lg hover:bg-navy-500/10" onClick={() => setActiveTab('cases')}>View Cases</button>
               </div>
             </div>
           </div>
@@ -1594,7 +1594,7 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
         {/* SOP - structured */}
         {activeTab === 'sop' && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Standard Operating Procedure</h3>
+            <h3 className="font-semibold text-slate-900 mb-2">Standard Operating Procedure</h3>
             <div className="space-y-4">
               <div><strong>Eligibility:</strong> {service.sop.eligibility}</div>
               <div><strong>Required Documents:</strong> <ul className="list-disc ml-4 text-sm">{service.sop.documents.map((d,i) => <li key={i}>{d}</li>)}</ul></div>
@@ -1605,7 +1605,7 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
               <div><strong>Checklist:</strong> <ul className="list-check ml-4 text-sm">{service.sop.checklist.map((item,i) => <li key={i}>✓ {item}</li>)}</ul></div>
               <div><strong>Escalation:</strong> {service.sop.escalation}</div>
               {service.sop.history && service.sop.history.length > 0 && (
-                <div><strong>Version History:</strong> {service.sop.history.map((h, i) => <div key={i} className="text-xs text-gray-500">{h.version} - {h.date} by {h.author}: {h.changes}</div>)}</div>
+                <div><strong>Version History:</strong> {service.sop.history.map((h, i) => <div key={i} className="text-xs text-slate-500">{h.version} - {h.date} by {h.author}: {h.changes}</div>)}</div>
               )}
             </div>
           </div>
@@ -1614,12 +1614,12 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
         {/* FAQs - unchanged */}
         {activeTab === 'faqs' && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Frequently Asked Questions</h3>
+            <h3 className="font-semibold text-slate-900 mb-2">Frequently Asked Questions</h3>
             <div className="space-y-3">
               {service.faqs.map((faq, idx) => (
-                <div key={idx} className="border-b border-gray-100 pb-2">
-                  <div className="font-medium text-sm text-gray-800">Q: {faq.q}</div>
-                  <div className="text-sm text-gray-600 mt-0.5">A: {faq.a}</div>
+                <div key={idx} className="border-b border-slate-100 pb-2">
+                  <div className="font-medium text-sm text-slate-800">Q: {faq.q}</div>
+                  <div className="text-sm text-slate-600 mt-0.5">A: {faq.a}</div>
                 </div>
               ))}
             </div>
@@ -1629,16 +1629,16 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
         {/* Resources - includes articles and links */}
         {activeTab === 'resources' && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Resources & Links</h3>
+            <h3 className="font-semibold text-slate-900 mb-2">Resources & Links</h3>
             <ul className="space-y-2">
               {service.resources.map((res, idx) => (
                 <li key={idx} className="flex items-center gap-2 text-sm">
-                  <FiExternalLink className="h-4 w-4 text-indigo-500" />
-                  <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline">{res.title}</a>
+                  <FiExternalLink className="h-4 w-4 text-navy-500" />
+                  <a href={res.url} target="_blank" rel="noopener noreferrer" className="text-navy-700 hover:underline">{res.title}</a>
                 </li>
               ))}
             </ul>
-            <h4 className="font-semibold text-gray-900 mt-4">Related Articles</h4>
+            <h4 className="font-semibold text-slate-900 mt-4">Related Articles</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
               {relatedArticles.map(a => <ArticleCard key={a.id} article={a} onClick={() => navigateTo('knowledge')} />)}
             </div>
@@ -1648,19 +1648,19 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
         {/* Official Resources */}
         {activeTab === 'official' && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Official Resources</h3>
+            <h3 className="font-semibold text-slate-900 mb-2">Official Resources</h3>
             <div className="space-y-3">
-              <div><strong>Official Website:</strong> <a href={service.officialResources.website} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{service.officialResources.website}</a></div>
-              <div><strong>Portal:</strong> <a href={service.officialResources.portal} target="_blank" rel="noopener" className="text-indigo-600 hover:underline">{service.officialResources.portal}</a></div>
+              <div><strong>Official Website:</strong> <a href={service.officialResources.website} target="_blank" rel="noopener" className="text-navy-700 hover:underline">{service.officialResources.website}</a></div>
+              <div><strong>Portal:</strong> <a href={service.officialResources.portal} target="_blank" rel="noopener" className="text-navy-700 hover:underline">{service.officialResources.portal}</a></div>
               <div><strong>Helpline:</strong> {service.officialResources.helpline}</div>
               {service.officialResources.forms && service.officialResources.forms.length > 0 && (
-                <div><strong>Forms:</strong> {service.officialResources.forms.map((f,i) => <a key={i} href={f.url} className="text-indigo-600 hover:underline ml-2">{f.name}</a>)}</div>
+                <div><strong>Forms:</strong> {service.officialResources.forms.map((f,i) => <a key={i} href={f.url} className="text-navy-700 hover:underline ml-2">{f.name}</a>)}</div>
               )}
               {service.officialResources.circulars && service.officialResources.circulars.length > 0 && (
-                <div><strong>Circulars:</strong> {service.officialResources.circulars.map((c,i) => <div key={i} className="text-sm">{c.title} ({c.date}) - <a href={c.file} className="text-indigo-600 hover:underline">Download</a></div>)}</div>
+                <div><strong>Circulars:</strong> {service.officialResources.circulars.map((c,i) => <div key={i} className="text-sm">{c.title} ({c.date}) - <a href={c.file} className="text-navy-700 hover:underline">Download</a></div>)}</div>
               )}
               {service.officialResources.videos && service.officialResources.videos.length > 0 && (
-                <div><strong>Video Tutorials:</strong> {service.officialResources.videos.map((v,i) => <a key={i} href={v.url} className="text-indigo-600 hover:underline ml-2">{v.title}</a>)}</div>
+                <div><strong>Video Tutorials:</strong> {service.officialResources.videos.map((v,i) => <a key={i} href={v.url} className="text-navy-700 hover:underline ml-2">{v.title}</a>)}</div>
               )}
               {service.officialResources.qrCode && (
                 <div><strong>QR Code:</strong> <img src={service.officialResources.qrCode} alt="QR" className="h-20 w-20" /></div>
@@ -1673,37 +1673,37 @@ const ServiceDetailPage = ({ serviceId, navigateTo, openDiscussion }) => {
         {activeTab === 'cases' && (
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900">Solved Cases ({serviceCases.length})</h3>
-              <button className="text-xs text-indigo-600 hover:text-indigo-800">+ Add Case</button>
+              <h3 className="font-semibold text-slate-900">Solved Cases ({serviceCases.length})</h3>
+              <button className="text-xs text-navy-700 hover:text-navy-700">+ Add Case</button>
             </div>
             {serviceCases.length > 0 ? (
               serviceCases.map(c => (
-                <div key={c.id} className="border-b border-gray-100 py-2">
-                  <div className="font-medium text-sm text-gray-900">{c.title}</div>
-                  <div className="text-xs text-gray-500">{c.description}</div>
-                  <div className="text-xs text-gray-400">Solved by {c.solvedBy} on {c.solvedDate}</div>
-                  <div className="flex gap-1 mt-1">{c.tags.map(t => <span key={t} className="text-[10px] bg-gray-100 px-1.5 py-0.5 rounded">#{t}</span>)}</div>
-                  <button className="text-xs text-indigo-600 hover:underline mt-1" onClick={() => navigateTo('discussion-detail', c.linkedDiscussion)}>View Discussion</button>
+                <div key={c.id} className="border-b border-slate-100 py-2">
+                  <div className="font-medium text-sm text-slate-900">{c.title}</div>
+                  <div className="text-xs text-slate-500">{c.description}</div>
+                  <div className="text-xs text-slate-400">Solved by {c.solvedBy} on {c.solvedDate}</div>
+                  <div className="flex gap-1 mt-1">{c.tags.map(t => <span key={t} className="text-[10px] bg-slate-100 px-1.5 py-0.5 rounded">#{t}</span>)}</div>
+                  <button className="text-xs text-navy-700 hover:underline mt-1" onClick={() => navigateTo('discussion-detail', c.linkedDiscussion)}>View Discussion</button>
                 </div>
               ))
-            ) : <p className="text-sm text-gray-500">No solved cases yet.</p>}
+            ) : <p className="text-sm text-slate-500">No solved cases yet.</p>}
           </div>
         )}
 
         {/* History (SOP version history, service updates) */}
         {activeTab === 'history' && (
           <div>
-            <h3 className="font-semibold text-gray-900 mb-2">Service History</h3>
+            <h3 className="font-semibold text-slate-900 mb-2">Service History</h3>
             <div className="space-y-2">
               {service.sop.history && service.sop.history.length > 0 ? service.sop.history.map((h, i) => (
-                <div key={i} className="border-b border-gray-100 pb-2">
+                <div key={i} className="border-b border-slate-100 pb-2">
                   <div className="text-sm font-medium">Version {h.version}</div>
-                  <div className="text-xs text-gray-500">Date: {h.date} | By: {h.author}</div>
-                  <div className="text-xs text-gray-700">Changes: {h.changes}</div>
+                  <div className="text-xs text-slate-500">Date: {h.date} | By: {h.author}</div>
+                  <div className="text-xs text-slate-700">Changes: {h.changes}</div>
                 </div>
-              )) : <p className="text-sm text-gray-500">No history recorded.</p>}
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <div className="text-xs text-gray-500">Ownership</div>
+              )) : <p className="text-sm text-slate-500">No history recorded.</p>}
+              <div className="mt-4 p-3 bg-slate-50 rounded-lg">
+                <div className="text-xs text-slate-500">Ownership</div>
                 <div className="text-sm">Owner: {service.owner}</div>
                 <div className="text-sm">Reviewer: {service.reviewer}</div>
                 <div className="text-sm">Approved by: {service.approvedBy}</div>
@@ -1739,20 +1739,20 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Discussions</h2>
+        <h2 className="text-xl font-bold text-slate-900">Discussions</h2>
         <div className="flex flex-wrap gap-2">
-          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} className="min-h-[44px] px-3 py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-navy-500 outline-none">
             <option value="all">All Categories</option>
             {DATA.categories.map(cat => (<option key={cat.id} value={cat.id}>{cat.label}</option>))}
           </select>
-          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="min-h-[44px] px-3 py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-navy-500 outline-none">
             <option value="all">All Status</option><option value="open">Open</option><option value="solved">Solved</option>
           </select>
-          <select value={filterService} onChange={e => setFilterService(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <select value={filterService} onChange={e => setFilterService(e.target.value)} className="min-h-[44px] px-3 py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-navy-500 outline-none">
             <option value="all">All Services</option>
             {DATA.services.map(s => (<option key={s.id} value={s.id}>{s.name}</option>))}
           </select>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="min-h-[44px] px-3 py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-navy-500 outline-none">
             <option value="latest">Latest</option><option value="replies">Most Replies</option><option value="views">Most Views</option>
           </select>
         </div>
@@ -1760,8 +1760,8 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
       <div className="space-y-2">
         {filtered.map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-gray-500">
-            <FiMessageCircle className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+          <div className="text-center py-12 text-slate-500">
+            <FiMessageCircle className="h-12 w-12 mx-auto mb-3 text-slate-300" />
             <p>No discussions found</p>
           </div>
         )}
@@ -1773,7 +1773,7 @@ const DiscussionsPage = ({ navigateTo, openDiscussion }) => {
 // Discussion Detail Page - expanded related objects
 const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
   const discussion = DATA.discussionDetail;
-  if (!discussion) return <div className="text-center py-12 text-gray-500">Discussion not found</div>;
+  if (!discussion) return <div className="text-center py-12 text-slate-500">Discussion not found</div>;
 
   const typeMap = {
     question: { icon: FiMessageSquare, label: 'Question' },
@@ -1805,16 +1805,16 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
       <div className="flex-1 min-w-0 space-y-4">
         <div>
           <div className="flex flex-wrap items-center gap-2 mb-2">
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium bg-navy-500/10 text-navy-700 px-2.5 py-1 rounded-full">
               <Icon className="h-3 w-3" /> {typeLabel}
             </span>
             <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${discussion.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
               {discussion.solved ? 'Solved' : 'Open'}
             </span>
-            {serviceName && <span className="text-xs font-medium bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full">{serviceName}</span>}
+            {serviceName && <span className="text-xs font-medium bg-navy-500/10 text-navy-700 px-2.5 py-1 rounded-full">{serviceName}</span>}
           </div>
-          <h2 className="text-2xl font-bold text-gray-900">{discussion.title}</h2>
-          <div className="flex flex-wrap gap-4 text-sm text-gray-500 mt-1">
+          <h2 className="text-2xl font-bold text-slate-900">{discussion.title}</h2>
+          <div className="flex flex-wrap gap-4 text-sm text-slate-500 mt-1">
             <span><FiUser className="inline mr-1" /> {discussion.author}</span>
             <span><FiClock className="inline mr-1" /> {discussion.created}</span>
             <span><FiEye className="inline mr-1" /> {discussion.views} views</span>
@@ -1823,50 +1823,50 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
         </div>
 
         {/* CRM Context Bar - expanded */}
-        <div className="flex flex-wrap gap-3 p-3 bg-indigo-50 border border-indigo-100 rounded-xl text-sm text-gray-700">
-          {discussion.customer && <span><FiUser className="inline mr-1.5 text-indigo-500" /> Customer: <strong>{discussion.customer}</strong></span>}
-          {discussion.applicationNumber && <span><FiFile className="inline mr-1.5 text-indigo-500" /> Application: <strong>{discussion.applicationNumber}</strong></span>}
-          {discussion.trackingStatus && <span><FiTarget className="inline mr-1.5 text-indigo-500" /> Status: <strong>{discussion.trackingStatus}</strong></span>}
+        <div className="flex flex-wrap gap-3 p-3 bg-navy-500/10 border border-navy-500/10 rounded-xl text-sm text-slate-700">
+          {discussion.customer && <span><FiUser className="inline mr-1.5 text-navy-500" /> Customer: <strong>{discussion.customer}</strong></span>}
+          {discussion.applicationNumber && <span><FiFile className="inline mr-1.5 text-navy-500" /> Application: <strong>{discussion.applicationNumber}</strong></span>}
+          {discussion.trackingStatus && <span><FiTarget className="inline mr-1.5 text-navy-500" /> Status: <strong>{discussion.trackingStatus}</strong></span>}
           {discussion.relatedServiceEntries && (
-            <span><FiBriefcase className="inline mr-1.5 text-indigo-500" /> Service Entries: <strong>{discussion.relatedServiceEntries.length}</strong></span>
+            <span><FiBriefcase className="inline mr-1.5 text-navy-500" /> Service Entries: <strong>{discussion.relatedServiceEntries.length}</strong></span>
           )}
-          <span className="text-xs text-gray-500">Linked to CRM records</span>
+          <span className="text-xs text-slate-500">Linked to CRM records</span>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-          <div className="text-sm text-gray-800 whitespace-pre-wrap">{discussion.description}</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+          <div className="text-sm text-slate-800 whitespace-pre-wrap">{discussion.description}</div>
           {discussion.attachments && (
             <div className="flex flex-wrap gap-2">
               {discussion.attachments.map((file, idx) => (
-                <span key={idx} className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full flex items-center gap-1">
+                <span key={idx} className="text-xs bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full flex items-center gap-1">
                   <FiPaperclip className="h-3 w-3" /> {file}
                 </span>
               ))}
             </div>
           )}
           <div className="flex flex-wrap gap-1">
-            {discussion.tags.map(t => <span key={t} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">#{t}</span>)}
+            {discussion.tags.map(t => <span key={t} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">#{t}</span>)}
           </div>
         </div>
 
         <div>
-          <h3 className="text-lg font-semibold text-gray-900 mb-3">{discussion.repliesList.length} Replies</h3>
+          <h3 className="text-lg font-semibold text-slate-900 mb-3">{discussion.repliesList.length} Replies</h3>
           <div className="space-y-3">
             {discussion.repliesList.map(reply => (
-              <div key={reply.id} className={`bg-white border rounded-xl p-4 ${reply.best ? 'border-emerald-300 bg-emerald-50' : 'border-gray-200'}`}>
+              <div key={reply.id} className={`bg-white border rounded-xl p-4 ${reply.best ? 'border-emerald-300 bg-emerald-50' : 'border-slate-200'}`}>
                 <div className="flex items-center gap-2 mb-1.5">
-                  <strong className="text-sm text-gray-900">{reply.author}</strong>
-                  <span className="text-xs text-gray-400">{reply.time}</span>
+                  <strong className="text-sm text-slate-900">{reply.author}</strong>
+                  <span className="text-xs text-slate-400">{reply.time}</span>
                   {reply.best && <span className="text-[10px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full flex items-center gap-1"><FiCheckCircle className="h-3 w-3" /> Best Answer</span>}
                 </div>
-                <div className="text-sm text-gray-700">{reply.content}</div>
+                <div className="text-sm text-slate-700">{reply.content}</div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <h4 className="text-sm font-semibold text-gray-900 mb-2">Write a reply...</h4>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <h4 className="text-sm font-semibold text-slate-900 mb-2">Write a reply...</h4>
           <MentionsInput
             placeholder="Write your reply... Supports Markdown"
             className="w-full"
@@ -1880,94 +1880,94 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             <Mention trigger="@" data={STAFF_SUGGESTIONS} markup="@[__display__](__id__)" displayTransform={(id, display) => `@${display}`} />
           </MentionsInput>
           <div className="flex justify-end gap-2 mt-3">
-            <button className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium hover:bg-gray-50 transition">Cancel</button>
-            <button className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition">Post Reply</button>
+            <button className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-50 transition">Cancel</button>
+            <button className="px-4 py-2 bg-navy-700 text-white rounded-lg text-sm font-medium hover:bg-navy-700 transition">Post Reply</button>
           </div>
         </div>
       </div>
 
       <div className="w-full lg:w-64 flex-shrink-0 space-y-4">
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Discussion Details</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Discussion Details</div>
           <div className="space-y-1 text-sm">
-            <div className="flex justify-between"><span className="text-gray-500">Status</span><span className="font-medium text-gray-900">{discussion.status}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Priority</span><span className="font-medium text-gray-900">{discussion.priority}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Category</span><span className="font-medium text-gray-900">{discussion.category}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Service</span><span className="font-medium text-gray-900">{serviceName || 'None'}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Created</span><span className="font-medium text-gray-900">{discussion.author}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Views</span><span className="font-medium text-gray-900">{discussion.views}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Replies</span><span className="font-medium text-gray-900">{discussion.replies}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">Followers</span><span className="font-medium text-gray-900">{discussion.followers}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Status</span><span className="font-medium text-slate-900">{discussion.status}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Priority</span><span className="font-medium text-slate-900">{discussion.priority}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Category</span><span className="font-medium text-slate-900">{discussion.category}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Service</span><span className="font-medium text-slate-900">{serviceName || 'None'}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Created</span><span className="font-medium text-slate-900">{discussion.author}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Views</span><span className="font-medium text-slate-900">{discussion.views}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Replies</span><span className="font-medium text-slate-900">{discussion.replies}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Followers</span><span className="font-medium text-slate-900">{discussion.followers}</span></div>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Actions</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Actions</div>
           <div className="space-y-1.5">
-            <button className="w-full flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-50 px-2 py-1.5 rounded-lg transition" onClick={() => toast.info('Bookmarked')}>
+            <button className="w-full flex items-center gap-2 text-sm text-slate-700 hover:bg-slate-50 px-2 py-1.5 rounded-lg transition" onClick={() => toast.info('Bookmarked')}>
               <FiBookmark className="h-4 w-4" /> Bookmark
             </button>
-            <button className="w-full flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-50 px-2 py-1.5 rounded-lg transition" onClick={() => toast.info('Watching')}>
+            <button className="w-full flex items-center gap-2 text-sm text-slate-700 hover:bg-slate-50 px-2 py-1.5 rounded-lg transition" onClick={() => toast.info('Watching')}>
               <FiEye className="h-4 w-4" /> Watch
             </button>
-            <button className="w-full flex items-center gap-2 text-sm text-gray-700 hover:bg-gray-50 px-2 py-1.5 rounded-lg transition" onClick={() => toast.info('Shared')}>
+            <button className="w-full flex items-center gap-2 text-sm text-slate-700 hover:bg-slate-50 px-2 py-1.5 rounded-lg transition" onClick={() => toast.info('Shared')}>
               <FiShare2 className="h-4 w-4" /> Share
             </button>
             <ConvertDropdown onConvert={handleConvert} />
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Tags</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Tags</div>
           <div className="flex flex-wrap gap-1">
-            {discussion.tags.map(t => <span key={t} className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">#{t}</span>)}
+            {discussion.tags.map(t => <span key={t} className="text-xs bg-slate-100 text-slate-600 px-2 py-0.5 rounded">#{t}</span>)}
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">People</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">People</div>
           <div className="flex flex-wrap gap-2">
-            <div className="flex items-center gap-1.5 text-xs bg-gray-100 px-2 py-1 rounded-full"><span className="w-5 h-5 rounded-full bg-indigo-500 text-white flex items-center justify-center text-[9px] font-bold">A</span> Admin</div>
-            <div className="flex items-center gap-1.5 text-xs bg-gray-100 px-2 py-1 rounded-full"><span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold">S</span> Sneha M</div>
-            <div className="flex items-center gap-1.5 text-xs bg-gray-100 px-2 py-1 rounded-full"><span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[9px] font-bold">R</span> Rahul K</div>
+            <div className="flex items-center gap-1.5 text-xs bg-slate-100 px-2 py-1 rounded-full"><span className="w-5 h-5 rounded-full bg-navy-500 text-white flex items-center justify-center text-[9px] font-bold">A</span> Admin</div>
+            <div className="flex items-center gap-1.5 text-xs bg-slate-100 px-2 py-1 rounded-full"><span className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold">S</span> Sneha M</div>
+            <div className="flex items-center gap-1.5 text-xs bg-slate-100 px-2 py-1 rounded-full"><span className="w-5 h-5 rounded-full bg-amber-500 text-white flex items-center justify-center text-[9px] font-bold">R</span> Rahul K</div>
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-4">
-          <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Similar Discussions</div>
+        <div className="bg-white border border-slate-200 rounded-xl p-4">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Similar Discussions</div>
           {discussion.similar.map((s, idx) => (
-            <div key={idx} className="py-1.5 border-b border-gray-100 last:border-0 cursor-pointer hover:text-indigo-600 transition" onClick={() => navigateTo('discussions')}>
-              <div className="text-sm text-gray-800">{s.title}</div>
-              <div className="text-xs text-gray-400">{s.replies} replies</div>
+            <div key={idx} className="py-1.5 border-b border-slate-100 last:border-0 cursor-pointer hover:text-navy-700 transition" onClick={() => navigateTo('discussions')}>
+              <div className="text-sm text-slate-800">{s.title}</div>
+              <div className="text-xs text-slate-400">{s.replies} replies</div>
             </div>
           ))}
         </div>
 
         {/* Related Content */}
         {discussion.relatedContent && (
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">Related Content</div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">Related Content</div>
             {discussion.relatedContent.articles && discussion.relatedContent.articles.length > 0 && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Articles</div>
+                <div className="text-xs font-medium text-slate-600">Articles</div>
                 {discussion.relatedContent.articles.map(a => (
-                  <div key={a.id} className="text-sm text-indigo-600 hover:underline cursor-pointer" onClick={() => navigateTo('knowledge')}>{a.title}</div>
+                  <div key={a.id} className="text-sm text-navy-700 hover:underline cursor-pointer" onClick={() => navigateTo('knowledge')}>{a.title}</div>
                 ))}
               </div>
             )}
             {discussion.relatedContent.trainings && discussion.relatedContent.trainings.length > 0 && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Trainings</div>
+                <div className="text-xs font-medium text-slate-600">Trainings</div>
                 {discussion.relatedContent.trainings.map(t => (
-                  <div key={t.id} className="text-sm text-indigo-600 hover:underline cursor-pointer" onClick={() => navigateTo('learning')}>{t.title}</div>
+                  <div key={t.id} className="text-sm text-navy-700 hover:underline cursor-pointer" onClick={() => navigateTo('learning')}>{t.title}</div>
                 ))}
               </div>
             )}
             {discussion.relatedContent.announcements && discussion.relatedContent.announcements.length > 0 && (
               <div>
-                <div className="text-xs font-medium text-gray-600">Announcements</div>
+                <div className="text-xs font-medium text-slate-600">Announcements</div>
                 {discussion.relatedContent.announcements.map(a => (
-                  <div key={a.id} className="text-sm text-indigo-600 hover:underline cursor-pointer" onClick={() => navigateTo('announcements')}>{a.title}</div>
+                  <div key={a.id} className="text-sm text-navy-700 hover:underline cursor-pointer" onClick={() => navigateTo('announcements')}>{a.title}</div>
                 ))}
               </div>
             )}
@@ -1976,17 +1976,17 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
 
         {/* Expanded Related Objects */}
         {discussion.relatedObjects && (
-          <div className="bg-white border border-gray-200 rounded-xl p-4">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mb-2">CRM Links</div>
+          <div className="bg-white border border-slate-200 rounded-xl p-4">
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">CRM Links</div>
             {discussion.relatedObjects.customer && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Customer</div>
+                <div className="text-xs font-medium text-slate-600">Customer</div>
                 <div className="text-sm">{discussion.relatedObjects.customer.name} ({discussion.relatedObjects.customer.phone})</div>
               </div>
             )}
             {discussion.relatedObjects.serviceEntries && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Service Entries</div>
+                <div className="text-xs font-medium text-slate-600">Service Entries</div>
                 {discussion.relatedObjects.serviceEntries.map(se => (
                   <div key={se.id} className="text-sm">{se.service} - {se.status}</div>
                 ))}
@@ -1994,13 +1994,13 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             )}
             {discussion.relatedObjects.tracking && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Tracking</div>
+                <div className="text-xs font-medium text-slate-600">Tracking</div>
                 <div className="text-sm">{discussion.relatedObjects.tracking.currentStage} (updated {discussion.relatedObjects.tracking.lastUpdated})</div>
               </div>
             )}
             {discussion.relatedObjects.notes && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Notes</div>
+                <div className="text-xs font-medium text-slate-600">Notes</div>
                 {discussion.relatedObjects.notes.map(n => (
                   <div key={n.id} className="text-sm">{n.content} - {n.author}</div>
                 ))}
@@ -2008,13 +2008,13 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             )}
             {discussion.relatedObjects.messenger && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Messenger</div>
+                <div className="text-xs font-medium text-slate-600">Messenger</div>
                 <div className="text-sm">Thread: {discussion.relatedObjects.messenger.threadId} (last: {discussion.relatedObjects.messenger.lastMessage})</div>
               </div>
             )}
             {discussion.relatedObjects.tasks && (
               <div className="mb-2">
-                <div className="text-xs font-medium text-gray-600">Tasks</div>
+                <div className="text-xs font-medium text-slate-600">Tasks</div>
                 {discussion.relatedObjects.tasks.map(t => (
                   <div key={t.id} className="text-sm">{t.title} - {t.status} (due {t.due})</div>
                 ))}
@@ -2022,7 +2022,7 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
             )}
             {discussion.relatedObjects.attachments && (
               <div>
-                <div className="text-xs font-medium text-gray-600">Attachments</div>
+                <div className="text-xs font-medium text-slate-600">Attachments</div>
                 {discussion.relatedObjects.attachments.map(a => (
                   <div key={a.name} className="text-sm">{a.name} ({a.size})</div>
                 ))}
@@ -2039,20 +2039,20 @@ const DiscussionDetailPage = ({ discussionId, navigateTo }) => {
 const LearningPage = ({ navigateTo }) => {
   return (
     <div>
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Learning Center</h2>
+      <h2 className="text-xl font-bold text-slate-900 mb-4">Learning Center</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {DATA.services.map(service => {
           const materials = DATA.training.filter(t => t.service === service.id);
           return (
-            <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition" onClick={() => navigateTo('learning')}>
-              <div className="font-semibold text-gray-900 mb-2">{service.name}</div>
+            <div key={service.id} className="bg-white border border-slate-200 rounded-xl p-4 cursor-pointer hover:shadow-md transition" onClick={() => navigateTo('learning')}>
+              <div className="font-semibold text-slate-900 mb-2">{service.name}</div>
               {materials.length > 0 ? materials.map(m => (
-                <div key={m.id} className="flex items-center gap-2 text-sm py-1 border-b border-gray-50 last:border-0">
+                <div key={m.id} className="flex items-center gap-2 text-sm py-1 border-b border-slate-50 last:border-0">
                   <span className="text-lg">{m.type.includes('Video') ? '🎬' : m.type.includes('PDF') ? '📄' : '📚'}</span>
-                  <span className="flex-1 text-gray-700">{m.title}</span>
-                  <span className="text-xs text-gray-400">{m.duration}</span>
+                  <span className="flex-1 text-slate-700">{m.title}</span>
+                  <span className="text-xs text-slate-400">{m.duration}</span>
                 </div>
-              )) : <div className="text-sm text-gray-400 py-2">No materials yet</div>}
+              )) : <div className="text-sm text-slate-400 py-2">No materials yet</div>}
             </div>
           );
         })}
@@ -2068,8 +2068,8 @@ const AnnouncementsPage = ({ navigateTo }) => {
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Announcements</h2>
-        <select value={filter} onChange={e => setFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
+        <h2 className="text-xl font-bold text-slate-900">Announcements</h2>
+        <select value={filter} onChange={e => setFilter(e.target.value)} className="min-h-[44px] px-3 py-1.5 border border-slate-300 rounded-lg text-base sm:text-sm focus:ring-2 focus:ring-navy-500 outline-none">
           <option value="all">All</option>
           <option value="government">Government</option>
           <option value="centre">Centre</option>
@@ -2077,7 +2077,7 @@ const AnnouncementsPage = ({ navigateTo }) => {
           <option value="training">Training</option>
         </select>
       </div>
-      <div className="bg-white border border-gray-200 rounded-xl p-4">
+      <div className="bg-white border border-slate-200 rounded-xl p-4">
         {filtered.map((a, idx) => <AnnouncementItem key={idx} announcement={a} onClick={() => navigateTo('announcements')} />)}
       </div>
     </div>
@@ -2087,15 +2087,15 @@ const AnnouncementsPage = ({ navigateTo }) => {
 // Tags Page (unchanged)
 const TagsPage = ({ navigateTo, handleTagClick }) => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">All Tags</h2>
+    <h2 className="text-xl font-bold text-slate-900 mb-4">All Tags</h2>
     <div className="flex flex-wrap gap-2 mb-6">
       {DATA.allTags.map(tag => (
-        <span key={tag.name} className="px-3 py-1.5 bg-gray-100 hover:bg-indigo-50 hover:text-indigo-600 border border-transparent hover:border-indigo-200 rounded-full text-sm font-medium text-gray-700 cursor-pointer transition-all" onClick={() => handleTagClick(tag.name)}>
-          {tag.name} <span className="text-gray-400 font-normal ml-1">{tag.count}</span>
+        <span key={tag.name} className="px-3 py-1.5 bg-slate-100 hover:bg-navy-500/10 hover:text-navy-700 border border-transparent hover:border-navy-500/20 rounded-full text-sm font-medium text-slate-700 cursor-pointer transition-all" onClick={() => handleTagClick(tag.name)}>
+          {tag.name} <span className="text-slate-400 font-normal ml-1">{tag.count}</span>
         </span>
       ))}
     </div>
-    <h3 className="text-lg font-semibold text-gray-900 mb-3">Discussions by Tag</h3>
+    <h3 className="text-lg font-semibold text-slate-900 mb-3">Discussions by Tag</h3>
     <div className="space-y-2">
       {DATA.discussions.slice(0, 3).map(d => <DiscussionCard key={d.id} discussion={d} onClick={() => navigateTo('discussions')} />)}
     </div>
@@ -2105,16 +2105,16 @@ const TagsPage = ({ navigateTo, handleTagClick }) => (
 // My Workspace Pages (unchanged)
 const MentionsPage = ({ navigateTo }) => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">Mentions</h2>
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+    <h2 className="text-xl font-bold text-slate-900 mb-4">Mentions</h2>
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
       {DATA.myMentions.map((m, idx) => (
-        <div key={idx} className="p-2 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 transition cursor-pointer" onClick={() => navigateTo('discussions')}>
+        <div key={idx} className="p-2 bg-white border border-slate-200 rounded-xl hover:border-navy-500/20 transition cursor-pointer" onClick={() => navigateTo('discussions')}>
           <div className="flex gap-2">
-            <div className="w-6 h-6 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center"><FiAtSign className="h-4 w-4" /></div>
+            <div className="w-6 h-6 rounded-lg bg-navy-500/10 text-navy-700 flex items-center justify-center"><FiAtSign className="h-4 w-4" /></div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-900">{m.title}</div>
-              <div className="text-xs text-gray-500 line-clamp-1">{m.excerpt}</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">{m.time}</div>
+              <div className="text-sm font-medium text-slate-900">{m.title}</div>
+              <div className="text-xs text-slate-500 line-clamp-1">{m.excerpt}</div>
+              <div className="text-[10px] text-slate-400 mt-0.5">{m.time}</div>
             </div>
           </div>
         </div>
@@ -2125,16 +2125,16 @@ const MentionsPage = ({ navigateTo }) => (
 
 const DraftsPage = ({ navigateTo }) => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">My Drafts</h2>
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-2">
+    <h2 className="text-xl font-bold text-slate-900 mb-4">My Drafts</h2>
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-2">
       {DATA.drafts.map((d, idx) => (
-        <div key={idx} className="p-2 bg-white border border-gray-200 rounded-xl opacity-80">
+        <div key={idx} className="p-2 bg-white border border-slate-200 rounded-xl opacity-80">
           <div className="flex gap-2">
-            <div className="w-6 h-6 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center"><FiFile className="h-4 w-4" /></div>
+            <div className="w-6 h-6 rounded-lg bg-slate-100 text-slate-500 flex items-center justify-center"><FiFile className="h-4 w-4" /></div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium text-gray-900">{d.title}</div>
-              <div className="text-[10px] text-gray-400">Updated {d.updated}</div>
-              <button className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mt-0.5" onClick={() => navigateTo('discussions')}>Continue editing →</button>
+              <div className="text-sm font-medium text-slate-900">{d.title}</div>
+              <div className="text-[10px] text-slate-400">Updated {d.updated}</div>
+              <button className="text-xs text-navy-700 hover:text-navy-700 font-medium mt-0.5" onClick={() => navigateTo('discussions')}>Continue editing →</button>
             </div>
           </div>
         </div>
@@ -2145,9 +2145,9 @@ const DraftsPage = ({ navigateTo }) => (
 
 const BookmarksPage = () => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">Bookmarks</h2>
-    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
-      <FiBookmark className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+    <h2 className="text-xl font-bold text-slate-900 mb-4">Bookmarks</h2>
+    <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
+      <FiBookmark className="h-12 w-12 mx-auto mb-3 text-slate-300" />
       <p>You haven't bookmarked any discussions yet.</p>
     </div>
   </div>
@@ -2155,9 +2155,9 @@ const BookmarksPage = () => (
 
 const FollowingPage = () => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">Following</h2>
-    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
-      <FiUserPlus className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+    <h2 className="text-xl font-bold text-slate-900 mb-4">Following</h2>
+    <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
+      <FiUserPlus className="h-12 w-12 mx-auto mb-3 text-slate-300" />
       <p>You aren't following any discussions yet.</p>
     </div>
   </div>
@@ -2165,9 +2165,9 @@ const FollowingPage = () => (
 
 const HistoryPage = () => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">History</h2>
-    <div className="bg-white border border-gray-200 rounded-xl p-8 text-center text-gray-500">
-      <FiClock className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+    <h2 className="text-xl font-bold text-slate-900 mb-4">History</h2>
+    <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-slate-500">
+      <FiClock className="h-12 w-12 mx-auto mb-3 text-slate-300" />
       <p>No recent history.</p>
     </div>
   </div>
@@ -2175,27 +2175,27 @@ const HistoryPage = () => (
 
 const NotificationsPage = () => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">Notifications</h2>
-    <div className="bg-white border border-gray-200 rounded-xl p-4 space-y-3">
-      <div className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition">
-        <div className="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><FiMessageSquare className="h-4 w-4" /></div>
+    <h2 className="text-xl font-bold text-slate-900 mb-4">Notifications</h2>
+    <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3">
+      <div className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg transition">
+        <div className="w-8 h-8 rounded-lg bg-navy-500/10 text-navy-700 flex items-center justify-center"><FiMessageSquare className="h-4 w-4" /></div>
         <div className="flex-1">
-          <p className="text-sm text-gray-700"><strong>Sneha M</strong> replied to <span className="text-indigo-600 font-medium">Passport Police Verification Delay</span></p>
-          <span className="text-xs text-gray-400">2 hours ago</span>
+          <p className="text-sm text-slate-700"><strong>Sneha M</strong> replied to <span className="text-navy-700 font-medium">Passport Police Verification Delay</span></p>
+          <span className="text-xs text-slate-400">2 hours ago</span>
         </div>
       </div>
-      <div className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition">
+      <div className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg transition">
         <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><FiCheckCircle className="h-4 w-4" /></div>
         <div className="flex-1">
-          <p className="text-sm text-gray-700"><span className="text-indigo-600 font-medium">Income Certificate Rejected</span> was marked as solved</p>
-          <span className="text-xs text-gray-400">Yesterday</span>
+          <p className="text-sm text-slate-700"><span className="text-navy-700 font-medium">Income Certificate Rejected</span> was marked as solved</p>
+          <span className="text-xs text-slate-400">Yesterday</span>
         </div>
       </div>
-      <div className="flex items-start gap-3 p-2 hover:bg-gray-50 rounded-lg transition">
+      <div className="flex items-start gap-3 p-2 hover:bg-slate-50 rounded-lg transition">
         <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><FiBell className="h-4 w-4" /></div>
         <div className="flex-1">
-          <p className="text-sm text-gray-700">New announcement: <span className="text-indigo-600 font-medium">Office Closed on 26th Jan</span></p>
-          <span className="text-xs text-gray-400">2 days ago</span>
+          <p className="text-sm text-slate-700">New announcement: <span className="text-navy-700 font-medium">Office Closed on 26th Jan</span></p>
+          <span className="text-xs text-slate-400">2 days ago</span>
         </div>
       </div>
     </div>
@@ -2233,16 +2233,16 @@ const AIAssistantPage = ({ navigateTo, aiQuery, setAiQuery }) => {
 
   return (
     <div className="flex flex-col h-full">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Akshaya Assistant</h2>
-      <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 overflow-y-auto mb-4" style={{ maxHeight: '60vh' }}>
+      <h2 className="text-xl font-bold text-slate-900 mb-4">Akshaya Assistant</h2>
+      <div className="flex-1 bg-white border border-slate-200 rounded-xl p-4 overflow-y-auto mb-4" style={{ maxHeight: '60vh' }}>
         {messages.map((msg, idx) => (
           <div key={idx} className={`mb-3 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
-            <div className={`inline-block p-3 rounded-xl max-w-xl ${msg.role === 'user' ? 'bg-indigo-100 text-gray-800' : 'bg-gray-100 text-gray-800'}`}>
+            <div className={`inline-block p-3 rounded-xl max-w-xl ${msg.role === 'user' ? 'bg-navy-500/10 text-slate-800' : 'bg-slate-100 text-slate-800'}`}>
               <div className="text-sm">{msg.content}</div>
             </div>
           </div>
         ))}
-        {loading && <div className="text-sm text-gray-400">Thinking...</div>}
+        {loading && <div className="text-sm text-slate-400">Thinking...</div>}
       </div>
       <div className="flex gap-2">
         <input
@@ -2251,11 +2251,11 @@ const AIAssistantPage = ({ navigateTo, aiQuery, setAiQuery }) => {
           onChange={e => setInput(e.target.value)}
           onKeyPress={e => e.key === 'Enter' && handleSend()}
           placeholder="Ask a question..."
-          className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+          className="min-h-[44px] flex-1 px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-navy-500 outline-none text-base sm:text-sm"
         />
-        <button onClick={handleSend} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">Send</button>
+        <button onClick={handleSend} className="px-4 py-2 bg-navy-700 text-white rounded-lg hover:bg-navy-700 transition">Send</button>
       </div>
-      <div className="mt-4 text-xs text-gray-400">History: {DATA.aiAssistantHistory.map(h => `${h.query} (${h.timestamp})`).join(' | ')}</div>
+      <div className="mt-4 text-xs text-slate-400">History: {DATA.aiAssistantHistory.map(h => `${h.query} (${h.timestamp})`).join(' | ')}</div>
     </div>
   );
 };
@@ -2282,15 +2282,15 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
   return (
     <div>
       <div className="mb-4">
-        <h2 className="text-xl font-bold text-gray-900">Search: "{query}"</h2>
-        <p className="text-sm text-gray-500">{discussionResults.length + articleResults.length + serviceResults.length + caseResults.length} results found</p>
+        <h2 className="text-xl font-bold text-slate-900">Search: "{query}"</h2>
+        <p className="text-sm text-slate-500">{discussionResults.length + articleResults.length + serviceResults.length + caseResults.length} results found</p>
       </div>
       {showAIAnswer && (
-        <div className="bg-indigo-50 border border-indigo-200 rounded-xl p-4 mb-4">
-          <div className="flex items-center gap-2 text-indigo-700 font-semibold mb-1">
+        <div className="bg-navy-500/10 border border-navy-500/20 rounded-xl p-4 mb-4">
+          <div className="flex items-center gap-2 text-navy-700 font-semibold mb-1">
             <FiZap className="h-5 w-5" /> AI Answer
           </div>
-          <p className="text-sm text-gray-700">
+          <p className="text-sm text-slate-700">
             Based on your query, here's a summary: {query.toLowerCase().includes('aadhaar') ? 'You can correct Aadhaar DOB by visiting the enrolment centre with valid proof (birth certificate, school certificate). Online updates are also available via UIDAI portal.' :
             query.toLowerCase().includes('passport') ? 'Passport police verification usually takes 7-15 days. For delays, contact the DCP office or file a grievance on CPGRAMS.' :
             'Please refine your query for more specific guidance.'}
@@ -2299,15 +2299,15 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
       )}
       {serviceResults.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Services</h3>
+          <h3 className="text-sm font-semibold text-slate-900 mb-2">Services</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {serviceResults.map(s => (
-              <div key={s.id} className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 cursor-pointer" onClick={() => navigateTo('service-detail', s.id)}>
+              <div key={s.id} className="p-3 bg-white border border-slate-200 rounded-xl hover:border-navy-500/20 cursor-pointer" onClick={() => navigateTo('service-detail', s.id)}>
                 <div className="flex items-center gap-2">
-                  <s.icon className="h-5 w-5 text-indigo-500" />
-                  <span className="font-medium text-gray-900">{s.name}</span>
+                  <s.icon className="h-5 w-5 text-navy-500" />
+                  <span className="font-medium text-slate-900">{s.name}</span>
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">{s.description}</p>
+                <p className="text-xs text-slate-500 mt-0.5">{s.description}</p>
               </div>
             ))}
           </div>
@@ -2315,7 +2315,7 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
       )}
       {discussionResults.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Discussions</h3>
+          <h3 className="text-sm font-semibold text-slate-900 mb-2">Discussions</h3>
           <div className="space-y-2">
             {discussionResults.map(d => <DiscussionCard key={d.id} discussion={d} onClick={openDiscussion} />)}
           </div>
@@ -2323,7 +2323,7 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
       )}
       {articleResults.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Knowledge Articles</h3>
+          <h3 className="text-sm font-semibold text-slate-900 mb-2">Knowledge Articles</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {articleResults.map(a => <ArticleCard key={a.id} article={a} onClick={() => navigateTo('knowledge')} />)}
           </div>
@@ -2331,22 +2331,22 @@ const SearchPage = ({ query, navigateTo, openDiscussion, showAIAnswer }) => {
       )}
       {caseResults.length > 0 && (
         <div className="mb-4">
-          <h3 className="text-sm font-semibold text-gray-900 mb-2">Solved Cases</h3>
+          <h3 className="text-sm font-semibold text-slate-900 mb-2">Solved Cases</h3>
           <div className="space-y-2">
             {caseResults.map(c => (
-              <div key={c.id} className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200">
-                <div className="font-medium text-gray-900">{c.title}</div>
-                <div className="text-xs text-gray-500">{c.description}</div>
-                <div className="text-xs text-gray-400 mt-1">Solved by {c.solvedBy} on {c.solvedDate}</div>
-                <button className="text-xs text-indigo-600 hover:underline" onClick={() => navigateTo('discussion-detail', c.linkedDiscussion)}>View Discussion</button>
+              <div key={c.id} className="p-3 bg-white border border-slate-200 rounded-xl hover:border-navy-500/20">
+                <div className="font-medium text-slate-900">{c.title}</div>
+                <div className="text-xs text-slate-500">{c.description}</div>
+                <div className="text-xs text-slate-400 mt-1">Solved by {c.solvedBy} on {c.solvedDate}</div>
+                <button className="text-xs text-navy-700 hover:underline" onClick={() => navigateTo('discussion-detail', c.linkedDiscussion)}>View Discussion</button>
               </div>
             ))}
           </div>
         </div>
       )}
       {discussionResults.length === 0 && articleResults.length === 0 && serviceResults.length === 0 && caseResults.length === 0 && (
-        <div className="text-center py-12 text-gray-500">
-          <FiSearch className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+        <div className="text-center py-12 text-slate-500">
+          <FiSearch className="h-12 w-12 mx-auto mb-3 text-slate-300" />
           <p>No results found. Try adjusting your search terms.</p>
         </div>
       )}

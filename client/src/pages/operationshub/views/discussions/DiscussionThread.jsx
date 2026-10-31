@@ -14,7 +14,7 @@ const API_URL = import.meta.env.VITE_API_URL || '';
 // --- UI HELPERS ---
 const Avatar = ({ name, size = "md" }) => {
   const initials = name ? name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() : 'U';
-  const colors = ['bg-blue-500', 'bg-emerald-500', 'bg-purple-500', 'bg-amber-500', 'bg-rose-500', 'bg-indigo-500'];
+  const colors = ['bg-navy-500', 'bg-emerald-500', 'bg-navy-500', 'bg-amber-500', 'bg-rose-500', 'bg-navy-500'];
   const colorIndex = name ? name.length % colors.length : 0;
   const sizeClasses = { sm: "w-8 h-8 text-xs", md: "w-10 h-10 text-sm", lg: "w-12 h-12 text-base" };
 
@@ -31,7 +31,7 @@ const ReactionPill = ({ emoji, count, active, onClick }) => {
     <button 
       onClick={onClick}
       className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors ${
-        active ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+        active ? 'bg-navy-500/10 border-navy-500/20 text-navy-700' : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
       }`}
     >
       <span>{emoji}</span> <span>{count}</span>
@@ -45,7 +45,7 @@ const formatContent = (text) => {
   return parts.map((part, idx) => {
     const match = part.match(/@\[(.*?)\]\((\d+)\)/);
     if (match) {
-      return <span key={idx} className="font-bold text-indigo-600 bg-indigo-50 px-1 rounded cursor-pointer hover:underline">@{match[1]}</span>;
+      return <span key={idx} className="font-bold text-navy-700 bg-navy-500/10 px-1 rounded cursor-pointer hover:underline">@{match[1]}</span>;
     }
     return <span key={idx}>{part}</span>;
   });
@@ -289,10 +289,10 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   if (!discussion) return null;
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
       
-      <div className="px-6 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
-        <button onClick={onBack} className="flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-indigo-600 transition">
+      <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between sticky top-0 z-10 backdrop-blur-md">
+        <button onClick={onBack} className="flex items-center gap-2 text-sm font-medium text-slate-500 hover:text-navy-700 transition">
           <FiArrowLeft /> Back
         </button>
         <div className="flex items-center gap-2">
@@ -317,65 +317,65 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
           <div className="relative" ref={shareMenuRef}>
             <button 
               onClick={() => setShowShareMenu(!showShareMenu)}
-              className={`p-2 rounded-full transition ${showShareMenu ? 'bg-indigo-50 text-indigo-600' : 'text-gray-400 hover:bg-gray-100'}`}
+              className={`p-2 rounded-full transition ${showShareMenu ? 'bg-navy-500/10 text-navy-700' : 'text-slate-400 hover:bg-slate-100'}`}
               title="Share Discussion"
             >
               <FiShare2 className="h-5 w-5" />
             </button>
             
             {showShareMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-white border border-gray-200 rounded-xl shadow-lg z-50 py-1.5 animate-in fade-in slide-in-from-top-2">
-                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-gray-400">Share options</div>
-                <button onClick={handleShareToMessenger} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-blue-50 hover:text-blue-700 flex items-center gap-2.5 transition">
+              <div className="absolute right-0 mt-2 w-56 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1.5 animate-in fade-in slide-in-from-top-2">
+                <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Share options</div>
+                <button onClick={handleShareToMessenger} className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-navy-500/10 hover:text-navy-700 flex items-center gap-2.5 transition">
                   <FiMessageCircle className="h-4 w-4" /> Send in Messenger
                 </button>
-                <button onClick={handleCopyLink} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-2.5 transition">
-                  <FiLink className="h-4 w-4 text-gray-400" /> Copy Link
+                <button onClick={handleCopyLink} className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-2.5 transition">
+                  <FiLink className="h-4 w-4 text-slate-400" /> Copy Link
                 </button>
-                <button onClick={handleShareViaEmail} className="w-full text-left px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:text-gray-900 flex items-center gap-2.5 transition">
-                  <FiMail className="h-4 w-4 text-gray-400" /> Send via Email
+                <button onClick={handleShareViaEmail} className="w-full text-left px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-2.5 transition">
+                  <FiMail className="h-4 w-4 text-slate-400" /> Send via Email
                 </button>
               </div>
             )}
           </div>
 
-          <button className="p-2 text-gray-400 hover:bg-gray-100 rounded-full transition"><FiMoreHorizontal className="h-5 w-5" /></button>
+          <button className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition"><FiMoreHorizontal className="h-5 w-5" /></button>
         </div>
       </div>
 
       <div className="p-6 flex gap-4">
         <div className="flex flex-col items-center">
           <Avatar name={discussion.author} size="lg" />
-          <div className="w-0.5 h-full bg-gray-100 my-2 rounded-full"></div>
+          <div className="w-0.5 h-full bg-slate-100 my-2 rounded-full"></div>
         </div>
 
         <div className="flex-1 min-w-0">
           <div className="flex items-baseline gap-2 mb-1">
-            <h3 className="text-sm font-bold text-gray-900">{discussion.author}</h3>
-            <span className="text-xs text-gray-500">· {formatDate(discussion.created_at || discussion.time)}</span>
+            <h3 className="text-sm font-bold text-slate-900">{discussion.author}</h3>
+            <span className="text-xs text-slate-500">· {formatDate(discussion.created_at || discussion.time)}</span>
           </div>
 
-          <h1 className="text-xl font-bold text-gray-900 mb-2 leading-snug">{discussion.title}</h1>
+          <h1 className="text-xl font-bold text-slate-900 mb-2 leading-snug">{discussion.title}</h1>
           
           {discussion.tags && discussion.tags.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-4">
               {discussion.tags.map(tag => (
-                <span key={tag} className="bg-indigo-50 text-indigo-600 text-[11px] font-semibold px-2 py-0.5 rounded-md">#{tag}</span>
+                <span key={tag} className="bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-md">#{tag}</span>
               ))}
             </div>
           )}
 
-          <div className="text-gray-800 text-sm whitespace-pre-wrap leading-relaxed">
+          <div className="text-slate-800 text-sm whitespace-pre-wrap leading-relaxed">
             {formatContent(discussion.description || discussion.content)}
           </div>
 
           {discussion.attachments && discussion.attachments.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
               {discussion.attachments.map((img, idx) => (
-                <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 group bg-gray-100 aspect-video">
+                <div key={idx} className="relative rounded-xl overflow-hidden border border-slate-200 group bg-slate-100 aspect-video">
                   <img src={getImageUrl(img.url)} alt="attachment" className="w-full h-full object-cover" />
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button className="bg-white/90 text-gray-900 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm" onClick={() => window.open(getImageUrl(img.url), '_blank')}>
+                    <button className="bg-white/90 text-slate-900 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm" onClick={() => window.open(getImageUrl(img.url), '_blank')}>
                       View Full Image
                     </button>
                   </div>
@@ -385,14 +385,14 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
           )}
 
           <div className="flex items-center flex-wrap gap-3 mt-5 relative">
-            <div className="flex items-center bg-gray-50 border border-gray-200 rounded-lg overflow-hidden">
-              <button onClick={() => handleVote('discussion', discussion.id, 1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === 1 ? 'text-emerald-600 bg-emerald-50' : 'text-gray-400 hover:bg-gray-200'}`}>
+            <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg overflow-hidden">
+              <button onClick={() => handleVote('discussion', discussion.id, 1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === 1 ? 'text-emerald-600 bg-emerald-50' : 'text-slate-400 hover:bg-slate-200'}`}>
                 <FiArrowUp className="h-4 w-4" />
               </button>
-              <span className={`text-xs font-bold px-2 ${localVotes.discussion.userVote === 1 ? 'text-emerald-600' : localVotes.discussion.userVote === -1 ? 'text-red-600' : 'text-gray-700'}`}>
+              <span className={`text-xs font-bold px-2 ${localVotes.discussion.userVote === 1 ? 'text-emerald-600' : localVotes.discussion.userVote === -1 ? 'text-rose-600' : 'text-slate-700'}`}>
                 {localVotes.discussion.total}
               </span>
-              <button onClick={() => handleVote('discussion', discussion.id, -1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === -1 ? 'text-red-600 bg-red-50' : 'text-gray-400 hover:bg-gray-200'}`}>
+              <button onClick={() => handleVote('discussion', discussion.id, -1)} className={`px-2 py-1.5 transition ${localVotes.discussion.userVote === -1 ? 'text-rose-600 bg-rose-50' : 'text-slate-400 hover:bg-slate-200'}`}>
                 <FiArrowDown className="h-4 w-4" />
               </button>
             </div>
@@ -402,13 +402,13 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             ))}
             
             <div className="relative">
-              <button onClick={() => setShowEmojiPicker(showEmojiPicker === discussion.id ? null : discussion.id)} className="p-1.5 text-gray-400 border border-transparent hover:border-gray-200 hover:bg-gray-50 rounded-lg transition">
+              <button onClick={() => setShowEmojiPicker(showEmojiPicker === discussion.id ? null : discussion.id)} className="p-1.5 text-slate-400 border border-transparent hover:border-slate-200 hover:bg-slate-50 rounded-lg transition">
                 <FiSmile className="h-4 w-4"/>
               </button>
               {showEmojiPicker === discussion.id && (
-                <div className="absolute left-0 bottom-full mb-2 bg-white border border-gray-200 shadow-xl rounded-xl p-2 flex gap-1 z-50">
+                <div className="absolute left-0 bottom-full mb-2 bg-white border border-slate-200 shadow-xl rounded-xl p-2 flex gap-1 z-50">
                   {AVAILABLE_EMOJIS.map(em => (
-                    <button key={em} onClick={() => handleReact('discussion', discussion.id, em)} className="hover:bg-gray-100 p-1.5 rounded text-lg transition">{em}</button>
+                    <button key={em} onClick={() => handleReact('discussion', discussion.id, em)} className="hover:bg-slate-100 p-1.5 rounded text-lg transition">{em}</button>
                   ))}
                 </div>
               )}
@@ -417,12 +417,12 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
         </div>
       </div>
 
-      <hr className="border-gray-100" />
+      <hr className="border-slate-100" />
 
       {/* 3. REPLIES SECTION */}
-      <div className="bg-gray-50/30">
-        <div className="px-6 py-4 text-sm font-bold text-gray-800 flex items-center gap-2">
-          <FiMessageSquare className="text-gray-400" /> {discussion.replies?.length || 0} Replies
+      <div className="bg-slate-50/30">
+        <div className="px-6 py-4 text-sm font-bold text-slate-800 flex items-center gap-2">
+          <FiMessageSquare className="text-slate-400" /> {discussion.replies?.length || 0} Replies
         </div>
 
         <div className="px-6 pb-6 space-y-0">
@@ -434,7 +434,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
             
             return (
               <div key={reply.id} className="flex gap-4 relative">
-                {!isLast && <div className="absolute left-[1.15rem] top-10 bottom-0 w-[2px] bg-gray-200 -z-10"></div>}
+                {!isLast && <div className="absolute left-[1.15rem] top-10 bottom-0 w-[2px] bg-slate-200 -z-10"></div>}
                 
                 <div className="flex flex-col items-center z-10 bg-white/0">
                   <Avatar name={reply.author} size="md" />
@@ -442,32 +442,32 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
                 <div className={`flex-1 min-w-0 mb-6 ${reply.is_best ? 'bg-emerald-50/50 border border-emerald-200 p-4 rounded-xl shadow-sm' : ''}`}>
                   <div className="flex items-center gap-2 mb-1">
-                    <h4 className="text-sm font-bold text-gray-900">{reply.author}</h4>
+                    <h4 className="text-sm font-bold text-slate-900">{reply.author}</h4>
                     {reply.is_best && <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">Best Answer</span>}
-                    <span className="text-xs text-gray-500 text-right flex-1">{formatDate(reply.created_at || reply.time)}</span>
+                    <span className="text-xs text-slate-500 text-right flex-1">{formatDate(reply.created_at || reply.time)}</span>
                   </div>
                   
-                  <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                  <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
                     {formatContent(reply.content)}
                   </div>
 
                   {reply.attachments && reply.attachments.length > 0 && (
                     <div className="flex gap-2 mt-3 overflow-x-auto pb-2">
                       {reply.attachments.map((img, i) => (
-                        <img key={i} src={getImageUrl(img.url)} onClick={() => window.open(getImageUrl(img.url), '_blank')} className="h-24 w-auto rounded-lg border border-gray-200 object-cover cursor-pointer hover:opacity-90" alt="reply attachment" />
+                        <img key={i} src={getImageUrl(img.url)} onClick={() => window.open(getImageUrl(img.url), '_blank')} className="h-24 w-auto rounded-lg border border-slate-200 object-cover cursor-pointer hover:opacity-90" alt="reply attachment" />
                       ))}
                     </div>
                   )}
 
-                  <div className="flex items-center gap-4 mt-2 text-xs font-semibold text-gray-500">
+                  <div className="flex items-center gap-4 mt-2 text-xs font-semibold text-slate-500">
                     <button 
                       onClick={() => handleVote('reply', reply.id, 1)} 
-                      className={`flex items-center gap-1 transition ${userReplyVote === 1 ? 'text-emerald-600' : 'hover:text-indigo-600'}`}
+                      className={`flex items-center gap-1 transition ${userReplyVote === 1 ? 'text-emerald-600' : 'hover:text-navy-700'}`}
                     >
                       <FiArrowUp /> {replyVotes}
                     </button>
                     
-                    <button onClick={() => handleReplyToUser(reply.author, reply.author_id)} className="hover:text-gray-900">
+                    <button onClick={() => handleReplyToUser(reply.author, reply.author_id)} className="hover:text-slate-900">
                       Reply
                     </button>
                     
@@ -485,12 +485,12 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                       {Object.entries(replyReactions).map(([em, data]) => (
                          <ReactionPill key={em} emoji={em} count={data.count} active={data.active} onClick={() => handleReact('reply', reply.id, em)} />
                       ))}
-                      <button onClick={() => setShowEmojiPicker(showEmojiPicker === `reply-${reply.id}` ? null : `reply-${reply.id}`)} className="hover:text-gray-900">React</button>
+                      <button onClick={() => setShowEmojiPicker(showEmojiPicker === `reply-${reply.id}` ? null : `reply-${reply.id}`)} className="hover:text-slate-900">React</button>
                       
                       {showEmojiPicker === `reply-${reply.id}` && (
-                        <div className="absolute left-0 bottom-full mb-2 bg-white border border-gray-200 shadow-xl rounded-xl p-2 flex gap-1 z-50">
+                        <div className="absolute left-0 bottom-full mb-2 bg-white border border-slate-200 shadow-xl rounded-xl p-2 flex gap-1 z-50">
                           {AVAILABLE_EMOJIS.map(em => (
-                            <button key={em} onClick={() => handleReact('reply', reply.id, em)} className="hover:bg-gray-100 p-1.5 rounded text-lg transition">{em}</button>
+                            <button key={em} onClick={() => handleReact('reply', reply.id, em)} className="hover:bg-slate-100 p-1.5 rounded text-lg transition">{em}</button>
                           ))}
                         </div>
                       )}
@@ -505,11 +505,11 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
 
       {/* 4. REPLY COMPOSER BOX */}
       {!discussion.solved ? (
-        <div ref={composerRef} className="p-6 bg-white border-t border-gray-200">
+        <div ref={composerRef} className="p-6 bg-white border-t border-slate-200">
           <form onSubmit={handlePostReply} className="flex flex-col gap-3">
             <div className="flex items-start gap-3">
               <Avatar name="Current User" size="md" /> 
-              <div className="flex-1 border border-gray-300 rounded-xl focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 bg-gray-50 focus-within:bg-white transition-all overflow-hidden flex flex-col">
+              <div className="flex-1 border border-slate-300 rounded-xl focus-within:border-navy-500 focus-within:ring-1 focus-within:ring-navy-500 bg-slate-50 focus-within:bg-white transition-all overflow-hidden flex flex-col">
                 
                 <MentionsInput
                   value={replyText}
@@ -538,9 +538,9 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                 {attachments.length > 0 && (
                   <div className="px-3 pb-3 flex gap-2 overflow-x-auto">
                     {attachments.map((att, idx) => (
-                      <div key={idx} className="relative h-16 w-16 rounded-lg border border-gray-200 flex-shrink-0 group">
+                      <div key={idx} className="relative h-16 w-16 rounded-lg border border-slate-200 flex-shrink-0 group">
                         <img src={att.previewUrl} alt="preview" className="h-full w-full object-cover rounded-lg" />
-                        <button type="button" onClick={() => removeAttachment(idx)} className="absolute -top-2 -right-2 bg-white border border-gray-200 text-gray-500 hover:text-red-500 rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition">
+                        <button type="button" onClick={() => removeAttachment(idx)} className="absolute -top-2 -right-2 bg-white border border-slate-200 text-slate-500 hover:text-rose-500 rounded-full p-0.5 shadow-sm opacity-0 group-hover:opacity-100 transition">
                           <FiX className="h-3 w-3" />
                         </button>
                       </div>
@@ -548,7 +548,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                   </div>
                 )}
                 
-                <div className="flex items-center justify-between px-3 py-2 border-t border-gray-200 bg-white">
+                <div className="flex items-center justify-between px-3 py-2 border-t border-slate-200 bg-white">
                   <div className="flex items-center gap-1 relative">
                     <input 
                       type="file" 
@@ -559,7 +559,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                       className="hidden" 
                     />
                     
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1.5 text-gray-500 hover:bg-gray-100 rounded-lg transition" title="Attach Image">
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1.5 text-slate-500 hover:bg-slate-100 rounded-lg transition" title="Attach Image">
                       <FiImage className="h-4 w-4" />
                     </button>
                   </div>
@@ -567,7 +567,7 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
                   <button 
                     type="submit" 
                     disabled={isSubmitting || (!replyText.trim() && attachments.length === 0)}
-                    className="bg-indigo-600 text-white text-xs font-bold px-4 py-1.5 rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
+                    className="bg-navy-700 text-white text-xs font-bold px-4 py-1.5 rounded-lg hover:bg-navy-700 disabled:opacity-50 transition"
                   >
                     {isSubmitting ? 'Posting...' : 'Post Reply'}
                   </button>
@@ -577,8 +577,8 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
           </form>
         </div>
       ) : (
-        <div className="p-4 bg-gray-100 border-t border-gray-200 text-center">
-          <p className="text-sm font-medium text-gray-500 flex items-center justify-center gap-2">
+        <div className="p-4 bg-slate-100 border-t border-slate-200 text-center">
+          <p className="text-sm font-medium text-slate-500 flex items-center justify-center gap-2">
             <FiCheckCircle /> This discussion has been marked as solved and is closed to new replies.
           </p>
         </div>

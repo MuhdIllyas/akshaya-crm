@@ -48,20 +48,20 @@ const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) =>
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 min-h-[60vh]">
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-8 min-h-[60vh]">
       {/* Title Area */}
-      <div className="border-b border-gray-100 pb-6 mb-6 flex justify-between items-end">
+      <div className="border-b border-slate-100 pb-6 mb-6 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">{document.title}</h1>
-          <p className="text-sm text-gray-400 mt-2">
-            Document Type: <span className="font-medium text-gray-600">{document.type}</span>
+          <h1 className="text-3xl font-bold text-slate-900">{document.title}</h1>
+          <p className="text-sm text-slate-400 mt-2">
+            Document Type: <span className="font-medium text-slate-600">{document.type}</span>
           </p>
         </div>
         {isEditMode && (
           <button 
             onClick={handleSave} 
             disabled={isSaving}
-            className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-all shadow-sm disabled:opacity-50"
+            className="flex items-center gap-2 bg-navy-700 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-navy-700 transition-all shadow-sm disabled:opacity-50"
           >
             <FiSave className="h-4 w-4" /> {isSaving ? 'Saving...' : 'Save Document'}
           </button>
@@ -71,8 +71,8 @@ const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) =>
       {/* Blocks Rendering Area */}
       <div className="space-y-6">
         {blocks.length === 0 && !isEditMode && (
-          <div className="text-center py-16 border-2 border-dashed border-gray-200 rounded-xl">
-            <p className="text-gray-500">This document is empty.</p>
+          <div className="text-center py-16 border-2 border-dashed border-slate-200 rounded-xl">
+            <p className="text-slate-500">This document is empty.</p>
           </div>
         )}
 
@@ -81,9 +81,9 @@ const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) =>
             
             {/* --- EDIT MODE --- */}
             {isEditMode ? (
-              <div className="flex gap-3 items-start bg-gray-50 p-3 rounded-xl border border-gray-200 focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-400 transition-all">
+              <div className="flex gap-3 items-start bg-slate-50 p-3 rounded-xl border border-slate-200 focus-within:border-navy-500 focus-within:ring-1 focus-within:ring-navy-500 transition-all">
                 <div className="flex-1">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 mb-1 block">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 block">
                     {block.block_type}
                   </span>
                   {block.block_type === 'heading' ? (
@@ -92,7 +92,7 @@ const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) =>
                       value={block.content.text || ''}
                       onChange={(e) => handleContentChange(index, e.target.value)}
                       placeholder="Enter heading..."
-                      className="w-full bg-transparent border-none focus:ring-0 text-xl font-bold text-gray-900 p-0"
+                      className="w-full bg-transparent border-none focus:ring-0 text-xl font-bold text-slate-900 p-0"
                     />
                   ) : block.block_type === 'warning' ? (
                     <textarea
@@ -106,23 +106,23 @@ const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) =>
                       value={block.content.text || ''}
                       onChange={(e) => handleContentChange(index, e.target.value)}
                       placeholder="Write your paragraph..."
-                      className="w-full bg-transparent border-none focus:ring-0 text-gray-700 p-0 resize-y min-h-[80px]"
+                      className="w-full bg-transparent border-none focus:ring-0 text-slate-700 p-0 resize-y min-h-[80px]"
                     />
                   )}
                 </div>
-                <button onClick={() => removeBlock(index)} className="p-2 text-gray-400 hover:text-red-600 hover:bg-white rounded-lg transition-colors shadow-sm border border-transparent hover:border-red-100">
+                <button onClick={() => removeBlock(index)} className="p-2 text-slate-400 hover:text-rose-600 hover:bg-white rounded-lg transition-colors shadow-sm border border-transparent hover:border-rose-100">
                   <FiTrash2 className="h-4 w-4" />
                 </button>
               </div>
 
             /* --- VIEW MODE --- */
             ) : (
-              <div className="text-gray-800 leading-relaxed">
+              <div className="text-slate-800 leading-relaxed">
                 {block.block_type === 'heading' && (
-                  <h3 className="text-2xl font-bold text-gray-900 mt-6 mb-3">{block.content.text}</h3>
+                  <h3 className="text-2xl font-bold text-slate-900 mt-6 mb-3">{block.content.text}</h3>
                 )}
                 {block.block_type === 'paragraph' && (
-                  <p className="mb-4 text-gray-700">{block.content.text}</p>
+                  <p className="mb-4 text-slate-700">{block.content.text}</p>
                 )}
                 {block.block_type === 'warning' && (
                   <div className="bg-amber-50 border-l-4 border-amber-500 p-4 rounded-r-lg my-4 flex gap-3">
@@ -137,16 +137,16 @@ const DocumentEditor = ({ workspaceId, document, isEditMode, onSaveSuccess }) =>
 
         {/* --- ADD BLOCK MENU (Only visible in Edit Mode) --- */}
         {isEditMode && (
-          <div className="pt-6 mt-8 border-t border-dashed border-gray-200 flex gap-2">
+          <div className="pt-6 mt-8 border-t border-dashed border-slate-200 flex gap-2">
             <button 
               onClick={() => addBlock('paragraph')}
-              className="flex items-center gap-2 text-sm text-gray-600 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 hover:text-gray-900 font-medium transition-all shadow-sm"
+              className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 hover:text-slate-900 font-medium transition-all shadow-sm"
             >
               <FiAlignLeft className="h-4 w-4" /> Add Paragraph
             </button>
             <button 
               onClick={() => addBlock('heading')}
-              className="flex items-center gap-2 text-sm text-gray-600 bg-white border border-gray-300 px-4 py-2 rounded-lg hover:bg-gray-50 hover:text-gray-900 font-medium transition-all shadow-sm"
+              className="flex items-center gap-2 text-sm text-slate-600 bg-white border border-slate-300 px-4 py-2 rounded-lg hover:bg-slate-50 hover:text-slate-900 font-medium transition-all shadow-sm"
             >
               <span className="font-bold font-serif leading-none">H</span> Add Heading
             </button>

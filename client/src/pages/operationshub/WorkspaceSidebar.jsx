@@ -28,7 +28,7 @@ const WorkspaceSidebar = ({ workspace, documents, activeTab, setActiveTab }) => 
     <button
       onClick={() => setActiveTab(id)}
       className={`w-full flex items-center gap-2.5 px-3 py-2 mb-0.5 rounded-lg text-sm font-medium transition-all ${
-        activeTab === id ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+        activeTab === id ? 'bg-navy-500/10 text-navy-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
       }`}
     >
       {icon} {label}
@@ -36,13 +36,13 @@ const WorkspaceSidebar = ({ workspace, documents, activeTab, setActiveTab }) => 
   );
 
   return (
-    <div className="w-64 bg-white border-r border-gray-200 flex flex-col h-full flex-shrink-0">
-      <div className="px-5 py-6 border-b border-gray-200">
+    <div className="w-64 bg-white border-r border-slate-200 flex flex-col h-full flex-shrink-0">
+      <div className="px-5 py-6 border-b border-slate-200">
         <div className="flex items-center gap-2 mb-3">
-          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white">
+          <div className="w-8 h-8 bg-gradient-to-br from-navy-500 to-navy-700 rounded-lg flex items-center justify-center text-white">
             <FiZap className="h-5 w-5" />
           </div>
-          <h1 className="text-lg font-bold text-gray-900">Operations</h1>
+          <h1 className="text-lg font-bold text-slate-900">Operations</h1>
         </div>
       </div>
 
@@ -50,13 +50,13 @@ const WorkspaceSidebar = ({ workspace, documents, activeTab, setActiveTab }) => 
         
         {/* WORKSPACE */}
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 mb-2">Workspace</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">Workspace</div>
           <NavButton id="overview" label="Overview" icon={<FiGrid className="h-4 w-4" />} />
         </div>
 
         {/* KNOWLEDGE */}
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 mb-2">Knowledge Base</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">Knowledge Base</div>
           {systemDocs.filter(d => d.system_key !== 'overview').map(doc => (
             <NavButton key={doc.id} id={doc.system_key} label={doc.title} icon={getIcon(doc.system_key, FiFileText)} />
           ))}
@@ -67,7 +67,7 @@ const WorkspaceSidebar = ({ workspace, documents, activeTab, setActiveTab }) => 
 
         {/* COLLABORATION */}
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 mb-2">Collaboration</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">Collaboration</div>
           <NavButton id="discussions" label="Discussions" icon={<FiMessageSquare className="h-4 w-4" />} />
           <NavButton id="cases" label="Solved Cases" icon={<FiShield className="h-4 w-4" />} />
           <NavButton id="tasks" label="Tasks" icon={<FiCheckSquare className="h-4 w-4" />} />
@@ -75,7 +75,7 @@ const WorkspaceSidebar = ({ workspace, documents, activeTab, setActiveTab }) => 
 
         {/* RESOURCES */}
         <div>
-          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 px-3 mb-2">Assets</div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 px-3 mb-2">Assets</div>
           <NavButton id="resources" label="Resources & Links" icon={<FiLink className="h-4 w-4" />} />
         </div>
 

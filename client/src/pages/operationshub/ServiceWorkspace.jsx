@@ -62,9 +62,9 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     }
   };
 
-  if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
-  if (error) return <div className="p-12 flex justify-center text-red-500 gap-2"><FiAlertCircle /> {error}</div>;
-  if (!workspace) return <div className="p-12 flex justify-center text-gray-500"><FiLoader className="animate-spin h-5 w-5 mr-2" /> Initializing Workspace Data...</div>;
+  if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-navy-500" /></div>;
+  if (error) return <div className="p-12 flex justify-center text-rose-500 gap-2"><FiAlertCircle /> {error}</div>;
+  if (!workspace) return <div className="p-12 flex justify-center text-slate-500"><FiLoader className="animate-spin h-5 w-5 mr-2" /> Initializing Workspace Data...</div>;
 
   // 1. Map Documents to Tabs
   const documentTabs = documents.map(doc => {
@@ -111,7 +111,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       return <DocumentView key={activeDoc.id} document={activeDoc} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
     }
 
-    return <div className="text-center text-gray-500 py-12">Tab content not found.</div>;
+    return <div className="text-center text-slate-500 py-12">Tab content not found.</div>;
   };
 
   return (
@@ -119,20 +119,20 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       {/* HEADER (Restored Original Layout) */}
       <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => navigateTo('services')}>
-            <FiChevronLeft className="h-5 w-5 text-gray-500" />
+          <button className="p-2 hover:bg-slate-100 rounded-lg transition" onClick={() => navigateTo('services')}>
+            <FiChevronLeft className="h-5 w-5 text-slate-500" />
           </button>
-          <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+          <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl">
             {mockService?.icon ? (
               <mockService.icon className="h-6 w-6" />
             ) : (
               <FiFileText className="h-6 w-6" />
             )}
           </div>
-          <h2 className="text-xl font-bold text-gray-900">{mockService ? mockService.name : 'Workspace'}</h2>
+          <h2 className="text-xl font-bold text-slate-900">{mockService ? mockService.name : 'Workspace'}</h2>
           
           <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wide ${
-            workspace.scope === 'GLOBAL' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+            workspace.scope === 'GLOBAL' ? 'bg-navy-500/10 text-navy-700' : 'bg-amber-100 text-amber-700'
           }`}>
             {workspace.scope}
           </span>
@@ -141,7 +141,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
         {/* Publish Controls moved to the top right of the workspace */}
         <div className="flex items-center gap-3">
           <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${
-            workspace.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-700 border-gray-200'
+            workspace.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'
           }`}>
             {workspace.status.replace('_', ' ')}
           </span>
@@ -158,15 +158,15 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       </div>
 
       {/* HORIZONTAL TABS */}
-      <div className="border-b border-gray-200 mb-6">
+      <div className="border-b border-slate-200 mb-6">
         <div className="flex flex-wrap gap-2 overflow-x-auto">
           {tabs.map(tab => (
             <button
               key={tab.id}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-indigo-500 text-indigo-600 bg-indigo-50/50 rounded-t-lg'
-                  : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
+                  ? 'border-navy-500 text-navy-700 bg-navy-500/10/50 rounded-t-lg'
+                  : 'border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300'
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
