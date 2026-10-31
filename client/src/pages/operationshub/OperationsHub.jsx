@@ -61,43 +61,43 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
   ];
 
   return (
-    <div className="w-60 h-full bg-white border-r border-slate-200 flex flex-col overflow-y-auto flex-shrink-0">
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-slate-200">
-        <div className="w-8 h-8 bg-gradient-to-br from-navy-500 to-navy-700 rounded-lg flex items-center justify-center text-white text-sm">
+    <div className="w-full lg:w-60 h-full bg-white border-r border-slate-200 flex flex-col overflow-y-auto flex-shrink-0">
+      <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-slate-200">
+        <div className="w-9 h-9 bg-navy-700 rounded-xl flex items-center justify-center text-white text-sm">
           <FiZap className="h-5 w-5" />
         </div>
-        <h1 className="text-lg font-bold text-slate-900">Operations Hub</h1>
-        <span className="text-[10px] font-semibold bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
+        <h1 className="whitespace-nowrap text-base font-semibold text-navy-700">Operations Hub</h1>
+        <span className="hidden text-[10px] font-semibold bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
       </div>
 
       <div className="flex-1 px-2.5 py-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5">⚡ Operations</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5">Operations</div>
         {mainNav.map(item => (
           <a
             key={item.id}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-2.5 min-h-[40px] px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
               active === item.id ? 'bg-navy-500/10 text-navy-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
             onClick={() => onNavigate(item.id)}
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
 
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5 mt-4">⭐ My Workspace</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5 mt-4">My Workspace</div>
         {workspaceItems.map(item => (
           <a
             key={item.id}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-2.5 min-h-[40px] px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
               active === item.id ? 'bg-navy-500/10 text-navy-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
             onClick={() => onNavigate(item.id)}
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-slate-200 text-slate-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
       </div>
@@ -105,7 +105,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
   );
 };
 
-const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant, hubStats = {} }) => {
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant, onNew, hubStats = {} }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -120,11 +120,11 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
   }, []);
 
   return (
-    <div className="flex-shrink-0 bg-white border-b border-slate-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-      <button className="lg:hidden text-slate-500 hover:text-slate-700" onClick={toggleMobileSidebar}>
+    <div className="flex-shrink-0 bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3">
+      <button className="lg:hidden grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700" onClick={toggleMobileSidebar}>
         <FiMenu className="h-5 w-5" />
       </button>
-      <div className="flex-1 min-w-[180px] max-w-xl relative">
+      <div className="flex-1 min-w-0 max-w-xl relative">
         <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
         <input
           ref={inputRef}
@@ -132,25 +132,28 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
           placeholder="Ask Operations Hub (e.g., 'How to correct Aadhaar DOB?')"
           value={query}
           onChange={(e) => onSearch(e.target.value)}
-          className="w-full pl-9 pr-14 py-2 bg-slate-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-slate-300 transition-all shadow-inner"
+          className="min-h-[44px] w-full pl-9 pr-4 sm:pr-14 py-2 bg-slate-100 border border-transparent rounded-xl text-base sm:text-sm focus:outline-none focus:bg-white focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30 transition-all"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-mono">⌘K</span>
+        <span className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-mono">⌘K</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <button onClick={onAIAssistant} className="relative p-2 rounded-full hover:bg-navy-500/10 text-navy-500 hover:text-navy-700 transition" title="Ask Akshaya Assistant">
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={onNew} className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white transition hover:bg-navy-800">
+          <FiPlus className="h-4 w-4" /><span className="hidden sm:inline">New</span>
+        </button>
+        <button onClick={onAIAssistant} className="hidden sm:grid relative h-11 w-11 place-items-center rounded-xl hover:bg-navy-500/10 text-navy-500 hover:text-navy-700 transition" title="Ask Akshaya Assistant">
           <FiZap className="h-5 w-5" />
         </button>
-        <button onClick={() => onNavigate('notifications')} className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
+        <button onClick={() => onNavigate('notifications')} className="relative grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiBell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
         </button>
-        <button onClick={() => onNavigate('bookmarks')} className="p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
+        <button onClick={() => onNavigate('bookmarks')} className="hidden sm:grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiBookmark className="h-5 w-5" />
         </button>
-        <button onClick={() => onNavigate('mentions')} className="relative p-2 rounded-full hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
+        <button onClick={() => onNavigate('mentions')} className="hidden sm:grid relative h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiAtSign className="h-5 w-5" />
           {hubStats.mentions > 0 && (    
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
+            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
           )}
         </button>
       </div>
@@ -165,12 +168,12 @@ const StatCard = ({ label, value, icon: Icon, color }) => {
     rose: 'bg-rose-50 text-rose-600', indigo: 'bg-navy-500/10 text-navy-700',
   };
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-xl hover:shadow-md transition-shadow">
+    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
       <div className={`p-2.5 rounded-xl ${colorMap[color] || 'bg-slate-50 text-slate-600'}`}>
         <Icon className="h-5 w-5" />
       </div>
       <div>
-        <div className="text-xl font-bold text-slate-900">{value}</div>
+        <div className="text-xl font-semibold text-slate-900">{value}</div>
         <div className="text-xs text-slate-500">{label}</div>
       </div>
     </div>
@@ -249,7 +252,7 @@ const ArticleCard = ({ article, onClick }) => {
 };
 
 const ActivityFeed = ({ activities }) => (
-  <div className="bg-white border border-slate-200 rounded-xl p-4">
+  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
     <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
       <FiRefreshCw className="h-4 w-4 text-navy-500" /> Recent Activity
     </h3>
@@ -311,13 +314,14 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h2 className="text-2xl font-bold text-slate-900">{greeting}, {firstName} 👋</h2>
-        <p className="text-slate-500">Welcome to the Operations Hub. Here is everything at a glance.</p>
+      <div className="rounded-2xl bg-navy-700 p-5 text-white shadow-sm sm:p-6">
+        <p className="text-sm text-white/70">{greeting}</p>
+        <h2 className="mt-0.5 text-xl font-semibold sm:text-2xl">Welcome back, {firstName}</h2>
+        <p className="mt-1 text-sm text-white/70">Welcome to the Operations Hub. Here is everything at a glance.</p>
       </div>
 
       {/* THE FIX: Real Live Data for the Stat Cards! */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatCard label="Discussions" value={hubStats.discussions} icon={FiMessageCircle} color="blue" />
         <StatCard label="Services" value={services.length} icon={FiGrid} color="green" />
         <StatCard label="Announcements" value={hubStats.announcements} icon={FiBell} color="amber" />
@@ -327,7 +331,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       </div>
 
       <div className="flex items-center justify-between mt-8 mb-2">
-        <h3 className="text-lg font-bold text-slate-900">High Priority Services</h3>
+        <h3 className="text-lg font-semibold text-slate-900">High Priority Services</h3>
         <button onClick={() => navigateTo('services')} className="text-sm font-semibold text-navy-700 hover:text-navy-700">
           View All {services.length} Services &rarr;
         </button>
@@ -336,7 +340,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       {/* THE FIX: Only map over the topServices (Max 6) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {topServices.map(service => (
-          <div key={service.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
+          <div key={service.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
             <div className="flex items-start gap-3 mb-3">
               <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl">
                 <FiLayers className="h-6 w-6" />
@@ -359,7 +363,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       </div>
 
       {/* Real Live Government Updates / Announcements */}
-      <div className="bg-white border-l-4 border-rose-500 rounded-xl shadow-sm p-4">
+      <div className="bg-white border-l-4 border-rose-500 rounded-2xl shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
             <FiFileText className="h-4 w-4 text-rose-500" /> Government Updates & Announcements
@@ -392,7 +396,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
         <div className="space-y-6">
           
           {/* LATEST DISCUSSIONS */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 shadow-sm">
             <div className="flex justify-between items-center mb-3">
               <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                 <FiMessageCircle className="h-4 w-4 text-navy-500" /> Latest Discussions
@@ -420,7 +424,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
 
         <div className="space-y-6">
           {/* MY MENTIONS */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 shadow-sm">
              <div className="flex justify-between items-center mb-3">
               <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
                 <FiAtSign className="h-4 w-4 text-navy-500" /> Recent Mentions
@@ -445,7 +449,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
           </div>
 
           {/* RECENT ACTIVITY */}
-          <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 shadow-sm">
             <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
               <FiRefreshCw className="h-4 w-4 text-navy-500" /> Global Activity
             </h3>
@@ -477,11 +481,11 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
 
 const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
   <div>
-    <h2 className="text-xl font-bold text-slate-900 mb-4">All Services</h2>
+    <h2 className="text-xl font-semibold text-slate-900 mb-4">All Services</h2>
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {/* 2. Map over the "services" prop instead of DATA.services */}
       {services.map(service => (
-        <div key={service.id} className="bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
+        <div key={service.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl"><service.icon className="h-6 w-6" /></div>
             <div>
@@ -504,7 +508,7 @@ const AIAssistantPage = () => {
   return (
     <div className="flex flex-col h-full">
       <h2 className="text-xl font-bold text-slate-900 mb-4">Akshaya Assistant</h2>
-      <div className="flex-1 bg-white border border-slate-200 rounded-xl p-4 mb-4">
+      <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm p-4 mb-4">
         {messages.map((msg, idx) => (
           <div key={idx} className={`mb-3 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
             <span className={`inline-block p-3 rounded-xl max-w-xl text-sm ${msg.role === 'user' ? 'bg-navy-500/10 text-slate-800' : 'bg-slate-100 text-slate-800'}`}>
@@ -710,8 +714,8 @@ const OperationsHub = () => { // <--- Removed the prop!
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-slate-50">
-      <div className="hidden lg:block flex-shrink-0">
+    <div className="flex h-dvh overflow-hidden bg-slate-50">
+      <div className="hidden lg:block w-60 flex-shrink-0">
         {/* PASSED hubStats */}
         <Sidebar active={page} onNavigate={navigateTo} hubStats={hubStats} /> 
       </div>
@@ -723,12 +727,23 @@ const OperationsHub = () => { // <--- Removed the prop!
           onNavigate={navigateTo}
           toggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
           onAIAssistant={() => navigateTo('ai-assistant')}
+          onNew={() => setShowCreateModal(true)}
           hubStats={hubStats} // <--- PASSED hubStats
         />
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           {renderPage()}
         </div>
       </div>
+
+      {/* MOBILE SIDEBAR DRAWER */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setMobileSidebarOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-xl">
+            <Sidebar active={page} onNavigate={navigateTo} hubStats={hubStats} />
+          </div>
+        </div>
+      )}
 
       {/* GLOBAL DRAFTS MODAL */}
       {showCreateModal && (
