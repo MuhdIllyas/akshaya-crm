@@ -31,12 +31,16 @@ import AnnouncementsView from './views/AnnouncementsView';
 import CreateDiscussionModal from './views/discussions/CreateDiscussionModal';
 import ServiceWorkspace from './ServiceWorkspace'; 
 import { getWorkflowServices } from '@/services/serviceService';
-import { 
-  fetchGlobalHubStats, 
+import {
+  fetchGlobalHubStats,
   fetchAnnouncements,
   fetchAllDiscussions,
   fetchMyMentions,
-  fetchRecentActivity
+  fetchRecentActivity,
+  fetchWorkspace,
+  fetchServiceDiscussionCounts,
+  createDiscussion,
+  deleteDraft,
 } from '@/services/knowledge';
 
 // =====================================================================
@@ -82,7 +86,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count > 0 && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
 
@@ -97,7 +101,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count > 0 && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
       </div>
@@ -545,13 +549,21 @@ const OperationsHub = () => { // <--- Removed the prop!
     photo: localStorage.getItem("photo"),
   }), []);
 
-  const { serviceId } = useParams(); 
+  const { serviceId } = useParams();
   const location = useLocation();
 
+  // PHASE 1 FIX: shared discussion links use ?discussion=<id> so they don't
+  // get confused with /operationshub/<serviceId>.
+  const urlDiscussionId = new URLSearchParams(location.search).get('discussion');
   const isDbId = serviceId && !isNaN(serviceId);
 
-  const [page, setPage] = useState(isDbId ? 'service-detail' : (serviceId || 'home'));
+  const initialPage = urlDiscussionId ? 'discussion-detail' : (isDbId ? 'service-detail' : (serviceId || 'home'));
+
+  const [page, setPage] = useState(initialPage);
+  // PHASE 1 FIX: services and discussions now have separate IDs
+  // (one state variable used to hold both).
   const [selectedServiceId, setSelectedServiceId] = useState(isDbId ? serviceId : null);
+  const [selectedDiscussionId, setSelectedDiscussionId] = useState(urlDiscussionId || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -575,37 +587,38 @@ const OperationsHub = () => { // <--- Removed the prop!
         
         // Fetch everything concurrently
         const [
-          servicesResponse, 
-          statsResponse, 
-          announcementsResponse, 
-          discussionsRes, 
-          mentionsRes, 
-          activityRes
+          servicesResponse,
+          statsResponse,
+          announcementsResponse,
+          discussionsRes,
+          mentionsRes,
+          activityRes,
+          countsRes
         ] = await Promise.all([
            getWorkflowServices(),
            fetchGlobalHubStats(),
            fetchAnnouncements(),
-           fetchAllDiscussions(),       
-           fetchMyMentions(),           
-           fetchRecentActivity()        
+           fetchAllDiscussions(),
+           fetchMyMentions(),
+           fetchRecentActivity(),
+           // Counts shouldn't take the whole dashboard down if they fail
+           fetchServiceDiscussionCounts().catch(() => [])
         ]);
 
-        // Map over the services and attach the counts
-        const formatted = servicesResponse.data.map(s => {
-          
-          // 🔥 SMART FALLBACK: If the backend doesn't provide the counts natively, 
-          // we count them dynamically from the discussions array!
-          const relatedDiscussions = discussionsRes.filter(d => d.service_name === s.name || d.service_id === s.id);
-          const openCount = relatedDiscussions.filter(d => d.status !== 'solved').length;
-          const closedCount = relatedDiscussions.filter(d => d.status === 'solved').length;
+        // PHASE 1 FIX: counts come from one SQL query (all discussions),
+        // not from the latest 50 matched by name.
+        const countsByService = {};
+        (countsRes || []).forEach(c => { countsByService[String(c.service_id)] = c; });
 
+        const formatted = servicesResponse.data.map(s => {
+          const c = countsByService[String(s.id)] || {};
           return {
-            id: s.id, 
+            id: s.id,
             name: s.name,
-            icon: FiLayers, 
+            icon: FiLayers,
             description: s.description || 'Manage operations for this service.',
-            openDiscussions: parseInt(s.open_discussions, 10) || openCount,
-            closedDiscussions: parseInt(s.closed_discussions, 10) || closedCount,
+            openDiscussions: c.open_count || 0,
+            closedDiscussions: c.solved_count || 0,
           };
         });
         
@@ -630,6 +643,11 @@ const OperationsHub = () => { // <--- Removed the prop!
 
   // Sync with URL changes
   useEffect(() => {
+      if (urlDiscussionId) {
+        setPage('discussion-detail');
+        setSelectedDiscussionId(urlDiscussionId);
+        return;
+      }
       if (serviceId) {
         if (!isNaN(serviceId)) {
           // It's a real database ID, open the workspace!
@@ -637,47 +655,61 @@ const OperationsHub = () => { // <--- Removed the prop!
           setSelectedServiceId(serviceId);
         } else {
           // It's just a text page like 'services' or 'home'
-          setPage(serviceId); 
+          setPage(serviceId);
           setSelectedServiceId(null);
         }
       }
-  }, [serviceId]);
+  }, [serviceId, urlDiscussionId]);
 
   useEffect(() => {
     if (location.state?.openDiscussionId) {
       setPage('discussion-detail');
-      setSelectedServiceId(location.state.openDiscussionId);
-      
+      setSelectedDiscussionId(location.state.openDiscussionId);
+
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
+  // PHASE 1 FIX: discussion IDs and service IDs go to separate state.
+  // Opening a discussion keeps the current service selected, so
+  // "New" still knows which service you're in.
   const navigateTo = (target, id = null) => {
     setPage(target);
-    setSelectedServiceId(id); // <--- This now safely accepts the ID for ANY page!
+    if (target === 'discussion-detail') {
+      setSelectedDiscussionId(id);
+    } else {
+      setSelectedServiceId(id);
+      setSelectedDiscussionId(null);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setMobileSidebarOpen(false);
   };
+
+  // The service the user is currently inside (null on global pages)
+  const activeServiceId = page === 'service-detail' ? selectedServiceId : null;
+  const activeServiceName = realServices.find(s => String(s.id) === String(activeServiceId))?.name;
+
+  const renderHome = () => (
+    <HomePage
+      currentUser={currentUser}
+      services={realServices}
+      hubStats={hubStats}
+      liveAnnouncements={liveAnnouncements}
+      recentDiscussions={homeDiscussions}
+      recentMentions={homeMentions}
+      recentActivity={homeActivity}
+      navigateTo={navigateTo}
+      openDiscussion={(id) => navigateTo('discussion-detail', id)}
+    />
+  );
 
   const renderPage = () => {
     // Show a loader while fetching services from PostgreSQL
     if (isLoadingServices) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-navy-500" /></div>;
 
     switch (page) {
-      case 'home': 
-        return (
-          <HomePage
-            currentUser={currentUser} 
-            services={realServices} 
-            hubStats={hubStats} 
-            liveAnnouncements={liveAnnouncements} 
-            recentDiscussions={homeDiscussions} 
-            recentMentions={homeMentions}       
-            recentActivity={homeActivity}       
-            navigateTo={navigateTo} 
-            openDiscussion={(id) => navigateTo('discussion-detail', id)} 
-          />
-        );
+      case 'home':
+        return renderHome();
       case 'services': 
         return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 
@@ -692,7 +724,7 @@ const OperationsHub = () => { // <--- Removed the prop!
       case 'discussions': 
         return <GlobalDiscussions navigateTo={navigateTo} />;
       case 'discussion-detail': 
-        return <DiscussionDetailPage discussionId={selectedServiceId} navigateTo={navigateTo} />;
+        return <DiscussionDetailPage discussionId={selectedDiscussionId} navigateTo={navigateTo} />;
       case 'learning': return <LearningView />;
       case 'announcements': return <AnnouncementsView />;
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
@@ -708,8 +740,9 @@ const OperationsHub = () => { // <--- Removed the prop!
       case 'notifications': return <NotificationsPage />;
       case 'ai-assistant': return <AIAssistantPage navigateTo={navigateTo} />;
       case 'search': return <SearchPage query={searchQuery} navigateTo={navigateTo} />;
-      default: 
-        return <HomePage navigateTo={navigateTo} />;
+      default:
+        // PHASE 1 FIX: used to render HomePage with no props and crash
+        return renderHome();
     }
   };
 
@@ -749,40 +782,37 @@ const OperationsHub = () => { // <--- Removed the prop!
       {showCreateModal && (
         <CreateDiscussionModal
           isOpen={showCreateModal}
-          lockedServiceId={serviceId} // Will be null if on the Global Home page
-          lockedServiceName={realServices.find(s => String(s.id) === String(serviceId))?.name}
-          existingDraft={editingDraft} 
+          // PHASE 1 FIX: locks to the service you're inside (state-based),
+          // not the URL param, which didn't change on in-hub navigation.
+          // A resumed draft keeps its own service choice instead.
+          lockedServiceId={editingDraft ? null : activeServiceId}
+          lockedServiceName={editingDraft ? null : activeServiceName}
+          existingDraft={editingDraft}
           onClose={() => {
             setShowCreateModal(false);
-            setEditingDraft(null); 
+            setEditingDraft(null);
           }}
           onSubmit={async (formData) => {
-             try {
-                 const { createDiscussion } = await import('@/services/knowledge');
-                 
-                 // 🔥 THE FIX: If there is no workspaceId, fetch it using the serviceId they selected!
-                 let finalWorkspaceId = formData.workspaceId;
-                 
-                 if (!finalWorkspaceId) {
-                   const token = localStorage.getItem("token");
-                   // Your existing backend route that gets/creates the workspace for a service
-                   const res = await fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/workspaces/${formData.serviceId}`, {
-                     headers: { 'Authorization': `Bearer ${token}` }
-                   });
-                   const data = await res.json();
-                   finalWorkspaceId = data.workspace.id; // Grab the Workspace ID!
-                 }
-                 
-                 // Finally submit the discussion to the correct workspace!
-                 await createDiscussion(finalWorkspaceId, formData);
-                 
-                 toast.success("Discussion published!");
-                 setShowCreateModal(false);
-                 setEditingDraft(null);
-                 
-             } catch (err) {
-                 throw err; 
+             // PHASE 1 FIX: the old code fetched /workspaces/:id (plural),
+             // which doesn't exist → 404 → crash. fetchWorkspace hits the
+             // real /workspace/:serviceId route.
+             let finalWorkspaceId = formData.workspaceId;
+             if (!finalWorkspaceId) {
+               const data = await fetchWorkspace(formData.serviceId);
+               finalWorkspaceId = data?.workspace?.id;
              }
+             if (!finalWorkspaceId) throw new Error('Could not find the workspace for this service.');
+
+             await createDiscussion(finalWorkspaceId, formData);
+
+             // A resumed draft has now been published, so remove the draft
+             if (editingDraft?.id) {
+               await deleteDraft(editingDraft.id).catch(() => {});
+             }
+
+             toast.success("Discussion published!");
+             setShowCreateModal(false);
+             setEditingDraft(null);
           }}
         />
       )}

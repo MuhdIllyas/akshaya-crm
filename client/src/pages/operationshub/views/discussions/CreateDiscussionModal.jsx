@@ -233,10 +233,11 @@ const CreateDiscussionModal = ({
 
                 {formData.relatedTo !== 'none' && (
                   <div className="sm:col-span-2 flex gap-2">
-                    <input 
-                      type="number" value={formData.relatedId} 
+                    {/* PHASE 1 FIX: text, so application numbers with letters work */}
+                    <input
+                      type="text" value={formData.relatedId}
                       onChange={e => { setFormData(prev => ({ ...prev, relatedId: e.target.value })); setCrmPreview(null); }} 
-                      placeholder="e.g., 6687 (Tracking ID)" 
+                      placeholder="Tracking ID or application number"
                       className="flex-1 px-3 py-2 border border-slate-300 rounded-lg outline-none text-sm" 
                     />
                     <button type="button" onClick={handleLookup} disabled={isLookingUp || !formData.relatedId} className="px-4 py-2 bg-slate-100 border border-slate-300 rounded-lg text-sm font-medium hover:bg-slate-200 transition disabled:opacity-50">

@@ -99,6 +99,7 @@ router.delete('/resources/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.
 // DISCUSSIONS
 // ==========================================
 router.get('/hub/discussions/all', authorizeRoles(ALL_STAFF), knowledgeController.getAllDiscussions);
+router.get('/hub/services/counts', authorizeRoles(ALL_STAFF), knowledgeController.getServiceDiscussionCounts);
 router.get('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.getDiscussions);
 router.post('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.createDiscussion);
 router.post('/discussions/:discussionId/replies', authorizeRoles(ALL_STAFF), knowledgeController.addReply);

@@ -264,6 +264,15 @@ export const getAllDiscussions = async (req, res) => {
     }
 };
 
+export const getServiceDiscussionCounts = async (req, res) => {
+    try {
+        res.json(await knowledgeService.getServiceDiscussionCounts());
+    } catch (err) {
+        console.error("💥 SERVICE COUNTS CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to fetch service counts' });
+    }
+};
+
 export const getDiscussionById = async (req, res) => {
     try {
         // Pass req.user.id as the second argument!

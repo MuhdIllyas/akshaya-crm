@@ -1,3 +1,4 @@
+//src/services/knowledge.js
 import axios from 'axios';
 
 // USE YOUR VITE_API_URL SO IT HITS YOUR NODE.JS BACKEND
@@ -128,6 +129,12 @@ export const fetchAllDiscussions = async () => {
   return data;
 };
 
+// PHASE 1: real open/solved counts per service → [{ service_id, open_count, solved_count }]
+export const fetchServiceDiscussionCounts = async () => {
+  const { data } = await api.get('/hub/services/counts');
+  return data;
+};
+
 export const fetchDiscussionById = async (id) => {
   const { data } = await api.get(`/hub/discussions/${id}`);
   return data;
@@ -153,7 +160,8 @@ export const markMentionsRead = async (discussionId) => {
 };
 
 export const fetchStaffSuggestions = async (query) => {
-  const { data } = await api.get(`/hub/staff/search?q=${query}`);
+  // PHASE 1 FIX: let axios encode the query (names with spaces/& broke the URL)
+  const { data } = await api.get('/hub/staff/search', { params: { q: query } });
   return data;
 };
 
@@ -197,9 +205,11 @@ export const fetchRecentActivity = async () => {
 };
 
 export const lookupCrmRecord = async (type, id, serviceId = null) => {
-  let url = `/hub/crm-lookup?type=${type}&id=${id}`;
-  if (serviceId) url += `&serviceId=${serviceId}`; 
-  const { data } = await api.get(url);
+  // PHASE 1 FIX: application numbers can now contain letters, slashes, etc.,
+  // so let axios encode the params instead of building the URL by hand
+  const params = { type, id };
+  if (serviceId) params.serviceId = serviceId;
+  const { data } = await api.get('/hub/crm-lookup', { params });
   return data;
 };
 

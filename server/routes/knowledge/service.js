@@ -27,31 +27,43 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            
+
+            // PHASE 1 FIX: ON CONFLICT relies on the partial unique index
+            // uq_kw_global_service (see migration). If two people open the
+            // service at the same moment, only one workspace gets created.
             const insertWs = await client.query(
-                `INSERT INTO knowledge_workspaces (service_id, scope, status) 
-                 VALUES ($1, 'GLOBAL', 'draft') RETURNING *`,
+                `INSERT INTO knowledge_workspaces (service_id, scope, status)
+                 VALUES ($1, 'GLOBAL', 'draft')
+                 ON CONFLICT (service_id) WHERE scope = 'GLOBAL' AND deleted_at IS NULL
+                 DO NOTHING
+                 RETURNING *`,
                 [serviceId]
             );
-            workspace = insertWs.rows[0];
 
-            await client.query(
-                `INSERT INTO knowledge_contributors (workspace_id, staff_id, role) VALUES ($1, $2, 'OWNER')`,
-                [workspace.id, staffId]
-            );
+            if (insertWs.rows.length > 0) {
+                workspace = insertWs.rows[0];
 
-            const defaultDocs = [
-                { title: 'Overview', slug: 'overview', key: 'overview', sort: 1000 },
-                { title: 'SOP', slug: 'sop', key: 'sop', sort: 2000 },
-                { title: 'FAQ', slug: 'faq', key: 'faq', sort: 3000 }
-            ];
-            
-            for (const doc of defaultDocs) {
+                // Owner = the person who created it. Admins/superadmins will
+                // manage ownership properly in Phase 2.
                 await client.query(
-                    `INSERT INTO knowledge_documents (workspace_id, title, slug, system_key, type, sort_order) 
-                     VALUES ($1, $2, $3, $4, 'SYSTEM', $5)`,
-                    [workspace.id, doc.title, doc.slug, doc.key, doc.sort]
+                    `INSERT INTO knowledge_contributors (workspace_id, staff_id, role) VALUES ($1, $2, 'OWNER')
+                     ON CONFLICT (workspace_id, staff_id) DO NOTHING`,
+                    [workspace.id, staffId]
                 );
+
+                const defaultDocs = [
+                    { title: 'Overview', slug: 'overview', key: 'overview', sort: 1000 },
+                    { title: 'SOP', slug: 'sop', key: 'sop', sort: 2000 },
+                    { title: 'FAQ', slug: 'faq', key: 'faq', sort: 3000 }
+                ];
+
+                for (const doc of defaultDocs) {
+                    await client.query(
+                        `INSERT INTO knowledge_documents (workspace_id, title, slug, system_key, type, sort_order)
+                         VALUES ($1, $2, $3, $4, 'SYSTEM', $5)`,
+                        [workspace.id, doc.title, doc.slug, doc.key, doc.sort]
+                    );
+                }
             }
             await client.query('COMMIT');
         } catch (err) {
@@ -59,6 +71,16 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
             throw err;
         } finally {
             client.release();
+        }
+
+        // Someone else created it a moment before us — just load theirs.
+        if (!workspace) {
+            const existing = await pool.query(
+                `SELECT * FROM knowledge_workspaces
+                 WHERE service_id = $1 AND scope = 'GLOBAL' AND deleted_at IS NULL`,
+                [serviceId]
+            );
+            workspace = existing.rows[0];
         }
     } else {
         workspace = workspaceRes.rows[0];
@@ -277,9 +299,11 @@ const logHistory = async (workspaceId, entityType, entityId, action, oldContent,
 // ==========================================
 export const getDiscussions = async (workspaceId, userId) => {
     const res = await pool.query(
-        `SELECT d.*, s.name as author_name, 
+        `SELECT d.*, s.name as author_name,
         (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count,
-        (SELECT vote_type FROM knowledge_votes WHERE discussion_id = d.id AND staff_id = $2) as user_vote
+        (SELECT vote_type FROM knowledge_votes WHERE discussion_id = d.id AND staff_id = $2) as user_vote,
+        EXISTS(SELECT 1 FROM knowledge_bookmarks WHERE target_type = 'discussion' AND target_id = d.id AND staff_id = $2) as is_bookmarked,
+        EXISTS(SELECT 1 FROM knowledge_followers WHERE discussion_id = d.id AND staff_id = $2) as is_following
         FROM knowledge_discussions d
         JOIN staff s ON d.author_id = s.id
         WHERE d.workspace_id = $1
@@ -630,8 +654,9 @@ export const getAllDiscussions = async () => {
     const res = await pool.query(`
         SELECT 
             d.*, 
-            s.name as author_name, 
+            s.name as author_name,
             srv.name as service_name,
+            kw.service_id,
             (SELECT COUNT(*) FROM knowledge_discussion_replies r WHERE r.discussion_id = d.id) as replies_count
         FROM knowledge_discussions d
         JOIN staff s ON d.author_id = s.id
@@ -643,7 +668,22 @@ export const getAllDiscussions = async () => {
     return res.rows;
 };
 
-export const getDiscussionById = async (id, userId) => { 
+// PHASE 1 FIX: real open/solved counts per service, computed in SQL
+// (the frontend used to count from only the latest 50 discussions).
+export const getServiceDiscussionCounts = async () => {
+    const res = await pool.query(`
+        SELECT kw.service_id,
+               COUNT(d.id) FILTER (WHERE d.status IS DISTINCT FROM 'solved')::int AS open_count,
+               COUNT(d.id) FILTER (WHERE d.status = 'solved')::int AS solved_count
+        FROM knowledge_workspaces kw
+        JOIN knowledge_discussions d ON d.workspace_id = kw.id
+        WHERE kw.deleted_at IS NULL
+        GROUP BY kw.service_id
+    `);
+    return res.rows;
+};
+
+export const getDiscussionById = async (id, userId) => {
     const discussionRes = await pool.query(`
         SELECT 
             d.*, 

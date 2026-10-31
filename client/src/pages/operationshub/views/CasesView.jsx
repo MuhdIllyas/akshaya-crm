@@ -22,9 +22,10 @@ const CasesView = ({ workspaceId }) => {
     loadCases();
   }, [workspaceId]);
 
-  const filteredCases = cases.filter(c => 
-    c.title.toLowerCase().includes(search.toLowerCase()) || 
-    c.tags.some(t => t.toLowerCase().includes(search.toLowerCase()))
+  // PHASE 1 FIX: tags can be NULL in the DB, which crashed .some() / .map()
+  const filteredCases = cases.filter(c =>
+    (c.title || '').toLowerCase().includes(search.toLowerCase()) ||
+    (c.tags || []).some(t => t.toLowerCase().includes(search.toLowerCase()))
   );
 
   if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-emerald-500" /></div>;
@@ -72,7 +73,7 @@ const CasesView = ({ workspaceId }) => {
                   <h3 className="text-base font-bold text-slate-900">{c.title}</h3>
                   <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-slate-500">
                     <span className="flex items-center gap-1"><FiUser /> {c.solver_name || 'System'}</span>
-                    {c.tags.map(tag => (
+                    {(c.tags || []).map(tag => (
                       <span key={tag} className="flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md">
                         <FiTag className="h-3 w-3" /> {tag}
                       </span>

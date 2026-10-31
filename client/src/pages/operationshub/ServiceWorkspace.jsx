@@ -96,7 +96,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
     }
     if (activeTab === 'discussions') { 
-      return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} />;
+      return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} serviceName={mockService?.name} />;
     }
     if (activeTab === 'resources') {
       return <ResourcesGrid resources={resources} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;

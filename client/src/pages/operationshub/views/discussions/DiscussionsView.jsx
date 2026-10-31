@@ -109,7 +109,7 @@ const LinkedCrmCard = ({ crmId }) => {
 // =====================================================================
 // 2. MAIN PAGE COMPONENT
 // =====================================================================
-const DiscussionsView = ({ workspaceId }) => {
+const DiscussionsView = ({ workspaceId, serviceId, serviceName }) => {
   const [activeThreadId, setActiveThreadId] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   
@@ -192,14 +192,21 @@ const DiscussionsView = ({ workspaceId }) => {
         />
       )}
 
-      <CreateDiscussionModal 
-        isOpen={isModalOpen} 
-        existingDraft={null} 
-        onClose={() => setIsModalOpen(false)} 
-        onSubmit={handleCreateDiscussion} 
-        preselectedServiceId={workspaceId} 
-        preselectedServiceName="Current Workspace"
-      />
+      {/* PHASE 1 FIX:
+          - correct prop names (the modal reads lockedServiceId / lockedWorkspaceId),
+            so the service is locked and the CRM check runs against THIS service
+          - only mounted while open, so the form starts empty every time */}
+      {isModalOpen && (
+        <CreateDiscussionModal
+          isOpen={isModalOpen}
+          existingDraft={null}
+          onClose={() => setIsModalOpen(false)}
+          onSubmit={handleCreateDiscussion}
+          lockedServiceId={serviceId}
+          lockedServiceName={serviceName || 'Current Service'}
+          lockedWorkspaceId={workspaceId}
+        />
+      )}
     </div>
   );
 };

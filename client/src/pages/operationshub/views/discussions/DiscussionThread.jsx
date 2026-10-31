@@ -2,12 +2,16 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   FiArrowLeft, FiMoreHorizontal, FiShare2, FiMessageSquare, 
   FiCheckCircle, FiImage, FiPaperclip, FiSmile, FiArrowUp, FiArrowDown, FiX,
-  FiLink, FiMessageCircle, FiMail // 🔥 Added new icons for the Share Menu
+  FiLink, FiMessageCircle, FiMail, // 🔥 Added new icons for the Share Menu
+  FiBookmark, FiEye
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { MentionsInput, Mention } from 'react-mentions';
 import { useNavigate } from 'react-router-dom'; // 🔥 Required for redirecting to Messenger
-import { addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions, markDiscussionSolved } from '@/services/knowledge'; 
+import {
+  addReply, votePost, toggleReaction, uploadKnowledgeFiles, fetchStaffSuggestions, markDiscussionSolved,
+  toggleBookmark, toggleFollow
+} from '@/services/knowledge';
 
 const API_URL = import.meta.env.VITE_API_URL || '';
 
@@ -78,6 +82,40 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   const [showShareMenu, setShowShareMenu] = useState(false);
   const shareMenuRef = useRef(null);
 
+  // PHASE 1: Bookmark + Follow (the API already returned these flags,
+  // but there were no buttons, so Bookmarks/Following pages stayed empty)
+  const [isBookmarked, setIsBookmarked] = useState(!!discussion?.is_bookmarked);
+  const [isFollowing, setIsFollowing] = useState(!!discussion?.is_following);
+
+  useEffect(() => {
+    setIsBookmarked(!!discussion?.is_bookmarked);
+    setIsFollowing(!!discussion?.is_following);
+  }, [discussion?.id, discussion?.is_bookmarked, discussion?.is_following]);
+
+  const handleToggleBookmark = async () => {
+    const next = !isBookmarked;
+    setIsBookmarked(next);
+    try {
+      await toggleBookmark('discussion', discussion.id);
+      toast.success(next ? 'Saved to Bookmarks' : 'Removed from Bookmarks');
+    } catch (err) {
+      setIsBookmarked(!next);
+      toast.error('Failed to update bookmark');
+    }
+  };
+
+  const handleToggleFollow = async () => {
+    const next = !isFollowing;
+    setIsFollowing(next);
+    try {
+      await toggleFollow(discussion.id);
+      toast.success(next ? 'You are now following this discussion' : 'Unfollowed');
+    } catch (err) {
+      setIsFollowing(!next);
+      toast.error('Failed to update follow');
+    }
+  };
+
   const currentUserId = parseInt(localStorage.getItem('id'), 10);
   const currentUserRole = localStorage.getItem('role') || 'staff';
   const canSolve = discussion?.author_id === currentUserId || ['admin', 'superadmin'].includes(currentUserRole);
@@ -122,7 +160,9 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
   // 🔥 NEW SHARE HANDLERS
   // ==========================================
   const getShareUrl = () => {
-    return `${window.location.origin}/dashboard/${currentUserRole}/operationshub/${discussion.id}`;
+    // PHASE 1 FIX: /operationshub/<id> is read as a SERVICE id, so shared
+    // links opened a workspace. ?discussion=<id> opens the discussion.
+    return `${window.location.origin}/dashboard/${currentUserRole}/operationshub?discussion=${discussion.id}`;
   };
 
   const handleCopyLink = () => {
@@ -312,6 +352,22 @@ const DiscussionThread = ({ discussion, onBack, onUpdate }) => {
               </button>
             )
           )}
+
+          <button
+            onClick={handleToggleFollow}
+            className={`p-2 rounded-full transition ${isFollowing ? 'bg-navy-500/10 text-navy-700' : 'text-slate-400 hover:bg-slate-100'}`}
+            title={isFollowing ? 'Unfollow' : 'Follow this discussion'}
+          >
+            <FiEye className="h-5 w-5" />
+          </button>
+
+          <button
+            onClick={handleToggleBookmark}
+            className={`p-2 rounded-full transition ${isBookmarked ? 'bg-amber-50 text-amber-600' : 'text-slate-400 hover:bg-slate-100'}`}
+            title={isBookmarked ? 'Remove bookmark' : 'Bookmark'}
+          >
+            <FiBookmark className={`h-5 w-5 ${isBookmarked ? 'fill-current' : ''}`} />
+          </button>
 
           {/* 🔥 THE FIX: Integrated Share Dropdown */}
           <div className="relative" ref={shareMenuRef}>
