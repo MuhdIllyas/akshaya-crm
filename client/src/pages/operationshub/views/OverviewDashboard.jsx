@@ -3,12 +3,17 @@ import {
   FiUsers, FiMessageSquare, FiCheckCircle, FiLink, 
   FiFileText, FiArrowRight, FiPlus 
 } from 'react-icons/fi';
+import { can } from '@/utils/knowledgePermissions';
 
 const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents = [], setActiveTab }) => {
   
   // Find specific system documents for quick access
   const sopDoc = documents.find(d => d.system_key === 'sop');
   const faqDoc = documents.find(d => d.system_key === 'faq');
+
+  // PHASE 2: labels match what this user can actually do
+  const canEditDocs = can('document.edit', { workspace });
+  const canAddResource = can('resource.add', { workspace });
 
   return (
     <div className="animate-in fade-in duration-300 space-y-6">
@@ -72,7 +77,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
             className="flex flex-col items-center justify-center gap-2 p-4 bg-slate-50 hover:bg-navy-500/10 hover:text-navy-700 text-slate-600 rounded-xl border border-transparent hover:border-navy-500/10 transition-all"
           >
             <FiLink className="h-5 w-5" />
-            <span className="text-xs font-semibold">Add Resource</span>
+            <span className="text-xs font-semibold">{canAddResource ? 'Add Resource' : 'View Resources'}</span>
           </button>
           <button 
             onClick={() => sopDoc && setActiveTab(sopDoc.system_key || `doc-${sopDoc.id}`)}
@@ -80,7 +85,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
             disabled={!sopDoc}
           >
             <FiFileText className="h-5 w-5" />
-            <span className="text-xs font-semibold">Update SOP</span>
+            <span className="text-xs font-semibold">{canEditDocs ? 'Update SOP' : 'Read SOP'}</span>
           </button>
           <button 
             onClick={() => faqDoc && setActiveTab(faqDoc.system_key || `doc-${faqDoc.id}`)}
@@ -88,7 +93,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
             disabled={!faqDoc}
           >
             <FiCheckCircle className="h-5 w-5" />
-            <span className="text-xs font-semibold">Edit FAQ</span>
+            <span className="text-xs font-semibold">{canEditDocs ? 'Edit FAQ' : 'Read FAQ'}</span>
           </button>
         </div>
       </div>
@@ -131,9 +136,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
         <div className="bg-white border border-slate-200 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-sm font-bold text-slate-900">Ownership & Contributors</h3>
-            <button className="text-xs font-semibold text-navy-700 hover:text-navy-700 flex items-center gap-1">
-              <FiPlus className="h-3 w-3" /> Add Staff
-            </button>
+            {/* PHASE 2: "Add Staff" hidden until the contributor picker is built (it did nothing) */}
           </div>
           
           {contributors.length === 0 ? (

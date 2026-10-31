@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fi';
 import { fetchWorkspace, updateWorkspaceStatus } from '@/services/knowledge'; 
 import { toast } from 'react-toastify';
+import { can } from '@/utils/knowledgePermissions';
 
 // Import our modular views
 import OverviewDashboard from './views/OverviewDashboard';
@@ -99,7 +100,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} serviceName={mockService?.name} />;
     }
     if (activeTab === 'resources') {
-      return <ResourcesGrid resources={resources} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+      return <ResourcesGrid resources={resources} workspace={workspace} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
     }
     if (activeTab === 'cases') {
       return <CasesView workspaceId={workspace.id} />;
@@ -108,7 +109,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     const activeDoc = documents.find(d => d.system_key === activeTab || `doc-${d.id}` === activeTab);
     if (activeDoc) {
       // DocumentView now handles its own Edit mode and block rendering!
-      return <DocumentView key={activeDoc.id} document={activeDoc} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+      return <DocumentView key={activeDoc.id} document={activeDoc} workspace={workspace} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
     }
 
     return <div className="text-center text-slate-500 py-12">Tab content not found.</div>;
@@ -145,7 +146,8 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
           }`}>
             {workspace.status.replace('_', ' ')}
           </span>
-          {workspace.status !== 'published' && (
+          {/* PHASE 2: only superadmin sees Publish (the API rejects everyone else) */}
+          {workspace.status !== 'published' && can('workspace.publish', { workspace }) && (
             <button 
               onClick={handlePublish} 
               disabled={isPublishing} 

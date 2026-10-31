@@ -3,6 +3,7 @@ import { FiGlobe, FiFileText, FiVideo, FiImage, FiExternalLink, FiPlus, FiTrash2
 import { toast } from 'react-toastify';
 import { addResource, deleteResource } from '@/services/knowledge'; // Adjust path
 import AddResourceModal from './AddResourceModal';
+import { can } from '@/utils/knowledgePermissions';
 
 const TYPE_CONFIG = {
   portal: { icon: FiGlobe, color: 'bg-navy-500/10 text-navy-700', border: 'hover:border-navy-500/30' },
@@ -11,7 +12,10 @@ const TYPE_CONFIG = {
   image: { icon: FiImage, color: 'bg-emerald-50 text-emerald-600', border: 'hover:border-emerald-300' }
 };
 
-const ResourcesGrid = ({ resources, workspaceId, onUpdate }) => {
+const ResourcesGrid = ({ resources, workspace, workspaceId, onUpdate }) => {
+  // PHASE 2: only admins/superadmins add or delete resources
+  const canAdd = can('resource.add', { workspace });
+  const canDelete = can('resource.delete', { workspace });
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -23,7 +27,7 @@ const ResourcesGrid = ({ resources, workspaceId, onUpdate }) => {
       setIsModalOpen(false);
       onUpdate(); // Reload workspace data
     } catch (err) {
-      toast.error('Failed to add resource.');
+      toast.error(err.response?.data?.error || 'Failed to add resource.');
     } finally {
       setIsSubmitting(false);
     }
@@ -38,7 +42,7 @@ const ResourcesGrid = ({ resources, workspaceId, onUpdate }) => {
       toast.success('Resource deleted.');
       onUpdate();
     } catch (err) {
-      toast.error('Failed to delete resource.');
+      toast.error(err.response?.data?.error || 'Failed to delete resource.');
     }
   };
 
@@ -49,12 +53,14 @@ const ResourcesGrid = ({ resources, workspaceId, onUpdate }) => {
           <h2 className="text-2xl font-bold text-slate-900">Important Links & Files</h2>
           <p className="text-sm text-slate-500 mt-1">Official portals, forms, and training materials for this service.</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)} 
-          className="flex items-center gap-2 bg-navy-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-navy-700 transition-all shadow-sm"
-        >
-          <FiPlus className="h-4 w-4" /> Add Resource
-        </button>
+        {canAdd && (
+          <button 
+            onClick={() => setIsModalOpen(true)} 
+            className="flex items-center gap-2 bg-navy-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-navy-700 transition-all shadow-sm"
+          >
+            <FiPlus className="h-4 w-4" /> Add Resource
+          </button>
+        )}
       </div>
 
       {(!resources || resources.length === 0) ? (
@@ -63,7 +69,9 @@ const ResourcesGrid = ({ resources, workspaceId, onUpdate }) => {
             <FiGlobe className="h-8 w-8" />
           </div>
           <h3 className="text-slate-900 font-bold mb-1">No Resources Yet</h3>
-          <p className="text-slate-500 text-sm">Add official portals and PDFs to help your staff.</p>
+          <p className="text-slate-500 text-sm">
+            {canAdd ? 'Add official portals and PDFs to help your staff.' : 'Admins will add official portals and forms here.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -83,13 +91,15 @@ const ResourcesGrid = ({ resources, workspaceId, onUpdate }) => {
                   </div>
                   
                   <div className="flex items-center gap-2">
-                    <button 
-                      onClick={(e) => handleDelete(e, res.id)} 
-                      className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
-                      title="Delete Resource"
-                    >
-                      <FiTrash2 className="h-4 w-4" />
-                    </button>
+                    {canDelete && (
+                      <button 
+                        onClick={(e) => handleDelete(e, res.id)} 
+                        className="p-2 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+                        title="Delete Resource"
+                      >
+                        <FiTrash2 className="h-4 w-4" />
+                      </button>
+                    )}
                     <FiExternalLink className="text-slate-300 group-hover:text-slate-500 transition-colors" />
                   </div>
                 </div>

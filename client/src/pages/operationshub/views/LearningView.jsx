@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { FiAward, FiPlus, FiVideo, FiFileText, FiClock, FiExternalLink, FiX } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { fetchTrainings, createTraining } from '@/services/knowledge'; // Adjust path
+import { can } from '@/utils/knowledgePermissions';
 
 const LearningView = () => {
   const [trainings, setTrainings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const canCreate = can('training.create'); // PHASE 2
 
   const [formData, setFormData] = useState({ title: '', description: '', type: 'video', url: '', duration: '' });
 
@@ -35,7 +37,7 @@ const LearningView = () => {
       setFormData({ title: '', description: '', type: 'video', url: '', duration: '' });
       loadTrainings();
     } catch (err) {
-      toast.error('Failed to add training');
+      toast.error(err.response?.data?.error || 'Failed to add training');
     } finally {
       setIsSubmitting(false);
     }
@@ -50,12 +52,14 @@ const LearningView = () => {
           <h2 className="text-2xl font-bold text-slate-900">Learning Center</h2>
           <p className="text-sm text-slate-500 mt-1">Official video tutorials, courses, and onboarding guides.</p>
         </div>
-        <button 
-          onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-navy-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-navy-700 transition shadow-sm"
-        >
-          <FiPlus className="h-4 w-4" /> Add Training
-        </button>
+        {canCreate && (
+          <button 
+            onClick={() => setIsModalOpen(true)}
+            className="flex items-center gap-2 bg-navy-700 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-navy-700 transition shadow-sm"
+          >
+            <FiPlus className="h-4 w-4" /> Add Training
+          </button>
+        )}
       </div>
 
       {/* Grid */}
@@ -67,7 +71,9 @@ const LearningView = () => {
             <FiAward className="h-8 w-8" />
           </div>
           <h3 className="text-slate-900 font-bold mb-1">No Training Materials</h3>
-          <p className="text-slate-500 text-sm">Upload videos or guides to help train your staff.</p>
+          <p className="text-slate-500 text-sm">
+            {canCreate ? 'Upload videos or guides to help train your staff.' : 'Training materials from management will appear here.'}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -94,7 +100,7 @@ const LearningView = () => {
       )}
 
       {/* Add Modal */}
-      {isModalOpen && (
+      {isModalOpen && canCreate && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
           <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">

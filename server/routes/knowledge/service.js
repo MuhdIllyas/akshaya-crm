@@ -2,6 +2,40 @@
 import pool from '../../db.js';
 import notificationService from '../../utils/notificationService.js'; 
 import { notificationTemplates } from '../../utils/notificationTemplates.js';
+import { KnowledgeError } from './permissions.js';
+
+// ==========================================
+// PHASE 2: lookups used for permission checks
+// (the server works out which workspace something belongs to,
+//  instead of trusting a workspaceId sent by the browser)
+// ==========================================
+export const getWorkspaceById = async (workspaceId) => {
+    const res = await pool.query('SELECT * FROM knowledge_workspaces WHERE id = $1 AND deleted_at IS NULL', [workspaceId]);
+    if (res.rows.length === 0) throw new KnowledgeError(404, 'Workspace not found.');
+    return res.rows[0];
+};
+
+export const getDocumentWorkspace = async (documentId) => {
+    const res = await pool.query(
+        `SELECT kw.* FROM knowledge_documents kd
+         JOIN knowledge_workspaces kw ON kw.id = kd.workspace_id
+         WHERE kd.id = $1 AND kd.deleted_at IS NULL AND kw.deleted_at IS NULL`,
+        [documentId]
+    );
+    if (res.rows.length === 0) throw new KnowledgeError(404, 'Document not found.');
+    return res.rows[0];
+};
+
+export const getResourceWorkspace = async (resourceId) => {
+    const res = await pool.query(
+        `SELECT kw.* FROM knowledge_resources kr
+         JOIN knowledge_workspaces kw ON kw.id = kr.workspace_id
+         WHERE kr.id = $1 AND kr.deleted_at IS NULL`,
+        [resourceId]
+    );
+    if (res.rows.length === 0) throw new KnowledgeError(404, 'Resource not found.');
+    return res.rows[0];
+};
 
 // ==========================================
 // WORKSPACE & STATS (Inheritance Logic)
@@ -124,6 +158,7 @@ export const getWorkspaceData = async (serviceId, centreId, staffId) => {
 };
 
 export const updateWorkspaceStatus = async (workspaceId, newStatus, staffId) => {
+    const before = await getWorkspaceById(workspaceId);
     let updateQuery = `UPDATE knowledge_workspaces SET status = $1, updated_at = NOW()`;
     const values = [newStatus, workspaceId];
     
@@ -138,7 +173,7 @@ export const updateWorkspaceStatus = async (workspaceId, newStatus, staffId) => 
     updateQuery += ` WHERE id = $2 RETURNING *`;
     const res = await pool.query(updateQuery, values);
     
-    await logHistory(workspaceId, 'workspace', workspaceId, 'status_change', { previous: 'unknown' }, { status: newStatus }, staffId);
+    await logHistory(workspaceId, 'workspace', workspaceId, 'status_change', { status: before.status }, { status: newStatus }, staffId);
     return res.rows[0];
 };
 
@@ -202,10 +237,11 @@ export const updateDocument = async (id, title, slug, visibility, sortOrder, sta
 };
 
 export const softDeleteDocument = async (id, staffId) => {
-    const docRes = await pool.query('SELECT workspace_id, type FROM knowledge_documents WHERE id = $1', [id]);
+    const docRes = await pool.query('SELECT workspace_id, type FROM knowledge_documents WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (docRes.rows.length === 0) throw new KnowledgeError(404, 'Document not found.');
     
     if (docRes.rows[0].type === 'SYSTEM') {
-        throw new Error("System documents cannot be deleted.");
+        throw new KnowledgeError(400, 'SOP, FAQ and Overview are system documents and cannot be deleted.');
     }
 
     const workspaceId = docRes.rows[0].workspace_id;
@@ -350,7 +386,7 @@ export const getDiscussions = async (workspaceId, userId) => {
     });
 };
 
-export const createDiscussion = async (workspaceId, payload, staffId) => {
+export const createDiscussion = async (workspaceId, payload, staffId, user = {}) => {
     const { title, content, category, priority, tags, relatedTo, relatedId, attachments } = payload;
     
     const customerStr = relatedTo === 'customer' ? relatedId : null;
@@ -364,15 +400,16 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
             `SELECT service_id FROM knowledge_workspaces WHERE id = $1`, 
             [workspaceId]
         );
-        if (workspaceRes.rows.length === 0) throw new Error("Invalid Workspace.");
+        if (workspaceRes.rows.length === 0) throw new KnowledgeError(404, "Invalid Workspace.");
         const expectedServiceId = workspaceRes.rows[0].service_id;
 
         if (expectedServiceId) {
             let queryStr = `
-                SELECT se.category_id 
+                SELECT se.category_id, st_staff.centre_id
                 FROM service_tracking st
                 JOIN service_entries se ON st.service_entry_id = se.id
-                WHERE st.application_number ILIKE $1
+                LEFT JOIN staff st_staff ON se.staff_id::integer = st_staff.id
+                WHERE (st.application_number ILIKE $1
             `;
             const params = [searchParam];
 
@@ -380,17 +417,25 @@ export const createDiscussion = async (workspaceId, payload, staffId) => {
                 queryStr += ` OR st.id = $2`;
                 params.push(numericId);
             }
+            queryStr += `)`;
 
             const appRes = await pool.query(queryStr, params);
 
             if (appRes.rows.length === 0) {
-                throw new Error("The linked CRM application could not be found.");
+                throw new KnowledgeError(400, "The linked CRM application could not be found.");
             }
 
             const actualServiceId = appRes.rows[0].category_id;
 
             if (parseInt(expectedServiceId, 10) !== parseInt(actualServiceId, 10)) {
-                throw new Error("Integrity Check Failed: You cannot link this application to this workspace because they belong to different services.");
+                throw new KnowledgeError(400, "You cannot link this application here because it belongs to a different service.");
+            }
+
+            // PHASE 2 FIX: same centre rule as the CRM lookup — only
+            // superadmin can link another centre's application
+            if (user.role !== 'superadmin' &&
+                String(appRes.rows[0].centre_id) !== String(user.centre_id)) {
+                throw new KnowledgeError(403, "This application belongs to another centre.");
             }
         }
     }
@@ -499,20 +544,28 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
     try {
         await client.query('BEGIN');
         
-        await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
-        
         let solutionText = "This issue was manually marked as resolved by staff.";
         let replyAuthorId = null;
 
         if (replyId) {
-            await client.query(`UPDATE knowledge_discussion_replies SET is_best_answer = true WHERE id = $1`, [replyId]);
-            
-            const replyRes = await client.query(`SELECT content, author_id FROM knowledge_discussion_replies WHERE id = $1`, [replyId]);
-            if (replyRes.rows.length > 0) {
-                solutionText = replyRes.rows[0].content;
-                replyAuthorId = replyRes.rows[0].author_id;
+            // PHASE 2 FIX: the best answer must be a reply in THIS discussion
+            const replyRes = await client.query(
+                `SELECT content, author_id FROM knowledge_discussion_replies WHERE id = $1 AND discussion_id = $2`,
+                [replyId, discussionId]
+            );
+            if (replyRes.rows.length === 0) {
+                throw new KnowledgeError(400, 'That reply does not belong to this discussion.');
             }
+            solutionText = replyRes.rows[0].content;
+            replyAuthorId = replyRes.rows[0].author_id;
+
+            await client.query(
+                `UPDATE knowledge_discussion_replies SET is_best_answer = true WHERE id = $1 AND discussion_id = $2`,
+                [replyId, discussionId]
+            );
         }
+
+        await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
 
         const discussionRes = await client.query(`SELECT workspace_id, title, content, tags FROM knowledge_discussions WHERE id = $1`, [discussionId]);
         const discussion = discussionRes.rows[0];
@@ -699,7 +752,7 @@ export const getDiscussionById = async (id, userId) => {
         WHERE d.id = $1
     `, [id, userId]);
 
-    if (discussionRes.rows.length === 0) throw new Error("Discussion not found");
+    if (discussionRes.rows.length === 0) throw new KnowledgeError(404, "Discussion not found");
     const discussion = discussionRes.rows[0];
 
     const repliesRes = await pool.query(`

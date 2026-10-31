@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import { FiEdit2, FiInfo, FiAlertTriangle, FiCheckCircle, FiFileText } from 'react-icons/fi';
 import BlockEditor from './BlockEditor';
+import { can } from '@/utils/knowledgePermissions';
 
-const DocumentView = ({ document, workspaceId, onUpdate }) => {
+const DocumentView = ({ document, workspace, workspaceId, onUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
+  // PHASE 2: staff can read; admins/superadmins can edit
+  const canEdit = can('document.edit', { workspace });
 
   // If the user clicks Edit, we will eventually show the interactive Block Editor
-  if (isEditing) {
+  if (isEditing && canEdit) {
       return (
         <BlockEditor 
           document={document} 
@@ -75,12 +78,14 @@ const DocumentView = ({ document, workspaceId, onUpdate }) => {
           </div>
         </div>
         
-        <button 
-          onClick={() => setIsEditing(true)} 
-          className="flex items-center gap-2 px-4 py-2 bg-navy-500/10 text-navy-700 font-medium text-sm rounded-xl hover:bg-navy-500/10 transition-colors"
-        >
-          <FiEdit2 className="h-4 w-4" /> Edit Document
-        </button>
+        {canEdit && (
+          <button 
+            onClick={() => setIsEditing(true)} 
+            className="flex items-center gap-2 px-4 py-2 bg-navy-500/10 text-navy-700 font-medium text-sm rounded-xl hover:bg-navy-500/10 transition-colors"
+          >
+            <FiEdit2 className="h-4 w-4" /> Edit Document
+          </button>
+        )}
       </div>
 
       {/* Document Body (Block Renderer) */}
@@ -88,7 +93,9 @@ const DocumentView = ({ document, workspaceId, onUpdate }) => {
         {!document.blocks || document.blocks.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-slate-400 text-lg">This document is currently empty.</p>
-            <p className="text-slate-400 text-sm mt-2">Click edit to start adding content.</p>
+            <p className="text-slate-400 text-sm mt-2">
+              {canEdit ? 'Click edit to start adding content.' : 'An admin has not added content here yet.'}
+            </p>
           </div>
         ) : (
           <div className="pb-12">
