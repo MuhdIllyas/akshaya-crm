@@ -5,7 +5,7 @@ import {
   FiX, FiRefreshCw, FiMail, FiMessageSquare, FiEye, FiTrendingUp,
   FiBarChart2, FiFilter, FiDownload, FiPrinter, FiMoreHorizontal,
   FiGrid, FiList, FiFlag, FiTarget, FiPieChart, FiAward,
-  FiAlertCircle, FiClock, FiCheckCircle, FiDollarSign, FiShield
+  FiAlertCircle, FiClock, FiCheckCircle, FiDollarSign, FiShield, FiArrowLeft, FiChevronRight
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'react-toastify';
@@ -33,18 +33,18 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
-          <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md text-center">
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-8 max-w-md text-center">
             <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FiAlertCircle className="h-8 w-8 text-rose-600" />
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-2">Something went wrong</h2>
-            <p className="text-gray-600 mb-4">
+            <h2 className="text-xl font-bold text-slate-900 mb-2">Something went wrong</h2>
+            <p className="text-slate-600 mb-4">
               There was an error loading customer profiles. Please try refreshing the page.
             </p>
             <button
               onClick={() => window.location.reload()}
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className="h-11 px-6 bg-navy-700 text-white rounded-xl hover:bg-navy-700 transition-colors"
             >
               Refresh Page
             </button>
@@ -56,6 +56,8 @@ class ErrorBoundary extends React.Component {
     return this.props.children;
   }
 }
+
+const PAGE_SIZE = 20;
 
 const CustomerProfileSystem = () => {
   const [activeTab, setActiveTab] = useState('profile');
@@ -69,6 +71,7 @@ const CustomerProfileSystem = () => {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('all');
   const [viewMode, setViewMode] = useState('list');
+  const [page, setPage] = useState(1);
 
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -83,10 +86,10 @@ const CustomerProfileSystem = () => {
       icon: FiClock
     },
     'In Progress': { 
-      color: 'text-blue-800', 
-      bg: 'bg-blue-100', 
-      border: 'border-blue-300',
-      dot: 'bg-blue-600',
+      color: 'text-navy-800', 
+      bg: 'bg-navy-500/10', 
+      border: 'border-navy-500/20',
+      dot: 'bg-navy-700',
       icon: FiTrendingUp
     },
     'Delayed': { 
@@ -104,17 +107,17 @@ const CustomerProfileSystem = () => {
       icon: FiCheckCircle
     },
     'Resubmit': { 
-      color: 'text-orange-800', 
-      bg: 'bg-orange-100', 
-      border: 'border-orange-300',
-      dot: 'bg-orange-600',
+      color: 'text-amber-800', 
+      bg: 'bg-amber-100', 
+      border: 'border-amber-300',
+      dot: 'bg-amber-600',
       icon: FiRefreshCw
     },
     'Paid': { 
-      color: 'text-green-700', 
-      bg: 'bg-green-100', 
-      border: 'border-green-300',
-      dot: 'bg-green-600',
+      color: 'text-emerald-700', 
+      bg: 'bg-emerald-100', 
+      border: 'border-emerald-300',
+      dot: 'bg-emerald-600',
       icon: FiDollarSign
     }
   };
@@ -406,6 +409,13 @@ const CustomerProfileSystem = () => {
     );
   }).map(c => normalizeCustomer(c));
 
+  // List page helpers (display only)
+  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pagedCustomers = filteredCustomers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const verifiedCount = customers.filter(c => c.is_verified === true).length;
+  const initials = (name) => (name || '?').split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+
   const handleAddApplication = () => {
     toast.info("This would open a form to add a new application in a real implementation");
   };
@@ -436,29 +446,6 @@ const CustomerProfileSystem = () => {
     }
   };
 
-  const KPIStat = ({ title, value, subtitle, trend, icon: Icon, color }) => (
-    <motion.div 
-      whileHover={{ y: -2 }}
-      className="bg-white rounded-xl border border-gray-200 p-6 hover:shadow-lg transition-all duration-300 group"
-    >
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm font-medium text-gray-600 mb-1">{title}</p>
-          <p className="text-2xl font-bold text-gray-900 mb-1">{value}</p>
-          <div className="flex items-center space-x-2">
-            <span className={`text-xs font-medium ${trend > 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-              {trend > 0 ? '+' : ''}{trend}%
-            </span>
-            <span className="text-xs text-gray-500">{subtitle}</span>
-          </div>
-        </div>
-        <div className={`p-3 rounded-xl ${color} transition-colors group-hover:scale-110`}>
-          <Icon className="h-6 w-6 text-white" />
-        </div>
-      </div>
-    </motion.div>
-  );
-
   // UPDATED: CustomerCard without "0 Active"
   const CustomerCard = ({ customer, isSelected, onClick }) => {
     return (
@@ -466,33 +453,33 @@ const CustomerProfileSystem = () => {
         whileHover={{ y: -2 }}
         className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
           isSelected 
-            ? 'border-indigo-500 bg-indigo-50 shadow-md' 
-            : 'border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm'
+            ? 'border-navy-700 bg-navy-500/10 shadow-md' 
+            : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
         }`}
         onClick={onClick}
       >
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center space-x-2 min-w-0 flex-1">
             <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 bg-gradient-to-br from-gray-800 to-gray-600 rounded-lg flex items-center justify-center">
+              <div className="w-8 h-8 bg-navy-700 rounded-lg flex items-center justify-center">
                 <FiUser className="h-4 w-4 text-white" />
               </div>
             </div>
             <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-gray-900 text-sm truncate" title={customer.name}>
+              <h3 className="font-semibold text-slate-900 text-sm truncate" title={customer.name}>
                 {customer.name}
               </h3>
-              <p className="text-xs text-gray-500 truncate" title={customer.phone}>
+              <p className="text-xs text-slate-500 truncate" title={customer.phone}>
                 {customer.phone}
               </p>
             </div>
           </div>
         </div>
         <div className="mb-2">
-          <p className="text-xs text-gray-600 truncate" title={customer.email}>
+          <p className="text-xs text-slate-600 truncate" title={customer.email}>
             {customer.email}
           </p>
-          <p className="text-xs text-gray-600 truncate" title={`${customer.district}, ${customer.state}`}>
+          <p className="text-xs text-slate-600 truncate" title={`${customer.district}, ${customer.state}`}>
             {customer.district}, {customer.state}
           </p>
         </div>
@@ -509,11 +496,11 @@ const CustomerProfileSystem = () => {
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
-          <div className="text-xs text-gray-500 truncate flex-1 min-w-0 mr-2">
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
+          <div className="text-xs text-slate-500 truncate flex-1 min-w-0 mr-2">
             Aadhaar: {customer.aadhaarDisplay || 'Not Uploaded'}
           </div>
-          <div className="text-xs font-medium text-indigo-600 whitespace-nowrap flex-shrink-0">
+          <div className="text-xs font-medium text-navy-700 whitespace-nowrap flex-shrink-0">
             {customer.satisfaction}% Sat
           </div>
         </div>
@@ -522,41 +509,41 @@ const CustomerProfileSystem = () => {
   };
 
   const StatItem = ({ label, value }) => (
-    <div className="text-center p-4 bg-gray-50 rounded-lg border border-gray-200">
-      <p className="text-sm font-medium text-gray-600 mb-1">{label}</p>
-      <p className="text-lg font-semibold text-gray-900">{value}</p>
+    <div className="text-center p-3 sm:p-4 bg-slate-50 rounded-xl border border-slate-200">
+      <p className="text-sm font-medium text-slate-600 mb-1">{label}</p>
+      <p className="text-lg font-semibold text-slate-900">{value}</p>
     </div>
   );
 
   const DetailRow = ({ label, value, valueClass = "" }) => (
-    <div className="flex justify-between items-center py-1">
-      <span className="text-sm text-gray-600">{label}</span>
-      <span className={`text-sm font-medium ${valueClass}`}>{value || '—'}</span>
+    <div className="flex justify-between items-start gap-4 py-1">
+      <span className="shrink-0 text-sm text-slate-600">{label}</span>
+      <span className={`min-w-0 break-words text-right text-sm font-medium ${valueClass}`}>{value || '—'}</span>
     </div>
   );
 
   const TimelineItem = ({ title, dateTime, completed, current }) => (
     <div className="flex items-center space-x-3">
-      <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : current ? 'bg-indigo-500' : 'bg-gray-300'}`}></div>
+      <div className={`w-2 h-2 rounded-full ${completed ? 'bg-emerald-500' : current ? 'bg-navy-700' : 'bg-slate-300'}`}></div>
       <div className="flex-1">
-        <p className={`text-sm font-medium ${completed || current ? 'text-gray-900' : 'text-gray-500'}`}>
+        <p className={`text-sm font-medium ${completed || current ? 'text-slate-900' : 'text-slate-500'}`}>
           {title}
         </p>
-        <p className="text-xs text-gray-500">{dateTime}</p>
+        <p className="text-xs text-slate-500">{dateTime}</p>
       </div>
     </div>
   );
 
   const ActivityItem = ({ action, description, time, user }) => (
-    <div className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-      <div className="w-2 h-2 bg-indigo-500 rounded-full mt-2"></div>
+    <div className="flex items-start space-x-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
+      <div className="w-2 h-2 bg-navy-700 rounded-full mt-2"></div>
       <div className="flex-1">
         <div className="flex items-center justify-between">
-          <p className="text-sm font-medium text-gray-900">{action}</p>
-          <p className="text-xs text-gray-500">{time}</p>
+          <p className="text-sm font-medium text-slate-900">{action}</p>
+          <p className="text-xs text-slate-500">{time}</p>
         </div>
-        <p className="text-sm text-gray-600 mt-1">{description}</p>
-        <p className="text-xs text-gray-500 mt-1">By {user}</p>
+        <p className="text-sm text-slate-600 mt-1">{description}</p>
+        <p className="text-xs text-slate-500 mt-1">By {user}</p>
       </div>
     </div>
   );
@@ -593,10 +580,10 @@ const CustomerProfileSystem = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[400px] flex items-center justify-center">
         <div className="text-center">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600 font-medium">Loading customer dashboard...</p>
+          <div className="w-16 h-16 border-4 border-navy-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-slate-600 font-medium">Loading customer dashboard...</p>
         </div>
       </div>
     );
@@ -604,215 +591,90 @@ const CustomerProfileSystem = () => {
   
   return (
     <ErrorBoundary>
-      <div className="min-h-screen bg-gray-50">
-        
-        <header className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-9 h-9 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-lg flex items-center justify-center shadow-lg">
-                  <FiUser className="h-5 w-5 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-xl font-bold text-gray-900">Customer Profile Management</h1>
-                  <p className="text-gray-600 text-sm">Manage and track customer profiles and applications</p>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">
-                <button
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all duration-200 shadow-sm"
-                  onClick={() => window.location.reload()}
-                >
-                  <FiRefreshCw className="h-4 w-4" />
-                  <span>Refresh</span>
+      <div className="p-4 sm:p-6">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-700 text-white">
+              <FiUser className="h-5 w-5" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Customer Profile Management</h1>
+              <p className="text-sm text-slate-500">Manage and track customer profiles and applications</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {!selectedCustomer && (
+              <>
+                <button className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-navy-700 px-4 text-sm font-medium text-white transition-colors hover:bg-navy-800 sm:h-10">
+                  <FiPlus className="h-4 w-4" />
+                  <span>New Customer</span>
                 </button>
-              </div>
-            </div>
+                <button
+                  onClick={handleExportData}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:h-10"
+                >
+                  <FiDownload className="h-4 w-4" />
+                  <span>Export</span>
+                </button>
+                <button
+                  onClick={handlePrintReport}
+                  className="hidden h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:inline-flex"
+                >
+                  <FiPrinter className="h-4 w-4" />
+                  <span>Print</span>
+                </button>
+              </>
+            )}
+            <button
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:h-10"
+              onClick={() => window.location.reload()}
+            >
+              <FiRefreshCw className="h-4 w-4" />
+              <span>Refresh</span>
+            </button>
           </div>
-        </header>
-        
-        <div className="max-w-7xl mx-auto px-6 py-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <KPIStat
-              title="Total Customers"
-              value={customers.length}
-              subtitle="Active profiles"
-              trend={8}
-              icon={FiUser}
-              color="bg-gradient-to-br from-blue-500 to-blue-600"
-            />
-            <KPIStat
-              title="Active Applications"
-              value={selectedCustomer ? customerApplications.filter(app => 
-                app.status === 'Pending' || app.status === 'In Progress'
-              ).length : 0}
-              subtitle="For selected customer"
-              trend={12}
-              icon={FiTrendingUp}
-              color="bg-gradient-to-br from-amber-500 to-amber-600"
-            />
-            <KPIStat
-              title="Completion Rate"
-              value={selectedCustomer && customerApplications.length > 0 
-                ? Math.round((customerApplications.filter(app => app.status === 'Completed').length / customerApplications.length) * 100)
-                : '0%'}
-              subtitle="Of total applications"
-              trend={3}
-              icon={FiCheck}
-              color="bg-gradient-to-br from-emerald-500 to-emerald-600"
-            />
-            <KPIStat
-              title="Avg. Satisfaction"
-              value="92%"
-              subtitle="Above target"
-              trend={2}
-              icon={FiAward}
-              color="bg-gradient-to-br from-purple-500 to-purple-600"
-            />
-          </div>
-          
-          <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
-            <div className="xl:col-span-1">
-              <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">Quick Actions</h3>
-                  <div className="flex space-x-1">
-                    <button 
-                      onClick={() => setViewMode('grid')}
-                      className={`p-2 rounded-lg ${viewMode === 'grid' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      <FiGrid className="h-4 w-4" />
-                    </button>
-                    <button 
-                      onClick={() => setViewMode('list')}
-                      className={`p-2 rounded-lg ${viewMode === 'list' ? 'bg-indigo-100 text-indigo-600' : 'text-gray-400 hover:text-gray-600'}`}
-                    >
-                      <FiList className="h-4 w-4" />
-                    </button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <button className="p-3 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-colors flex flex-col items-center justify-center">
-                    <FiPlus className="h-5 w-5 mb-1" />
-                    <span className="text-xs font-medium">New Customer</span>
-                  </button>
-                  <button 
-                    onClick={handleExportData}
-                    className="p-3 bg-emerald-50 text-emerald-600 rounded-lg hover:bg-emerald-100 transition-colors flex flex-col items-center justify-center"
-                  >
-                    <FiDownload className="h-5 w-5 mb-1" />
-                    <span className="text-xs font-medium">Export</span>
-                  </button>
-                  <button className="p-3 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors flex flex-col items-center justify-center">
-                    <FiFilter className="h-5 w-5 mb-1" />
-                    <span className="text-xs font-medium">Filters</span>
-                  </button>
-                  <button 
-                    onClick={handlePrintReport}
-                    className="p-3 bg-purple-50 text-purple-600 rounded-lg hover:bg-purple-100 transition-colors flex flex-col items-center justify-center"
-                  >
-                    <FiPrinter className="h-5 w-5 mb-1" />
-                    <span className="text-xs font-medium">Print</span>
-                  </button>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-                <div className="space-y-4">
-                  <div className="relative">
-                    <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                    <input
-                      type="text"
-                      placeholder="Search customers..."
-                      className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Status Filter</label>
-                    <div className="relative">
-                      <select
-                        className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 appearance-none"
-                        value={statusFilter}
-                        onChange={(e) => setStatusFilter(e.target.value)}
-                      >
-                        <option value="all">All Statuses</option>
-                        <option value="Active">Active</option>
-                        <option value="Inactive">Inactive</option>
-                        <option value="High Priority">High Priority</option>
-                      </select>
-                      <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                        <FiChevronDown className="h-5 w-5" />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="font-semibold text-gray-900">
-                    Customers <span className="text-gray-500 font-normal">({filteredCustomers.length})</span>
-                  </h3>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                    <span className="text-xs text-gray-500">Active</span>
-                  </div>
-                </div>
-                <div className="space-y-3 max-h-[500px] overflow-y-auto scrollbar-hide">
-                  {filteredCustomers.map(customer => (
-                    <CustomerCard
-                      key={customer.id}
-                      customer={customer}
-                      isSelected={selectedCustomer?.id === customer.id}
-                      onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
-                    />
-                  ))}
-                  {filteredCustomers.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                      <p className="text-sm">No customers found</p>
-                      <p className="text-xs text-gray-400 mt-1">Try adjusting your search</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-            
-            <div className="xl:col-span-3">
-              {selectedCustomer ? (
+        </div>
+
+        {selectedCustomer ? (
+          <div>
+            <button
+              onClick={() => navigate('/dashboard/staff/customers')}
+              className="mb-3 inline-flex min-h-[40px] items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-800"
+            >
+              <FiArrowLeft className="h-4 w-4" />
+              All customers
+            </button>
                 <div className="space-y-6">
-                  <div className="bg-white rounded-xl border border-gray-200 p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-16 h-16 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
+                      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+                        <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 bg-navy-700 rounded-xl flex items-center justify-center">
                           <FiUser className="h-8 w-8 text-white" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-3 mb-1">
-                            <h2 className="text-2xl font-bold text-gray-900">{selectedCustomer.name}</h2>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
+                            <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">{selectedCustomer.name}</h2>
                             <VerificationBadge isVerified={selectedCustomer.is_verified} />
                           </div>
-                          <div className="flex items-center space-x-4">
-                            <div className="flex items-center space-x-1 text-gray-600">
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                            <div className="flex items-center space-x-1 text-slate-600">
                               <FiPhone className="h-4 w-4" />
                               <span className="text-sm">{selectedCustomer.phone}</span>
                             </div>
-                            <div className="flex items-center space-x-1 text-gray-600">
+                            <div className="flex items-center space-x-1 text-slate-600">
                               <FiMail className="h-4 w-4" />
-                              <span className="text-sm">{selectedCustomer.email}</span>
+                              <span className="text-sm break-all">{selectedCustomer.email}</span>
                             </div>
-                            <div className="flex items-center space-x-1 text-gray-600">
+                            <div className="flex items-center space-x-1 text-slate-600">
                               <FiCreditCard className="h-4 w-4" />
                               <span className="text-sm">{selectedCustomer.aadhaarDisplay || selectedCustomer.aadhaar}</span>
                             </div>
                           </div>
                         </div>
                       </div>
-                      <div className="flex space-x-2 mt-4 lg:mt-0">
+                      <div className="flex flex-wrap gap-2 mt-4 lg:mt-0">
                         <button
-                          className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 flex items-center space-x-2 transition-all duration-200"
+                          className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center space-x-2 transition-all duration-200"
                           onClick={handleNotifyCustomer}
                         >
                           <FiMessageSquare className="h-4 w-4" />
@@ -820,13 +682,13 @@ const CustomerProfileSystem = () => {
                         </button>
                         <button 
                           onClick={handleEditCustomer}
-                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center space-x-2 transition-all duration-200"
+                          className="h-10 px-4 border border-slate-300 bg-white text-slate-700 rounded-xl hover:bg-slate-50 flex items-center space-x-2 transition-all duration-200"
                         >
                           <FiEdit className="h-4 w-4" />
                           <span>Edit</span>
                         </button>
-                        <button className="p-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
-                          <FiMoreHorizontal className="h-4 w-4 text-gray-600" />
+                        <button className="grid h-10 w-10 place-items-center border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors">
+                          <FiMoreHorizontal className="h-4 w-4 text-slate-600" />
                         </button>
                       </div>
                     </div>
@@ -838,16 +700,16 @@ const CustomerProfileSystem = () => {
                     </div>
                   </div>
                   
-                  <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                    <div className="border-b border-gray-200">
-                      <nav className="flex -mb-px">
+                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                    <div className="border-b border-slate-200">
+                      <nav className="flex -mb-px overflow-x-auto">
                         {['profile', 'applications', 'documents', 'history'].map((tab) => (
                           <button
                             key={tab}
-                            className={`flex-1 py-4 px-6 text-center font-medium text-sm border-b-2 transition-colors ${
+                            className={`flex-1 whitespace-nowrap py-3.5 px-4 sm:px-6 text-center font-medium text-sm border-b-2 transition-colors ${
                               activeTab === tab
-                                ? 'border-indigo-500 text-indigo-600'
-                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                ? 'border-navy-700 text-navy-700'
+                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                             }`}
                             onClick={() => setActiveTab(tab)}
                           >
@@ -859,7 +721,7 @@ const CustomerProfileSystem = () => {
                         ))}
                       </nav>
                     </div>
-                    <div className="p-6">
+                    <div className="p-4 sm:p-6">
                       <AnimatePresence mode="wait">
                         <motion.div
                           key={activeTab}
@@ -872,7 +734,7 @@ const CustomerProfileSystem = () => {
                             <div className="space-y-6">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-4">
-                                  <h3 className="font-semibold text-gray-900">Personal Information</h3>
+                                  <h3 className="font-semibold text-slate-900">Personal Information</h3>
                                   <div className="space-y-3">
                                     <DetailRow label="Full Name" value={selectedCustomer.name} />
                                     <DetailRow label="Phone Number" value={selectedCustomer.phone} />
@@ -887,14 +749,14 @@ const CustomerProfileSystem = () => {
                                   </div>
                                 </div>
                                 <div className="space-y-4">
-                                  <h3 className="font-semibold text-gray-900">Address Details</h3>
+                                  <h3 className="font-semibold text-slate-900">Address Details</h3>
                                   <div className="space-y-3">
                                     <DetailRow label="Full Address" value={selectedCustomer.address} />
                                     <DetailRow label="District" value={selectedCustomer.district} />
                                     <DetailRow label="State" value={selectedCustomer.state} />
                                     <DetailRow label="Pincode" value={selectedCustomer.pincode} />
                                     <div className="py-2">
-                                      <h4 className="text-sm font-medium text-gray-700 mb-2">Verification Status</h4>
+                                      <h4 className="text-sm font-medium text-slate-700 mb-2">Verification Status</h4>
                                       <div className="space-y-2">
                                         <DetailRow 
                                           label="Profile Status" 
@@ -913,7 +775,7 @@ const CustomerProfileSystem = () => {
                                       </div>
                                     </div>
                                     <div className="py-2">
-                                      <h4 className="text-sm font-medium text-gray-700 mb-2">Timestamps</h4>
+                                      <h4 className="text-sm font-medium text-slate-700 mb-2">Timestamps</h4>
                                       <div className="space-y-2">
                                         <DetailRow label="Member Since" value={formatDate(selectedCustomer.createdAt)} />
                                         <DetailRow label="Last Updated" value={formatDate(selectedCustomer.updatedAt)} />
@@ -924,10 +786,10 @@ const CustomerProfileSystem = () => {
                               </div>
                               
                               {selectedCustomer.profile_photo && (
-                                <div className="border-t border-gray-200 pt-6">
-                                  <h3 className="font-semibold text-gray-900 mb-4">Profile Photo</h3>
+                                <div className="border-t border-slate-200 pt-6">
+                                  <h3 className="font-semibold text-slate-900 mb-4">Profile Photo</h3>
                                   <div className="flex items-center space-x-4">
-                                    <div className="w-24 h-24 rounded-lg overflow-hidden border border-gray-200">
+                                    <div className="w-24 h-24 rounded-lg overflow-hidden border border-slate-200">
                                       <img 
                                         src={selectedCustomer.profile_photo} 
                                         alt="Profile" 
@@ -939,8 +801,8 @@ const CustomerProfileSystem = () => {
                                       />
                                     </div>
                                     <div>
-                                      <p className="text-sm text-gray-600">Profile photo uploaded</p>
-                                      <button className="mt-2 text-sm text-indigo-600 hover:text-indigo-800">
+                                      <p className="text-sm text-slate-600">Profile photo uploaded</p>
+                                      <button className="mt-2 min-h-[40px] text-sm text-navy-700 hover:text-navy-800">
                                         View Full Size
                                       </button>
                                     </div>
@@ -952,10 +814,10 @@ const CustomerProfileSystem = () => {
                           
                           {activeTab === 'applications' && (
                             <div className="space-y-6">
-                              <div className="flex justify-between items-center">
-                                <h3 className="font-semibold text-gray-900">Applications</h3>
+                              <div className="flex flex-wrap gap-3 justify-between items-center">
+                                <h3 className="font-semibold text-slate-900">Applications</h3>
                                 <button 
-                                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center"
+                                  className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center"
                                   onClick={handleAddApplication}
                                 >
                                   <FiPlus className="mr-2" /> New Application
@@ -964,34 +826,34 @@ const CustomerProfileSystem = () => {
                               
                               {applicationsLoading ? (
                                 <div className="text-center py-8">
-                                  <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                  <p className="text-gray-600">Loading applications...</p>
+                                  <div className="w-12 h-12 border-4 border-navy-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                                  <p className="text-slate-600">Loading applications...</p>
                                 </div>
                               ) : customerApplications.length > 0 ? (
                                 <>
                                   <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-gray-200">
-                                      <thead className="bg-gray-50">
+                                    <table className="min-w-full divide-y divide-slate-200">
+                                      <thead className="bg-slate-50">
                                         <tr>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">App Number</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Service</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Priority</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">App Number</th>
+                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Service</th>
+                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
+                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Priority</th>
+                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Date</th>
+                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
                                         </tr>
                                       </thead>
-                                      <tbody className="bg-white divide-y divide-gray-200">
+                                      <tbody className="bg-white divide-y divide-slate-200">
                                         {customerApplications.map(app => {
                                           const priority = priorityConfig[app.priority || 'medium'];
                                           return (
                                             <tr 
                                               key={app.id} 
-                                              className="hover:bg-gray-50 cursor-pointer transition-colors" 
+                                              className="hover:bg-slate-50 cursor-pointer transition-colors" 
                                               onClick={() => handleViewApplication(app)}
                                             >
                                               <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-gray-900">{app.appNumber}</div>
+                                                <div className="text-sm font-medium text-slate-900">{app.appNumber}</div>
                                                 {app.source === 'Pending Online' && (
                                                   <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
                                                     Online Booking
@@ -999,8 +861,8 @@ const CustomerProfileSystem = () => {
                                                 )}
                                               </td>
                                               <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-gray-900">{app.type}</div>
-                                                <div className="text-xs text-gray-500">{app.subType}</div>
+                                                <div className="text-sm text-slate-900">{app.type}</div>
+                                                <div className="text-xs text-slate-500">{app.subType}</div>
                                               </td>
                                               <td className="px-6 py-4 whitespace-nowrap">
                                                 <StatusBadge status={app.status} />
@@ -1010,12 +872,12 @@ const CustomerProfileSystem = () => {
                                                   {priority.label}
                                                 </span>
                                               </td>
-                                              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
                                                 {app.createdDate}
                                               </td>
                                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <button 
-                                                  className="text-indigo-600 hover:text-indigo-900 mr-3 transition-colors"
+                                                  className="inline-grid h-10 w-10 place-items-center text-navy-700 hover:text-navy-800 transition-colors"
                                                   onClick={(e) => {
                                                     e.stopPropagation();
                                                     handleViewApplication(app);
@@ -1034,35 +896,35 @@ const CustomerProfileSystem = () => {
                                   
                                   {customerApplications.filter(app => app.source !== 'Pending Online').length > 0 && (
                                     <div className="mt-6">
-                                      <h4 className="font-semibold text-gray-900 mb-4">Recent Application Progress</h4>
+                                      <h4 className="font-semibold text-slate-900 mb-4">Recent Application Progress</h4>
                                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                         {customerApplications.filter(app => app.source !== 'Pending Online').slice(0, 4).map(app => {
                                           return (
                                             <div 
                                               key={app.id} 
-                                              className="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" 
+                                              className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" 
                                               onClick={() => handleViewApplication(app)}
                                             >
                                               <div className="flex justify-between items-start mb-3">
                                                 <div>
-                                                  <h5 className="font-medium text-gray-900">{app.appNumber}</h5>
-                                                  <p className="text-sm text-gray-600">{app.type} - {app.subType}</p>
+                                                  <h5 className="font-medium text-slate-900">{app.appNumber}</h5>
+                                                  <p className="text-sm text-slate-600">{app.type} - {app.subType}</p>
                                                 </div>
                                                 <StatusBadge status={app.status} />
                                               </div>
                                               <div className="mb-2">
                                                 <div className="flex justify-between text-sm mb-1">
-                                                  <span className="text-gray-600">Progress</span>
+                                                  <span className="text-slate-600">Progress</span>
                                                   <span className="font-medium">{app.progress}%</span>
                                                 </div>
-                                                <div className="w-full bg-gray-200 rounded-full h-2">
+                                                <div className="w-full bg-slate-200 rounded-full h-2">
                                                   <div 
-                                                    className="bg-gradient-to-r from-indigo-500 to-purple-600 h-2 rounded-full transition-all duration-500"
+                                                    className="bg-navy-500 h-2 rounded-full transition-all duration-500"
                                                     style={{ width: `${app.progress}%` }}
                                                   ></div>
                                                 </div>
                                               </div>
-                                              <div className="text-sm text-gray-600">
+                                              <div className="text-sm text-slate-600">
                                                 Applied: {app.createdDate}
                                               </div>
                                             </div>
@@ -1073,10 +935,10 @@ const CustomerProfileSystem = () => {
                                   )}
                                 </>
                               ) : (
-                                <div className="text-center py-12 text-gray-500">
+                                <div className="text-center py-12 text-slate-500">
                                   <FiFolder className="mx-auto h-16 w-16 mb-4 opacity-30" />
                                   <p className="text-lg font-medium mb-2">No applications found</p>
-                                  <p className="text-sm text-gray-400">This customer hasn't submitted any applications yet</p>
+                                  <p className="text-sm text-slate-400">This customer hasn't submitted any applications yet</p>
                                 </div>
                               )}
                             </div>
@@ -1088,7 +950,7 @@ const CustomerProfileSystem = () => {
 
                           {activeTab === 'history' && (
                             <div className="space-y-6">
-                              <h3 className="font-semibold text-gray-900 mb-4">Customer Timeline</h3>
+                              <h3 className="font-semibold text-slate-900 mb-4">Customer Timeline</h3>
                               
                               <div className="space-y-4">
                                 <TimelineItem 
@@ -1119,7 +981,7 @@ const CustomerProfileSystem = () => {
                               </div>
                               
                               <div className="mt-8">
-                                <h4 className="font-semibold text-gray-900 mb-3">Recent Activity</h4>
+                                <h4 className="font-semibold text-slate-900 mb-3">Recent Activity</h4>
                                 <div className="space-y-3">
                                   <ActivityItem 
                                     action="Profile Updated"
@@ -1152,21 +1014,155 @@ const CustomerProfileSystem = () => {
                     </div>
                   </div>
                 </div>
-              ) : (
-                <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                  <div className="w-20 h-20 bg-gray-200 rounded-xl flex items-center justify-center mx-auto mb-4">
-                    <FiUser className="h-10 w-10 text-gray-400" />
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">No Customer Selected</h3>
-                  <p className="text-gray-600 max-w-sm mx-auto">
-                    Select a customer from the list to view detailed information
-                  </p>
-                </div>
-              )}
-            </div>
           </div>
-        </div>
-        
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {[
+                ['Total customers', customers.length],
+                ['Verified', verifiedCount],
+                ['Pending verification', customers.length - verifiedCount],
+                ['Matching search', filteredCustomers.length]
+              ].map(([label, value]) => (
+                <div key={label} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
+                  <p className="text-xs text-slate-500">{label}</p>
+                  <p className="text-xl font-semibold text-slate-900">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
+              <div className="relative flex-1">
+                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
+                <input
+                  type="text"
+                  placeholder="Search name, phone, email"
+                  title="Search by name, phone, Aadhaar last 4 or email"
+                  className="w-full pl-10 pr-4 min-h-[44px] py-2 text-base sm:text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500/40 transition-all"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+                />
+              </div>
+              <div className="flex gap-2">
+                <div className="relative flex-1 lg:w-48 lg:flex-none">
+                  <select
+                    className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500/40 appearance-none"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                  >
+                    <option value="all">All Statuses</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="High Priority">High Priority</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
+                    <FiChevronDown className="h-5 w-5" />
+                  </div>
+                </div>
+                <div className="flex rounded-xl bg-slate-100 p-1">
+                  <button
+                    onClick={() => setViewMode('grid')}
+                    className={`grid h-10 w-10 place-items-center rounded-lg ${viewMode === 'grid' ? 'bg-white text-navy-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <FiGrid className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => setViewMode('list')}
+                    className={`grid h-10 w-10 place-items-center rounded-lg ${viewMode === 'list' ? 'bg-white text-navy-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+                  >
+                    <FiList className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {filteredCustomers.length === 0 ? (
+              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm sm:p-12">
+                <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
+                <p className="text-sm">No customers found</p>
+                <p className="text-xs text-slate-400 mt-1">Try adjusting your search</p>
+              </div>
+            ) : viewMode === 'grid' ? (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                {pagedCustomers.map(customer => (
+                  <CustomerCard
+                    key={customer.id}
+                    customer={customer}
+                    isSelected={false}
+                    onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
+                  />
+                ))}
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="hidden grid-cols-12 gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-slate-500 md:grid">
+                  <span className="col-span-4">Customer</span>
+                  <span className="col-span-2">Phone</span>
+                  <span className="col-span-2">District</span>
+                  <span className="col-span-2">Aadhaar</span>
+                  <span className="col-span-2">Status</span>
+                </div>
+                <ul className="divide-y divide-slate-100">
+                  {pagedCustomers.map(customer => (
+                    <li key={customer.id}>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
+                        className="grid w-full grid-cols-2 items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-slate-50 md:grid-cols-12 md:px-5"
+                      >
+                        <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-4">
+                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700">
+                            {initials(customer.name)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-medium text-slate-900">{customer.name}</p>
+                            <p className="truncate text-xs text-slate-400">
+                              <span className="md:hidden">{customer.phone} · {customer.district} · </span>
+                              {customer.email}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="hidden truncate text-sm text-slate-600 md:col-span-2 md:block">{customer.phone}</p>
+                        <p className="hidden truncate text-sm text-slate-600 md:col-span-2 md:block">{customer.district}</p>
+                        <p className="hidden truncate text-sm text-slate-600 md:col-span-2 md:block">{customer.aadhaarDisplay || 'Not Uploaded'}</p>
+                        <div className="col-span-2 flex items-center justify-between md:col-span-2">
+                          <VerificationBadge isVerified={customer.is_verified} />
+                          <FiChevronRight className="h-4 w-4 text-slate-300 md:hidden" />
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {filteredCustomers.length > 0 && (
+              <div className="mt-3 flex flex-col items-center justify-between gap-3 text-sm text-slate-500 sm:flex-row">
+                <span>
+                  {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredCustomers.length)} of {filteredCustomers.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setPage(currentPage - 1)}
+                    disabled={currentPage <= 1}
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-4 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="px-2">Page {currentPage} of {totalPages}</span>
+                  <button
+                    onClick={() => setPage(currentPage + 1)}
+                    disabled={currentPage >= totalPages}
+                    className="h-10 rounded-xl border border-slate-300 bg-white px-4 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         <style>{`
           .scrollbar-hide {
             -ms-overflow-style: none;
