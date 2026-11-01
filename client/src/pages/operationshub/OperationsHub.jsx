@@ -72,7 +72,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
         <div className="w-9 h-9 bg-navy-700 rounded-xl flex items-center justify-center text-white text-sm">
           <FiZap className="h-5 w-5" />
         </div>
-        <h1 className="whitespace-nowrap text-base font-semibold text-navy-700">Operations Hub</h1>
+        <h1 className="whitespace-nowrap text-base font-semibold text-navy-700">Knowledge Hub</h1>
         <span className="hidden text-[10px] font-semibold bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
       </div>
 
@@ -135,7 +135,7 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
         <input
           ref={inputRef}
           type="text"
-          placeholder="Ask Operations Hub (e.g., 'How to correct Aadhaar DOB?')"
+          placeholder="Ask Knowledge Hub (e.g., 'How to correct Aadhaar DOB?')"
           value={query}
           onChange={(e) => onSearch(e.target.value)}
           className="min-h-[44px] w-full pl-9 pr-4 sm:pr-14 py-2 bg-slate-100 border border-transparent rounded-xl text-base sm:text-sm focus:outline-none focus:bg-white focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30 transition-all"
@@ -148,10 +148,6 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
         </button>
         <button onClick={onAIAssistant} className="hidden sm:grid relative h-11 w-11 place-items-center rounded-xl hover:bg-navy-500/10 text-navy-500 hover:text-navy-700 transition" title="Ask Akshaya Assistant">
           <FiZap className="h-5 w-5" />
-        </button>
-        <button onClick={() => onNavigate('notifications')} className="relative grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
-          <FiBell className="h-5 w-5" />
-          <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
         </button>
         <button onClick={() => onNavigate('bookmarks')} className="hidden sm:grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiBookmark className="h-5 w-5" />
@@ -323,7 +319,7 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       <div className="rounded-2xl bg-navy-700 p-5 text-white shadow-sm sm:p-6">
         <p className="text-sm text-white/70">{greeting}</p>
         <h2 className="mt-0.5 text-xl font-semibold sm:text-2xl">Welcome back, {firstName}</h2>
-        <p className="mt-1 text-sm text-white/70">Welcome to the Operations Hub. Here is everything at a glance.</p>
+        <p className="mt-1 text-sm text-white/70">Welcome to the Knowledge Hub. Here is everything at a glance.</p>
       </div>
 
       {/* THE FIX: Real Live Data for the Stat Cards! */}
@@ -588,31 +584,40 @@ const OperationsHub = () => { // <--- Removed the prop!
         setIsLoadingServices(true);
         
         // Fetch everything concurrently
-        const [
-          servicesResponse,
-          statsResponse,
-          announcementsResponse,
-          discussionsRes,
-          mentionsRes,
-          activityRes,
-          countsRes
-        ] = await Promise.all([
+        // FIX: allSettled, so one failing call (e.g. the service list for
+        // superadmin) no longer blanks the whole dashboard. Each section
+        // falls back to empty and we say which part failed.
+        const results = await Promise.allSettled([
            getWorkflowServices(),
            fetchGlobalHubStats(),
            fetchAnnouncements(),
            fetchAllDiscussions(),
            fetchMyMentions(),
            fetchRecentActivity(),
-           // Counts shouldn't take the whole dashboard down if they fail
-           fetchServiceDiscussionCounts().catch(() => [])
+           fetchServiceDiscussionCounts()
         ]);
+        const value = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+        const servicesResponse = value(0, { data: [] });
+        const statsResponse = value(1, hubStats);
+        const announcementsResponse = value(2, []);
+        const discussionsRes = value(3, []);
+        const mentionsRes = value(4, []);
+        const activityRes = value(5, []);
+        const countsRes = value(6, []);
+
+        const sectionNames = ['services', 'stats', 'announcements', 'discussions', 'mentions', 'activity'];
+        const failed = results.slice(0, 6).map((r, i) => (r.status === 'rejected' ? sectionNames[i] : null)).filter(Boolean);
+        if (failed.length) {
+          console.error('Operations Hub: some sections failed to load:', failed, results);
+          toast.warn(`Some parts of the hub could not load: ${failed.join(', ')}`);
+        }
 
         // PHASE 1 FIX: counts come from one SQL query (all discussions),
         // not from the latest 50 matched by name.
         const countsByService = {};
         (countsRes || []).forEach(c => { countsByService[String(c.service_id)] = c; });
 
-        const formatted = servicesResponse.data.map(s => {
+        const formatted = (servicesResponse?.data || []).map(s => {
           const c = countsByService[String(s.id)] || {};
           return {
             id: s.id,
