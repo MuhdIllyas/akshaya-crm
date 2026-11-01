@@ -290,4 +290,10 @@ export const promoteDiscussionToFaq = async (discussionId, { question, answer })
   return data;
 };
 
+// Starter SOP blocks from Service Management (required documents, department fees, website)
+export const fetchSetupImport = async (documentId) => {
+  const { data } = await api.get(`/documents/${documentId}/import-from-setup`);
+  return data;
+};
+
 export default api;

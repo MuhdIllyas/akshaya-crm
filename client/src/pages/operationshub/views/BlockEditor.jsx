@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import {
-  FiPlus, FiTrash2, FiArrowUp, FiArrowDown, FiSave, FiSend, FiX,
+  FiPlus, FiTrash2, FiArrowUp, FiArrowDown, FiSave, FiSend, FiX, FiDownloadCloud,
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
-import { batchUpdateBlocks, createSuggestion } from '@/services/knowledge';
+import { batchUpdateBlocks, createSuggestion, fetchSetupImport } from '@/services/knowledge';
 import {
   BLOCK_TYPES, BLOCK_GROUPS, emptyContent, parseContent, parseMetadata, isBlockEmpty,
 } from './knowledgeBlocks';
@@ -200,6 +200,42 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
   const [isSaving, setIsSaving] = useState(false);
   const [insertAfter, setInsertAfter] = useState(null); // index, or null
   const [showBottomMenu, setShowBottomMenu] = useState(blocks.length === 0);
+  const [importing, setImporting] = useState(false);
+
+  // Import is offered on the SOP (that's where documents and fees belong)
+  const canImport = document.system_key === 'sop';
+
+  // Adds required documents, department fees and the portal link from
+  // Service Management. Blocks already in the editor are skipped, so
+  // importing again only adds what's new. Nothing is saved until the
+  // person clicks Save / Send for Review.
+  const handleImport = async () => {
+    try {
+      setImporting(true);
+      const data = await fetchSetupImport(document.id);
+      const existing = new Set(blocks.map(b => String(b.block_key)));
+      const fresh = (data.blocks || [])
+        .filter(b => !existing.has(String(b.block_key)))
+        .map(b => ({ ...b, _id: newKey(), content: parseContent(b.content), metadata: parseMetadata(b.metadata) }));
+
+      if ((data.blocks || []).length === 0) {
+        toast.info(`${data.service?.name || 'This service'} has no required documents, fees or website in Service Management yet.`);
+        return;
+      }
+      if (fresh.length === 0) {
+        toast.info('Everything from service setup is already in this document.');
+        return;
+      }
+      setBlocks(prev => [...prev, ...fresh]);
+      setShowBottomMenu(false);
+      const skipped = data.blocks.length - fresh.length;
+      toast.success(`Added ${fresh.length} block${fresh.length > 1 ? 's' : ''} from service setup${skipped ? ` (${skipped} already here)` : ''}. Review them, add the steps, then save.`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Could not read the service setup.');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const updateContent = (id, content) => setBlocks(prev => prev.map(b => (b._id === id ? { ...b, content } : b)));
 
@@ -267,10 +303,12 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
   };
 
   return (
-    <div className="animate-in fade-in overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm duration-300">
+    // FIX: no overflow-hidden here, because it stops the header below from staying
+    // stuck to the top while scrolling (Save button scrolled out of view).
+    <div className="animate-in fade-in rounded-2xl border border-slate-200 bg-white shadow-sm duration-300">
       {/* Header */}
-      <div className={`sticky top-0 z-10 flex flex-col gap-3 border-b px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8 ${
-        isSuggest ? 'border-amber-100 bg-amber-50/70' : 'border-slate-100 bg-slate-50/50'
+      <div className={`sticky top-0 z-20 flex flex-col gap-3 rounded-t-2xl border-b px-4 py-4 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:px-8 ${
+        isSuggest ? 'border-amber-100 bg-amber-50' : 'border-slate-100 bg-slate-50'
       }`}>
         <div>
           <h2 className="text-sm font-bold uppercase tracking-wider text-slate-900">
@@ -282,7 +320,19 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
               : 'Use the arrows to reorder, + to insert a block below.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {canImport && (
+            <button
+              type="button"
+              onClick={handleImport}
+              disabled={importing}
+              title="Fill in required documents, department fees and the portal link from Service Management"
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-navy-500/30 hover:text-navy-700 disabled:opacity-50"
+            >
+              <FiDownloadCloud className="h-4 w-4" />
+              {importing ? 'Importing...' : 'Import from service setup'}
+            </button>
+          )}
           <button onClick={onCancel} className="rounded-xl px-4 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100">
             Cancel
           </button>

@@ -116,6 +116,9 @@ router.put('/suggestions/:id/reject', authorizeRoles(ALL_STAFF), knowledgeContro
 router.put('/suggestions/:id/withdraw', authorizeRoles(ALL_STAFF), knowledgeController.withdrawSuggestion);
 router.post('/discussions/:discussionId/faq', authorizeRoles(ALL_STAFF), knowledgeController.promoteDiscussionToFaq);
 
+// Import from service setup (read-only preview used by the SOP editor)
+router.get('/documents/:documentId/import-from-setup', authorizeRoles(ALL_STAFF), knowledgeController.importFromServiceSetup);
+
 // ==========================================
 // RESOURCES
 // ==========================================

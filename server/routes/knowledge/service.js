@@ -1613,3 +1613,148 @@ export const promoteDiscussionToFaq = async (discussionId, { question, answer },
     });
     return { mode: 'suggested', suggestionId: suggestion.id, documentId: faqDocId };
 };
+
+// =====================================================================
+// IMPORT FROM SERVICE SETUP
+// Builds starter SOP blocks from data that already exists in Service
+// Management: required documents (service + each subcategory), the
+// department (government) fee, and the official website.
+// Nothing is saved here — the editor shows the blocks and a person
+// reviews them before saving (or sending as a suggestion).
+//
+// Service charges are left out on purpose: they differ per centre, and
+// the SOP is shared by every centre. Department fees that differ between
+// centres are shown as a range instead of one amount.
+// Block keys start with "imp-" so a second import only adds what's new.
+// =====================================================================
+const feeSummary = (rows) => {
+    // rows: [{ min, max, centres }] from the configuration tables
+    const r = rows && rows[0];
+    if (!r || r.centres === 0 || r.min === null) return null;
+    const min = Number(r.min);
+    const max = Number(r.max);
+    if (min === max) return { amount: String(min), note: min === 0 ? 'No department fee' : '' };
+    return { amount: '', note: `Differs by centre: ₹${min.toLocaleString('en-IN')} – ₹${max.toLocaleString('en-IN')}` };
+};
+
+export const buildSetupImport = async (documentId) => {
+    const workspace = await getDocumentWorkspace(documentId);
+    const serviceId = workspace.service_id;
+
+    const svcRes = await pool.query('SELECT id, name, website FROM services WHERE id = $1', [serviceId]);
+    if (svcRes.rows.length === 0) throw new KnowledgeError(404, 'Service not found.');
+    const service = svcRes.rows[0];
+
+    // Subcategories, skipping ones that are switched off in every centre
+    const subRes = await pool.query(
+        `SELECT sc.id, sc.name
+         FROM subcategories sc
+         WHERE sc.service_id = $1
+           AND (
+             NOT EXISTS (SELECT 1 FROM subcategory_configurations c WHERE c.subcategory_id = sc.id)
+             OR EXISTS (SELECT 1 FROM subcategory_configurations c WHERE c.subcategory_id = sc.id AND c.is_enabled = true)
+           )
+         ORDER BY sc.id`,
+        [serviceId]
+    );
+    const subs = subRes.rows;
+    const subIds = subs.map(s => s.id);
+
+    const docRes = await pool.query(
+        `SELECT id, sub_category_id, document_name
+         FROM required_documents
+         WHERE (service_id = $1 AND sub_category_id IS NULL)
+            OR sub_category_id = ANY($2::int[])
+         ORDER BY id`,
+        [serviceId, subIds]
+    );
+
+    // Department fee across the centres where it's enabled
+    const svcFeeRes = await pool.query(
+        `SELECT MIN(department_charge) AS min, MAX(department_charge) AS max, COUNT(*)::int AS centres
+         FROM service_configurations
+         WHERE service_id = $1 AND is_enabled = true`,
+        [serviceId]
+    );
+    const subFeeRes = subIds.length ? await pool.query(
+        `SELECT subcategory_id, MIN(department_charge) AS min, MAX(department_charge) AS max, COUNT(*)::int AS centres
+         FROM subcategory_configurations
+         WHERE subcategory_id = ANY($1::int[]) AND is_enabled = true
+         GROUP BY subcategory_id`,
+        [subIds]
+    ) : { rows: [] };
+    const subFeeById = new Map(subFeeRes.rows.map(r => [r.subcategory_id, r]));
+
+    const docName = (d) => String(d.document_name || '').trim();
+    const blocks = [];
+    const meta = { source: 'service_setup', service_id: service.id };
+
+    // --- Required documents ---
+    const generalDocs = docRes.rows.filter(d => d.sub_category_id === null && docName(d));
+    const docsBySub = new Map();
+    docRes.rows.filter(d => d.sub_category_id !== null && docName(d)).forEach(d => {
+        if (!docsBySub.has(d.sub_category_id)) docsBySub.set(d.sub_category_id, []);
+        docsBySub.get(d.sub_category_id).push(d);
+    });
+    const subsWithDocs = subs.filter(s => docsBySub.has(s.id));
+
+    if (generalDocs.length || subsWithDocs.length) {
+        blocks.push({ block_key: 'imp-h-docs', block_type: 'h2', content: { text: 'Required documents' }, metadata: meta });
+        generalDocs.forEach(d => blocks.push({
+            block_key: `imp-doc-${d.id}`, block_type: 'required_document',
+            content: { name: docName(d), note: '', mandatory: true }, metadata: meta,
+        }));
+        subsWithDocs.forEach(s => {
+            blocks.push({ block_key: `imp-h-sub-${s.id}`, block_type: 'h3', content: { text: s.name }, metadata: meta });
+            docsBySub.get(s.id).forEach(d => blocks.push({
+                block_key: `imp-doc-${d.id}`, block_type: 'required_document',
+                content: { name: docName(d), note: '', mandatory: true }, metadata: meta,
+            }));
+        });
+    }
+
+    // --- Department fees ---
+    const feeBlocks = [];
+    if (subs.length) {
+        subs.forEach(s => {
+            const f = feeSummary([subFeeById.get(s.id)].filter(Boolean));
+            if (f) feeBlocks.push({
+                block_key: `imp-fee-sub-${s.id}`, block_type: 'fee',
+                content: { label: `${s.name} — department fee`, amount: f.amount, note: f.note }, metadata: meta,
+            });
+        });
+    }
+    if (!feeBlocks.length) {
+        const f = feeSummary(svcFeeRes.rows);
+        if (f) feeBlocks.push({
+            block_key: 'imp-fee-svc', block_type: 'fee',
+            content: { label: 'Department fee', amount: f.amount, note: f.note }, metadata: meta,
+        });
+    }
+    if (feeBlocks.length) {
+        blocks.push({ block_key: 'imp-h-fees', block_type: 'h2', content: { text: 'Fees' }, metadata: meta });
+        blocks.push(...feeBlocks);
+        blocks.push({
+            block_key: 'imp-fee-note', block_type: 'callout',
+            content: { style: 'info', text: 'Service charges are set separately for each centre in Service Management.' },
+            metadata: meta,
+        });
+    }
+
+    // --- Official website ---
+    const website = String(service.website || '').trim();
+    if (/^https?:\/\//i.test(website)) {
+        blocks.push({ block_key: 'imp-link-website', block_type: 'link', content: { label: `${service.name} — official portal`, url: website }, metadata: meta });
+    }
+
+    return {
+        service: { id: service.id, name: service.name },
+        blocks,
+        summary: {
+            documents: docRes.rows.filter(docName).length,
+            subcategories: subs.length,
+            fees: feeBlocks.length,
+            website: blocks.some(b => b.block_key === 'imp-link-website'),
+        },
+    };
+};

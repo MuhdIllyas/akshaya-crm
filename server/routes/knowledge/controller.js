@@ -539,3 +539,12 @@ export const promoteDiscussionToFaq = async (req, res) => {
         sendError(res, err, 'Failed to add to FAQ');
     }
 };
+
+// Starter SOP blocks from Service Management data (read-only; nothing is saved)
+export const importFromServiceSetup = async (req, res) => {
+    try {
+        res.json(await knowledgeService.buildSetupImport(req.params.documentId));
+    } catch (err) {
+        sendError(res, err, 'Failed to read service setup');
+    }
+};
