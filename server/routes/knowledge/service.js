@@ -3,6 +3,7 @@ import pool from '../../db.js';
 import notificationService from '../../utils/notificationService.js'; 
 import { notificationTemplates } from '../../utils/notificationTemplates.js';
 import { KnowledgeError, can, REVIEWER_ROLES } from './permissions.js';
+import * as notify from './notify.js';
 
 // ==========================================
 // PHASE 2: lookups used for permission checks
@@ -198,6 +199,9 @@ export const updateWorkspaceStatus = async (workspaceId, newStatus, staffId) => 
     const res = await pool.query(updateQuery, values);
     
     await logHistory(workspaceId, 'workspace', workspaceId, 'status_change', { status: before.status }, { status: newStatus }, staffId);
+    if (newStatus === 'published' && before.status !== 'published') {
+        notify.workspacePublished({ workspaceId, actorId: staffId });
+    }
     return res.rows[0];
 };
 
@@ -218,13 +222,18 @@ const extractMentions = (content) => {
 // ==========================================
 // CONTRIBUTORS
 // ==========================================
-export const addContributor = async (workspaceId, staffId, role) => {
+export const addContributor = async (workspaceId, staffId, role, actorId = null) => {
+    const before = await pool.query('SELECT role FROM knowledge_contributors WHERE workspace_id = $1 AND staff_id = $2', [workspaceId, staffId]);
     await pool.query(
         `INSERT INTO knowledge_contributors (workspace_id, staff_id, role) 
          VALUES ($1, $2, $3) ON CONFLICT (workspace_id, staff_id) 
          DO UPDATE SET role = EXCLUDED.role`,
         [workspaceId, staffId, role]
     );
+    // Tell them, unless nothing actually changed
+    if (String(before.rows[0]?.role || '').toUpperCase() !== String(role).toUpperCase()) {
+        notify.contributorAdded({ workspaceId, staffId, role, actorId });
+    }
 };
 
 export const removeContributor = async (workspaceId, staffId) => {
@@ -327,6 +336,21 @@ export const getDocumentBlocks = async (documentId) => getBlocksWithClient(pool,
 const writeBlocks = async (client, workspaceId, documentId, newBlocks, staffId, action = 'batch_update') => {
     const oldContent = await getBlocksWithClient(client, documentId);
 
+    // What changed (used for notifications): matched by block_key
+    const oldByKey = new Map(oldContent.map(b => [String(b.block_key), blockFingerprint(b)]));
+    const newKeys = new Set(newBlocks.map(b => String(b.block_key)));
+    const diff = { added: 0, changed: 0, removed: 0, addedFaqQuestions: [], wasEmpty: oldContent.length === 0 };
+    for (const b of newBlocks) {
+        const before = oldByKey.get(String(b.block_key));
+        if (before === undefined) {
+            diff.added++;
+            if (b.block_type === 'faq_item') diff.addedFaqQuestions.push(parseMaybe(b.content)?.question || 'New question');
+        } else if (before !== blockFingerprint(b)) {
+            diff.changed++;
+        }
+    }
+    diff.removed = oldContent.filter(b => !newKeys.has(String(b.block_key))).length;
+
     await client.query('DELETE FROM knowledge_blocks WHERE document_id = $1', [documentId]);
 
     for (const block of newBlocks) {
@@ -340,6 +364,7 @@ const writeBlocks = async (client, workspaceId, documentId, newBlocks, staffId, 
     await logHistoryTransaction(client, workspaceId, 'document_blocks', documentId, action, oldContent, newBlocks, staffId);
     await client.query(`UPDATE knowledge_documents SET updated_at = NOW() WHERE id = $1`, [documentId]);
     await client.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
+    return diff;
 };
 
 export const batchUpdateBlocks = async (workspaceId, documentId, newBlocks, staffId) => {
@@ -347,8 +372,9 @@ export const batchUpdateBlocks = async (workspaceId, documentId, newBlocks, staf
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
-        await writeBlocks(client, workspaceId, documentId, blocks, staffId);
+        const diff = await writeBlocks(client, workspaceId, documentId, blocks, staffId);
         await client.query('COMMIT');
+        notify.documentChanged({ workspaceId, documentId, actorId: staffId, diff });
     } catch (err) {
         await client.query('ROLLBACK');
         throw err;
@@ -368,6 +394,7 @@ export const addResource = async (workspaceId, type, title, url, fileId, staffId
     );
 
     await logHistory(workspaceId, 'resource', res.rows[0].id, 'added', null, res.rows[0], staffId);
+    notify.resourceAdded({ workspaceId, resource: res.rows[0], actorId: staffId });
     return res.rows[0];
 };
 
@@ -551,6 +578,8 @@ export const createDiscussion = async (workspaceId, payload, staffId, user = {})
     }
     
     await pool.query(`UPDATE knowledge_workspaces SET updated_at = NOW() WHERE id = $1`, [workspaceId]);
+    // Staff at centres offering this service hear about the new question
+    notify.discussionCreated({ discussion: newDiscussion, alreadyNotified: mentionedIds });
     return newDiscussion;
 };
 
@@ -588,6 +617,9 @@ export const addReply = async (discussionId, content, attachments, authorId) => 
             });
         }
     }
+
+    // Followers of the thread (author + mentioned people are notified separately)
+    notify.replyAdded({ discussionId, discussionTitle: title, replierId: authorId, alreadyNotified: [...mentionedIds, discussion_author_id] });
 
     // 🔥 Notify Discussion Author
     if (discussion_author_id !== authorId && !mentionedIds.includes(discussion_author_id)) {
@@ -643,7 +675,7 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
 
         await client.query(`UPDATE knowledge_discussions SET status = 'solved', updated_at = NOW() WHERE id = $1`, [discussionId]);
 
-        const discussionRes = await client.query(`SELECT workspace_id, title, content, tags FROM knowledge_discussions WHERE id = $1`, [discussionId]);
+        const discussionRes = await client.query(`SELECT workspace_id, title, content, tags, author_id FROM knowledge_discussions WHERE id = $1`, [discussionId]);
         const discussion = discussionRes.rows[0];
 
         const solverRes = await client.query('SELECT name FROM staff WHERE id = $1', [staffId]);
@@ -671,6 +703,11 @@ export const markDiscussionSolved = async (discussionId, replyId, staffId) => {
         );
 
         await client.query('COMMIT');
+        // Author + followers (the best-answer person already got their own notification)
+        notify.discussionSolved({
+            discussionId, discussionTitle: discussion.title, authorId: discussion.author_id,
+            solverId: staffId, alreadyNotified: replyAuthorId ? [replyAuthorId] : [],
+        });
     } catch (err) {
         await client.query('ROLLBACK');
         throw err;
@@ -708,33 +745,106 @@ export const getMyBookmarks = async (staffId) => {
     return res.rows;
 };
 
-export const createAnnouncement = async (title, content, category, priority, isPinned, staffId, teamId = null) => {
+// =====================================================================
+// ANNOUNCEMENTS — sent to everyone, one centre, or one team
+//   admin      → their own centre, or one of their centre's teams
+//   superadmin → everyone, any centre, or any team (incl. global teams)
+// =====================================================================
+const teamById = async (teamId) => {
+    const r = await pool.query('SELECT id, name, centre_id, is_global FROM teams WHERE id = $1', [teamId]);
+    return r.rows[0] || null;
+};
+
+export const createAnnouncement = async (user, { title, content, category, priority, isPinned, audienceType, centreId, teamId }) => {
+    if (!title?.trim() || !content?.trim()) throw new KnowledgeError(400, 'Title and message are required.');
+
+    // Old screens sent only teamId (or nothing). Keep that working.
+    let audience = audienceType || (teamId ? 'team' : (user.role === 'superadmin' ? 'all' : 'centre'));
+    if (!['all', 'centre', 'team'].includes(audience)) throw new KnowledgeError(400, 'Unknown audience.');
+
+    let finalCentreId = null;
+    let finalTeamId = null;
+
+    if (audience === 'all') {
+        if (user.role !== 'superadmin') throw new KnowledgeError(403, 'Only the superadmin can send to every centre.');
+    }
+
+    if (audience === 'centre') {
+        if (user.role === 'superadmin') {
+            finalCentreId = parseInt(centreId, 10);
+            if (Number.isNaN(finalCentreId)) throw new KnowledgeError(400, 'Choose a centre.');
+            const c = await pool.query('SELECT id FROM centres WHERE id = $1', [finalCentreId]);
+            if (!c.rows.length) throw new KnowledgeError(404, 'Centre not found.');
+        } else {
+            // Admins always send to their own centre
+            finalCentreId = parseInt(user.centre_id, 10);
+            if (Number.isNaN(finalCentreId)) throw new KnowledgeError(400, 'No centre found for this user.');
+        }
+    }
+
+    if (audience === 'team') {
+        const team = await teamById(parseInt(teamId, 10));
+        if (!team) throw new KnowledgeError(404, 'Team not found.');
+        if (user.role !== 'superadmin' &&
+            (team.is_global || String(team.centre_id) !== String(user.centre_id))) {
+            throw new KnowledgeError(403, "You can only send to your own centre's teams.");
+        }
+        finalTeamId = team.id;
+    }
+
     const res = await pool.query(
-        `INSERT INTO knowledge_announcements (title, content, category, priority, is_pinned, created_by, team_id) 
-         VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-        [title, content, category, priority, isPinned, staffId, teamId]
+        `INSERT INTO knowledge_announcements
+            (title, content, category, priority, is_pinned, created_by, team_id, audience_type, centre_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+        [title.trim(), content.trim(), category || 'general', priority || 'normal', !!isPinned, user.id, finalTeamId, audience, finalCentreId]
     );
+    notify.announcementCreated({ announcement: res.rows[0], actorId: user.id });
     return res.rows[0];
 };
 
-export const getAnnouncements = async (teamId = null) => {
-    // If teamId is passed, fetch global (NULL) + team specific. Otherwise, just global.
-    let query = `
-        SELECT a.*, s.name as author_name 
-        FROM knowledge_announcements a
-        LEFT JOIN staff s ON a.created_by = s.id
-        WHERE a.team_id IS NULL
-    `;
+/**
+ * Announcements this person should see (newest / pinned first).
+ * teamId (optional): only that team's announcements plus the ones for everyone
+ * (used by the My Team page).
+ */
+export const getAnnouncements = async (user, teamId = null) => {
     const params = [];
-    
-    if (teamId) {
-        query += ` OR a.team_id = $1`;
-        params.push(teamId);
+    const add = (v) => { params.push(v); return `$${params.length}`; };
+    // Hide announcements whose expiry date has passed
+    const where = [`(a.expires_at IS NULL OR a.expires_at > NOW())`];
+
+    if (user.role !== 'superadmin') {
+        const me = add(user.id);
+        const centre = add(String(user.centre_id ?? ''));
+        const myTeams = `SELECT tm.team_id FROM team_members tm WHERE tm.staff_id = ${me} AND tm.is_active = true`;
+        const adminTeams = user.role === 'admin'
+            ? ` OR (t.centre_id::text = ${centre} AND COALESCE(t.is_global, false) = false)`
+            : '';
+        where.push(`(
+            a.audience_type = 'all'
+            OR (a.audience_type = 'centre' AND a.centre_id::text = ${centre})
+            OR (a.audience_type = 'team' AND (a.team_id IN (${myTeams})${adminTeams}))
+            OR a.created_by = ${me}
+        )`);
     }
-    
-    query += ` ORDER BY a.is_pinned DESC, a.created_at DESC LIMIT 50`;
-    
-    const res = await pool.query(query, params);
+
+    if (teamId) {
+        where.push(`(a.audience_type = 'all' OR a.team_id = ${add(parseInt(teamId, 10))})`);
+    }
+
+    const res = await pool.query(
+        `SELECT a.*, s.name AS author_name,
+                t.name AS team_name, COALESCE(t.is_global, false) AS team_is_global,
+                c.name AS centre_name
+         FROM knowledge_announcements a
+         LEFT JOIN staff s ON a.created_by = s.id
+         LEFT JOIN teams t ON t.id = a.team_id
+         LEFT JOIN centres c ON c.id = a.centre_id
+         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+         ORDER BY a.is_pinned DESC, a.created_at DESC
+         LIMIT 50`,
+        params
+    );
     return res.rows;
 };
 
@@ -781,6 +891,7 @@ export const createTraining = async (title, description, type, url, duration, st
          VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
         [title, description, type, url, duration, staffId]
     );
+    notify.trainingCreated({ training: res.rows[0], actorId: staffId });
     return res.rows[0];
 };
 
@@ -1210,18 +1321,6 @@ export const toggleReaction = async (staffId, targetType, targetId, emoji) => {
 // reviewed content the future AI can trust.
 // =====================================================================
 
-// Sends a notification only if the template exists in notificationTemplates.js
-// (see the install notes: add knowledgeSuggestionApproved / Rejected there).
-const notifySafe = async (templateName, args, payload) => {
-    const tpl = notificationTemplates[templateName];
-    if (typeof tpl !== 'function') return;
-    try {
-        await notificationService.createNotification({ ...payload, ...tpl(args) });
-    } catch (err) {
-        console.error(`Failed to send ${templateName} notification`, err);
-    }
-};
-
 export const getContributorRole = async (workspaceId, staffId, client = pool) => {
     const res = await client.query(
         'SELECT role FROM knowledge_contributors WHERE workspace_id = $1 AND staff_id = $2',
@@ -1402,6 +1501,7 @@ export const createSuggestion = async ({
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
         [workspace.id, documentId, user.id, note, JSON.stringify(current), JSON.stringify(proposed), sourceType, sourceId]
     );
+    notify.suggestionSubmitted({ suggestion: ins.rows[0], workspace });
     return ins.rows[0];
 };
 
@@ -1476,7 +1576,7 @@ export const approveSuggestion = async (id, user, reviewNote = null) => {
         }
         finalBlocks = finalBlocks.map((b, i) => ({ ...b, sort_order: i + 1 }));
 
-        await writeBlocks(client, suggestion.workspace_id, suggestion.document_id, finalBlocks, user.id, 'suggestion_approved');
+        suggestion.diff = await writeBlocks(client, suggestion.workspace_id, suggestion.document_id, finalBlocks, user.id, 'suggestion_approved');
 
         await client.query(
             `UPDATE knowledge_suggestions
@@ -1493,10 +1593,11 @@ export const approveSuggestion = async (id, user, reviewNote = null) => {
         client.release();
     }
 
-    await notifySafe('knowledgeSuggestionApproved',
-        { reviewerName: suggestion.reviewerName, documentTitle: suggestion.document_title },
-        { recipientStaffId: suggestion.author_id, senderStaffId: user.id,
-          relatedEntityType: 'knowledge_suggestion', relatedEntityId: suggestion.id });
+    notify.suggestionReviewed({ suggestion, reviewerId: user.id, approved: true, note: reviewNote });
+    notify.documentChanged({
+        workspaceId: suggestion.workspace_id, documentId: suggestion.document_id,
+        actorId: user.id, suggestedById: suggestion.author_id, diff: suggestion.diff,
+    });
 
     return { message: 'Suggestion approved and published.' };
 };
@@ -1524,11 +1625,7 @@ export const rejectSuggestion = async (id, user, reviewNote) => {
         client.release();
     }
 
-    const reviewerRes = await pool.query('SELECT name FROM staff WHERE id = $1', [user.id]);
-    await notifySafe('knowledgeSuggestionRejected',
-        { reviewerName: reviewerRes.rows[0]?.name, documentTitle: suggestion.document_title, reason: reviewNote.trim() },
-        { recipientStaffId: suggestion.author_id, senderStaffId: user.id,
-          relatedEntityType: 'knowledge_suggestion', relatedEntityId: suggestion.id });
+    notify.suggestionReviewed({ suggestion, reviewerId: user.id, approved: false, note: reviewNote.trim() });
 
     return { message: 'Suggestion rejected.' };
 };
@@ -1594,8 +1691,9 @@ export const promoteDiscussionToFaq = async (discussionId, { question, answer },
         const client = await pool.connect();
         try {
             await client.query('BEGIN');
-            await writeBlocks(client, workspace.id, faqDocId, blocks, user.id, 'faq_from_discussion');
+            const diff = await writeBlocks(client, workspace.id, faqDocId, blocks, user.id, 'faq_from_discussion');
             await client.query('COMMIT');
+            notify.documentChanged({ workspaceId: workspace.id, documentId: faqDocId, actorId: user.id, diff });
         } catch (err) {
             await client.query('ROLLBACK');
             throw err;

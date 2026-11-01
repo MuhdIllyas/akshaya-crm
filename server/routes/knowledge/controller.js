@@ -50,7 +50,7 @@ export const addContributor = async (req, res) => {
             throw new KnowledgeError(400, `Role must be one of: ${CONTRIBUTOR_ROLES.join(', ')}`);
         }
         await assertCan(req.user, 'contributor.manage', await knowledgeService.getWorkspaceById(workspaceId));
-        await knowledgeService.addContributor(workspaceId, staffId, finalRole);
+        await knowledgeService.addContributor(workspaceId, staffId, finalRole, req.user.id);
         res.json({ message: 'Contributor added' });
     } catch (err) {
         sendError(res, err, 'Failed to add contributor');
@@ -235,36 +235,18 @@ export const getGlobalStats = async (req, res) => {
 
 export const createAnnouncement = async (req, res) => {
     try {
-        // 🔥 Added teamId to the destructured body variables
-        const { title, content, category, priority, isPinned, teamId } = req.body; 
-        
-        const announcement = await knowledgeService.createAnnouncement(
-            title, 
-            content, 
-            category, 
-            priority, 
-            isPinned, 
-            req.user.id, 
-            teamId // 🔥 Pass it to the service layer
-        );
+        const announcement = await knowledgeService.createAnnouncement(req.user, req.body || {});
         res.status(201).json(announcement);
     } catch (err) {
-        console.error("💥 CREATE ANNOUNCEMENT CRASH INFO:", err);
-        res.status(500).json({ error: 'Failed to create announcement', details: err.message });
+        sendError(res, err, 'Failed to create announcement');
     }
 };
 
 export const getAnnouncements = async (req, res) => {
     try {
-        // 🔥 Extract teamId from query parameters
-        const { teamId } = req.query; 
-        
-        // 🔥 Pass it to the service layer
-        const announcements = await knowledgeService.getAnnouncements(teamId); 
-        res.json(announcements);
+        res.json(await knowledgeService.getAnnouncements(req.user, req.query.teamId || null));
     } catch (err) {
-        console.error("💥 ANNOUNCEMENTS CRASH INFO:", err);
-        res.status(500).json({ error: 'Failed to fetch announcements', details: err.message });
+        sendError(res, err, 'Failed to fetch announcements');
     }
 };
 
