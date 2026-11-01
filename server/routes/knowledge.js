@@ -119,6 +119,9 @@ router.post('/discussions/:discussionId/faq', authorizeRoles(ALL_STAFF), knowled
 // Import from service setup (read-only preview used by the SOP editor)
 router.get('/documents/:documentId/import-from-setup', authorizeRoles(ALL_STAFF), knowledgeController.importFromServiceSetup);
 
+// Live charges at the user's centre (superadmin: ?centreId= or all centres)
+router.get('/services/:serviceId/charges', authorizeRoles(ALL_STAFF), knowledgeController.getServiceCharges);
+
 // ==========================================
 // RESOURCES
 // ==========================================

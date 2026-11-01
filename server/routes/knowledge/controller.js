@@ -548,3 +548,12 @@ export const importFromServiceSetup = async (req, res) => {
         sendError(res, err, 'Failed to read service setup');
     }
 };
+
+// Live charges for a service (own centre; superadmin can pick or see all)
+export const getServiceCharges = async (req, res) => {
+    try {
+        res.json(await knowledgeService.getServiceCharges(req.params.serviceId, req.user, req.query.centreId || null));
+    } catch (err) {
+        sendError(res, err, 'Failed to load charges');
+    }
+};

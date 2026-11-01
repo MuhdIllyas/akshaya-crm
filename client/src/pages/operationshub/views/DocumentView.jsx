@@ -3,6 +3,7 @@ import { FiEdit2, FiFileText, FiEdit3, FiClock, FiInbox, FiAward } from 'react-i
 import { toast } from 'react-toastify';
 import BlockEditor from './BlockEditor';
 import { BlocksView } from './knowledgeBlocks';
+import ChargesCard from './ChargesCard';
 import { can } from '@/utils/knowledgePermissions';
 import { fetchMySuggestionForDocument } from '@/services/knowledge';
 
@@ -118,14 +119,18 @@ const DocumentView = ({ document, workspace, workspaceId, contributorRole, onUpd
 
       {/* Body */}
       <div className="mx-auto min-h-[400px] max-w-3xl px-4 py-8 sm:px-8">
+        {/* Live charges from the centre's configuration (never typed into the SOP) */}
+        {document.system_key === 'sop' && workspace?.service_id && (
+          <ChargesCard serviceId={workspace.service_id} />
+        )}
         {!document.blocks || document.blocks.length === 0 ? (
           <div className="py-20 text-center">
             <p className="text-lg text-slate-400">This document is currently empty.</p>
             <p className="mt-2 text-sm text-slate-400">
               {document.system_key === 'sop'
                 ? (canEdit
-                    ? 'Click "Edit Document", then "Import from service setup" to start with the required documents and fees already filled in.'
-                    : 'Click "Suggest an Edit", then "Import from service setup" to start with the required documents and fees already filled in.')
+                    ? 'Click "Edit Document", then "Import from service setup" to start with the required documents already filled in.'
+                    : 'Click "Suggest an Edit", then "Import from service setup" to start with the required documents already filled in.')
                 : (canEdit
                     ? 'Click "Edit Document" to start adding questions and answers.'
                     : 'Know the answer to a common question? Click "Suggest an Edit" to help your team.')}

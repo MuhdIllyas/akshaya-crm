@@ -290,9 +290,15 @@ export const promoteDiscussionToFaq = async (discussionId, { question, answer })
   return data;
 };
 
-// Starter SOP blocks from Service Management (required documents, department fees, website)
+// Starter SOP blocks from Service Management (required documents, website)
 export const fetchSetupImport = async (documentId) => {
   const { data } = await api.get(`/documents/${documentId}/import-from-setup`);
+  return data;
+};
+
+// Live charges for a service at the user's centre (superadmin: one centre or all)
+export const fetchServiceCharges = async (serviceId, centreId = null) => {
+  const { data } = await api.get(`/services/${serviceId}/charges`, { params: centreId ? { centreId } : {} });
   return data;
 };
 

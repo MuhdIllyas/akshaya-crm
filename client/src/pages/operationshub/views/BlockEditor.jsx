@@ -202,10 +202,10 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
   const [showBottomMenu, setShowBottomMenu] = useState(blocks.length === 0);
   const [importing, setImporting] = useState(false);
 
-  // Import is offered on the SOP (that's where documents and fees belong)
+  // Import is offered on the SOP (that's where required documents belong)
   const canImport = document.system_key === 'sop';
 
-  // Adds required documents, department fees and the portal link from
+  // Adds required documents and the portal link from
   // Service Management. Blocks already in the editor are skipped, so
   // importing again only adds what's new. Nothing is saved until the
   // person clicks Save / Send for Review.
@@ -219,7 +219,7 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
         .map(b => ({ ...b, _id: newKey(), content: parseContent(b.content), metadata: parseMetadata(b.metadata) }));
 
       if ((data.blocks || []).length === 0) {
-        toast.info(`${data.service?.name || 'This service'} has no required documents, fees or website in Service Management yet.`);
+        toast.info(`${data.service?.name || 'This service'} has no required documents or website in Service Management yet.`);
         return;
       }
       if (fresh.length === 0) {
@@ -229,7 +229,7 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
       setBlocks(prev => [...prev, ...fresh]);
       setShowBottomMenu(false);
       const skipped = data.blocks.length - fresh.length;
-      toast.success(`Added ${fresh.length} block${fresh.length > 1 ? 's' : ''} from service setup${skipped ? ` (${skipped} already here)` : ''}. Review them, add the steps, then save.`);
+      toast.success(`Added ${fresh.length} block${fresh.length > 1 ? 's' : ''} from service setup${skipped ? ` (${skipped} already here)` : ''}. Review them, add the steps and tips, then save.`);
     } catch (err) {
       toast.error(err.response?.data?.error || 'Could not read the service setup.');
     } finally {
@@ -326,7 +326,7 @@ const BlockEditor = ({ document, workspaceId, mode = 'edit', initialBlocks = nul
               type="button"
               onClick={handleImport}
               disabled={importing}
-              title="Fill in required documents, department fees and the portal link from Service Management"
+              title="Fill in the required documents and the portal link from Service Management"
               className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-navy-500/30 hover:text-navy-700 disabled:opacity-50"
             >
               <FiDownloadCloud className="h-4 w-4" />

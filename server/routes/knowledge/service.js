@@ -1617,26 +1617,15 @@ export const promoteDiscussionToFaq = async (discussionId, { question, answer },
 // =====================================================================
 // IMPORT FROM SERVICE SETUP
 // Builds starter SOP blocks from data that already exists in Service
-// Management: required documents (service + each subcategory), the
-// department (government) fee, and the official website.
+// Management: required documents (service + each subcategory) and the
+// official website.
 // Nothing is saved here — the editor shows the blocks and a person
 // reviews them before saving (or sending as a suggestion).
 //
-// Service charges are left out on purpose: they differ per centre, and
-// the SOP is shared by every centre. Department fees that differ between
-// centres are shown as a range instead of one amount.
+// Fees / charges are left out on purpose: they're configured per centre,
+// and the SOP is shared by every centre.
 // Block keys start with "imp-" so a second import only adds what's new.
 // =====================================================================
-const feeSummary = (rows) => {
-    // rows: [{ min, max, centres }] from the configuration tables
-    const r = rows && rows[0];
-    if (!r || r.centres === 0 || r.min === null) return null;
-    const min = Number(r.min);
-    const max = Number(r.max);
-    if (min === max) return { amount: String(min), note: min === 0 ? 'No department fee' : '' };
-    return { amount: '', note: `Differs by centre: ₹${min.toLocaleString('en-IN')} – ₹${max.toLocaleString('en-IN')}` };
-};
-
 export const buildSetupImport = async (documentId) => {
     const workspace = await getDocumentWorkspace(documentId);
     const serviceId = workspace.service_id;
@@ -1669,22 +1658,6 @@ export const buildSetupImport = async (documentId) => {
         [serviceId, subIds]
     );
 
-    // Department fee across the centres where it's enabled
-    const svcFeeRes = await pool.query(
-        `SELECT MIN(department_charge) AS min, MAX(department_charge) AS max, COUNT(*)::int AS centres
-         FROM service_configurations
-         WHERE service_id = $1 AND is_enabled = true`,
-        [serviceId]
-    );
-    const subFeeRes = subIds.length ? await pool.query(
-        `SELECT subcategory_id, MIN(department_charge) AS min, MAX(department_charge) AS max, COUNT(*)::int AS centres
-         FROM subcategory_configurations
-         WHERE subcategory_id = ANY($1::int[]) AND is_enabled = true
-         GROUP BY subcategory_id`,
-        [subIds]
-    ) : { rows: [] };
-    const subFeeById = new Map(subFeeRes.rows.map(r => [r.subcategory_id, r]));
-
     const docName = (d) => String(d.document_name || '').trim();
     const blocks = [];
     const meta = { source: 'service_setup', service_id: service.id };
@@ -1713,33 +1686,10 @@ export const buildSetupImport = async (documentId) => {
         });
     }
 
-    // --- Department fees ---
-    const feeBlocks = [];
-    if (subs.length) {
-        subs.forEach(s => {
-            const f = feeSummary([subFeeById.get(s.id)].filter(Boolean));
-            if (f) feeBlocks.push({
-                block_key: `imp-fee-sub-${s.id}`, block_type: 'fee',
-                content: { label: `${s.name} — department fee`, amount: f.amount, note: f.note }, metadata: meta,
-            });
-        });
-    }
-    if (!feeBlocks.length) {
-        const f = feeSummary(svcFeeRes.rows);
-        if (f) feeBlocks.push({
-            block_key: 'imp-fee-svc', block_type: 'fee',
-            content: { label: 'Department fee', amount: f.amount, note: f.note }, metadata: meta,
-        });
-    }
-    if (feeBlocks.length) {
-        blocks.push({ block_key: 'imp-h-fees', block_type: 'h2', content: { text: 'Fees' }, metadata: meta });
-        blocks.push(...feeBlocks);
-        blocks.push({
-            block_key: 'imp-fee-note', block_type: 'callout',
-            content: { style: 'info', text: 'Service charges are set separately for each centre in Service Management.' },
-            metadata: meta,
-        });
-    }
+    // Fees are NOT imported: charges are configured per centre (and most
+    // department fees are ₹0), so typed amounts in a shared SOP would be
+    // wrong for some centres. Fees should be shown live from each centre's
+    // configuration instead.
 
     // --- Official website ---
     const website = String(service.website || '').trim();
@@ -1753,8 +1703,87 @@ export const buildSetupImport = async (documentId) => {
         summary: {
             documents: docRes.rows.filter(docName).length,
             subcategories: subs.length,
-            fees: feeBlocks.length,
             website: blocks.some(b => b.block_key === 'imp-link-website'),
         },
+    };
+};
+
+// =====================================================================
+// CHARGES AT YOUR CENTRE (live, read-only)
+// Charges are configured per centre, so they're never typed into the
+// shared SOP. This reads them live from service_configurations /
+// subcategory_configurations.
+//   admin / staff → their own centre only
+//   superadmin    → one centre (centreId) or every centre side by side
+// =====================================================================
+const toNum = (v) => (v === null || v === undefined ? 0 : Number(v));
+
+const loadCentreCharges = async (serviceId, centreIds) => {
+    const svcRes = await pool.query(
+        `SELECT centre_id, is_enabled, service_charge, department_charge
+         FROM service_configurations
+         WHERE service_id = $1 AND centre_id = ANY($2::int[])`,
+        [serviceId, centreIds]
+    );
+    const subRes = await pool.query(
+        `SELECT c.centre_id, scat.id, scat.name, c.service_charge, c.department_charge
+         FROM subcategories scat
+         JOIN subcategory_configurations c
+           ON c.subcategory_id = scat.id AND c.is_enabled = true AND c.centre_id = ANY($2::int[])
+         WHERE scat.service_id = $1
+         ORDER BY scat.id`,
+        [serviceId, centreIds]
+    );
+    const svcByCentre = new Map(svcRes.rows.map(r => [Number(r.centre_id), r]));
+    return (centreId) => {
+        const svc = svcByCentre.get(Number(centreId));
+        const subs = subRes.rows
+            .filter(r => Number(r.centre_id) === Number(centreId))
+            .map(r => {
+                const service_charge = toNum(r.service_charge);
+                const department_charge = toNum(r.department_charge);
+                return { id: r.id, name: r.name, service_charge, department_charge, total: service_charge + department_charge };
+            });
+        return {
+            enabled: !!svc && svc.is_enabled !== false,
+            service: svc ? {
+                service_charge: toNum(svc.service_charge),
+                department_charge: toNum(svc.department_charge),
+                total: toNum(svc.service_charge) + toNum(svc.department_charge),
+            } : null,
+            subcategories: subs,
+        };
+    };
+};
+
+export const getServiceCharges = async (serviceId, user, requestedCentreId = null) => {
+    const svc = await pool.query('SELECT id, name FROM services WHERE id = $1', [serviceId]);
+    if (svc.rows.length === 0) throw new KnowledgeError(404, 'Service not found.');
+    const service = svc.rows[0];
+
+    // Admin / staff: always their own centre, whatever was asked for
+    if (user.role !== 'superadmin') {
+        const centreId = parseInt(user.centre_id, 10);
+        if (Number.isNaN(centreId)) throw new KnowledgeError(400, 'No centre found for this user.');
+        const c = await pool.query('SELECT id, name FROM centres WHERE id = $1', [centreId]);
+        const read = await loadCentreCharges(serviceId, [centreId]);
+        return {
+            service, mode: 'single',
+            centres: [{ id: centreId, name: c.rows[0]?.name || `Centre ${centreId}`, ...read(centreId) }],
+        };
+    }
+
+    // Superadmin: one centre, or all of them
+    const centresRes = requestedCentreId
+        ? await pool.query('SELECT id, name FROM centres WHERE id = $1', [parseInt(requestedCentreId, 10)])
+        : await pool.query('SELECT id, name FROM centres ORDER BY name');
+    if (centresRes.rows.length === 0) throw new KnowledgeError(404, 'Centre not found.');
+
+    const ids = centresRes.rows.map(c => Number(c.id));
+    const read = await loadCentreCharges(serviceId, ids);
+    return {
+        service,
+        mode: requestedCentreId ? 'single' : 'all',
+        centres: centresRes.rows.map(c => ({ id: Number(c.id), name: c.name, ...read(c.id) })),
     };
 };
