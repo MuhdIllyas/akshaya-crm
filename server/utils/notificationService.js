@@ -268,6 +268,52 @@ const notificationService = {
     }
   },
 
+  /**
+   * Like createBulkNotifications, but for "update" style notifications
+   * (e.g. "Voter ID SOP updated"): if a recipient still has an UNREAD
+   * notification of the same type about the same thing, that one is
+   * refreshed (new text, moved to the top) instead of adding another.
+   * Prevents 5 saves in a row from creating 5 notifications.
+   */
+  async createOrBumpBulkNotifications(options) {
+    const { recipientStaffIds, type, relatedEntityType, relatedEntityId, title, message, metadata = {} } = options;
+    if (!recipientStaffIds || recipientStaffIds.length === 0) return [];
+    if (!relatedEntityType || relatedEntityId === null || relatedEntityId === undefined) {
+      return this.createBulkNotifications(options);
+    }
+
+    const existingRes = await pool.query(
+      `SELECT id, recipient_staff_id FROM notifications
+       WHERE recipient_staff_id = ANY($1::int[]) AND type = $2
+         AND related_entity_type = $3 AND related_entity_id = $4 AND is_read = false`,
+      [recipientStaffIds, type, relatedEntityType, relatedEntityId]
+    );
+    const bumpIds = existingRes.rows.map(r => r.id);
+    const alreadyNotified = new Set(existingRes.rows.map(r => Number(r.recipient_staff_id)));
+
+    if (bumpIds.length) {
+      await pool.query(
+        `UPDATE notifications SET title = $1, message = $2, metadata = $3::jsonb, created_at = NOW()
+         WHERE id = ANY($4::int[])`,
+        [title, message, metadata, bumpIds]
+      );
+      const enriched = await pool.query(`
+        SELECT n.*, s.name AS sender_name, s.role AS sender_role, c.name AS centre_name
+        FROM notifications n
+        LEFT JOIN staff s ON n.sender_staff_id = s.id
+        LEFT JOIN centres c ON n.centre_id = c.id
+        WHERE n.id = ANY($1::int[])
+      `, [bumpIds]);
+      for (const notif of enriched.rows) {
+        socketNotifications.emitNotificationUpdated(notif.recipient_staff_id, notif);
+      }
+    }
+
+    const fresh = recipientStaffIds.filter(id => !alreadyNotified.has(Number(id)));
+    const created = fresh.length ? await this.createBulkNotifications({ ...options, recipientStaffIds: fresh }) : [];
+    return created;
+  },
+
   async markAsRead(notificationId, staffId) {
     const client = await pool.connect();
     try {

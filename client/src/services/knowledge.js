@@ -1,3 +1,4 @@
+//src/services/knowledge.js
 import axios from 'axios';
 
 // USE YOUR VITE_API_URL SO IT HITS YOUR NODE.JS BACKEND
@@ -34,6 +35,19 @@ export const batchUpdateBlocks = async (workspaceId, documentId, blocks) => {
 
 export const createDocument = async (payload) => {
   const { data } = await api.post('/documents', payload);
+  return data;
+};
+
+// ==========================================
+// CONTRIBUTORS (admins / superadmins)
+// ==========================================
+export const addContributor = async (workspaceId, staffId, role = 'EDITOR') => {
+  const { data } = await api.post(`/workspace/${workspaceId}/contributors`, { staffId, role });
+  return data;
+};
+
+export const removeContributor = async (workspaceId, staffId) => {
+  const { data } = await api.delete(`/workspace/${workspaceId}/contributors/${staffId}`);
   return data;
 };
 
@@ -128,6 +142,12 @@ export const fetchAllDiscussions = async () => {
   return data;
 };
 
+// PHASE 1: real open/solved counts per service → [{ service_id, open_count, solved_count }]
+export const fetchServiceDiscussionCounts = async () => {
+  const { data } = await api.get('/hub/services/counts');
+  return data;
+};
+
 export const fetchDiscussionById = async (id) => {
   const { data } = await api.get(`/hub/discussions/${id}`);
   return data;
@@ -153,7 +173,8 @@ export const markMentionsRead = async (discussionId) => {
 };
 
 export const fetchStaffSuggestions = async (query) => {
-  const { data } = await api.get(`/hub/staff/search?q=${query}`);
+  // PHASE 1 FIX: let axios encode the query (names with spaces/& broke the URL)
+  const { data } = await api.get('/hub/staff/search', { params: { q: query } });
   return data;
 };
 
@@ -197,9 +218,11 @@ export const fetchRecentActivity = async () => {
 };
 
 export const lookupCrmRecord = async (type, id, serviceId = null) => {
-  let url = `/hub/crm-lookup?type=${type}&id=${id}`;
-  if (serviceId) url += `&serviceId=${serviceId}`; 
-  const { data } = await api.get(url);
+  // PHASE 1 FIX: application numbers can now contain letters, slashes, etc.,
+  // so let axios encode the params instead of building the URL by hand
+  const params = { type, id };
+  if (serviceId) params.serviceId = serviceId;
+  const { data } = await api.get('/hub/crm-lookup', { params });
   return data;
 };
 
@@ -220,6 +243,63 @@ export const uploadKnowledgeFiles = async (files) => {
   });
   
   return data.urls; // Returns: [{ url: '/uploads/...', name: '...' }]
+};
+
+// ==========================================
+// PHASE 3: SUGGESTIONS & REVIEW QUEUE
+// ==========================================
+export const createSuggestion = async (documentId, { blocks, note }) => {
+  const { data } = await api.post(`/documents/${documentId}/suggestions`, { blocks, note });
+  return data;
+};
+
+export const fetchMySuggestionForDocument = async (documentId) => {
+  const { data } = await api.get(`/documents/${documentId}/suggestions/mine`);
+  return data;
+};
+
+// params: { scope: 'review' | 'mine', status: 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'all', workspaceId }
+export const fetchSuggestions = async (params = {}) => {
+  const { data } = await api.get('/suggestions', { params });
+  return data;
+};
+
+export const fetchSuggestion = async (id) => {
+  const { data } = await api.get(`/suggestions/${id}`);
+  return data;
+};
+
+export const approveSuggestion = async (id, note = '') => {
+  const { data } = await api.put(`/suggestions/${id}/approve`, { note });
+  return data;
+};
+
+export const rejectSuggestion = async (id, note) => {
+  const { data } = await api.put(`/suggestions/${id}/reject`, { note });
+  return data;
+};
+
+export const withdrawSuggestion = async (id) => {
+  const { data } = await api.put(`/suggestions/${id}/withdraw`);
+  return data;
+};
+
+// "Add to FAQ" from a solved discussion → { mode: 'published' | 'suggested' }
+export const promoteDiscussionToFaq = async (discussionId, { question, answer }) => {
+  const { data } = await api.post(`/discussions/${discussionId}/faq`, { question, answer });
+  return data;
+};
+
+// Starter SOP blocks from Service Management (required documents, website)
+export const fetchSetupImport = async (documentId) => {
+  const { data } = await api.get(`/documents/${documentId}/import-from-setup`);
+  return data;
+};
+
+// Live charges for a service at the user's centre (superadmin: one centre or all)
+export const fetchServiceCharges = async (serviceId, centreId = null) => {
+  const { data } = await api.get(`/services/${serviceId}/charges`, { params: centreId ? { centreId } : {} });
+  return data;
 };
 
 export default api;

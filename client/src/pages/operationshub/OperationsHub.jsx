@@ -14,7 +14,7 @@ import {
   FiArchive, FiClipboard, FiVideo, FiFileText, FiLifeBuoy,
   FiUsers, FiBriefcase, FiTarget, FiCheckSquare, FiMessageCircle as FiMessageCircleOutline,
   FiGrid, FiList, FiFilePlus, FiDatabase, FiServer, FiCloud,
-  FiMessageCircle as FiChat, FiFileMinus, FiFilePlus as FiFileAdd,
+  FiMessageCircle as FiChat, FiFileMinus, FiFilePlus as FiFileAdd, FiInbox,
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -30,13 +30,18 @@ import DraftsPage from './views/DraftsPage';
 import AnnouncementsView from './views/AnnouncementsView';
 import CreateDiscussionModal from './views/discussions/CreateDiscussionModal';
 import ServiceWorkspace from './ServiceWorkspace'; 
+import SuggestionsView from './views/SuggestionsView'; // PHASE 3
 import { getWorkflowServices } from '@/services/serviceService';
-import { 
-  fetchGlobalHubStats, 
+import {
+  fetchGlobalHubStats,
   fetchAnnouncements,
   fetchAllDiscussions,
   fetchMyMentions,
-  fetchRecentActivity
+  fetchRecentActivity,
+  fetchWorkspace,
+  fetchServiceDiscussionCounts,
+  createDiscussion,
+  deleteDraft,
 } from '@/services/knowledge';
 
 // =====================================================================
@@ -53,6 +58,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
     { id: 'ai-assistant', label: 'AI Assistant', icon: FiZap },
   ];
   const workspaceItems = [
+    { id: 'suggestions', label: 'Suggestions', icon: FiInbox, count: hubStats.pendingReviews }, // PHASE 3: waiting for my review
     { id: 'mentions', label: 'Mentions', icon: FiAtSign, count: hubStats.mentions },
     { id: 'bookmarks', label: 'Bookmarks', icon: FiBookmark },
     { id: 'drafts', label: 'Drafts', icon: FiFile, count: hubStats.drafts || 0 }, 
@@ -61,43 +67,43 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
   ];
 
   return (
-    <div className="w-60 h-full bg-white border-r border-gray-200 flex flex-col overflow-y-auto flex-shrink-0">
-      <div className="flex items-center gap-2 px-5 py-4 border-b border-gray-200">
-        <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center text-white text-sm">
+    <div className="w-full lg:w-60 h-full bg-white border-r border-slate-200 flex flex-col overflow-y-auto flex-shrink-0">
+      <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-slate-200">
+        <div className="w-9 h-9 bg-navy-700 rounded-xl flex items-center justify-center text-white text-sm">
           <FiZap className="h-5 w-5" />
         </div>
-        <h1 className="text-lg font-bold text-gray-900">Operations Hub</h1>
-        <span className="text-[10px] font-semibold bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
+        <h1 className="whitespace-nowrap text-base font-semibold text-navy-700">Knowledge Hub</h1>
+        <span className="hidden text-[10px] font-semibold bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full ml-auto">v1.0</span>
       </div>
 
       <div className="flex-1 px-2.5 py-3">
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5">⚡ Operations</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5">Operations</div>
         {mainNav.map(item => (
           <a
             key={item.id}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-              active === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            className={`flex items-center gap-2.5 min-h-[40px] px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              active === item.id ? 'bg-navy-500/10 text-navy-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
             onClick={() => onNavigate(item.id)}
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count > 0 && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
 
-        <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 px-3 py-1.5 mt-4">⭐ My Workspace</div>
+        <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-3 py-1.5 mt-4">My Workspace</div>
         {workspaceItems.map(item => (
           <a
             key={item.id}
-            className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
-              active === item.id ? 'bg-indigo-50 text-indigo-600' : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+            className={`flex items-center gap-2.5 min-h-[40px] px-3 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              active === item.id ? 'bg-navy-500/10 text-navy-700' : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
             }`}
             onClick={() => onNavigate(item.id)}
           >
             <item.icon className="h-4 w-4" />
             <span>{item.label}</span>
-            {item.count && <span className="ml-auto bg-gray-200 text-gray-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
+            {item.count > 0 && <span className="ml-auto bg-navy-500/10 text-navy-700 text-[11px] font-semibold px-2 py-0.5 rounded-full">{item.count}</span>}
           </a>
         ))}
       </div>
@@ -105,7 +111,7 @@ const Sidebar = ({ active, onNavigate, hubStats = {} }) => {
   );
 };
 
-const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant, hubStats = {} }) => {
+const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistant, onNew, hubStats = {} }) => {
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -120,37 +126,36 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
   }, []);
 
   return (
-    <div className="flex-shrink-0 bg-white border-b border-gray-200 px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
-      <button className="lg:hidden text-gray-500 hover:text-gray-700" onClick={toggleMobileSidebar}>
+    <div className="flex-shrink-0 bg-white border-b border-slate-200 px-3 sm:px-6 py-2.5 sm:py-3 flex items-center gap-2 sm:gap-3">
+      <button className="lg:hidden grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-700" onClick={toggleMobileSidebar}>
         <FiMenu className="h-5 w-5" />
       </button>
-      <div className="flex-1 min-w-[180px] max-w-xl relative">
-        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 h-4 w-4" />
+      <div className="flex-1 min-w-0 max-w-xl relative">
+        <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
         <input
           ref={inputRef}
           type="text"
-          placeholder="Ask Operations Hub (e.g., 'How to correct Aadhaar DOB?')"
+          placeholder="Ask Knowledge Hub (e.g., 'How to correct Aadhaar DOB?')"
           value={query}
           onChange={(e) => onSearch(e.target.value)}
-          className="w-full pl-9 pr-14 py-2 bg-gray-100 border border-transparent rounded-full text-sm focus:outline-none focus:bg-white focus:border-gray-300 transition-all shadow-inner"
+          className="min-h-[44px] w-full pl-9 pr-4 sm:pr-14 py-2 bg-slate-100 border border-transparent rounded-xl text-base sm:text-sm focus:outline-none focus:bg-white focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30 transition-all"
         />
-        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded border border-gray-300 font-mono">⌘K</span>
+        <span className="hidden sm:block absolute right-3 top-1/2 -translate-y-1/2 text-[11px] text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded border border-slate-300 font-mono">⌘K</span>
       </div>
-      <div className="flex items-center gap-1.5">
-        <button onClick={onAIAssistant} className="relative p-2 rounded-full hover:bg-indigo-50 text-indigo-500 hover:text-indigo-700 transition" title="Ask Akshaya Assistant">
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={onNew} className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white transition hover:bg-navy-800">
+          <FiPlus className="h-4 w-4" /><span className="hidden sm:inline">New</span>
+        </button>
+        <button onClick={onAIAssistant} className="hidden sm:grid relative h-11 w-11 place-items-center rounded-xl hover:bg-navy-500/10 text-navy-500 hover:text-navy-700 transition" title="Ask Akshaya Assistant">
           <FiZap className="h-5 w-5" />
         </button>
-        <button onClick={() => onNavigate('notifications')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
-          <FiBell className="h-5 w-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
-        </button>
-        <button onClick={() => onNavigate('bookmarks')} className="p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+        <button onClick={() => onNavigate('bookmarks')} className="hidden sm:grid h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiBookmark className="h-5 w-5" />
         </button>
-        <button onClick={() => onNavigate('mentions')} className="relative p-2 rounded-full hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition">
+        <button onClick={() => onNavigate('mentions')} className="hidden sm:grid relative h-11 w-11 place-items-center rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition">
           <FiAtSign className="h-5 w-5" />
           {hubStats.mentions > 0 && (    
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-white"></span>
+            <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-rose-500 rounded-full border-2 border-white"></span>
           )}
         </button>
       </div>
@@ -160,18 +165,18 @@ const TopBar = ({ onSearch, query, onNavigate, toggleMobileSidebar, onAIAssistan
 
 const StatCard = ({ label, value, icon: Icon, color }) => {
   const colorMap = {
-    blue: 'bg-blue-50 text-blue-600', green: 'bg-green-50 text-green-600',
-    amber: 'bg-amber-50 text-amber-600', purple: 'bg-purple-50 text-purple-600',
-    rose: 'bg-rose-50 text-rose-600', indigo: 'bg-indigo-50 text-indigo-600',
+    blue: 'bg-navy-500/10 text-navy-700', green: 'bg-emerald-50 text-emerald-600',
+    amber: 'bg-amber-50 text-amber-600', purple: 'bg-navy-500/10 text-navy-700',
+    rose: 'bg-rose-50 text-rose-600', indigo: 'bg-navy-500/10 text-navy-700',
   };
   return (
-    <div className="flex items-center gap-3 p-3 bg-white border border-gray-200 rounded-xl hover:shadow-md transition-shadow">
-      <div className={`p-2.5 rounded-xl ${colorMap[color] || 'bg-gray-50 text-gray-600'}`}>
+    <div className="flex items-center gap-3 p-3 bg-white border border-slate-200 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
+      <div className={`p-2.5 rounded-xl ${colorMap[color] || 'bg-slate-50 text-slate-600'}`}>
         <Icon className="h-5 w-5" />
       </div>
       <div>
-        <div className="text-xl font-bold text-gray-900">{value}</div>
-        <div className="text-xs text-gray-500">{label}</div>
+        <div className="text-xl font-semibold text-slate-900">{value}</div>
+        <div className="text-xs text-slate-500">{label}</div>
       </div>
     </div>
   );
@@ -179,16 +184,16 @@ const StatCard = ({ label, value, icon: Icon, color }) => {
 
 const AnnouncementItem = ({ announcement, onClick }) => {
   const categoryColors = {
-    government: 'bg-red-100 text-red-700', centre: 'bg-blue-100 text-blue-700',
-    software: 'bg-green-100 text-green-700', training: 'bg-purple-100 text-purple-700',
+    government: 'bg-rose-100 text-rose-700', centre: 'bg-navy-500/10 text-navy-700',
+    software: 'bg-emerald-100 text-emerald-700', training: 'bg-navy-500/10 text-navy-700',
   };
-  const color = categoryColors[announcement.category] || 'bg-gray-100 text-gray-700';
+  const color = categoryColors[announcement.category] || 'bg-slate-100 text-slate-700';
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-100 last:border-0 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg transition" onClick={onClick}>
+    <div className="flex items-center gap-3 py-3 border-b border-slate-100 last:border-0 cursor-pointer hover:bg-slate-50 -mx-2 px-2 rounded-lg transition" onClick={onClick}>
       {announcement.pinned ? <FiHeart className="text-amber-500 h-4 w-4 flex-shrink-0" /> : <span className="w-4 flex-shrink-0"></span>}
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-gray-900">{announcement.title}</div>
-        <div className="text-xs text-gray-400">{announcement.time}</div>
+        <div className="text-sm font-medium text-slate-900">{announcement.title}</div>
+        <div className="text-xs text-slate-400">{announcement.time}</div>
       </div>
       <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${color}`}>{announcement.category}</span>
     </div>
@@ -197,30 +202,30 @@ const AnnouncementItem = ({ announcement, onClick }) => {
 
 const DiscussionCard = ({ discussion, onClick }) => {
   const typeMap = {
-    question: { icon: FiMessageSquare, color: 'bg-blue-50 text-blue-600' },
+    question: { icon: FiMessageSquare, color: 'bg-navy-500/10 text-navy-700' },
     'customer issue': { icon: FiUser, color: 'bg-amber-50 text-amber-600' },
-    bug: { icon: FiAlertCircle, color: 'bg-yellow-50 text-yellow-600' },
+    bug: { icon: FiAlertCircle, color: 'bg-amber-50 text-amber-600' },
   };
-  const { icon: Icon, color: typeClass } = typeMap[discussion.type] || { icon: FiMessageSquare, color: 'bg-gray-50 text-gray-600' };
+  const { icon: Icon, color: typeClass } = typeMap[discussion.type] || { icon: FiMessageSquare, color: 'bg-slate-50 text-slate-600' };
   const serviceObj = null;
   const serviceName = serviceObj ? serviceObj.name : null;
 
   return (
-    <div className="p-3 bg-white border border-gray-200 rounded-xl mb-2.5 hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={() => onClick(discussion.id)}>
+    <div className="p-3 bg-white border border-slate-200 rounded-xl mb-2.5 hover:border-navy-500/20 hover:shadow-sm transition-all cursor-pointer" onClick={() => onClick(discussion.id)}>
       <div className="flex gap-3">
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 ${typeClass}`}><Icon className="h-4 w-4" /></div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center flex-wrap gap-1.5">
-            <span className="text-sm font-semibold text-gray-900">{discussion.title}</span>
+            <span className="text-sm font-semibold text-slate-900">{discussion.title}</span>
             {discussion.solved !== undefined && (
               <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${discussion.solved ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
                 {discussion.solved ? 'Solved' : 'Open'}
               </span>
             )}
-            {serviceName && <span className="text-[10px] font-medium bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full">{serviceName}</span>}
+            {serviceName && <span className="text-[10px] font-medium bg-navy-500/10 text-navy-700 px-2 py-0.5 rounded-full">{serviceName}</span>}
           </div>
-          <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-400">
+          <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{discussion.preview}</div>
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-slate-400">
             <span><FiUser className="inline h-3 w-3 mr-0.5" /> {discussion.author}</span>
             <span><FiClock className="inline h-3 w-3 mr-0.5" /> {discussion.lastReply}</span>
             <span><FiMessageSquare className="inline h-3 w-3 mr-0.5" /> {discussion.replies}</span>
@@ -235,37 +240,37 @@ const ArticleCard = ({ article, onClick }) => {
   const serviceObj = null; // <--- Safe fallback!
   const serviceName = serviceObj ? serviceObj.name : null;
   return (
-    <div className="p-3 bg-white border border-gray-200 rounded-xl hover:border-indigo-200 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
-      <div className="font-semibold text-sm text-gray-900">{article.title}</div>
-      <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{article.desc}</div>
-      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-gray-400">
+    <div className="p-3 bg-white border border-slate-200 rounded-xl hover:border-navy-500/20 hover:shadow-sm transition-all cursor-pointer" onClick={onClick}>
+      <div className="font-semibold text-sm text-slate-900">{article.title}</div>
+      <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{article.desc}</div>
+      <div className="flex flex-wrap gap-3 mt-1.5 text-[11px] text-slate-400">
         <span><FiFolder className="inline h-3 w-3 mr-0.5" /> {article.category}</span>
         <span><FiUser className="inline h-3 w-3 mr-0.5" /> {article.author}</span>
         <span><FiClock className="inline h-3 w-3 mr-0.5" /> {article.updated}</span>
-        {serviceName && <span className="bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded">{serviceName}</span>}
+        {serviceName && <span className="bg-navy-500/10 text-navy-700 px-1.5 py-0.5 rounded">{serviceName}</span>}
       </div>
     </div>
   );
 };
 
 const ActivityFeed = ({ activities }) => (
-  <div className="bg-white border border-gray-200 rounded-xl p-4">
-    <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-3">
-      <FiRefreshCw className="h-4 w-4 text-indigo-500" /> Recent Activity
+  <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4">
+    <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-3">
+      <FiRefreshCw className="h-4 w-4 text-navy-500" /> Recent Activity
     </h3>
     <div className="space-y-2">
       {activities.map(act => (
         <div key={act.id} className="flex items-start gap-2 text-sm">
           <span className="mt-0.5">
             {act.type === 'solved' && <FiCheckCircle className="h-4 w-4 text-emerald-500" />}
-            {act.type === 'article' && <FiFileText className="h-4 w-4 text-blue-500" />}
+            {act.type === 'article' && <FiFileText className="h-4 w-4 text-navy-500" />}
           </span>
           <div className="flex-1 min-w-0">
-            <span className="text-gray-700">
+            <span className="text-slate-700">
               <strong>{act.user}</strong> {act.type === 'solved' ? 'solved' : 'updated'}{' '}
-              <span className="text-indigo-600 font-medium">{act.target}</span>
+              <span className="text-navy-700 font-medium">{act.target}</span>
             </span>
-            <span className="block text-xs text-gray-400">{act.time}</span>
+            <span className="block text-xs text-slate-400">{act.time}</span>
           </div>
         </div>
       ))}
@@ -278,13 +283,13 @@ const ConvertDropdown = ({ onConvert }) => {
   const options = [{ label: 'Solved Case', icon: FiCheckCircle, action: 'case' }];
   return (
     <div className="relative inline-block">
-      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition">
+      <button onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-700 bg-navy-500/10 hover:bg-navy-500/10 px-3 py-1.5 rounded-lg transition">
         <FiMoreHorizontal className="h-4 w-4" /> Convert
       </button>
       {open && (
-        <div className="absolute right-0 mt-1 w-44 bg-white border border-gray-200 rounded-lg shadow-lg z-10 py-1">
+        <div className="absolute right-0 mt-1 w-44 bg-white border border-slate-200 rounded-lg shadow-lg z-10 py-1">
           {options.map(opt => (
-            <div key={opt.action} className="flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 cursor-pointer" onClick={() => { onConvert(opt.action); setOpen(false); }}>
+            <div key={opt.action} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 cursor-pointer" onClick={() => { onConvert(opt.action); setOpen(false); }}>
               <opt.icon className="h-4 w-4" /> {opt.label}
             </div>
           ))}
@@ -311,13 +316,14 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">{greeting}, {firstName} 👋</h2>
-        <p className="text-gray-500">Welcome to the Operations Hub. Here is everything at a glance.</p>
+      <div className="rounded-2xl bg-navy-700 p-5 text-white shadow-sm sm:p-6">
+        <p className="text-sm text-white/70">{greeting}</p>
+        <h2 className="mt-0.5 text-xl font-semibold sm:text-2xl">Welcome back, {firstName}</h2>
+        <p className="mt-1 text-sm text-white/70">Welcome to the Knowledge Hub. Here is everything at a glance.</p>
       </div>
 
       {/* THE FIX: Real Live Data for the Stat Cards! */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
         <StatCard label="Discussions" value={hubStats.discussions} icon={FiMessageCircle} color="blue" />
         <StatCard label="Services" value={services.length} icon={FiGrid} color="green" />
         <StatCard label="Announcements" value={hubStats.announcements} icon={FiBell} color="amber" />
@@ -327,8 +333,8 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       </div>
 
       <div className="flex items-center justify-between mt-8 mb-2">
-        <h3 className="text-lg font-bold text-gray-900">High Priority Services</h3>
-        <button onClick={() => navigateTo('services')} className="text-sm font-semibold text-indigo-600 hover:text-indigo-800">
+        <h3 className="text-lg font-semibold text-slate-900">High Priority Services</h3>
+        <button onClick={() => navigateTo('services')} className="text-sm font-semibold text-navy-700 hover:text-navy-700">
           View All {services.length} Services &rarr;
         </button>
       </div>
@@ -336,18 +342,18 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       {/* THE FIX: Only map over the topServices (Max 6) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {topServices.map(service => (
-          <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
+          <div key={service.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 hover:shadow-lg transition cursor-pointer" onClick={() => navigateTo('service-detail', service.id)}>
             <div className="flex items-start gap-3 mb-3">
-              <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+              <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl">
                 <FiLayers className="h-6 w-6" />
               </div>
               <div className="flex-1 min-w-0">
-                <h4 className="font-bold text-gray-900 truncate">{service.name}</h4>
-                <div className="text-xs text-gray-500 line-clamp-2 mt-0.5">{service.description}</div>
+                <h4 className="font-bold text-slate-900 truncate">{service.name}</h4>
+                <div className="text-xs text-slate-500 line-clamp-2 mt-0.5">{service.description}</div>
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs font-medium border-t border-gray-100 pt-3">
-              <span className={`${(service.openDiscussions > 0) ? 'bg-amber-100 text-amber-700' : 'bg-indigo-50 text-indigo-600'} px-2 py-1 rounded-lg flex items-center gap-1`}>
+            <div className="flex flex-wrap items-center gap-2 text-xs font-medium border-t border-slate-100 pt-3">
+              <span className={`${(service.openDiscussions > 0) ? 'bg-amber-100 text-amber-700' : 'bg-navy-500/10 text-navy-700'} px-2 py-1 rounded-lg flex items-center gap-1`}>
                 <FiMessageCircle className="h-3 w-3" /> {service.openDiscussions || 0} Open
               </span>
               <span className="bg-emerald-50 text-emerald-600 px-2 py-1 rounded-lg flex items-center gap-1">
@@ -359,26 +365,26 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
       </div>
 
       {/* Real Live Government Updates / Announcements */}
-      <div className="bg-white border-l-4 border-red-500 rounded-xl shadow-sm p-4">
+      <div className="bg-white border-l-4 border-rose-500 rounded-2xl shadow-sm p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-            <FiFileText className="h-4 w-4 text-red-500" /> Government Updates & Announcements
+          <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+            <FiFileText className="h-4 w-4 text-rose-500" /> Government Updates & Announcements
           </h3>
         </div>
         <div className="space-y-2">
           {liveAnnouncements.length === 0 ? (
-             <p className="text-sm text-gray-500">No active announcements.</p>
+             <p className="text-sm text-slate-500">No active announcements.</p>
           ) : (
             liveAnnouncements.map(update => (
-              <div key={update.id} className="flex items-center gap-3 text-sm p-2 hover:bg-gray-50 rounded-lg transition">
+              <div key={update.id} className="flex items-center gap-3 text-sm p-2 hover:bg-slate-50 rounded-lg transition">
                 {update.is_pinned && <FiHeart className="text-amber-500 h-3 w-3 flex-shrink-0" />}
                 <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${
-                  update.priority === 'high' ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'
+                  update.priority === 'high' ? 'bg-rose-100 text-rose-700' : 'bg-navy-500/10 text-navy-700'
                 }`}>
                   {update.priority}
                 </span>
-                <span className="text-gray-700 font-medium flex-1">{update.title}</span>
-                <span className="text-xs text-gray-400">
+                <span className="text-slate-700 font-medium flex-1">{update.title}</span>
+                <span className="text-xs text-slate-400">
                   {new Date(update.created_at).toLocaleDateString()}
                 </span>
               </div>
@@ -392,22 +398,22 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
         <div className="space-y-6">
           
           {/* LATEST DISCUSSIONS */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 shadow-sm">
             <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <FiMessageCircle className="h-4 w-4 text-indigo-500" /> Latest Discussions
+              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <FiMessageCircle className="h-4 w-4 text-navy-500" /> Latest Discussions
               </h3>
-              <button onClick={() => navigateTo('discussions')} className="text-xs font-medium text-indigo-600 hover:underline">View All</button>
+              <button onClick={() => navigateTo('discussions')} className="text-xs font-medium text-navy-700 hover:underline">View All</button>
             </div>
             
             {recentDiscussions.length === 0 ? (
-               <p className="text-sm text-gray-500 py-2">No active discussions.</p>
+               <p className="text-sm text-slate-500 py-2">No active discussions.</p>
             ) : (
               <div className="space-y-3">
                 {recentDiscussions.map(d => (
-                  <div key={d.id} onClick={() => openDiscussion(d.id)} className="group cursor-pointer border-b border-gray-50 pb-2 last:border-0 last:pb-0">
-                    <h4 className="text-sm font-semibold text-gray-800 group-hover:text-indigo-600 truncate">{d.title}</h4>
-                    <div className="flex items-center gap-3 text-[11px] text-gray-500 mt-1">
+                  <div key={d.id} onClick={() => openDiscussion(d.id)} className="group cursor-pointer border-b border-slate-50 pb-2 last:border-0 last:pb-0">
+                    <h4 className="text-sm font-semibold text-slate-800 group-hover:text-navy-700 truncate">{d.title}</h4>
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-1">
                       <span><FiUser className="inline h-3 w-3 mr-1"/>{d.author_name}</span>
                       <span><FiMessageSquare className="inline h-3 w-3 mr-1"/>{d.replies_count} replies</span>
                     </div>
@@ -420,24 +426,24 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
 
         <div className="space-y-6">
           {/* MY MENTIONS */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 shadow-sm">
              <div className="flex justify-between items-center mb-3">
-              <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
-                <FiAtSign className="h-4 w-4 text-purple-500" /> Recent Mentions
+              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <FiAtSign className="h-4 w-4 text-navy-500" /> Recent Mentions
               </h3>
-              <button onClick={() => navigateTo('mentions')} className="text-xs font-medium text-purple-600 hover:underline">Inbox</button>
+              <button onClick={() => navigateTo('mentions')} className="text-xs font-medium text-navy-700 hover:underline">Inbox</button>
             </div>
             
             {recentMentions.length === 0 ? (
-               <p className="text-sm text-gray-500 py-2">No new mentions.</p>
+               <p className="text-sm text-slate-500 py-2">No new mentions.</p>
             ) : (
               <div className="space-y-3">
                 {recentMentions.map(m => (
-                  <div key={m.id} onClick={() => openDiscussion(m.discussion_id)} className="cursor-pointer bg-purple-50 p-2.5 rounded-lg hover:bg-purple-100 transition border border-purple-100">
-                    <div className="text-xs font-medium text-purple-800 mb-1">
+                  <div key={m.id} onClick={() => openDiscussion(m.discussion_id)} className="cursor-pointer bg-navy-500/10 p-2.5 rounded-lg hover:bg-navy-500/10 transition border border-navy-500/10">
+                    <div className="text-xs font-medium text-navy-700 mb-1">
                       <strong className="font-bold">{m.author_name}</strong> tagged you:
                     </div>
-                    <div className="text-sm font-semibold text-gray-900 truncate">{m.discussion_title}</div>
+                    <div className="text-sm font-semibold text-slate-900 truncate">{m.discussion_title}</div>
                   </div>
                 ))}
               </div>
@@ -445,23 +451,23 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
           </div>
 
           {/* RECENT ACTIVITY */}
-          <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2 mb-4">
-              <FiRefreshCw className="h-4 w-4 text-indigo-500" /> Global Activity
+          <div className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2 mb-4">
+              <FiRefreshCw className="h-4 w-4 text-navy-500" /> Global Activity
             </h3>
             
             <div className="space-y-3">
               {recentActivity.map((act, i) => (
                 <div key={i} className="flex items-start gap-3 text-sm">
-                  <div className={`mt-0.5 p-1.5 rounded-md ${act.type === 'solved' ? 'bg-emerald-100 text-emerald-600' : 'bg-blue-100 text-blue-600'}`}>
+                  <div className={`mt-0.5 p-1.5 rounded-md ${act.type === 'solved' ? 'bg-emerald-100 text-emerald-600' : 'bg-navy-500/10 text-navy-700'}`}>
                     {act.type === 'solved' ? <FiCheckCircle className="h-3 w-3" /> : <FiMessageSquare className="h-3 w-3" />}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="text-gray-700">
-                      <strong className="font-semibold text-gray-900">{act.user_name}</strong> {act.type === 'solved' ? 'solved the case:' : 'started a discussion:'}
+                    <span className="text-slate-700">
+                      <strong className="font-semibold text-slate-900">{act.user_name}</strong> {act.type === 'solved' ? 'solved the case:' : 'started a discussion:'}
                     </span>
-                    <span className="block text-indigo-600 font-medium truncate mt-0.5">{act.target}</span>
-                    <span className="block text-[10px] text-gray-400 mt-1 uppercase tracking-wider">
+                    <span className="block text-navy-700 font-medium truncate mt-0.5">{act.target}</span>
+                    <span className="block text-[10px] text-slate-400 mt-1 uppercase tracking-wider">
                       {new Date(act.time).toLocaleDateString()}
                     </span>
                   </div>
@@ -477,16 +483,16 @@ const HomePage = ({ currentUser, services, hubStats, liveAnnouncements = [], rec
 
 const ServicesPage = ({ services, navigateTo, openServiceDetail }) => (
   <div>
-    <h2 className="text-xl font-bold text-gray-900 mb-4">All Services</h2>
+    <h2 className="text-xl font-semibold text-slate-900 mb-4">All Services</h2>
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {/* 2. Map over the "services" prop instead of DATA.services */}
       {services.map(service => (
-        <div key={service.id} className="bg-white border border-gray-200 rounded-xl p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
+        <div key={service.id} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-4 hover:shadow-md transition cursor-pointer" onClick={() => openServiceDetail(service.id)}>
           <div className="flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl"><service.icon className="h-6 w-6" /></div>
+            <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl"><service.icon className="h-6 w-6" /></div>
             <div>
-              <h3 className="font-semibold text-gray-900">{service.name}</h3>
-              <p className="text-xs text-gray-500">{service.description}</p>
+              <h3 className="font-semibold text-slate-900">{service.name}</h3>
+              <p className="text-xs text-slate-500">{service.description}</p>
             </div>
           </div>
         </div>
@@ -503,26 +509,26 @@ const AIAssistantPage = () => {
   const [input, setInput] = useState('');
   return (
     <div className="flex flex-col h-full">
-      <h2 className="text-xl font-bold text-gray-900 mb-4">Akshaya Assistant</h2>
-      <div className="flex-1 bg-white border border-gray-200 rounded-xl p-4 mb-4">
+      <h2 className="text-xl font-bold text-slate-900 mb-4">Akshaya Assistant</h2>
+      <div className="flex-1 bg-white border border-slate-200 rounded-2xl shadow-sm p-4 mb-4">
         {messages.map((msg, idx) => (
           <div key={idx} className={`mb-3 ${msg.role === 'user' ? 'text-right' : 'text-left'}`}>
-            <span className={`inline-block p-3 rounded-xl max-w-xl text-sm ${msg.role === 'user' ? 'bg-indigo-100 text-gray-800' : 'bg-gray-100 text-gray-800'}`}>
+            <span className={`inline-block p-3 rounded-xl max-w-xl text-sm ${msg.role === 'user' ? 'bg-navy-500/10 text-slate-800' : 'bg-slate-100 text-slate-800'}`}>
               {msg.content}
             </span>
           </div>
         ))}
       </div>
       <div className="flex gap-2">
-        <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a question..." className="flex-1 px-3 py-2 border border-gray-300 rounded-lg outline-none" />
-        <button onClick={() => { setMessages([...messages, { role: 'user', content: input }]); setInput(''); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Send</button>
+        <input type="text" value={input} onChange={e => setInput(e.target.value)} placeholder="Ask a question..." className="flex-1 px-3 py-2 border border-slate-300 rounded-lg outline-none" />
+        <button onClick={() => { setMessages([...messages, { role: 'user', content: input }]); setInput(''); }} className="px-4 py-2 bg-navy-700 text-white rounded-lg">Send</button>
       </div>
     </div>
   );
 };
 
 const SearchPage = ({ query }) => (
-  <div className="p-4"><h2 className="text-xl font-bold text-gray-900">Search: "{query}"</h2></div>
+  <div className="p-4"><h2 className="text-xl font-bold text-slate-900">Search: "{query}"</h2></div>
 );
 
 
@@ -541,13 +547,21 @@ const OperationsHub = () => { // <--- Removed the prop!
     photo: localStorage.getItem("photo"),
   }), []);
 
-  const { serviceId } = useParams(); 
+  const { serviceId } = useParams();
   const location = useLocation();
 
+  // PHASE 1 FIX: shared discussion links use ?discussion=<id> so they don't
+  // get confused with /operationshub/<serviceId>.
+  const urlDiscussionId = new URLSearchParams(location.search).get('discussion');
   const isDbId = serviceId && !isNaN(serviceId);
 
-  const [page, setPage] = useState(isDbId ? 'service-detail' : (serviceId || 'home'));
+  const initialPage = urlDiscussionId ? 'discussion-detail' : (isDbId ? 'service-detail' : (serviceId || 'home'));
+
+  const [page, setPage] = useState(initialPage);
+  // PHASE 1 FIX: services and discussions now have separate IDs
+  // (one state variable used to hold both).
   const [selectedServiceId, setSelectedServiceId] = useState(isDbId ? serviceId : null);
+  const [selectedDiscussionId, setSelectedDiscussionId] = useState(urlDiscussionId || null);
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -570,38 +584,48 @@ const OperationsHub = () => { // <--- Removed the prop!
         setIsLoadingServices(true);
         
         // Fetch everything concurrently
-        const [
-          servicesResponse, 
-          statsResponse, 
-          announcementsResponse, 
-          discussionsRes, 
-          mentionsRes, 
-          activityRes
-        ] = await Promise.all([
+        // FIX: allSettled, so one failing call (e.g. the service list for
+        // superadmin) no longer blanks the whole dashboard. Each section
+        // falls back to empty and we say which part failed.
+        const results = await Promise.allSettled([
            getWorkflowServices(),
            fetchGlobalHubStats(),
            fetchAnnouncements(),
-           fetchAllDiscussions(),       
-           fetchMyMentions(),           
-           fetchRecentActivity()        
+           fetchAllDiscussions(),
+           fetchMyMentions(),
+           fetchRecentActivity(),
+           fetchServiceDiscussionCounts()
         ]);
+        const value = (i, fallback) => (results[i].status === 'fulfilled' ? results[i].value : fallback);
+        const servicesResponse = value(0, { data: [] });
+        const statsResponse = value(1, hubStats);
+        const announcementsResponse = value(2, []);
+        const discussionsRes = value(3, []);
+        const mentionsRes = value(4, []);
+        const activityRes = value(5, []);
+        const countsRes = value(6, []);
 
-        // Map over the services and attach the counts
-        const formatted = servicesResponse.data.map(s => {
-          
-          // 🔥 SMART FALLBACK: If the backend doesn't provide the counts natively, 
-          // we count them dynamically from the discussions array!
-          const relatedDiscussions = discussionsRes.filter(d => d.service_name === s.name || d.service_id === s.id);
-          const openCount = relatedDiscussions.filter(d => d.status !== 'solved').length;
-          const closedCount = relatedDiscussions.filter(d => d.status === 'solved').length;
+        const sectionNames = ['services', 'stats', 'announcements', 'discussions', 'mentions', 'activity'];
+        const failed = results.slice(0, 6).map((r, i) => (r.status === 'rejected' ? sectionNames[i] : null)).filter(Boolean);
+        if (failed.length) {
+          console.error('Operations Hub: some sections failed to load:', failed, results);
+          toast.warn(`Some parts of the hub could not load: ${failed.join(', ')}`);
+        }
 
+        // PHASE 1 FIX: counts come from one SQL query (all discussions),
+        // not from the latest 50 matched by name.
+        const countsByService = {};
+        (countsRes || []).forEach(c => { countsByService[String(c.service_id)] = c; });
+
+        const formatted = (servicesResponse?.data || []).map(s => {
+          const c = countsByService[String(s.id)] || {};
           return {
-            id: s.id, 
+            id: s.id,
             name: s.name,
-            icon: FiLayers, 
+            icon: FiLayers,
             description: s.description || 'Manage operations for this service.',
-            openDiscussions: parseInt(s.open_discussions, 10) || openCount,
-            closedDiscussions: parseInt(s.closed_discussions, 10) || closedCount,
+            openDiscussions: c.open_count || 0,
+            closedDiscussions: c.solved_count || 0,
           };
         });
         
@@ -624,8 +648,18 @@ const OperationsHub = () => { // <--- Removed the prop!
     fetchDashboardData();
   }, []);
 
+  // PHASE 3: refresh sidebar counts after reviewing a suggestion
+  const refreshHubStats = async () => {
+    try { setHubStats(await fetchGlobalHubStats()); } catch { /* keep old counts */ }
+  };
+
   // Sync with URL changes
   useEffect(() => {
+      if (urlDiscussionId) {
+        setPage('discussion-detail');
+        setSelectedDiscussionId(urlDiscussionId);
+        return;
+      }
       if (serviceId) {
         if (!isNaN(serviceId)) {
           // It's a real database ID, open the workspace!
@@ -633,47 +667,61 @@ const OperationsHub = () => { // <--- Removed the prop!
           setSelectedServiceId(serviceId);
         } else {
           // It's just a text page like 'services' or 'home'
-          setPage(serviceId); 
+          setPage(serviceId);
           setSelectedServiceId(null);
         }
       }
-  }, [serviceId]);
+  }, [serviceId, urlDiscussionId]);
 
   useEffect(() => {
     if (location.state?.openDiscussionId) {
       setPage('discussion-detail');
-      setSelectedServiceId(location.state.openDiscussionId);
-      
+      setSelectedDiscussionId(location.state.openDiscussionId);
+
       window.history.replaceState({}, document.title);
     }
   }, [location.state]);
 
+  // PHASE 1 FIX: discussion IDs and service IDs go to separate state.
+  // Opening a discussion keeps the current service selected, so
+  // "New" still knows which service you're in.
   const navigateTo = (target, id = null) => {
     setPage(target);
-    setSelectedServiceId(id); // <--- This now safely accepts the ID for ANY page!
+    if (target === 'discussion-detail') {
+      setSelectedDiscussionId(id);
+    } else {
+      setSelectedServiceId(id);
+      setSelectedDiscussionId(null);
+    }
     window.scrollTo({ top: 0, behavior: 'smooth' });
     setMobileSidebarOpen(false);
   };
 
+  // The service the user is currently inside (null on global pages)
+  const activeServiceId = page === 'service-detail' ? selectedServiceId : null;
+  const activeServiceName = realServices.find(s => String(s.id) === String(activeServiceId))?.name;
+
+  const renderHome = () => (
+    <HomePage
+      currentUser={currentUser}
+      services={realServices}
+      hubStats={hubStats}
+      liveAnnouncements={liveAnnouncements}
+      recentDiscussions={homeDiscussions}
+      recentMentions={homeMentions}
+      recentActivity={homeActivity}
+      navigateTo={navigateTo}
+      openDiscussion={(id) => navigateTo('discussion-detail', id)}
+    />
+  );
+
   const renderPage = () => {
     // Show a loader while fetching services from PostgreSQL
-    if (isLoadingServices) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
+    if (isLoadingServices) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-navy-500" /></div>;
 
     switch (page) {
-      case 'home': 
-        return (
-          <HomePage
-            currentUser={currentUser} 
-            services={realServices} 
-            hubStats={hubStats} 
-            liveAnnouncements={liveAnnouncements} 
-            recentDiscussions={homeDiscussions} 
-            recentMentions={homeMentions}       
-            recentActivity={homeActivity}       
-            navigateTo={navigateTo} 
-            openDiscussion={(id) => navigateTo('discussion-detail', id)} 
-          />
-        );
+      case 'home':
+        return renderHome();
       case 'services': 
         return <ServicesPage services={realServices} navigateTo={navigateTo} openServiceDetail={(id) => navigateTo('service-detail', id)} />;
       case 'service-detail': 
@@ -688,12 +736,23 @@ const OperationsHub = () => { // <--- Removed the prop!
       case 'discussions': 
         return <GlobalDiscussions navigateTo={navigateTo} />;
       case 'discussion-detail': 
-        return <DiscussionDetailPage discussionId={selectedServiceId} navigateTo={navigateTo} />;
+        return <DiscussionDetailPage discussionId={selectedDiscussionId} navigateTo={navigateTo} />;
       case 'learning': return <LearningView />;
       case 'announcements': return <AnnouncementsView />;
       case 'tags': return <TagsPage navigateTo={navigateTo} />;
       case 'bookmarks': return <BookmarksPage navigateTo={navigateTo} />;
       case 'mentions': return <MentionsPage navigateTo={navigateTo} />;
+      case 'suggestions': {
+        const isManager = ['admin', 'superadmin'].includes(currentUser.role);
+        const showReview = isManager || (hubStats.pendingReviews || 0) > 0;
+        return (
+          <SuggestionsView
+            showReviewTab={showReview}
+            defaultScope={showReview ? 'review' : 'mine'}
+            onChanged={refreshHubStats}
+          />
+        );
+      }
       case 'drafts': 
         return <DraftsPage navigateTo={navigateTo} onResumeDraft={(draft) => { 
           setEditingDraft(draft); 
@@ -704,14 +763,15 @@ const OperationsHub = () => { // <--- Removed the prop!
       case 'notifications': return <NotificationsPage />;
       case 'ai-assistant': return <AIAssistantPage navigateTo={navigateTo} />;
       case 'search': return <SearchPage query={searchQuery} navigateTo={navigateTo} />;
-      default: 
-        return <HomePage navigateTo={navigateTo} />;
+      default:
+        // PHASE 1 FIX: used to render HomePage with no props and crash
+        return renderHome();
     }
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <div className="hidden lg:block flex-shrink-0">
+    <div className="flex h-dvh overflow-hidden bg-slate-50">
+      <div className="hidden lg:block w-60 flex-shrink-0">
         {/* PASSED hubStats */}
         <Sidebar active={page} onNavigate={navigateTo} hubStats={hubStats} /> 
       </div>
@@ -723,6 +783,7 @@ const OperationsHub = () => { // <--- Removed the prop!
           onNavigate={navigateTo}
           toggleMobileSidebar={() => setMobileSidebarOpen(!mobileSidebarOpen)}
           onAIAssistant={() => navigateTo('ai-assistant')}
+          onNew={() => setShowCreateModal(true)}
           hubStats={hubStats} // <--- PASSED hubStats
         />
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
@@ -730,44 +791,51 @@ const OperationsHub = () => { // <--- Removed the prop!
         </div>
       </div>
 
+      {/* MOBILE SIDEBAR DRAWER */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-40 lg:hidden">
+          <div className="absolute inset-0 bg-slate-900/50" onClick={() => setMobileSidebarOpen(false)} />
+          <div className="absolute inset-y-0 left-0 w-72 max-w-[85vw] shadow-xl">
+            <Sidebar active={page} onNavigate={navigateTo} hubStats={hubStats} />
+          </div>
+        </div>
+      )}
+
       {/* GLOBAL DRAFTS MODAL */}
       {showCreateModal && (
         <CreateDiscussionModal
           isOpen={showCreateModal}
-          lockedServiceId={serviceId} // Will be null if on the Global Home page
-          lockedServiceName={realServices.find(s => String(s.id) === String(serviceId))?.name}
-          existingDraft={editingDraft} 
+          // PHASE 1 FIX: locks to the service you're inside (state-based),
+          // not the URL param, which didn't change on in-hub navigation.
+          // A resumed draft keeps its own service choice instead.
+          lockedServiceId={editingDraft ? null : activeServiceId}
+          lockedServiceName={editingDraft ? null : activeServiceName}
+          existingDraft={editingDraft}
           onClose={() => {
             setShowCreateModal(false);
-            setEditingDraft(null); 
+            setEditingDraft(null);
           }}
           onSubmit={async (formData) => {
-             try {
-                 const { createDiscussion } = await import('@/services/knowledge');
-                 
-                 // 🔥 THE FIX: If there is no workspaceId, fetch it using the serviceId they selected!
-                 let finalWorkspaceId = formData.workspaceId;
-                 
-                 if (!finalWorkspaceId) {
-                   const token = localStorage.getItem("token");
-                   // Your existing backend route that gets/creates the workspace for a service
-                   const res = await fetch(`${import.meta.env.VITE_API_URL}/api/knowledge/workspaces/${formData.serviceId}`, {
-                     headers: { 'Authorization': `Bearer ${token}` }
-                   });
-                   const data = await res.json();
-                   finalWorkspaceId = data.workspace.id; // Grab the Workspace ID!
-                 }
-                 
-                 // Finally submit the discussion to the correct workspace!
-                 await createDiscussion(finalWorkspaceId, formData);
-                 
-                 toast.success("Discussion published!");
-                 setShowCreateModal(false);
-                 setEditingDraft(null);
-                 
-             } catch (err) {
-                 throw err; 
+             // PHASE 1 FIX: the old code fetched /workspaces/:id (plural),
+             // which doesn't exist → 404 → crash. fetchWorkspace hits the
+             // real /workspace/:serviceId route.
+             let finalWorkspaceId = formData.workspaceId;
+             if (!finalWorkspaceId) {
+               const data = await fetchWorkspace(formData.serviceId);
+               finalWorkspaceId = data?.workspace?.id;
              }
+             if (!finalWorkspaceId) throw new Error('Could not find the workspace for this service.');
+
+             await createDiscussion(finalWorkspaceId, formData);
+
+             // A resumed draft has now been published, so remove the draft
+             if (editingDraft?.id) {
+               await deleteDraft(editingDraft.id).catch(() => {});
+             }
+
+             toast.success("Discussion published!");
+             setShowCreateModal(false);
+             setEditingDraft(null);
           }}
         />
       )}

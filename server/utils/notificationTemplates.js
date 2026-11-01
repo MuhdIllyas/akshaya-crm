@@ -28,7 +28,23 @@ export const NOTIFICATION_TYPES = {
   KNOWLEDGE_REPLY: 'knowledge_reply',
   KNOWLEDGE_SOLVED: 'knowledge_solved',
   KNOWLEDGE_UPVOTE: 'knowledge_upvote',
-  KNOWLEDGE_REACTION: 'knowledge_reaction'
+  KNOWLEDGE_REACTION: 'knowledge_reaction',
+
+  // Operations Hub — knowledge updates
+  KNOWLEDGE_DOC_PUBLISHED: 'knowledge_doc_published',
+  KNOWLEDGE_DOC_UPDATED: 'knowledge_doc_updated',
+  KNOWLEDGE_FAQ_ADDED: 'knowledge_faq_added',
+  KNOWLEDGE_SUGGESTION_SUBMITTED: 'knowledge_suggestion_submitted',
+  KNOWLEDGE_SUGGESTION_APPROVED: 'knowledge_suggestion_approved',
+  KNOWLEDGE_SUGGESTION_REJECTED: 'knowledge_suggestion_rejected',
+  KNOWLEDGE_NEW_DISCUSSION: 'knowledge_new_discussion',
+  KNOWLEDGE_FOLLOWED_REPLY: 'knowledge_followed_reply',
+  KNOWLEDGE_DISCUSSION_SOLVED: 'knowledge_discussion_solved',
+  KNOWLEDGE_ANNOUNCEMENT: 'knowledge_announcement',
+  KNOWLEDGE_TRAINING: 'knowledge_training',
+  KNOWLEDGE_CONTRIBUTOR_ADDED: 'knowledge_contributor_added',
+  KNOWLEDGE_RESOURCE_ADDED: 'knowledge_resource_added',
+  KNOWLEDGE_WORKSPACE_PUBLISHED: 'knowledge_workspace_published'
 };
 
 export const notificationTemplates = {
@@ -155,6 +171,196 @@ export const notificationTemplates = {
     priority: 'low', 
     metadata: {
       'Discussion': data.discussionTitle
+    }
+  }),
+
+  // ==========================================
+  // 🔥 KNOWLEDGE HUB — CONTENT UPDATES
+  // ==========================================
+  knowledgeDocPublished: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_DOC_PUBLISHED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `📘 New ${data.documentTitle}: ${data.serviceName}`,
+    message: `${data.serviceName} now has a ${data.documentTitle}. Read it and suggest improvements.`,
+    priority: 'normal',
+    metadata: {
+      'Service': data.serviceName,
+      'Document': data.documentTitle,
+      'Written by': data.actorName
+    }
+  }),
+
+  knowledgeDocUpdated: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_DOC_UPDATED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `📝 ${data.serviceName} ${data.documentTitle} updated`,
+    message: `${data.actorName} updated the ${data.documentTitle}: ${data.changes}.`,
+    priority: 'normal',
+    metadata: {
+      'Service': data.serviceName,
+      'Document': data.documentTitle,
+      'Changes': data.changes,
+      'Updated by': data.actorName,
+      ...(data.suggestedBy ? { 'Suggested by': data.suggestedBy } : {})
+    }
+  }),
+
+  knowledgeFaqAdded: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_FAQ_ADDED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `❓ New FAQ in ${data.serviceName}`,
+    message: data.moreCount > 0
+      ? `"${data.question}" and ${data.moreCount} more question${data.moreCount > 1 ? 's' : ''}.`
+      : `"${data.question}"`,
+    priority: 'normal',
+    metadata: {
+      'Service': data.serviceName,
+      'Question': data.question,
+      'Added by': data.actorName,
+      ...(data.suggestedBy ? { 'Suggested by': data.suggestedBy } : {})
+    }
+  }),
+
+  knowledgeSuggestionSubmitted: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_SUGGESTION_SUBMITTED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '📥 Suggestion to review',
+    message: `${data.authorName} suggested ${data.fromDiscussion ? 'a new FAQ entry for' : 'a change to'} ${data.serviceName} ${data.documentTitle}.`,
+    priority: 'normal',
+    metadata: {
+      'Service': data.serviceName,
+      'Document': data.documentTitle,
+      'Suggested by': data.authorName,
+      ...(data.note ? { 'Note': data.note } : {})
+    }
+  }),
+
+  knowledgeSuggestionApproved: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_SUGGESTION_APPROVED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '✅ Suggestion approved',
+    message: `${data.reviewerName} approved your change to ${data.serviceName} ${data.documentTitle}. It's live now — thank you!`,
+    priority: 'high',
+    metadata: {
+      'Service': data.serviceName,
+      'Document': data.documentTitle,
+      'Approved by': data.reviewerName,
+      ...(data.note ? { 'Note': data.note } : {})
+    }
+  }),
+
+  knowledgeSuggestionRejected: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_SUGGESTION_REJECTED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '↩️ Suggestion needs changes',
+    message: `${data.reviewerName} didn't approve your change to ${data.serviceName} ${data.documentTitle}.`,
+    priority: 'high',
+    metadata: {
+      'Service': data.serviceName,
+      'Document': data.documentTitle,
+      'Reviewed by': data.reviewerName,
+      'Reason': data.reason
+    }
+  }),
+
+  knowledgeNewDiscussion: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_NEW_DISCUSSION,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `💬 New question in ${data.serviceName}`,
+    message: `${data.authorName} asked: "${data.discussionTitle}". Can you help?`,
+    priority: data.priority === 'high' || data.priority === 'critical' ? 'high' : 'normal',
+    metadata: {
+      'Service': data.serviceName,
+      'Discussion': data.discussionTitle,
+      'Asked by': data.authorName
+    }
+  }),
+
+  knowledgeFollowedReply: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_FOLLOWED_REPLY,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '💬 New reply in a discussion you follow',
+    message: `${data.senderName} replied in "${data.discussionTitle}".`,
+    priority: 'normal',
+    metadata: {
+      'Discussion': data.discussionTitle,
+      'Reply by': data.senderName
+    }
+  }),
+
+  knowledgeDiscussionSolved: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_DISCUSSION_SOLVED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: '✅ Discussion solved',
+    message: `"${data.discussionTitle}" has been solved.`,
+    priority: 'normal',
+    metadata: {
+      'Discussion': data.discussionTitle,
+      'Solved by': data.solvedByName
+    }
+  }),
+
+  knowledgeAnnouncement: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_ANNOUNCEMENT,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `📢 ${data.title}`,
+    message: String(data.content || '').length > 160 ? `${String(data.content).slice(0, 157)}...` : (data.content || ''),
+    priority: data.priority === 'high' ? 'high' : 'normal',
+    metadata: {
+      'Sent to': data.sentTo || 'Everyone',
+      'Category': data.category,
+      'Posted by': data.authorName
+    }
+  }),
+
+  knowledgeTraining: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_TRAINING,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `🎓 New training: ${data.title}`,
+    message: data.description || 'A new training is available in the Learning Center.',
+    priority: 'normal',
+    metadata: {
+      'Type': data.type === 'video' ? 'Video' : 'Guide',
+      ...(data.duration ? { 'Duration': data.duration } : {}),
+      'Added by': data.authorName
+    }
+  }),
+
+  knowledgeContributorAdded: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_CONTRIBUTOR_ADDED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `⭐ You're now ${data.roleLabel} of ${data.serviceName}`,
+    message: data.roleHelp,
+    priority: 'high',
+    metadata: {
+      'Service': data.serviceName,
+      'Role': data.roleLabel,
+      'Added by': data.actorName
+    }
+  }),
+
+  knowledgeResourceAdded: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_RESOURCE_ADDED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `🔗 New resource in ${data.serviceName}`,
+    message: data.title,
+    priority: 'low',
+    metadata: {
+      'Service': data.serviceName,
+      'Resource': data.title,
+      'Added by': data.actorName
+    }
+  }),
+
+  knowledgeWorkspacePublished: (data) => ({
+    type: NOTIFICATION_TYPES.KNOWLEDGE_WORKSPACE_PUBLISHED,
+    category: NOTIFICATION_CATEGORIES.KNOWLEDGE,
+    title: `🚀 ${data.serviceName} guide published`,
+    message: `The ${data.serviceName} SOP and FAQ are now the official guide for all centres.`,
+    priority: 'normal',
+    metadata: {
+      'Service': data.serviceName,
+      'Published by': data.actorName
     }
   }),
 

@@ -1,6 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import * as knowledgeController from './knowledge/controller.js';
+import { requirePermission } from './knowledge/permissions.js';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
@@ -62,60 +63,94 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ storage: storage });
+// PHASE 2 FIX: limit size, count and file types
+const ALLOWED_MIME = [
+  'image/jpeg', 'image/png', 'image/webp', 'image/gif',
+  'application/pdf',
+];
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 10 * 1024 * 1024, files: 10 }, // 10 MB per file
+  fileFilter: (req, file, cb) => {
+    if (ALLOWED_MIME.includes(file.mimetype)) return cb(null, true);
+    cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', `File type not allowed: ${file.originalname}`));
+  },
+});
 
 // ==========================================
 // WORKSPACE
 // ==========================================
 router.get('/workspace/:serviceId', authorizeRoles(ALL_STAFF), knowledgeController.getWorkspace);
-router.put('/workspace/:id/status', authorizeRoles(SUPERADMIN_ONLY), knowledgeController.updateWorkspaceStatus);
+router.put('/workspace/:id/status', requirePermission('workspace.publish'), knowledgeController.updateWorkspaceStatus);
 router.get('/workspaces/:workspaceId/cases', authorizeRoles(ALL_STAFF), knowledgeController.getCases);
 
 // ==========================================
 // CONTRIBUTORS
 // ==========================================
-router.post('/workspace/:workspaceId/contributors', authorizeRoles(ADMIN_ONLY), knowledgeController.addContributor);
-router.delete('/workspace/:workspaceId/contributors/:staffId', authorizeRoles(ADMIN_ONLY), knowledgeController.removeContributor);
+router.post('/workspace/:workspaceId/contributors', requirePermission('contributor.manage'), knowledgeController.addContributor);
+router.delete('/workspace/:workspaceId/contributors/:staffId', requirePermission('contributor.manage'), knowledgeController.removeContributor);
 
 // ==========================================
 // DOCUMENTS 
 // ==========================================
-router.post('/documents', authorizeRoles(ADMIN_ONLY), knowledgeController.createDocument);
-router.put('/documents/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.updateDocument);
-router.delete('/documents/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.deleteDocument); 
+router.post('/documents', requirePermission('document.create'), knowledgeController.createDocument);
+// PHASE 3: open at the route; the controller checks admin OR the service's OWNER/EDITOR contributors
+router.put('/documents/:id', authorizeRoles(ALL_STAFF), knowledgeController.updateDocument);
+router.delete('/documents/:id', requirePermission('document.delete'), knowledgeController.deleteDocument); 
 
 // ==========================================
 // BLOCKS 
 // ==========================================
-router.post('/documents/:documentId/blocks/batch', authorizeRoles(ADMIN_ONLY), knowledgeController.batchUpdateBlocks);
+router.post('/documents/:documentId/blocks/batch', authorizeRoles(ALL_STAFF), knowledgeController.batchUpdateBlocks);
+
+// ==========================================
+// PHASE 3: SUGGESTIONS & REVIEW QUEUE
+// (each handler checks author / reviewer rights itself)
+// ==========================================
+router.post('/documents/:documentId/suggestions', authorizeRoles(ALL_STAFF), knowledgeController.createSuggestion);
+router.get('/documents/:documentId/suggestions/mine', authorizeRoles(ALL_STAFF), knowledgeController.getMySuggestionForDocument);
+router.get('/suggestions', authorizeRoles(ALL_STAFF), knowledgeController.listSuggestions);
+router.get('/suggestions/:id', authorizeRoles(ALL_STAFF), knowledgeController.getSuggestion);
+router.put('/suggestions/:id/approve', authorizeRoles(ALL_STAFF), knowledgeController.approveSuggestion);
+router.put('/suggestions/:id/reject', authorizeRoles(ALL_STAFF), knowledgeController.rejectSuggestion);
+router.put('/suggestions/:id/withdraw', authorizeRoles(ALL_STAFF), knowledgeController.withdrawSuggestion);
+router.post('/discussions/:discussionId/faq', authorizeRoles(ALL_STAFF), knowledgeController.promoteDiscussionToFaq);
+
+// Import from service setup (read-only preview used by the SOP editor)
+router.get('/documents/:documentId/import-from-setup', authorizeRoles(ALL_STAFF), knowledgeController.importFromServiceSetup);
+
+// Live charges at the user's centre (superadmin: ?centreId= or all centres)
+router.get('/services/:serviceId/charges', authorizeRoles(ALL_STAFF), knowledgeController.getServiceCharges);
 
 // ==========================================
 // RESOURCES
 // ==========================================
-router.post('/workspaces/:workspaceId/resources', authorizeRoles(ADMIN_ONLY), knowledgeController.addResource);
-router.delete('/resources/:id', authorizeRoles(ADMIN_ONLY), knowledgeController.deleteResource);
+router.post('/workspaces/:workspaceId/resources', requirePermission('resource.add'), knowledgeController.addResource);
+router.delete('/resources/:id', requirePermission('resource.delete'), knowledgeController.deleteResource);
 
 // ==========================================
 // DISCUSSIONS
 // ==========================================
 router.get('/hub/discussions/all', authorizeRoles(ALL_STAFF), knowledgeController.getAllDiscussions);
+router.get('/hub/services/counts', authorizeRoles(ALL_STAFF), knowledgeController.getServiceDiscussionCounts);
 router.get('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.getDiscussions);
 router.post('/workspaces/:workspaceId/discussions', authorizeRoles(ALL_STAFF), knowledgeController.createDiscussion);
 router.post('/discussions/:discussionId/replies', authorizeRoles(ALL_STAFF), knowledgeController.addReply);
-router.put('/discussions/:discussionId/solve', authorizeRoles(ADMIN_ONLY), knowledgeController.solveDiscussion);
+// PHASE 2 FIX: open to all staff here; the controller allows the author OR an admin/superadmin
+router.put('/discussions/:discussionId/solve', authorizeRoles(ALL_STAFF), knowledgeController.solveDiscussion);
 router.get('/hub/discussions/:id', authorizeRoles(ALL_STAFF), knowledgeController.getDiscussionById);
 
 // Add this near your other routes
 router.get('/hub/stats', authorizeRoles(ALL_STAFF), knowledgeController.getGlobalStats);
 // Fetch the latest global announcements
 router.get('/hub/announcements', authorizeRoles(ALL_STAFF), knowledgeController.getAnnouncements);
-router.post('/hub/announcements', authorizeRoles(ADMIN_ONLY), knowledgeController.createAnnouncement);
+router.post('/hub/announcements', requirePermission('announcement.create'), knowledgeController.createAnnouncement);
 
 // ==========================================
 // TRAININGS
 // ==========================================
 router.get('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.getTrainings);
-router.post('/hub/trainings', authorizeRoles(ALL_STAFF), knowledgeController.createTraining);
+router.post('/hub/trainings', requirePermission('training.create'), knowledgeController.createTraining);
 
 // ==========================================
 // BOOKMARKS
@@ -166,7 +201,21 @@ router.post('/hub/react', authorizeRoles(ALL_STAFF), knowledgeController.toggleR
 // UPLOADS (MULTER)
 // ==========================================
 // Accepts up to 10 files at once under the field name 'files'
-router.post('/upload', authorizeRoles(ALL_STAFF), upload.array('files', 10), (req, res) => {
+// Turns multer errors (too big, wrong type) into a clear 400 instead of a 500
+const handleUpload = (req, res, next) => {
+  upload.array('files', 10)(req, res, (err) => {
+    if (err instanceof multer.MulterError) {
+      const msg = err.code === 'LIMIT_FILE_SIZE' ? 'Each file must be 10 MB or smaller.'
+        : err.code === 'LIMIT_FILE_COUNT' ? 'You can upload up to 10 files at once.'
+        : (err.field || 'Only images (JPG, PNG, WEBP, GIF) and PDFs are allowed.');
+      return res.status(400).json({ error: msg });
+    }
+    if (err) return next(err);
+    next();
+  });
+};
+
+router.post('/upload', authorizeRoles(ALL_STAFF), handleUpload, (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });

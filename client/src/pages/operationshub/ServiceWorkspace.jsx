@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
   FiGrid, FiFileText, FiMessageSquare, FiLink, 
-  FiGlobe, FiCheckCircle, FiClock, FiChevronLeft, FiLoader, FiAlertCircle, FiAward, FiBriefcase, FiFolder
+  FiGlobe, FiCheckCircle, FiClock, FiChevronLeft, FiLoader, FiAlertCircle, FiAward, FiBriefcase, FiFolder, FiInbox
 } from 'react-icons/fi';
 import { fetchWorkspace, updateWorkspaceStatus } from '@/services/knowledge'; 
 import { toast } from 'react-toastify';
+import { can } from '@/utils/knowledgePermissions';
 
 // Import our modular views
 import OverviewDashboard from './views/OverviewDashboard';
@@ -13,6 +14,7 @@ import ResourcesGrid from './views/ResourcesGrid';
 import ComingSoon from './views/ComingSoon';
 import DiscussionsView from './views/discussions/DiscussionsView';
 import CasesView from './views/CasesView';
+import SuggestionsView from './views/SuggestionsView';
 
 const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [loading, setLoading] = useState(true);
@@ -24,6 +26,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   const [resources, setResources] = useState([]);
   const [stats, setStats] = useState({});
   const [contributors, setContributors] = useState([]);
+  const [myContributorRole, setMyContributorRole] = useState(null); // PHASE 3
   
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isPublishing, setIsPublishing] = useState(false);
@@ -41,6 +44,7 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       setResources(data.resources || []);
       setStats(data.stats || {});
       setContributors(data.contributors || []);
+      setMyContributorRole(data.myContributorRole || null);
     } catch (err) {
       console.error(err);
       setError('Failed to load workspace from database.');
@@ -62,9 +66,9 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     }
   };
 
-  if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-indigo-500" /></div>;
-  if (error) return <div className="p-12 flex justify-center text-red-500 gap-2"><FiAlertCircle /> {error}</div>;
-  if (!workspace) return <div className="p-12 flex justify-center text-gray-500"><FiLoader className="animate-spin h-5 w-5 mr-2" /> Initializing Workspace Data...</div>;
+  if (loading) return <div className="p-12 flex justify-center"><FiLoader className="animate-spin h-8 w-8 text-navy-500" /></div>;
+  if (error) return <div className="p-12 flex justify-center text-rose-500 gap-2"><FiAlertCircle /> {error}</div>;
+  if (!workspace) return <div className="p-12 flex justify-center text-slate-500"><FiLoader className="animate-spin h-5 w-5 mr-2" /> Initializing Workspace Data...</div>;
 
   // 1. Map Documents to Tabs
   const documentTabs = documents.map(doc => {
@@ -82,24 +86,39 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
   }).filter(tab => tab.id !== 'overview'); // Keep Overview separate as 'dashboard'
 
   // 2. Build Final Tabs Array
+  const pendingSuggestions = documents.reduce((sum, d) => sum + (d.pending_suggestions || 0), 0);
+  const canReviewHere = can('suggestion.review', { workspace, contributorRole: myContributorRole });
+
   const tabs = [
     { id: 'dashboard', label: 'Dashboard', icon: FiGrid },
     ...documentTabs,
     { id: 'discussions', label: 'Discussions', icon: FiMessageSquare }, // <--- Add this!
     { id: 'resources', label: 'Resources', icon: FiLink },
     { id: 'cases', label: 'Cases', icon: FiCheckCircle },
+    // PHASE 3: staff improvements waiting for review (badge = pending count)
+    { id: 'suggestions', label: 'Suggestions', icon: FiInbox, badge: pendingSuggestions },
   ];
 
   // 3. Document Router
   const renderContent = () => {
     if (activeTab === 'dashboard') {
-      return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} />;
+      return <OverviewDashboard stats={stats} contributors={contributors} workspace={workspace} documents={documents} setActiveTab={setActiveTab} onUpdate={loadWorkspaceData} contributorRole={myContributorRole} />;
     }
     if (activeTab === 'discussions') { 
-      return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} />;
+      return <DiscussionsView workspaceId={workspace.id} serviceId={serviceId} serviceName={mockService?.name} />;
     }
     if (activeTab === 'resources') {
-      return <ResourcesGrid resources={resources} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+      return <ResourcesGrid resources={resources} workspace={workspace} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+    }
+    if (activeTab === 'suggestions') {
+      return (
+        <SuggestionsView
+          workspaceId={workspace.id}
+          showReviewTab={canReviewHere}
+          defaultScope={canReviewHere ? 'review' : 'mine'}
+          onChanged={loadWorkspaceData}
+        />
+      );
     }
     if (activeTab === 'cases') {
       return <CasesView workspaceId={workspace.id} />;
@@ -108,10 +127,20 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
     const activeDoc = documents.find(d => d.system_key === activeTab || `doc-${d.id}` === activeTab);
     if (activeDoc) {
       // DocumentView now handles its own Edit mode and block rendering!
-      return <DocumentView key={activeDoc.id} document={activeDoc} workspaceId={workspace.id} onUpdate={loadWorkspaceData} />;
+      return (
+        <DocumentView
+          key={activeDoc.id}
+          document={activeDoc}
+          workspace={workspace}
+          workspaceId={workspace.id}
+          contributorRole={myContributorRole}
+          onUpdate={loadWorkspaceData}
+          onOpenSuggestions={() => setActiveTab('suggestions')}
+        />
+      );
     }
 
-    return <div className="text-center text-gray-500 py-12">Tab content not found.</div>;
+    return <div className="text-center text-slate-500 py-12">Tab content not found.</div>;
   };
 
   return (
@@ -119,20 +148,20 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       {/* HEADER (Restored Original Layout) */}
       <div className="flex flex-wrap items-center justify-between mb-6 gap-4">
         <div className="flex items-center gap-3">
-          <button className="p-2 hover:bg-gray-100 rounded-lg transition" onClick={() => navigateTo('services')}>
-            <FiChevronLeft className="h-5 w-5 text-gray-500" />
+          <button className="p-2 hover:bg-slate-100 rounded-lg transition" onClick={() => navigateTo('services')}>
+            <FiChevronLeft className="h-5 w-5 text-slate-500" />
           </button>
-          <div className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl">
+          <div className="p-2.5 bg-navy-500/10 text-navy-700 rounded-xl">
             {mockService?.icon ? (
               <mockService.icon className="h-6 w-6" />
             ) : (
               <FiFileText className="h-6 w-6" />
             )}
           </div>
-          <h2 className="text-xl font-bold text-gray-900">{mockService ? mockService.name : 'Workspace'}</h2>
+          <h2 className="text-xl font-bold text-slate-900">{mockService ? mockService.name : 'Workspace'}</h2>
           
           <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase tracking-wide ${
-            workspace.scope === 'GLOBAL' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+            workspace.scope === 'GLOBAL' ? 'bg-navy-500/10 text-navy-700' : 'bg-amber-100 text-amber-700'
           }`}>
             {workspace.scope}
           </span>
@@ -141,11 +170,12 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
         {/* Publish Controls moved to the top right of the workspace */}
         <div className="flex items-center gap-3">
           <span className={`text-[11px] font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg border ${
-            workspace.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-gray-100 text-gray-700 border-gray-200'
+            workspace.status === 'published' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-700 border-slate-200'
           }`}>
             {workspace.status.replace('_', ' ')}
           </span>
-          {workspace.status !== 'published' && (
+          {/* PHASE 2: only superadmin sees Publish (the API rejects everyone else) */}
+          {workspace.status !== 'published' && can('workspace.publish', { workspace }) && (
             <button 
               onClick={handlePublish} 
               disabled={isPublishing} 
@@ -158,19 +188,22 @@ const ServiceWorkspace = ({ serviceId, navigateTo, mockService }) => {
       </div>
 
       {/* HORIZONTAL TABS */}
-      <div className="border-b border-gray-200 mb-6">
+      <div className="border-b border-slate-200 mb-6">
         <div className="flex flex-wrap gap-2 overflow-x-auto">
           {tabs.map(tab => (
             <button
               key={tab.id}
               className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${
                 activeTab === tab.id
-                  ? 'border-indigo-500 text-indigo-600 bg-indigo-50/50 rounded-t-lg'
-                  : 'border-transparent text-gray-500 hover:text-gray-900 hover:border-gray-300'
+                  ? 'border-navy-500 text-navy-700 bg-navy-500/10/50 rounded-t-lg'
+                  : 'border-transparent text-slate-500 hover:text-slate-900 hover:border-slate-300'
               }`}
               onClick={() => setActiveTab(tab.id)}
             >
               <tab.icon className="h-4 w-4" /> {tab.label}
+              {tab.badge > 0 && (
+                <span className="ml-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-700">{tab.badge}</span>
+              )}
             </button>
           ))}
         </div>

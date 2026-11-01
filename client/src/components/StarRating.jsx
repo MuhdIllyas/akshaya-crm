@@ -41,11 +41,11 @@ const StarRating = ({
   return (
     <div className="flex flex-col">
       {showLabel && (
-        <label className="block text-sm font-medium text-gray-700 mb-2">
+        <label className="block text-sm font-medium text-slate-700 mb-1.5">
           {label} {editable && <span className="text-rose-500">*</span>}
         </label>
       )}
-      <div className="flex items-center space-x-1">
+      <div className="flex flex-wrap items-center gap-0.5">
         {[1, 2, 3, 4, 5].map((star) => {
           const isActive = (hoverRating || rating) >= star;
           return (
@@ -55,21 +55,21 @@ const StarRating = ({
               onClick={() => handleClick(star)}
               onMouseEnter={() => handleMouseEnter(star)}
               onMouseLeave={handleMouseLeave}
-              className={`${editable ? 'cursor-pointer' : 'cursor-default'} focus:outline-none transition-transform ${editable && 'hover:scale-110'}`}
+              className={`${editable ? 'cursor-pointer p-1.5 sm:p-1 hover:scale-110' : 'cursor-default p-0.5'} rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 transition-transform`}
               disabled={!editable}
             >
               <FiStar
                 className={`${starSize} ${
                   isActive
-                    ? 'fill-yellow-400 text-yellow-400'
-                    : 'text-gray-300'
+                    ? 'fill-amber-400 text-amber-400'
+                    : 'text-slate-300'
                 } transition-colors`}
               />
             </button>
           );
         })}
         {showLabel && (
-          <span className="ml-2 text-sm text-gray-500">
+          <span className="ml-2 text-sm text-slate-500">
             {rating > 0 ? `${rating}/5` : 'Not rated'}
           </span>
         )}

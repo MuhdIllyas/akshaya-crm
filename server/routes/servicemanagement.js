@@ -326,6 +326,93 @@ router.get('/workflow_services', authenticateToken, async (req, res) => {
   try {
     const targetCentreId = req.query.centre_id ? parseInt(req.query.centre_id) : parseInt(req.user.centre_id);
 
+    if (search && (typeof search !== 'string' || search.length > 100)) {
+      return res.status(400).json({ error: 'Search query must be a string and less than 100 characters' });
+    }
+
+    // FIX: superadmin has no centre_id, so parseInt() gave NaN and the query
+    // crashed with a 500 (Operations Hub showed no services for superadmin).
+    // With no centre chosen, superadmin gets every workflow service that is
+    // enabled in at least one centre. Centre-specific charges / wallets don't
+    // apply at that level, so they come back empty.
+    if (Number.isNaN(targetCentreId)) {
+      if (req.user.role !== 'superadmin') {
+        return res.status(400).json({ error: 'No centre found for this user.' });
+      }
+
+      let globalQuery = `
+        SELECT
+          s.id, s.name, s.description, s.website, s.status, s.requires_workflow, s.has_expiry,
+          NULL AS wallet_id,
+          0 AS department_charges,
+          0 AS service_charges,
+          false AS requires_wallet,
+          (
+            SELECT COUNT(*)
+            FROM knowledge_discussions kd
+            JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+            WHERE kw.service_id = s.id
+              AND (kd.status != 'solved' OR kd.status IS NULL)
+              AND kd.deleted_at IS NULL
+          ) AS open_discussions,
+          (
+            SELECT COUNT(*)
+            FROM knowledge_discussions kd
+            JOIN knowledge_workspaces kw ON kd.workspace_id = kw.id
+            WHERE kw.service_id = s.id
+              AND kd.status = 'solved'
+              AND kd.deleted_at IS NULL
+          ) AS closed_discussions,
+          (
+            SELECT COALESCE(json_agg(sub), '[]'::json)
+            FROM (
+              SELECT
+                scat.id, scat.name, scat.service_id,
+                NULL AS wallet_id,
+                0 AS department_charges,
+                0 AS service_charges,
+                false AS requires_wallet,
+                (
+                  SELECT COALESCE(json_agg(rd), '[]'::json)
+                  FROM required_documents rd
+                  WHERE rd.sub_category_id = scat.id
+                ) AS required_documents
+              FROM subcategories scat
+              WHERE scat.service_id = s.id
+            ) sub
+          ) AS subcategories,
+          (
+            SELECT COALESCE(json_agg(rd), '[]'::json)
+            FROM required_documents rd
+            WHERE rd.service_id = s.id AND rd.sub_category_id IS NULL
+          ) AS required_documents
+        FROM services s
+        WHERE s.requires_workflow = true
+          AND EXISTS (
+            SELECT 1 FROM service_configurations sc
+            WHERE sc.service_id = s.id AND sc.is_enabled = true
+          )
+      `;
+      const globalValues = [];
+      if (search) {
+        globalQuery += ` AND (s.name ILIKE $1 OR s.description ILIKE $1
+                  OR EXISTS (
+                    SELECT 1 FROM subcategories scat
+                    WHERE scat.service_id = s.id AND scat.name ILIKE $1
+                  ))`;
+        globalValues.push(`%${search}%`);
+      }
+      globalQuery += ` ORDER BY s.name ASC`;
+
+      const globalResult = await client.query(globalQuery, globalValues);
+      return res.json(globalResult.rows.map(service => ({
+        ...service,
+        open_discussions: parseInt(service.open_discussions, 10) || 0,
+        closed_discussions: parseInt(service.closed_discussions, 10) || 0,
+        wallet_name: null, balance: null, wallet_type: null, is_shared: null, wallet_status: null, assigned_staff_id: null
+      })));
+    }
+
     let query = `
       SELECT 
         s.id, s.name, s.description, s.website, s.status, s.requires_workflow, s.has_expiry,
@@ -1040,6 +1127,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
              s.name AS service_name,
              st.name AS staff_name,
              tr.id AS tracking_id,
+             tk.type AS token_type,
              (SELECT COUNT(*) FROM notes n WHERE n.related_service_entry_id = se.id) AS notes_count
       FROM service_entries se
       JOIN subcategories sc ON se.subcategory_id::integer = sc.id
@@ -1047,6 +1135,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       JOIN staff st ON se.staff_id = st.id
       LEFT JOIN wallets w ON se.service_wallet_id = w.id -- 🔥 NEW: Join the wallets table
       LEFT JOIN service_tracking tr ON tr.service_entry_id = se.id
+      LEFT JOIN tokens tk ON tk.token_id = se.token_id -- token type (normal / campaign) for the All Entries page
     `;
 
     let values = [];
@@ -1196,6 +1285,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
       entries.push({
         id: entry.id,
         tokenId: entry.token_id,
+        tokenType: entry.token_type || null,
         customerName: entry.customer_name,
         phone: entry.phone,
         category: entry.category_id,
@@ -2119,8 +2209,10 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     }
     // ====================================================================
 
-    // Update Token Status using the newly calculated status
-    if (updatedEntry.status && updatedEntry.token_id) {
+    // Update Token Status — only when the entry status really changed
+    // (a name/phone/expiry edit must not reset the token or the tracking status)
+    const statusChanged = updatedEntry.status !== existingEntry.status;
+    if (statusChanged && updatedEntry.token_id) {
       let tokenStatus = 'pending';
       if (updatedEntry.status === 'completed') tokenStatus = 'completed';
       else if (updatedEntry.status === 'not_received') tokenStatus = 'processed';
@@ -2131,8 +2223,8 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       io.to(`centre_${centreId}`).emit(`tokenUpdate:${centreId}`, { tokenId: updatedEntry.token_id, status: tokenStatus });
     }
 
-    // Update Tracking Status using the newly calculated status
-    if (updatedEntry.status) {
+    // Update Tracking Status — only when the entry status really changed
+    if (statusChanged) {
       const trackingResult = await client.query('SELECT id, status, application_number FROM service_tracking WHERE service_entry_id = $1', [parseInt(id)]);
       if (trackingResult.rows.length > 0) {
         const trackingStatus = updatedEntry.status === 'completed' ? 'completed' : updatedEntry.status === 'not_received' ? 'rejected' : 'pending';
@@ -4449,13 +4541,40 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
     await client.query("BEGIN");
 
+    // lock the entry: a double tap waits here, then finds nothing pending
     const serviceRes = await client.query(
-      `SELECT id FROM service_entries WHERE id = $1`,
+      `SELECT se.id, se.total_charges, st.centre_id
+       FROM service_entries se
+       JOIN staff st ON st.id = se.staff_id
+       WHERE se.id = $1
+       FOR UPDATE OF se`,
       [serviceEntryId]
     );
+    if (serviceRes.rows.length === 0) throw httpErr(404, "Service entry not found");
 
-    if (serviceRes.rows.length === 0) {
-      throw new Error("Service entry not found");
+    const entryCentreId = serviceRes.rows[0].centre_id;
+    if (req.user.role !== "superadmin" && Number(entryCentreId) !== Number(req.user.centre_id)) {
+      throw httpErr(403, "This service entry belongs to another centre");
+    }
+    await assertOwnWallets(client, [wallet_id], entryCentreId);
+
+    const paidRes = await client.query(
+      `SELECT COALESCE(SUM(amount), 0) AS paid
+       FROM payments
+       WHERE service_entry_id = $1
+         AND status = 'received'
+         AND COALESCE(is_reversal, FALSE) = FALSE
+         AND NOT EXISTS (
+           SELECT 1 FROM wallet_transactions wt
+           WHERE wt.reference_payment_id = payments.id AND COALESCE(wt.is_reversal, FALSE) = TRUE
+         )`,
+      [serviceEntryId]
+    );
+    const pendingNow =
+      Math.round((Number(serviceRes.rows[0].total_charges) - Number(paidRes.rows[0].paid)) * 100) / 100;
+    if (pendingNow <= 0) throw httpErr(409, "This payment has already been collected");
+    if (Number(amount) > pendingNow + 0.009) {
+      throw httpErr(400, `Only ₹${pendingNow} is pending on this service`);
     }
 
     const groupId = crypto.randomUUID();
@@ -4617,7 +4736,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("❌ Receive payment error:", err);
-    res.status(500).json({
+    res.status(err.status || 500).json({
       error: err.message || "Failed to receive payment"
     });
   } finally {

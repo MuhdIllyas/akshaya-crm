@@ -1,5 +1,16 @@
 //knowledge - controller.js
 import * as knowledgeService from './service.js';
+import { can, sendError, KnowledgeError, WORKSPACE_STATUSES, CONTRIBUTOR_ROLES } from './permissions.js';
+
+// PHASE 2/3: throws 403 unless the user may do `action` on this workspace.
+// Covers "admins only control their own centre" and the per-service
+// contributor roles (OWNER / EDITOR can edit, REVIEWER can review).
+const assertCan = async (user, action, workspace) => {
+    const contributorRole = workspace ? await knowledgeService.getContributorRole(workspace.id, user.id) : null;
+    if (!can(user, action, { workspace, contributorRole })) {
+        throw new KnowledgeError(403, 'You do not have permission to change this workspace.');
+    }
+};
 
 export const getWorkspace = async (req, res) => {
     try {
@@ -7,7 +18,7 @@ export const getWorkspace = async (req, res) => {
         const staffId = req.user.id; 
         const centreId = req.user.centre_id; 
         
-        const workspaceData = await knowledgeService.getWorkspaceData(serviceId, centreId, staffId);
+        const workspaceData = await knowledgeService.getWorkspaceData(serviceId, centreId, staffId, req.user.role);
         res.json(workspaceData);
     } catch (err) {
         console.error('Error in getWorkspace:', err.message);
@@ -19,11 +30,14 @@ export const updateWorkspaceStatus = async (req, res) => {
     try {
         const { id } = req.params;
         const { status } = req.body; 
+        if (!WORKSPACE_STATUSES.includes(status)) {
+            throw new KnowledgeError(400, `Status must be one of: ${WORKSPACE_STATUSES.join(', ')}`);
+        }
         
         const updated = await knowledgeService.updateWorkspaceStatus(id, status, req.user.id);
         res.json(updated);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to update status' });
+        sendError(res, err, 'Failed to update status');
     }
 };
 
@@ -31,32 +45,39 @@ export const addContributor = async (req, res) => {
     try {
         const { workspaceId } = req.params;
         const { staffId, role } = req.body;
-        await knowledgeService.addContributor(workspaceId, staffId, role);
+        const finalRole = (role || 'EDITOR').toUpperCase();
+        if (!CONTRIBUTOR_ROLES.includes(finalRole)) {
+            throw new KnowledgeError(400, `Role must be one of: ${CONTRIBUTOR_ROLES.join(', ')}`);
+        }
+        await assertCan(req.user, 'contributor.manage', await knowledgeService.getWorkspaceById(workspaceId));
+        await knowledgeService.addContributor(workspaceId, staffId, finalRole, req.user.id);
         res.json({ message: 'Contributor added' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to add contributor' });
+        sendError(res, err, 'Failed to add contributor');
     }
 };
 
 export const removeContributor = async (req, res) => {
     try {
         const { workspaceId, staffId } = req.params;
+        await assertCan(req.user, 'contributor.manage', await knowledgeService.getWorkspaceById(workspaceId));
         await knowledgeService.removeContributor(workspaceId, staffId);
         res.json({ message: 'Contributor removed' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to remove contributor' });
+        sendError(res, err, 'Failed to remove contributor');
     }
 };
 
 export const createDocument = async (req, res) => {
     try {
         const { workspaceId, title, slug, type, visibility, sortOrder } = req.body;
+        await assertCan(req.user, 'document.create', await knowledgeService.getWorkspaceById(workspaceId));
         const document = await knowledgeService.createDocument(
             workspaceId, title, slug, type, visibility, sortOrder, req.user.id
         );
         res.status(201).json(document);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to create document' });
+        sendError(res, err, 'Failed to create document');
     }
 };
 
@@ -64,63 +85,72 @@ export const updateDocument = async (req, res) => {
     try {
         const { id } = req.params;
         const { title, slug, visibility, sortOrder } = req.body;
+        await assertCan(req.user, 'document.edit', await knowledgeService.getDocumentWorkspace(id));
         const document = await knowledgeService.updateDocument(id, title, slug, visibility, sortOrder, req.user.id);
         res.json(document);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to update document' });
+        sendError(res, err, 'Failed to update document');
     }
 };
 
 export const deleteDocument = async (req, res) => {
     try {
         const { id } = req.params;
+        await assertCan(req.user, 'document.delete', await knowledgeService.getDocumentWorkspace(id));
         await knowledgeService.softDeleteDocument(id, req.user.id);
         res.json({ message: 'Document deleted successfully' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to delete document' });
+        sendError(res, err, 'Failed to delete document');
     }
 };
 
 export const batchUpdateBlocks = async (req, res) => {
     try {
         const { documentId } = req.params;
-        const { workspaceId, blocks } = req.body; 
+        const { blocks } = req.body; 
+        if (!Array.isArray(blocks)) throw new KnowledgeError(400, 'blocks must be an array.');
 
-        await knowledgeService.batchUpdateBlocks(workspaceId, documentId, blocks, req.user.id);
+        // PHASE 2 FIX: the workspace comes from the document itself, not from
+        // the browser, so a document can't be saved into the wrong workspace
+        const workspace = await knowledgeService.getDocumentWorkspace(documentId);
+        await assertCan(req.user, 'document.edit', workspace);
+
+        await knowledgeService.batchUpdateBlocks(workspace.id, documentId, blocks, req.user.id);
         res.json({ message: 'Blocks saved successfully' });
     } catch (err) {
-        console.error('Error saving blocks:', err);
-        res.status(500).json({ error: 'Failed to save blocks' });
+        sendError(res, err, 'Failed to save blocks');
     }
 };
 
 export const addResource = async (req, res) => {
     try {
         const { workspaceId } = req.params;
+        await assertCan(req.user, 'resource.add', await knowledgeService.getWorkspaceById(workspaceId));
         
         // ADDED: Fallbacks so they default to null if missing!
         const type = req.body.type || 'portal';
         const title = req.body.title;
         const url = req.body.url || null;
         const fileId = req.body.fileId || null; 
+        if (!title || !title.trim()) throw new KnowledgeError(400, 'Title is required.');
 
         const resource = await knowledgeService.addResource(
             workspaceId, type, title, url, fileId, req.user.id
         );
         res.status(201).json(resource);
     } catch (err) {
-        console.error("💥 RESOURCE CRASH INFO:", err);
-        res.status(500).json({ error: 'Failed to add resource', details: err.message });
+        sendError(res, err, 'Failed to add resource');
     }
 };
 
 export const deleteResource = async (req, res) => {
     try {
         const { id } = req.params;
+        await assertCan(req.user, 'resource.delete', await knowledgeService.getResourceWorkspace(id));
         await knowledgeService.softDeleteResource(id, req.user.id);
         res.json({ message: 'Resource deleted' });
     } catch (err) {
-        res.status(500).json({ error: 'Failed to delete resource' });
+        sendError(res, err, 'Failed to delete resource');
     }
 };
 
@@ -137,12 +167,13 @@ export const getDiscussions = async (req, res) => {
 
 export const createDiscussion = async (req, res) => {
     try {
-        const discussion = await knowledgeService.createDiscussion(req.params.workspaceId, req.body, req.user.id);
+        if (!req.body.title?.trim() || !req.body.content?.trim()) {
+            throw new KnowledgeError(400, 'Title and details are required.');
+        }
+        const discussion = await knowledgeService.createDiscussion(req.params.workspaceId, req.body, req.user.id, req.user);
         res.status(201).json(discussion);
     } catch (err) {
-        // This prints the real error to your SERVER terminal, not the browser!
-        console.error("💥 DISCUSSION CRASH INFO:", err); 
-        res.status(500).json({ error: 'Failed to create discussion', details: err.message });
+        sendError(res, err, 'Failed to create discussion');
     }
 };
 
@@ -163,7 +194,6 @@ export const solveDiscussion = async (req, res) => {
         const { discussionId } = req.params;
         const { replyId } = req.body;
         const userId = req.user.id;
-        const userRole = req.user.role;
 
         // 1. Fetch the discussion to see who owns it and its current status
         // (Reusing the service function you already built!)
@@ -178,27 +208,25 @@ export const solveDiscussion = async (req, res) => {
             return res.status(400).json({ error: 'This discussion is already closed and archived.' });
         }
 
-        // 3. THE GATEKEEPER: Check Ownership OR Admin Status
-        // If they are NOT the author, and NOT an admin/superadmin, kick them out.
-        if (discussion.author_id !== userId && !['admin', 'superadmin'].includes(userRole)) {
+        // 3. THE GATEKEEPER: the author OR an admin/superadmin (shared rule in permissions.js)
+        if (!can(req.user, 'discussion.solve', { authorId: discussion.author_id })) {
             return res.status(403).json({ 
-                error: 'Forbidden: Only the original author or an Admin can mark this solved.' 
+                error: 'Only the person who started this discussion or an Admin can mark it solved.' 
             });
         }
 
         // 4. If they pass the checks, proceed with solving!
-        await knowledgeService.markDiscussionSolved(discussionId, replyId, userId);
+        await knowledgeService.markDiscussionSolved(discussionId, replyId || null, userId);
         res.json({ message: 'Discussion securely locked and marked as solved.' });
 
     } catch (err) {
-        console.error("💥 SOLVE CRASH INFO:", err);
-        res.status(500).json({ error: 'Failed to mark as solved', details: err.message });
+        sendError(res, err, 'Failed to mark as solved');
     }
 };
 
 export const getGlobalStats = async (req, res) => {
     try {
-        const stats = await knowledgeService.getGlobalStats(req.user.id);
+        const stats = await knowledgeService.getGlobalStats(req.user.id, req.user);
         res.json(stats);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch global stats' });
@@ -207,36 +235,18 @@ export const getGlobalStats = async (req, res) => {
 
 export const createAnnouncement = async (req, res) => {
     try {
-        // 🔥 Added teamId to the destructured body variables
-        const { title, content, category, priority, isPinned, teamId } = req.body; 
-        
-        const announcement = await knowledgeService.createAnnouncement(
-            title, 
-            content, 
-            category, 
-            priority, 
-            isPinned, 
-            req.user.id, 
-            teamId // 🔥 Pass it to the service layer
-        );
+        const announcement = await knowledgeService.createAnnouncement(req.user, req.body || {});
         res.status(201).json(announcement);
     } catch (err) {
-        console.error("💥 CREATE ANNOUNCEMENT CRASH INFO:", err);
-        res.status(500).json({ error: 'Failed to create announcement', details: err.message });
+        sendError(res, err, 'Failed to create announcement');
     }
 };
 
 export const getAnnouncements = async (req, res) => {
     try {
-        // 🔥 Extract teamId from query parameters
-        const { teamId } = req.query; 
-        
-        // 🔥 Pass it to the service layer
-        const announcements = await knowledgeService.getAnnouncements(teamId); 
-        res.json(announcements);
+        res.json(await knowledgeService.getAnnouncements(req.user, req.query.teamId || null));
     } catch (err) {
-        console.error("💥 ANNOUNCEMENTS CRASH INFO:", err);
-        res.status(500).json({ error: 'Failed to fetch announcements', details: err.message });
+        sendError(res, err, 'Failed to fetch announcements');
     }
 };
 
@@ -264,13 +274,22 @@ export const getAllDiscussions = async (req, res) => {
     }
 };
 
+export const getServiceDiscussionCounts = async (req, res) => {
+    try {
+        res.json(await knowledgeService.getServiceDiscussionCounts());
+    } catch (err) {
+        console.error("💥 SERVICE COUNTS CRASH INFO:", err);
+        res.status(500).json({ error: 'Failed to fetch service counts' });
+    }
+};
+
 export const getDiscussionById = async (req, res) => {
     try {
         // Pass req.user.id as the second argument!
         const discussion = await knowledgeService.getDiscussionById(req.params.id, req.user.id);
         res.json(discussion);
     } catch (err) {
-        res.status(500).json({ error: 'Failed to fetch discussion details' });
+        sendError(res, err, 'Failed to fetch discussion details');
     }
 };
 
@@ -417,5 +436,106 @@ export const toggleReaction = async (req, res) => {
     } catch (err) {
         console.error("💥 REACTION CRASH INFO:", err);
         res.status(500).json({ error: 'Failed to toggle reaction' });
+    }
+};
+// =====================================================================
+// PHASE 3: SUGGESTIONS & REVIEW QUEUE
+// =====================================================================
+
+// Staff (and anyone) submit a suggested version of a document
+export const createSuggestion = async (req, res) => {
+    try {
+        const { documentId } = req.params;
+        const { blocks, note } = req.body;
+        const workspace = await knowledgeService.getDocumentWorkspace(documentId);
+        await assertCan(req.user, 'suggestion.create', workspace);
+
+        const suggestion = await knowledgeService.createSuggestion({
+            workspace, documentId, user: req.user,
+            note: note?.trim() || null, proposedBlocks: blocks,
+        });
+        res.status(201).json(suggestion);
+    } catch (err) {
+        sendError(res, err, 'Failed to submit suggestion');
+    }
+};
+
+// My own pending suggestion for a document (to continue editing it)
+export const getMySuggestionForDocument = async (req, res) => {
+    try {
+        res.json(await knowledgeService.getMyPendingSuggestion(req.params.documentId, req.user.id));
+    } catch (err) {
+        sendError(res, err, 'Failed to load your suggestion');
+    }
+};
+
+// ?scope=review|mine &status=pending|approved|rejected|withdrawn|all &workspaceId=
+export const listSuggestions = async (req, res) => {
+    try {
+        const { scope = 'review', status = 'pending', workspaceId = null } = req.query;
+        if (!['review', 'mine'].includes(scope)) throw new KnowledgeError(400, 'scope must be review or mine');
+        res.json(await knowledgeService.listSuggestions(req.user, { scope, status, workspaceId }));
+    } catch (err) {
+        sendError(res, err, 'Failed to load suggestions');
+    }
+};
+
+export const getSuggestion = async (req, res) => {
+    try {
+        res.json(await knowledgeService.getSuggestionDetail(req.params.id, req.user));
+    } catch (err) {
+        sendError(res, err, 'Failed to load suggestion');
+    }
+};
+
+export const approveSuggestion = async (req, res) => {
+    try {
+        res.json(await knowledgeService.approveSuggestion(req.params.id, req.user, req.body?.note?.trim() || null));
+    } catch (err) {
+        sendError(res, err, 'Failed to approve suggestion');
+    }
+};
+
+export const rejectSuggestion = async (req, res) => {
+    try {
+        res.json(await knowledgeService.rejectSuggestion(req.params.id, req.user, req.body?.note));
+    } catch (err) {
+        sendError(res, err, 'Failed to reject suggestion');
+    }
+};
+
+export const withdrawSuggestion = async (req, res) => {
+    try {
+        res.json(await knowledgeService.withdrawSuggestion(req.params.id, req.user));
+    } catch (err) {
+        sendError(res, err, 'Failed to withdraw suggestion');
+    }
+};
+
+// "Add to FAQ" from a solved discussion
+export const promoteDiscussionToFaq = async (req, res) => {
+    try {
+        const result = await knowledgeService.promoteDiscussionToFaq(req.params.discussionId, req.body || {}, req.user);
+        res.status(201).json(result);
+    } catch (err) {
+        sendError(res, err, 'Failed to add to FAQ');
+    }
+};
+
+// Starter SOP blocks from Service Management data (read-only; nothing is saved)
+export const importFromServiceSetup = async (req, res) => {
+    try {
+        res.json(await knowledgeService.buildSetupImport(req.params.documentId));
+    } catch (err) {
+        sendError(res, err, 'Failed to read service setup');
+    }
+};
+
+// Live charges for a service (own centre; superadmin can pick or see all)
+export const getServiceCharges = async (req, res) => {
+    try {
+        res.json(await knowledgeService.getServiceCharges(req.params.serviceId, req.user, req.query.centreId || null));
+    } catch (err) {
+        sendError(res, err, 'Failed to load charges');
     }
 };

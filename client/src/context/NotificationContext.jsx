@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { socket } from '../services/socket.js';
 import { toast } from 'react-toastify';
+import { getNotificationLink, goTo } from '../utils/notificationLinks';
 
 const NotificationContext = createContext();
 
@@ -54,7 +55,17 @@ export const NotificationProvider = ({ children }) => {
       // 🔥 EXPLICIT WHITELIST: Always show toasts for these specific types, plus anything 'high' priority
       const allowedToastTypes = [
         'whatsapp_message', 'mention', 'review', 'conversation_assigned',
-        'knowledge_mention', 'knowledge_reply', 'knowledge_solved', 'salary_paid'
+        'knowledge_mention', 'knowledge_reply', 'knowledge_solved', 'salary_paid',
+        // Knowledge Hub: things the person should act on or will want to see now
+        'knowledge_announcement',          // announcement to you, your centre or your team
+        'knowledge_suggestion_submitted',  // a suggestion is waiting for your review
+        'knowledge_suggestion_approved',   // your suggestion was approved
+        'knowledge_suggestion_rejected',   // your suggestion needs changes
+        'knowledge_contributor_added',     // you were made Editor / Reviewer of a service
+        'knowledge_followed_reply',        // new reply in a discussion you follow
+        'knowledge_discussion_solved'      // a discussion you're in was solved
+        // Not toasted (bell only, to avoid noise): new SOP / SOP updated / new FAQ,
+        // new discussion, new training, new resource
       ];
 
       if (
@@ -62,6 +73,8 @@ export const NotificationProvider = ({ children }) => {
         notification.type?.includes('message') ||
         allowedToastTypes.includes(notification.type)
       ) {
+        // Clicking the toast opens the right place (SOP, suggestion, announcement...)
+        const link = getNotificationLink(notification);
         toast.info(
           <div>
             <strong>{notification.title}</strong>
@@ -73,7 +86,8 @@ export const NotificationProvider = ({ children }) => {
             hideProgressBar: false,
             closeOnClick: true,
             pauseOnHover: true,
-            draggable: true
+            draggable: true,
+            ...(link && { onClick: () => goTo(link), style: { cursor: 'pointer' } })
           }
         );
       }

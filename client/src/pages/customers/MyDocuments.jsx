@@ -519,13 +519,13 @@ const MyDocuments = () => {
 
   const getColorByType = (type) => {
     switch(type) {
-      case 'identity': return 'bg-blue-100 text-blue-700';
-      case 'tax': return 'bg-purple-100 text-purple-700';
+      case 'identity': return 'bg-navy-500/10 text-navy-700';
+      case 'tax': return 'bg-navy-500/10 text-navy-700';
       case 'income': return 'bg-amber-100 text-amber-700';
-      case 'family': return 'bg-green-100 text-green-700';
-      case 'certificate': return 'bg-indigo-100 text-indigo-700';
-      case 'photo': return 'bg-pink-100 text-pink-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case 'family': return 'bg-emerald-100 text-emerald-700';
+      case 'certificate': return 'bg-navy-500/10 text-navy-700';
+      case 'photo': return 'bg-navy-500/10 text-navy-700';
+      default: return 'bg-slate-100 text-slate-700';
     }
   };
 
@@ -545,7 +545,7 @@ const MyDocuments = () => {
       case 'approved': return <FiCheck className="text-emerald-600" />;
       case 'rejected': return <FiX className="text-rose-600" />;
       case 'pending': return <FiClock className="text-amber-600" />;
-      default: return <FiClock className="text-gray-600" />;
+      default: return <FiClock className="text-slate-600" />;
     }
   };
 
@@ -563,7 +563,7 @@ const MyDocuments = () => {
       case 'approved': return 'border-l-4 border-emerald-500';
       case 'rejected': return 'border-l-4 border-rose-500';
       case 'pending': return 'border-l-4 border-amber-500';
-      default: return 'border-l-4 border-gray-300';
+      default: return 'border-l-4 border-slate-300';
     }
   };
 
@@ -578,10 +578,10 @@ const MyDocuments = () => {
 
   const getScopeIcon = (scope) => {
     switch(scope) {
-      case 'individual': return <FiUser className="text-gray-500" />;
-      case 'household': return <FiUsers className="text-gray-500" />;
-      case 'service': return <FiBriefcase className="text-gray-500" />;
-      default: return <FiFile className="text-gray-500" />;
+      case 'individual': return <FiUser className="text-slate-500" />;
+      case 'household': return <FiUsers className="text-slate-500" />;
+      case 'service': return <FiBriefcase className="text-slate-500" />;
+      default: return <FiFile className="text-slate-500" />;
     }
   };
 
@@ -612,19 +612,18 @@ const MyDocuments = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
-      
+    <div>
       {/* Header with Stats */}
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
+      <div className="mb-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-800">My Documents</h1>
-            <p className="text-gray-600 mt-1">Manage all your uploaded documents in one place</p>
+            <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">My Documents</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Manage all your uploaded documents in one place</p>
           </div>
           
           <button
             onClick={() => setShowUploadModal(true)}
-            className="inline-flex items-center justify-center px-5 py-2.5 bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors duration-200 shadow-sm"
+            className="inline-flex h-11 sm:h-10 items-center justify-center px-4 text-sm bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors duration-200 shadow-sm"
             disabled={isSubmitting}
           >
             <FiUpload className="mr-2" />
@@ -633,62 +632,31 @@ const MyDocuments = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total Documents</p>
-                <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
-              </div>
-              <div className="bg-blue-50 p-2 rounded-lg">
-                <FiFile className="text-blue-600" />
-              </div>
-            </div>
+        <div className="grid grid-cols-4 divide-x divide-slate-100 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="px-2 py-3 text-center sm:px-4 sm:py-4">
+            <p className="text-xl font-semibold text-slate-900 sm:text-2xl">{stats.total}</p>
+            <p className="text-[11px] text-slate-500 sm:text-sm">Total<span className="hidden sm:inline"> Documents</span></p>
           </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Approved</p>
-                <p className="text-2xl font-bold text-emerald-600">{stats.approved}</p>
-              </div>
-              <div className="bg-emerald-50 p-2 rounded-lg">
-                <FiCheck className="text-emerald-600" />
-              </div>
-            </div>
+          <div className="px-2 py-3 text-center sm:px-4 sm:py-4">
+            <p className="text-xl font-semibold text-emerald-600 sm:text-2xl">{stats.approved}</p>
+            <p className="text-[11px] text-slate-500 sm:text-sm">Approved</p>
           </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Pending</p>
-                <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-              </div>
-              <div className="bg-amber-50 p-2 rounded-lg">
-                <FiClock className="text-amber-600" />
-              </div>
-            </div>
+          <div className="px-2 py-3 text-center sm:px-4 sm:py-4">
+            <p className="text-xl font-semibold text-amber-600 sm:text-2xl">{stats.pending}</p>
+            <p className="text-[11px] text-slate-500 sm:text-sm">Pending</p>
           </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Rejected</p>
-                <p className="text-2xl font-bold text-rose-600">{stats.rejected}</p>
-              </div>
-              <div className="bg-rose-50 p-2 rounded-lg">
-                <FiX className="text-rose-600" />
-              </div>
-            </div>
+          <div className="px-2 py-3 text-center sm:px-4 sm:py-4">
+            <p className="text-xl font-semibold text-rose-600 sm:text-2xl">{stats.rejected}</p>
+            <p className="text-[11px] text-slate-500 sm:text-sm">Rejected</p>
           </div>
         </div>
       </div>
 
       {/* Control Bar */}
-      <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm mb-6">
+      <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200 shadow-sm mb-4">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           {/* Scope Filter */}
-          <div className="flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
+          <div className="flex items-center gap-1 overflow-x-auto bg-slate-100 p-1 rounded-xl">
             {[
               { key: 'individual', label: 'Personal', icon: <FiUser className="text-sm" /> },
               { key: 'household', label: 'Family', icon: <FiUsers className="text-sm" /> },
@@ -697,10 +665,10 @@ const MyDocuments = () => {
               <button
                 key={tab.key}
                 onClick={() => handleScopeChange(tab.key)}
-                className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-all duration-200 ${
+                className={`flex items-center whitespace-nowrap min-h-[40px] sm:min-h-0 px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                   activeScope === tab.key
                     ? 'bg-white text-navy-700 shadow-sm'
-                    : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+                    : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
                 }`}
               >
                 {tab.icon}
@@ -710,38 +678,38 @@ const MyDocuments = () => {
           </div>
 
           {/* Search and View Controls */}
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-3">
             {/* Search */}
             <div className="relative flex-1 lg:flex-none lg:w-64">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
                 placeholder="Search documents..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg border border-gray-300 focus:border-navy-500 focus:ring-2 focus:ring-navy-200 focus:bg-white"
+                className="w-full pl-10 pr-4 min-h-[44px] sm:min-h-[40px] py-2 text-base sm:text-sm bg-slate-100 rounded-xl border border-slate-300 focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30 focus:bg-white"
               />
             </div>
 
             {/* View Toggle */}
-            <div className="hidden lg:flex items-center space-x-1 bg-gray-100 p-1 rounded-lg">
+            <div className="hidden lg:flex items-center space-x-1 bg-slate-100 p-1 rounded-lg">
               <button
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'}`}
+                className={`p-2 rounded ${viewMode === 'grid' ? 'bg-white shadow-sm' : 'hover:bg-slate-50'}`}
               >
                 <div className="w-4 h-4 grid grid-cols-2 gap-0.5">
                   {[...Array(4)].map((_, i) => (
-                    <div key={i} className={`${viewMode === 'grid' ? 'bg-navy-600' : 'bg-gray-400'}`}></div>
+                    <div key={i} className={`${viewMode === 'grid' ? 'bg-navy-700' : 'bg-slate-400'}`}></div>
                   ))}
                 </div>
               </button>
               <button
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-gray-50'}`}
+                className={`p-2 rounded ${viewMode === 'list' ? 'bg-white shadow-sm' : 'hover:bg-slate-50'}`}
               >
                 <div className="w-4 h-4 flex flex-col justify-between">
                   {[...Array(3)].map((_, i) => (
-                    <div key={i} className={`h-1 ${viewMode === 'list' ? 'bg-navy-600' : 'bg-gray-400'}`}></div>
+                    <div key={i} className={`h-1 ${viewMode === 'list' ? 'bg-navy-700' : 'bg-slate-400'}`}></div>
                   ))}
                 </div>
               </button>
@@ -755,57 +723,57 @@ const MyDocuments = () => {
         <div className="flex items-center justify-center min-h-[400px]">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-navy-700 mx-auto"></div>
-            <p className="mt-4 text-gray-600">Loading documents...</p>
+            <p className="mt-4 text-slate-600">Loading documents...</p>
           </div>
         </div>
       ) : filteredDocuments.length > 0 ? (
         <>
           {/* Grid View */}
           {viewMode === 'grid' ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {filteredDocuments.map((doc) => (
                 <div
                   key={doc.id}
-                  className={`bg-white rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition-all duration-200 cursor-pointer ${getStatusColor(doc.status)}`}
+                  className={`bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow duration-200 ${getStatusColor(doc.status)}`}
                 >
-                  <div className="p-5">
+                  <div className="p-4">
                     {/* Document Header */}
                     <div className="flex items-start justify-between mb-4">
                       <div className={`p-3 rounded-lg ${doc.color}`}>
                         {getIcon(doc.icon)}
                       </div>
                       <div className="flex items-center space-x-2">
-                        <span className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded">
+                        <span className="text-xs px-2 py-1 bg-slate-100 text-slate-700 rounded">
                           {doc.file_type}
                         </span>
-                        <div className="text-gray-400 hover:text-gray-600">
+                        <div className="text-slate-400 hover:text-slate-600">
                           {getStatusIcon(doc.status)}
                         </div>
                       </div>
                     </div>
 
                     {/* Document Info */}
-                    <h3 className="font-bold text-gray-800 mb-2">{doc.name}</h3>
+                    <h3 className="font-bold text-slate-800 mb-2">{doc.name}</h3>
                     
                     <div className="space-y-2 mb-4">
-                      <div className="flex items-center text-sm text-gray-600">
+                      <div className="flex items-center text-sm text-slate-600">
                         <FiCalendar className="mr-2 flex-shrink-0" />
                         <span>Uploaded {formatDate(doc.uploaded_date)}</span>
                       </div>
-                      <div className="flex items-center text-sm text-gray-600">
+                      <div className="flex items-center text-sm text-slate-600">
                         <FiRefreshCw className="mr-2 flex-shrink-0" />
                         <span>Version {doc.version}</span>
                         <span className="mx-2">•</span>
                         <span>{doc.file_size}</span>
                       </div>
                       {doc.document_number_last4 && (
-                        <div className="flex items-center text-sm text-gray-600">
+                        <div className="flex items-center text-sm text-slate-600">
                           <FiFile className="mr-2 flex-shrink-0" />
                           <span>Number: ****{doc.document_number_last4}</span>
                         </div>
                       )}
                       {doc.expiry_date && (
-                        <div className={`flex items-center text-sm ${isDocumentExpired(doc.expiry_date) ? 'text-rose-600' : 'text-gray-600'}`}>
+                        <div className={`flex items-center text-sm ${isDocumentExpired(doc.expiry_date) ? 'text-rose-600' : 'text-slate-600'}`}>
                           <FiCalendar className="mr-2 flex-shrink-0" />
                           <span>Expires: {formatDate(doc.expiry_date)}</span>
                           {isDocumentExpired(doc.expiry_date) && (
@@ -826,31 +794,31 @@ const MyDocuments = () => {
                     </div>
 
                     {/* Scope Badge */}
-                    <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium mb-4 bg-gray-100 text-gray-700 ml-2">
+                    <div className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium mb-4 bg-slate-100 text-slate-700 ml-2">
                       {getScopeIcon(doc.scope)}
                       <span className="ml-1">{getScopeLabel(doc.scope)}</span>
                     </div>
 
                     {/* Actions */}
-                    <div className="flex items-center justify-between pt-4 border-t border-gray-100">
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100">
                       <div className="flex items-center space-x-2">
                         <button 
                           onClick={() => openDocument(doc.id)}
-                          className="p-2 text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg transition-colors"
+                          className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg transition-colors"
                           title="View document"
                         >
                           <FiEye />
                         </button>
                         <button 
                           onClick={() => downloadDocument(doc.id, doc.name)}
-                          className="p-2 text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg transition-colors"
+                          className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg transition-colors"
                           title="Download document"
                         >
                           <FiDownload />
                         </button>
                         <button 
                           onClick={() => fetchDocumentVersions(doc.id)}
-                          className="p-2 text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg transition-colors"
+                          className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg transition-colors"
                           title="View versions"
                         >
                           <FiRefreshCw />
@@ -859,7 +827,7 @@ const MyDocuments = () => {
                       <div className="flex items-center space-x-2">
                         <button 
                           onClick={() => handleEditClick(doc)}
-                          className="p-2 text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                          className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg transition-colors"
                           title="Edit document"
                         >
                           <FiEdit />
@@ -869,7 +837,7 @@ const MyDocuments = () => {
                             setDocumentToDelete(doc);
                             setShowDeleteModal(true);
                           }}
-                          className="p-2 text-gray-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
+                          className="grid h-10 w-10 place-items-center text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-colors"
                           title="Delete document"
                         >
                           <FiTrash2 />
@@ -882,50 +850,50 @@ const MyDocuments = () => {
             </div>
           ) : (
             /* List View */
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-x-auto">
+              <table className="w-full min-w-[760px]">
+                <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-gray-700">Document</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-gray-700">Scope</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-gray-700">Document Number</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-gray-700">Expiry Date</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-gray-700">Status</th>
-                    <th className="text-left py-4 px-6 text-sm font-medium text-gray-700">Actions</th>
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-700">Document</th>
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-700">Scope</th>
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-700">Document Number</th>
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-700">Expiry Date</th>
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-700">Status</th>
+                    <th className="text-left py-4 px-6 text-sm font-medium text-slate-700">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-slate-200">
                   {filteredDocuments.map((doc) => (
-                    <tr key={doc.id} className="hover:bg-gray-50">
+                    <tr key={doc.id} className="hover:bg-slate-50">
                       <td className="py-4 px-6">
                         <div className="flex items-center">
                           <div className={`p-2 rounded-lg mr-3 ${doc.color}`}>
                             {getIcon(doc.icon)}
                           </div>
                           <div>
-                            <p className="font-medium text-gray-800">{doc.name}</p>
-                            <p className="text-sm text-gray-500">
+                            <p className="font-medium text-slate-800">{doc.name}</p>
+                            <p className="text-sm text-slate-500">
                               v{doc.version} • {doc.file_size} • {doc.file_type}
                             </p>
-                            <p className="text-xs text-gray-400 mt-1">
+                            <p className="text-xs text-slate-400 mt-1">
                               Uploaded {formatDate(doc.uploaded_date)}
                             </p>
                           </div>
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <div className="flex items-center text-gray-700">
+                        <div className="flex items-center text-slate-700">
                           {getScopeIcon(doc.scope)}
                           <span className="ml-2">{getScopeLabel(doc.scope)}</span>
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <div className="text-gray-700">
+                        <div className="text-slate-700">
                           {doc.document_number_last4 ? `****${doc.document_number_last4}` : 'N/A'}
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <div className={`${isDocumentExpired(doc.expiry_date) ? 'text-rose-600' : 'text-gray-700'}`}>
+                        <div className={`${isDocumentExpired(doc.expiry_date) ? 'text-rose-600' : 'text-slate-700'}`}>
                           {doc.expiry_date ? formatDate(doc.expiry_date) : 'N/A'}
                           {isDocumentExpired(doc.expiry_date) && (
                             <span className="ml-2 px-2 py-0.5 text-xs bg-rose-100 text-rose-700 rounded">Expired</span>
@@ -946,28 +914,28 @@ const MyDocuments = () => {
                         <div className="flex items-center space-x-2">
                           <button 
                             onClick={() => openDocument(doc.id)}
-                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg"
+                            className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg"
                             title="View document"
                           >
                             <FiEye />
                           </button>
                           <button 
                             onClick={() => downloadDocument(doc.id, doc.name)}
-                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg"
+                            className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg"
                             title="Download document"
                           >
                             <FiDownload />
                           </button>
                           <button 
                             onClick={() => fetchDocumentVersions(doc.id)}
-                            className="p-2 text-gray-600 hover:text-navy-700 hover:bg-navy-50 rounded-lg"
+                            className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg"
                             title="View versions"
                           >
                             <FiRefreshCw />
                           </button>
                           <button 
                             onClick={() => handleEditClick(doc)}
-                            className="p-2 text-gray-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg"
+                            className="grid h-10 w-10 place-items-center text-slate-600 hover:text-navy-700 hover:bg-navy-500/10 rounded-lg"
                             title="Edit document"
                           >
                             <FiEdit />
@@ -977,7 +945,7 @@ const MyDocuments = () => {
                               setDocumentToDelete(doc);
                               setShowDeleteModal(true);
                             }}
-                            className="p-2 text-gray-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
+                            className="grid h-10 w-10 place-items-center text-slate-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg"
                             title="Delete document"
                           >
                             <FiTrash2 />
@@ -993,22 +961,22 @@ const MyDocuments = () => {
         </>
       ) : (
         /* Empty State */
-        <div className="bg-white rounded-xl p-12 border border-gray-200 shadow-sm text-center">
+        <div className="bg-white rounded-2xl p-8 sm:p-12 border border-slate-200 shadow-sm text-center">
           <div className="max-w-md mx-auto">
-            <div className="bg-gradient-to-br from-gray-100 to-gray-200 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
-              <FiFile className="text-gray-400 text-3xl" />
+            <div className="bg-slate-100 w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6">
+              <FiFile className="text-slate-400 text-3xl" />
             </div>
-            <h3 className="text-xl font-bold text-gray-800 mb-3">
+            <h3 className="text-xl font-bold text-slate-800 mb-3">
               No {activeScope === 'individual' ? 'Personal' : activeScope === 'household' ? 'Family' : 'Service'} Documents
             </h3>
-            <p className="text-gray-600 mb-6">
+            <p className="text-slate-600 mb-6">
               {activeScope === 'individual' && "Upload your personal identification documents to get started."}
               {activeScope === 'household' && "Add family documents for household services and applications."}
               {activeScope === 'service' && "Upload documents specific to the services you're applying for."}
             </p>
             <button
               onClick={() => setShowUploadModal(true)}
-              className="inline-flex items-center justify-center px-6 py-3 bg-gradient-to-r from-navy-600 to-navy-700 text-white rounded-lg font-medium hover:from-navy-700 hover:to-navy-800 transition-all duration-200"
+              className="inline-flex h-11 items-center justify-center px-6 bg-navy-700 text-white rounded-xl font-medium hover:bg-navy-800 transition-colors duration-200"
               disabled={isSubmitting}
             >
               <FiUpload className="mr-2" />
@@ -1021,15 +989,15 @@ const MyDocuments = () => {
       {/* Quick Stats Footer */}
       {filteredDocuments.length > 0 && (
         <div className="mt-8">
-          <div className="bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border border-blue-100">
+          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-sm">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div className="flex items-center">
-                <div className="bg-white p-3 rounded-xl shadow-sm mr-4">
-                  <FiInfo className="text-blue-600 text-xl" />
+                <div className="bg-navy-500/10 p-3 rounded-xl mr-4">
+                  <FiInfo className="text-navy-700 text-xl" />
                 </div>
                 <div>
-                  <h4 className="font-semibold text-blue-800">Document Tips</h4>
-                  <p className="text-sm text-blue-700 mt-1">
+                  <h4 className="font-semibold text-navy-800">Document Tips</h4>
+                  <p className="text-sm text-navy-700 mt-1">
                     • Keep documents updated • Store multiple versions • Ensure document numbers are correct
                   </p>
                 </div>
@@ -1041,7 +1009,7 @@ const MyDocuments = () => {
                     setActiveScope('household');
                   }
                 }}
-                className="text-sm font-medium text-navy-700 hover:text-navy-800 px-4 py-2 bg-white rounded-lg border border-gray-300 hover:border-navy-400 transition-colors"
+                className="text-sm font-medium text-navy-700 hover:text-navy-800 min-h-[44px] px-4 py-2 bg-white rounded-xl border border-slate-300 hover:border-navy-500/40 transition-colors"
               >
                 View Household Documents →
               </button>
@@ -1052,16 +1020,16 @@ const MyDocuments = () => {
 
       {/* Upload Document Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90dvh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-800">
+                <h3 className="text-xl font-bold text-slate-800">
                   Upload New Document
                 </h3>
                 <button
                   onClick={resetUploadModal}
-                  className="text-gray-500 hover:text-gray-700 p-2"
+                  className="grid h-10 w-10 place-items-center text-slate-500 hover:text-slate-700"
                   disabled={isSubmitting}
                 >
                   ✕
@@ -1071,11 +1039,11 @@ const MyDocuments = () => {
               <form onSubmit={handleUploadSubmit}>
                 {/* File Upload Area */}
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Select Document (Max 5MB)
                   </label>
                   <div 
-                    className={`border-2 border-dashed ${dragOver ? 'border-navy-500 bg-navy-50' : 'border-gray-300'} rounded-xl p-8 text-center hover:border-navy-400 transition-colors cursor-pointer`}
+                    className={`border-2 border-dashed ${dragOver ? 'border-navy-500 bg-navy-500/10' : 'border-slate-300'} rounded-xl p-6 sm:p-8 text-center hover:border-navy-500/40 transition-colors cursor-pointer`}
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
                     onDrop={handleDrop}
@@ -1083,9 +1051,9 @@ const MyDocuments = () => {
                   >
                     {uploadForm.file ? (
                       <div className="text-center">
-                        <FiFile className="text-4xl text-navy-600 mx-auto mb-2" />
-                        <p className="font-medium text-gray-800">{uploadForm.file.name}</p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <FiFile className="text-4xl text-navy-700 mx-auto mb-2" />
+                        <p className="font-medium text-slate-800">{uploadForm.file.name}</p>
+                        <p className="text-sm text-slate-500 mt-1">
                           {formatFileSize(uploadForm.file.size)}
                         </p>
                         <button
@@ -1102,11 +1070,11 @@ const MyDocuments = () => {
                       </div>
                     ) : (
                       <>
-                        <FiUpload className="text-4xl text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600 mb-2">
+                        <FiUpload className="text-4xl text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-600 mb-2">
                           <span className="font-medium text-navy-700">Click to browse</span> or drag and drop
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-slate-500">
                           PDF, JPG, PNG, DOC up to 5MB
                         </p>
                         <input
@@ -1124,7 +1092,7 @@ const MyDocuments = () => {
 
                 {/* Document Name Dropdown */}
                 <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Document Type *
                   </label>
                   <select
@@ -1145,7 +1113,7 @@ const MyDocuments = () => {
                       });
                       setSelectedDocMeta(selected || null);
                     }}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                    className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     required
                     disabled={isSubmitting}
                   >
@@ -1161,7 +1129,7 @@ const MyDocuments = () => {
                 {/* Document Number (conditional) */}
                 {selectedDocMeta?.requires_number && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Document Number *
                     </label>
                     <input
@@ -1171,7 +1139,7 @@ const MyDocuments = () => {
                         setUploadForm({ ...uploadForm, documentNumber: e.target.value })
                       }
                       placeholder="Enter document number"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       required={selectedDocMeta?.requires_number}
                       disabled={isSubmitting}
                     />
@@ -1181,7 +1149,7 @@ const MyDocuments = () => {
                 {/* Expiry Date (conditional) */}
                 {selectedDocMeta?.requires_expiry && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Expiry Date *
                     </label>
                     <input
@@ -1190,7 +1158,7 @@ const MyDocuments = () => {
                       onChange={(e) =>
                         setUploadForm({ ...uploadForm, expiryDate: e.target.value })
                       }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       required={selectedDocMeta?.requires_expiry}
                       disabled={isSubmitting}
                     />
@@ -1200,7 +1168,7 @@ const MyDocuments = () => {
                 {/* Household Selection (for household scope documents) */}
                 {selectedDocMeta?.scope === 'household' && !selectedDocMeta?.creates_household && households.length > 0 && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Select Household
                     </label>
                     <select
@@ -1208,7 +1176,7 @@ const MyDocuments = () => {
                       onChange={(e) =>
                         setUploadForm({ ...uploadForm, householdId: e.target.value })
                       }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       disabled={isSubmitting}
                     >
                       <option value="">Select a household</option>
@@ -1223,15 +1191,15 @@ const MyDocuments = () => {
 
                 {/* Household Creation Fields (for ration card) */}
                 {selectedDocMeta?.creates_household && (
-                  <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
-                    <h4 className="font-medium text-blue-800 mb-3 flex items-center">
+                  <div className="mb-6 p-4 bg-navy-500/10 rounded-lg border border-navy-500/10">
+                    <h4 className="font-medium text-navy-800 mb-3 flex items-center">
                       <FiHome className="mr-2" />
                       Household Details
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                        <label className="block text-sm font-medium text-navy-700 mb-2">
                           Ration Card Type
                         </label>
                         <select
@@ -1239,7 +1207,7 @@ const MyDocuments = () => {
                           onChange={(e) =>
                             setUploadForm({ ...uploadForm, rationCardType: e.target.value })
                           }
-                          className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                          className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-navy-500/20 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                           disabled={isSubmitting}
                         >
                           <option value="general">General</option>
@@ -1251,7 +1219,7 @@ const MyDocuments = () => {
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                        <label className="block text-sm font-medium text-navy-700 mb-2">
                           District
                         </label>
                         <input
@@ -1261,13 +1229,13 @@ const MyDocuments = () => {
                             setUploadForm({ ...uploadForm, district: e.target.value })
                           }
                           placeholder="Enter district"
-                          className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                          className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-navy-500/20 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                           disabled={isSubmitting}
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                        <label className="block text-sm font-medium text-navy-700 mb-2">
                           State
                         </label>
                         <input
@@ -1277,7 +1245,7 @@ const MyDocuments = () => {
                             setUploadForm({ ...uploadForm, state: e.target.value })
                           }
                           placeholder="Enter state"
-                          className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                          className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-navy-500/20 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                           disabled={isSubmitting}
                         />
                       </div>
@@ -1287,13 +1255,13 @@ const MyDocuments = () => {
 
                 {/* Document Category (optional) */}
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Document Category (Optional)
                   </label>
                   <select
                     value={uploadForm.documentType}
                     onChange={(e) => setUploadForm({...uploadForm, documentType: e.target.value})}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                    className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                     disabled={isSubmitting}
                   >
                     <option value="identity">Identity Proof</option>
@@ -1307,11 +1275,11 @@ const MyDocuments = () => {
                 </div>
 
                 {/* Form Actions */}
-                <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end pt-6 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={resetUploadModal}
-                    className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                    className="min-h-[44px] px-6 py-2 text-slate-700 border border-slate-300 rounded-xl font-medium hover:bg-slate-50 transition-colors"
                     disabled={isSubmitting}
                   >
                     Cancel
@@ -1319,10 +1287,10 @@ const MyDocuments = () => {
                   <button
                     type="submit"
                     disabled={!uploadForm.file || !uploadForm.documentName.trim() || isSubmitting}
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    className={`min-h-[44px] px-6 py-2 rounded-xl font-medium transition-colors ${
                       (uploadForm.file && uploadForm.documentName.trim() && !isSubmitting)
                         ? 'bg-navy-700 text-white hover:bg-navy-800'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     }`}
                   >
                     <FiUpload className="inline mr-2" />
@@ -1337,11 +1305,11 @@ const MyDocuments = () => {
 
       {/* Edit Document Modal */}
       {showEditModal && documentToEdit && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[90dvh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-800">
+                <h3 className="text-xl font-bold text-slate-800">
                   Edit Document: {documentToEdit.name}
                 </h3>
                 <button
@@ -1350,7 +1318,7 @@ const MyDocuments = () => {
                     setDocumentToEdit(null);
                     setSelectedDocMeta(null);
                   }}
-                  className="text-gray-500 hover:text-gray-700 p-2"
+                  className="grid h-10 w-10 place-items-center text-slate-500 hover:text-slate-700"
                   disabled={isSubmitting}
                 >
                   ✕
@@ -1360,11 +1328,11 @@ const MyDocuments = () => {
               <form onSubmit={handleEditSubmit}>
                 {/* Optional: Upload new file */}
                 <div className="mb-6">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-2">
                     Upload New File (Optional)
                   </label>
                   <div 
-                    className={`border-2 border-dashed ${dragOver ? 'border-navy-500 bg-navy-50' : 'border-gray-300'} rounded-xl p-8 text-center hover:border-navy-400 transition-colors cursor-pointer`}
+                    className={`border-2 border-dashed ${dragOver ? 'border-navy-500 bg-navy-500/10' : 'border-slate-300'} rounded-xl p-6 sm:p-8 text-center hover:border-navy-500/40 transition-colors cursor-pointer`}
                     onDragOver={(e) => handleDragOver(e, true)}
                     onDragLeave={handleDragLeave}
                     onDrop={(e) => handleDrop(e, true)}
@@ -1372,9 +1340,9 @@ const MyDocuments = () => {
                   >
                     {editForm.newFile ? (
                       <div className="text-center">
-                        <FiFile className="text-4xl text-navy-600 mx-auto mb-2" />
-                        <p className="font-medium text-gray-800">{editForm.newFile.name}</p>
-                        <p className="text-sm text-gray-500 mt-1">
+                        <FiFile className="text-4xl text-navy-700 mx-auto mb-2" />
+                        <p className="font-medium text-slate-800">{editForm.newFile.name}</p>
+                        <p className="text-sm text-slate-500 mt-1">
                           {formatFileSize(editForm.newFile.size)}
                         </p>
                         <button
@@ -1391,11 +1359,11 @@ const MyDocuments = () => {
                       </div>
                     ) : (
                       <>
-                        <FiUpload className="text-4xl text-gray-400 mx-auto mb-4" />
-                        <p className="text-gray-600 mb-2">
+                        <FiUpload className="text-4xl text-slate-400 mx-auto mb-4" />
+                        <p className="text-slate-600 mb-2">
                           <span className="font-medium text-navy-700">Click to upload new version</span>
                         </p>
-                        <p className="text-sm text-gray-500">
+                        <p className="text-sm text-slate-500">
                           Leave empty to keep current file
                         </p>
                         <input
@@ -1409,7 +1377,7 @@ const MyDocuments = () => {
                       </>
                     )}
                   </div>
-                  <p className="text-sm text-gray-500 mt-2">
+                  <p className="text-sm text-slate-500 mt-2">
                     Current file: {documentToEdit.name}.{documentToEdit.file_type.toLowerCase()}
                   </p>
                 </div>
@@ -1417,7 +1385,7 @@ const MyDocuments = () => {
                 {/* Document Number (only show if document requires it) */}
                 {selectedDocMeta?.requires_number && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Document Number {selectedDocMeta?.requires_number ? '*' : '(Optional)'}
                     </label>
                     <input
@@ -1427,11 +1395,11 @@ const MyDocuments = () => {
                         setEditForm({ ...editForm, documentNumber: e.target.value })
                       }
                       placeholder="Enter document number"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       required={selectedDocMeta?.requires_number}
                       disabled={isSubmitting}
                     />
-                    <p className="text-xs text-gray-500 mt-1">
+                    <p className="text-xs text-slate-500 mt-1">
                       {documentToEdit.document_number_last4 ? 
                         `Currently: ****${documentToEdit.document_number_last4}` : 
                         'No document number saved'}
@@ -1442,7 +1410,7 @@ const MyDocuments = () => {
                 {/* Expiry Date (only show if document requires it) */}
                 {selectedDocMeta?.requires_expiry && (
                   <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
                       Expiry Date {selectedDocMeta?.requires_expiry ? '*' : '(Optional)'}
                     </label>
                     <input
@@ -1451,7 +1419,7 @@ const MyDocuments = () => {
                       onChange={(e) =>
                         setEditForm({ ...editForm, expiryDate: e.target.value })
                       }
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                      className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-slate-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                       required={selectedDocMeta?.requires_expiry}
                       disabled={isSubmitting}
                     />
@@ -1460,15 +1428,15 @@ const MyDocuments = () => {
 
                 {/* Household fields for ration card (only if creates_household) */}
                 {selectedDocMeta?.creates_household && (
-                  <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-100">
-                    <h4 className="font-medium text-blue-800 mb-3 flex items-center">
+                  <div className="mb-6 p-4 bg-navy-500/10 rounded-lg border border-navy-500/10">
+                    <h4 className="font-medium text-navy-800 mb-3 flex items-center">
                       <FiHome className="mr-2" />
                       Update Household Details
                     </h4>
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
-                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                        <label className="block text-sm font-medium text-navy-700 mb-2">
                           Ration Card Type
                         </label>
                         <select
@@ -1476,7 +1444,7 @@ const MyDocuments = () => {
                           onChange={(e) =>
                             setEditForm({ ...editForm, rationCardType: e.target.value })
                           }
-                          className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                          className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-navy-500/20 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                           disabled={isSubmitting}
                         >
                           <option value="general">General</option>
@@ -1488,7 +1456,7 @@ const MyDocuments = () => {
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                        <label className="block text-sm font-medium text-navy-700 mb-2">
                           District
                         </label>
                         <input
@@ -1498,13 +1466,13 @@ const MyDocuments = () => {
                             setEditForm({ ...editForm, district: e.target.value })
                           }
                           placeholder="Enter district"
-                          className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                          className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-navy-500/20 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                           disabled={isSubmitting}
                         />
                       </div>
                       
                       <div>
-                        <label className="block text-sm font-medium text-blue-700 mb-2">
+                        <label className="block text-sm font-medium text-navy-700 mb-2">
                           State
                         </label>
                         <input
@@ -1514,7 +1482,7 @@ const MyDocuments = () => {
                             setEditForm({ ...editForm, state: e.target.value })
                           }
                           placeholder="Enter state"
-                          className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-200"
+                          className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm border border-navy-500/20 rounded-lg focus:border-navy-500 focus:ring-2 focus:ring-navy-500/30"
                           disabled={isSubmitting}
                         />
                       </div>
@@ -1523,7 +1491,7 @@ const MyDocuments = () => {
                 )}
 
                 {/* Form Actions */}
-                <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-end pt-6 border-t border-slate-200">
                   <button
                     type="button"
                     onClick={() => {
@@ -1531,7 +1499,7 @@ const MyDocuments = () => {
                       setDocumentToEdit(null);
                       setSelectedDocMeta(null);
                     }}
-                    className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                    className="min-h-[44px] px-6 py-2 text-slate-700 border border-slate-300 rounded-xl font-medium hover:bg-slate-50 transition-colors"
                     disabled={isSubmitting}
                   >
                     Cancel
@@ -1539,10 +1507,10 @@ const MyDocuments = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
+                    className={`min-h-[44px] px-6 py-2 rounded-xl font-medium transition-colors ${
                       !isSubmitting
                         ? 'bg-navy-700 text-white hover:bg-navy-800'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                        : 'bg-slate-300 text-slate-500 cursor-not-allowed'
                     }`}
                   >
                     <FiEdit className="inline mr-2" />
@@ -1557,31 +1525,31 @@ const MyDocuments = () => {
 
       {/* Delete Confirmation Modal */}
       {showDeleteModal && documentToDelete && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-md w-full p-5 sm:p-6">
             <div className="text-center">
               <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-rose-100 mb-4">
                 <FiTrash2 className="h-6 w-6 text-rose-600" />
               </div>
-              <h3 className="text-lg font-bold text-gray-900 mb-2">Delete Document</h3>
-              <p className="text-gray-600 mb-6">
+              <h3 className="text-lg font-bold text-slate-900 mb-2">Delete Document</h3>
+              <p className="text-slate-600 mb-6">
                 Are you sure you want to delete <span className="font-semibold">"{documentToDelete.name}"</span>?
                 This action cannot be undone.
               </p>
-              <div className="flex justify-center space-x-4">
+              <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-center">
                 <button
                   onClick={() => {
                     setShowDeleteModal(false);
                     setDocumentToDelete(null);
                   }}
-                  className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  className="min-h-[44px] px-6 py-2 text-slate-700 border border-slate-300 rounded-xl font-medium hover:bg-slate-50 transition-colors"
                   disabled={isSubmitting}
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleDeleteDocument}
-                  className="px-6 py-2 bg-rose-600 text-white rounded-lg font-medium hover:bg-rose-700 transition-colors"
+                  className="min-h-[44px] px-6 py-2 bg-rose-600 text-white rounded-xl font-medium hover:bg-rose-700 transition-colors"
                   disabled={isSubmitting}
                 >
                   {isSubmitting ? 'Deleting...' : 'Delete Document'}
@@ -1594,15 +1562,15 @@ const MyDocuments = () => {
 
       {/* Versions Modal */}
       {showVersionModal && selectedDocument && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90dvh] overflow-y-auto">
+            <div className="p-4 sm:p-6">
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className="text-xl font-bold text-gray-800">
+                  <h3 className="text-xl font-bold text-slate-800">
                     Document Versions
                   </h3>
-                  <p className="text-gray-600 text-sm mt-1">
+                  <p className="text-slate-600 text-sm mt-1">
                     {selectedDocument.name}
                   </p>
                 </div>
@@ -1611,7 +1579,7 @@ const MyDocuments = () => {
                     setShowVersionModal(false);
                     setDocumentVersions([]);
                   }}
-                  className="text-gray-500 hover:text-gray-700 p-2"
+                  className="grid h-10 w-10 place-items-center text-slate-500 hover:text-slate-700"
                 >
                   ✕
                 </button>
@@ -1622,7 +1590,7 @@ const MyDocuments = () => {
                   documentVersions.map((version, index) => (
                     <div 
                       key={version.id} 
-                      className={`p-4 border rounded-lg ${version.is_latest ? 'border-navy-300 bg-navy-50' : 'border-gray-200 bg-white'}`}
+                      className={`p-4 border rounded-lg ${version.is_latest ? 'border-navy-500/20 bg-navy-500/10' : 'border-slate-200 bg-white'}`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center">
@@ -1637,17 +1605,17 @@ const MyDocuments = () => {
                             {version.status}
                           </span>
                           {version.is_latest && (
-                            <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-navy-100 text-navy-700">
+                            <span className="ml-2 inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-navy-500/10 text-navy-700">
                               Latest
                             </span>
                           )}
                         </div>
-                        <span className="text-sm font-medium text-gray-700">
+                        <span className="text-sm font-medium text-slate-700">
                           Version {version.version}
                         </span>
                       </div>
                       
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-slate-600">
                         <div className="flex items-center">
                           <FiCalendar className="mr-2 flex-shrink-0" />
                           <span>{formatDate(version.created_at)}</span>
@@ -1665,8 +1633,8 @@ const MyDocuments = () => {
                       </div>
                       
                       {version.review_remarks && (
-                        <div className="mt-3 p-3 bg-gray-50 rounded border border-gray-200">
-                          <p className="text-sm text-gray-700">
+                        <div className="mt-3 p-3 bg-slate-50 rounded border border-slate-200">
+                          <p className="text-sm text-slate-700">
                             <span className="font-medium">Remarks:</span> {version.review_remarks}
                           </p>
                         </div>
@@ -1675,7 +1643,7 @@ const MyDocuments = () => {
                   ))
                 ) : (
                   <div className="text-center py-8">
-                    <p className="text-gray-600">No versions found</p>
+                    <p className="text-slate-600">No versions found</p>
                   </div>
                 )}
               </div>

@@ -17,6 +17,7 @@ import { toast } from 'react-toastify';
 
 import { socket } from '@/services/socket'; 
 import { useNotifications } from '../../context/NotificationContext';
+import { getNotificationLink } from '@/utils/notificationLinks';
 
 import PaymentReceiptDrawer from '@/components/PaymentReceiptDrawer';
 
@@ -85,9 +86,10 @@ const mapDBNotificationToUI = (dbNotif) => {
     actionUrl = `/dashboard/${role}/attendance?tab=payslips`;
   }
 
-  // 🔥 Route for Knowledge/Operations Hub Discussions
+  // 🔥 Route for Knowledge/Operations Hub: open the exact place
+  // (service SOP/FAQ, suggestions, announcements, learning, or the discussion)
   if (dbNotif.related_entity_type === 'discussion' || dbNotif.type?.startsWith('knowledge_')) {
-    actionUrl = `/dashboard/${role}/operationshub`; 
+    actionUrl = getNotificationLink(dbNotif) || `/dashboard/${role}/operationshub`;
   }
 
   // Safely get type to prevent .includes() crashing
@@ -128,7 +130,8 @@ const mapDBNotificationToUI = (dbNotif) => {
       // 🔥 The state to pass when clicking the whole card
       actionState: { 
         openConversationId: dbNotif.conversation_id,
-        openDiscussionId: (dbNotif.related_entity_type === 'discussion' || typeStr.startsWith('knowledge_')) ? dbNotif.related_entity_id : undefined,
+        // Only real discussions carry a discussion id (an announcement/suggestion id is NOT a discussion id)
+        openDiscussionId: dbNotif.related_entity_type === 'discussion' ? dbNotif.related_entity_id : undefined,
 
         // 🔥 Tell Messenger to open the Tasks tab for admins
         openTasksView: dbNotif.related_entity_type === 'task' && ["admin", "superadmin"].includes(role) ? true : undefined
@@ -205,6 +208,7 @@ const matchesTab = (n, tabId) => {
     case 'services': return type.includes('service');
     case 'assignments': return type.includes('task') || type.includes('service');
     case 'system': return type === 'system';
+    case 'hub': return type.startsWith('knowledge_');
     default: return true;
   }
 };
@@ -356,7 +360,7 @@ const NotificationDetail = ({ notification, onAction, onClick, onTogglePin, onBa
       {((actions && actions.length > 0) || canGoToPage) && (
         <div className="flex flex-wrap items-center gap-2 mt-6 pt-4 border-t border-slate-100">
           {canGoToPage && (
-            <button className="text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 px-4 py-2 rounded-lg shadow-sm inline-flex items-center gap-1" onClick={() => onClick(notification.actionUrl, notification.actionState)}>
+            <button className="text-sm font-semibold text-white bg-navy-700 hover:bg-navy-800 px-4 py-2 rounded-lg shadow-sm inline-flex items-center gap-1" onClick={() => onClick(notification.actionUrl, notification.actionState, notification.id)}>
               Go to page <FiChevronRight className="h-4 w-4" />
             </button>
           )}
@@ -461,6 +465,7 @@ const NotificationsPage = () => {
     { id: 'messages', label: 'Messages', icon: FiMessageCircle },
     { id: 'services', label: 'Services', icon: FiBriefcase },
     { id: 'assignments', label: 'Assignments', icon: FiCheckSquare },
+    { id: 'hub', label: 'Knowledge Hub', icon: FiBookOpen },
     { id: 'system', label: 'System', icon: FiActivity },
   ];
 
@@ -676,9 +681,9 @@ const NotificationsPage = () => {
       (notification.type.startsWith('knowledge_') || notification.related_entity_type === 'discussion')
     ) {
       handleMarkRead(id);
-      // 🔥 Send them to the base URL and pass the Discussion ID securely in the background!
-      navigate(`/dashboard/${role}/operationshub`, { 
-        state: { openDiscussionId: notification.related_entity_id } 
+      // 🔥 Open the exact place in the hub (SOP, suggestion, announcement, training or discussion)
+      navigate(notification.actionUrl && notification.actionUrl !== '#' ? notification.actionUrl : `/dashboard/${role}/operationshub`, {
+        state: notification.actionState
       });
       return;
     }
@@ -701,8 +706,9 @@ const NotificationsPage = () => {
   };
 
   // 2. Update the card click handler
-  const handleClick = (url, state) => { 
+  const handleClick = (url, state, id) => { 
     if (url && url !== '#') {
+      if (id) handleMarkRead(id);
       navigate(url, { state }); 
     }
   };
