@@ -21,87 +21,125 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 }
 
 // ===============================
-// 📥 BULLETPROOF MEDIA DOWNLOADER
+// 📥 MEDIA DOWNLOADER (via Libromi API Platform)
 // ===============================
-async function downloadWhatsAppMedia(mediaId, directLink, accessToken, baseUrl, mimeType, filenameHint) {
-  try {
-    let downloadUrl = directLink;
+// Meta's lookaside.fbsbx.com links need a *Meta* access token in an
+// Authorization header. We only hold Libromi tokens, so those links always
+// answer 401. Libromi already downloads every customer file from Meta and
+// serves it from its own API, so we fetch it from there instead:
+//   1. find the Libromi conversation  (GET /v1/conversations?query=<phone>&channel_id=<id>)
+//   2. find the matching inbound media message (GET /v1/conversations/{id}/messages)
+//   3. download media.url (works WITHOUT a key for ~10 min) and save locally.
+// Needs env LIBROMI_API_KEY (key from Libromi developer portal → Keys; read access is enough).
 
-    // 1. Resolve ID to URL if necessary
-    if (!downloadUrl && mediaId) {
-      const cleanBase = baseUrl.replace(/\/messages\/?$/, '');
-      const endpointsToTry = [
-        `${cleanBase}/media/${mediaId}`,              
-        `${cleanBase}/${mediaId}`,                    
-        `https://graph.facebook.com/v18.0/${mediaId}` 
-      ];
+const LIBROMI_API = (process.env.LIBROMI_API_URL || 'https://api.wa-api.cloud/v1').replace(/\/$/, '');
+const LIBROMI_API_KEY = process.env.LIBROMI_API_KEY;
 
-      for (const endpoint of endpointsToTry) {
-        try {
-          const res = await axios.get(endpoint, { headers: { Authorization: `Bearer ${accessToken}` } });
-          if (res.data && (res.data.url || res.data.link)) {
-            downloadUrl = res.data.url || res.data.link;
-            break; 
-          }
-        } catch (e) { /* Ignore and try next */ }
-      }
-    }
+const KIND_TO_TYPE = { image: 'IMAGE', video: 'VIDEO', audio: 'AUDIO', document: 'DOCUMENT', sticker: 'STICKER' };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-    if (!downloadUrl) throw new Error("Could not find a valid download URL.");
+const libromiGet = (url, params) =>
+  axios.get(`${LIBROMI_API}${url}`, {
+    params,
+    headers: { Authorization: `Bearer ${LIBROMI_API_KEY}` },
+    timeout: 15000,
+  });
 
-    console.log(`[Webhook] Downloading media from: ${downloadUrl.substring(0, 60)}...`);
+// Pick a file extension: real file name first (documents), then mime type.
+function pickExtension(mimeType, filenameHint) {
+  const fromName = filenameHint ? path.extname(filenameHint).toLowerCase() : '';
+  if (fromName && fromName.length <= 6) return fromName;
+  if (mimeType) {
+    const sub = mimeType.split('/')[1]?.split(';')[0]?.trim().toLowerCase();
+    const map = { jpeg: '.jpg', 'x-m4a': '.m4a', mpeg: '.mp3', quicktime: '.mov', pdf: '.pdf' };
+    if (sub) return map[sub] || (sub.length <= 5 ? `.${sub}` : '.bin');
+  }
+  return '.bin';
+}
 
-    let responseStream;
+async function saveStreamToDisk(url, mimeType, filenameHint) {
+  const res = await axios.get(url, { responseType: 'stream', timeout: 60000 });
+  const ext = pickExtension(res.headers['content-type'] || mimeType, filenameHint);
+  const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  const filePath = path.join(UPLOAD_DIR, uniqueFilename);
 
-    // 🔥 THE FIX: Try RAW Signed URL first!
-    // Meta's lookaside URLs with &hash= are pre-signed. Adding an Auth header modifies 
-    // the request and breaks the signature, causing the 401 Unauthorized.
-    try {
-      console.log(`[Webhook] Attempting raw download (pre-signed URL)...`);
-      const rawReq = await axios.get(downloadUrl, {
-        responseType: 'stream'
-      });
-      responseStream = rawReq.data;
-    } catch (rawErr) {
-      console.log(`[Webhook] Raw download failed (${rawErr.response?.status}). Attempting WITH auth token...`);
-      // Fallback: If it wasn't pre-signed, try with the Bearer token
-      const authReq = await axios.get(downloadUrl, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-        responseType: 'stream'
-      });
-      responseStream = authReq.data;
-    }
-
-    // 3. Determine extension and generate a safe filename
-    let ext = '';
-    if (mimeType) {
-      ext = '.' + mimeType.split('/')[1].split(';')[0]; 
-    } else if (filenameHint) {
-      ext = path.extname(filenameHint);
-    }
-    if (!ext) ext = '.bin'; 
-    
-    const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-    const filePath = path.join(UPLOAD_DIR, uniqueFilename);
-
-    // 4. Save to your local disk
+  await new Promise((resolve, reject) => {
     const writer = fs.createWriteStream(filePath);
-    responseStream.pipe(writer);
+    res.data.pipe(writer);
+    writer.on('finish', resolve);
+    writer.on('error', reject);
+    res.data.on('error', reject);
+  });
 
-    await new Promise((resolve, reject) => {
-      writer.on('finish', resolve);
-      writer.on('error', reject);
-    });
+  console.log('[Webhook] LOCAL FILE SAVED:', filePath);
+  return `/uploads/chat/${uniqueFilename}`;
+}
 
-    // 🔥 ADDED THE REQUESTED LOGS HERE:
-    console.log("LOCAL FILE SAVED:", filePath);
-    console.log("RETURNING:", `/uploads/chat/${uniqueFilename}`);
+// Find the Libromi conversation id for this customer on this channel.
+async function findLibromiConversationId(customerPhone, channelId) {
+  const digits = String(customerPhone).replace(/\D/g, '').slice(-10); // "contains" match
+  const params = { query: digits };
+  if (channelId) params.channel_id = String(channelId);
 
-    // 5. Return the local relative path for the database
-    return `/uploads/chat/${uniqueFilename}`;
+  let res = await libromiGet('/conversations', params);
+  let list = res.data?.data || [];
 
+  // If our stored channel_id doesn't match Libromi's id format, retry without it.
+  if (!list.length && channelId) {
+    res = await libromiGet('/conversations', { query: digits });
+    list = res.data?.data || [];
+  }
+  return list[0]?.id || null;
+}
+
+async function downloadWhatsAppMedia({ customerPhone, channelId, kind, caption, sentAtMs, mimeType, filenameHint }) {
+  if (!LIBROMI_API_KEY) {
+    console.error('[Webhook] LIBROMI_API_KEY is not set – cannot download media.');
+    return null;
+  }
+
+  try {
+    const conversationId = await findLibromiConversationId(customerPhone, channelId);
+    if (!conversationId) throw new Error(`No Libromi conversation found for ${customerPhone}`);
+
+    // The file may still be downloading inside Libromi for a few seconds → retry.
+    for (let attempt = 1; attempt <= 4; attempt++) {
+      const res = await libromiGet(`/conversations/${conversationId}/messages`, {
+        direction: 'inbound',
+        types: KIND_TO_TYPE[kind] || undefined,
+        limit: 10,
+      });
+      const candidates = (res.data?.data || []).filter((m) => m.has_media && m.media);
+
+      // Best match: same caption and closest in time to the webhook; else the newest one.
+      const scored = candidates
+        .map((m) => {
+          const t = m.created_at ? new Date(m.created_at).getTime() : 0;
+          const timeDiff = sentAtMs && t ? Math.abs(t - sentAtMs) : 0;
+          const captionMatch = caption ? (m.media.caption || m.text || '') === caption : true;
+          return { m, timeDiff, captionMatch };
+        })
+        .filter((c) => c.timeDiff <= 5 * 60 * 1000) // within 5 minutes of the webhook
+        .sort((a, b) => Number(b.captionMatch) - Number(a.captionMatch) || a.timeDiff - b.timeDiff);
+
+      const match = scored[0]?.m;
+
+      if (match?.media?.url) {
+        return await saveStreamToDisk(match.media.url, match.media.mime || mimeType, match.media.file_name || filenameHint);
+      }
+
+      if (match?.media?.url_unavailable === 'failed' || match?.media?.status === 'failed') {
+        throw new Error('Libromi could not store this file (media_failed).');
+      }
+
+      // Not found yet or still processing → wait and try again.
+      console.log(`[Webhook] Media not ready yet (attempt ${attempt}), retrying...`);
+      await sleep(3000 * attempt);
+    }
+
+    throw new Error('Media still not available after retries.');
   } catch (error) {
-    console.error(`[Webhook] Failed to download WhatsApp media:`, error.message);
+    console.error('[Webhook] Failed to download WhatsApp media:', error.response?.data || error.message);
     return null;
   }
 }
@@ -281,36 +319,38 @@ router.post('/whatsapp', async (req, res) => {
     // ===============================
     // ⬇️ EXECUTE MEDIA DOWNLOAD
     // ===============================
-    if ((mediaIdToDownload || directLink) && communicationAccountId) {
+    if (mediaIdToDownload || directLink) {
       try {
-        const accountData = await pool.query(
-          `SELECT access_token, base_url FROM communication_accounts WHERE id = $1`,
-          [communicationAccountId]
-        );
-        
-        if (accountData.rows.length > 0) {
-          const { access_token, base_url } = accountData.rows[0];
-          
-          const localPath = await downloadWhatsAppMedia(
-            mediaIdToDownload, 
-            directLink,
-            access_token, 
-            base_url, 
-            mimeTypeHint, 
-            fileName
+        let channelId = incomingChannelId;
+        if (!channelId && communicationAccountId) {
+          const accountData = await pool.query(
+            `SELECT channel_id FROM communication_accounts WHERE id = $1`,
+            [communicationAccountId]
           );
-          
-          if (localPath) {
-            fileUrl = localPath; 
-          } else if (directLink) {
-            fileUrl = directLink; 
-            messageText += "\n[Media saved as external link]";
-          } else {
-            messageText += "\n[Failed to download media attachment]";
-          }
+          channelId = accountData.rows[0]?.channel_id || null;
+        }
+
+        const sentAtMs = msgObject?.timestamp ? Number(msgObject.timestamp) * 1000 : Date.now();
+
+        const localPath = await downloadWhatsAppMedia({
+          customerPhone: from,
+          channelId,
+          kind: messageType,
+          caption: messageText || null,
+          sentAtMs,
+          mimeType: mimeTypeHint,
+          filenameHint: fileName,
+        });
+
+        if (localPath) {
+          fileUrl = localPath;
+        } else {
+          // Never store Meta's lookaside link: it always answers 401 in a browser.
+          console.error(`[Webhook] Media download failed. Meta media id: ${mediaIdToDownload}`);
+          messageText += "\n[Attachment could not be downloaded – open it in Libromi inbox]";
         }
       } catch (err) {
-        console.error("Error retrieving account data for media download:", err);
+        console.error("Error during media download:", err);
       }
     }
 
