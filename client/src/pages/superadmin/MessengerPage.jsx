@@ -67,6 +67,9 @@ import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
 
+// Message types that carry an attachment (WhatsApp media + uploads)
+const FILE_TYPES = ['file', 'image', 'audio', 'video', 'document'];
+
 // ============== NEW CHAT MODAL (Grouped by Centre) ==============
 const NewChatModal = ({ isOpen, onClose, onCreate, staffList, centresMap }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -600,7 +603,7 @@ const MessengerPage = ({ user }) => {
           text: msg.message,
           time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: msg.created_at,
-          isFile: msg.message_type === 'file' || msg.message_type === 'image',
+          isFile: FILE_TYPES.includes(msg.message_type),
           fileName: msg.file_name,
           fileUrl: msg.file_url,
           fileSize: msg.file_size,
@@ -946,7 +949,7 @@ const MessengerPage = ({ user }) => {
           text: msg.text,
           time: new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: msg.created_at,
-          isFile: msg.type === 'file' || msg.type === 'image',
+          isFile: FILE_TYPES.includes(msg.type),
           fileName: msg.file_name,
           fileUrl: msg.file_url,
           fileSize: msg.file_size,
@@ -1107,7 +1110,7 @@ const MessengerPage = ({ user }) => {
           text: newMsg.message,
           time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           createdAt: newMsg.created_at,
-          isFile: newMsg.message_type === 'file' || newMsg.message_type === 'image',
+          isFile: FILE_TYPES.includes(newMsg.message_type),
           fileName: newMsg.file_name,
           fileUrl: newMsg.file_url,
           fileSize: newMsg.file_size,
