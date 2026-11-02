@@ -1061,6 +1061,10 @@ const Chat = ({
                 );
               } else {
                 const isImage = msg.messageType === "image" && msg.fileUrl && !msg.isDeleted;
+                const isAudio = msg.messageType === "audio" && msg.fileUrl && !msg.isDeleted;
+                const isVideo = msg.messageType === "video" && msg.fileUrl && !msg.isDeleted;
+                // WhatsApp captions are saved as the message text; show them under the attachment
+                const caption = msg.isFile && msg.text && !msg.text.startsWith("[") ? msg.text : null;
                 body = (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} group`}>
                     <div className={`relative flex items-end gap-2 max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
@@ -1115,6 +1119,32 @@ const Chat = ({
                               />
                               {msg.fileName && <p className="mt-1 px-1.5 text-[11px] opacity-70 truncate text-left">{msg.fileName}</p>}
                             </button>
+                          ) : isAudio ? (
+                            <div className="-mx-1 pt-0.5" onClick={(e) => e.stopPropagation()}>
+                              <audio
+                                controls
+                                preload="metadata"
+                                src={fullFileUrl(msg.fileUrl)}
+                                className="w-64 max-w-full h-10"
+                              />
+                              <a
+                                href={fullFileUrl(msg.fileUrl)}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="mt-0.5 inline-flex items-center gap-1 px-1 text-[11px] opacity-70 hover:opacity-100"
+                              >
+                                <FiDownload size={11} /> Voice note
+                              </a>
+                            </div>
+                          ) : isVideo ? (
+                            <div className="-mx-1.5 -mt-0.5" onClick={(e) => e.stopPropagation()}>
+                              <video
+                                controls
+                                preload="metadata"
+                                src={fullFileUrl(msg.fileUrl)}
+                                className="max-h-72 w-auto max-w-full rounded-xl bg-black"
+                              />
+                            </div>
                           ) : (
                             <button
                               type="button"
@@ -1140,6 +1170,10 @@ const Chat = ({
                           )
                         ) : (
                           renderMessageTextWithMentions(msg.text, msg.mentions, isOwn)
+                        )}
+
+                        {caption && !msg.isDeleted && (
+                          <p className="mt-1 whitespace-pre-wrap break-words">{caption}</p>
                         )}
 
                         <div className={`flex items-center justify-end gap-1 mt-0.5 -mb-0.5 text-[10.5px] ${isOwn ? "text-blue-100" : "text-slate-400"}`}>
