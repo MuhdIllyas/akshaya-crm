@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
-import { sendManualWhatsAppTemplate } from "../utils/messageRouter.js";
+import { sendManualWhatsAppTemplate, sendSystemMessage, getUnreadCount } from "../utils/messageRouter.js";
+import { addStaffToConversation } from "../utils/conversationService.js";
 
 const router = express.Router();
 
@@ -27,27 +28,76 @@ router.post("/send-template", async (req, res) => {
 });
 
 /* =====================================================================
-   🤖 BOT: CHECK APPLICATION STATUS
-   Called by the Libromi chatbot ("Check Your Status" → Rest API block).
-
-   POST /api/whatsapp/track-application
-   Header: x-bot-key: <BOT_API_KEY from .env>
-   Body:   { "query": "{{Application_Number}}", "wa_phone": "{{STAT_PHONE}}" }
-
-   Reply:  { found: true|false, count, reply: "<ready-to-send WhatsApp text>" }
-   The bot just saves `reply` into a variable and sends it.
-
-   Lookup order:
-     1. query looks like an application number → match service_tracking.application_number
-     2. query is a phone number (10+ digits)   → applications for that phone
-        (only if it is the same number they are chatting from, unless
-         ALLOW_OTHER_PHONE_LOOKUP=true)
-     3. nothing matched                        → applications for the WhatsApp number itself
+   🔧 SHARED BOT HELPERS
    ===================================================================== */
 
 const BOT_API_KEY = process.env.BOT_API_KEY;
 const ALLOW_OTHER_PHONE_LOOKUP = process.env.ALLOW_OTHER_PHONE_LOOKUP === "true";
 const MAX_RESULTS = 5;
+
+const botAuthOk = (req) => !BOT_API_KEY || req.get("x-bot-key") === BOT_API_KEY;
+
+const last10 = (v) => String(v || "").replace(/\D/g, "").slice(-10);
+
+// Libromi sends "{{var}}" literally when a variable is empty — treat that as empty
+const clean = (v) => {
+  const s = String(v ?? "").trim();
+  return !s || /^\{\{.*\}\}$/.test(s) ? null : s.slice(0, 1000);
+};
+
+const isPhoneLike = (q) => {
+  const d = String(q || "").replace(/\D/g, "");
+  return d.length >= 10 && d.length <= 13 && /^[\d\s+()-]+$/.test(String(q));
+};
+
+/**
+ * Which centre is this customer chatting with RIGHT NOW?
+ * Each centre has its own WhatsApp number → its own conversation (webhook sets
+ * centre_id on it). The conversation with the most recent INCOMING message is
+ * the one the bot session started from. Outgoing staff messages from another
+ * centre are ignored, so they can't pull the lead/chat to the wrong centre.
+ */
+async function findActiveWaConversation(phone10) {
+  if (phone10.length !== 10) return null;
+  const { rows } = await pool.query(
+    `SELECT c.id, c.centre_id, c.assigned_staff_id, ce.name AS centre_name, ce.admin_id, li.last_in
+     FROM chat_conversations c
+     LEFT JOIN centres ce ON ce.id = c.centre_id
+     CROSS JOIN LATERAL (
+       SELECT MAX(m.created_at) AS last_in
+       FROM chat_messages m
+       WHERE m.conversation_id = c.id AND m.direction = 'incoming'
+     ) li
+     WHERE c.channel = 'whatsapp'
+       AND c.status <> 'deleted'
+       AND RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10) = $1
+       AND li.last_in IS NOT NULL
+     ORDER BY li.last_in DESC
+     LIMIT 1`,
+    [phone10]
+  );
+  return rows[0] || null;
+}
+
+/* =====================================================================
+   🤖 BOT: CHECK APPLICATION STATUS
+   POST /api/whatsapp/track-application
+   Header: x-bot-key: <BOT_API_KEY>
+   Body:   { "query": "{{status_query}}", "wa_phone": "{{STAT_PHONE}}" }
+   Reply:  { found, count, application_number, reply }
+
+   Centre rule: the centre is the one whose WhatsApp number the customer is
+   messaging (findActiveWaConversation). ONLY that centre's applications are
+   shown — a customer messaging Pukayur never sees Kolathur's details.
+   • Phone lookup → this centre's applications for that phone.
+   • Application number → matches in this centre only (numbers can repeat
+     across centres). Several in this centre → the one on the customer's own
+     phone, otherwise ask for their phone number.
+   • If the application belongs to a different phone, only the status is
+     shown — the customer name is hidden.
+   • If the centre can't be worked out (no chat record yet), we fall back to
+     all centres so the bot still answers.
+   ===================================================================== */
 
 const STATUS_LABELS = {
   pending: "⏳ Pending",
@@ -58,53 +108,80 @@ const STATUS_LABELS = {
   resubmit: "⚠️ Needs resubmission – please contact the centre",
 };
 
-const last10 = (v) => String(v || "").replace(/\D/g, "").slice(-10);
-
 const formatDate = (d) =>
   d
     ? new Date(d).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "Asia/Kolkata" })
     : null;
 
+// Centre of an application = centre of the staff who made the service entry
 const BASE_SELECT = `
   SELECT st.application_number, st.status, st.current_step, st.estimated_delivery, st.updated_at,
-         se.customer_name, se.phone, se.created_at,
-         s.name AS service_name, sub.name AS subcategory_name
+         st.assigned_to,
+         se.id AS service_entry_id, se.staff_id, se.customer_name, se.phone, se.created_at,
+         s.name AS service_name, sub.name AS subcategory_name,
+         stf.centre_id, ce.name AS centre_name
   FROM service_tracking st
   JOIN service_entries se ON st.service_entry_id = se.id
   LEFT JOIN services s ON se.category_id = s.id
   LEFT JOIN subcategories sub ON se.subcategory_id = sub.id
+  LEFT JOIN staff stf ON stf.id = se.staff_id
+  LEFT JOIN centres ce ON ce.id = stf.centre_id
 `;
 
 async function findByApplicationNumber(appNo) {
-  const clean = String(appNo).replace(/\s+/g, "").toUpperCase();
-  if (clean.length < 3) return [];
+  const key = String(appNo).replace(/\s+/g, "").toUpperCase();
+  if (key.length < 3) return [];
   const { rows } = await pool.query(
     `${BASE_SELECT}
      WHERE UPPER(REPLACE(st.application_number, ' ', '')) = $1
-     LIMIT 1`,
-    [clean]
+     ORDER BY st.updated_at DESC
+     LIMIT 10`,
+    [key]
   );
   return rows;
 }
 
-async function findByPhone(phone10) {
+// Applications for a phone — only in the given centre (all centres if centreId is null)
+async function findByPhone(phone10, centreId = null) {
   if (phone10.length !== 10) return [];
   const { rows } = await pool.query(
     `${BASE_SELECT}
      WHERE RIGHT(regexp_replace(se.phone, '\\D', '', 'g'), 10) = $1
+       AND ($2::int IS NULL OR stf.centre_id = $2::int)
        -- open applications, plus ones finished in the last 30 days
        AND (st.status NOT IN ('completed', 'paid') OR st.updated_at >= NOW() - INTERVAL '30 days')
      ORDER BY st.updated_at DESC
      LIMIT ${MAX_RESULTS}`,
-    [phone10]
+    [phone10, centreId]
   );
   return rows;
 }
 
-function buildReply(rows, { intro } = {}) {
+/**
+ * Narrow down application-number matches (duplicates across centres).
+ * Returns { rows, ambiguous }.
+ */
+function pickApplication(matches, waPhone, centreId) {
+  // Only this centre's applications (all centres if the centre is unknown)
+  const here = centreId ? matches.filter((r) => Number(r.centre_id) === Number(centreId)) : matches;
+  if (here.length <= 1) return { rows: here, ambiguous: false };
+  const own = here.filter((r) => last10(r.phone) === waPhone);
+  if (own.length >= 1) return { rows: own.slice(0, MAX_RESULTS), ambiguous: false };
+  return { rows: [], ambiguous: true };
+}
+
+const maskName = (n) => {
+  const s = String(n || "").trim();
+  if (s.length <= 2) return "***";
+  return `${s[0]}${"*".repeat(Math.min(s.length - 2, 5))}${s[s.length - 1]}`;
+};
+
+function buildReply(rows, { intro, masked = false } = {}) {
   const name = rows[0]?.customer_name;
   const lines = [];
-  lines.push(intro || (name ? `Hi ${name}, here is your application status:` : "Here is your application status:"));
+  if (intro) lines.push(intro);
+  else if (masked) lines.push(`Here is the status of application for ${maskName(name)}:`);
+  else lines.push(name ? `Hi ${name}, here is your application status:` : "Here is your application status:");
   lines.push("");
 
   rows.forEach((r, i) => {
@@ -120,45 +197,59 @@ function buildReply(rows, { intro } = {}) {
     lines.push("");
   });
 
-  lines.push("For any help, reply *Staff* to talk to our team.");
-  return lines.join("\n");
+  return lines.join("\n").trim();
 }
 
 router.post("/track-application", async (req, res) => {
-  // Simple shared-secret check so only our bot can call this
-  if (BOT_API_KEY && req.get("x-bot-key") !== BOT_API_KEY) {
+  if (!botAuthOk(req)) {
     return res.status(401).json({ found: false, reply: "Sorry, something went wrong. Please try again later." });
   }
 
   try {
-    const query = String(req.body?.query || req.body?.application_number || "").trim();
+    const query = clean(req.body?.query || req.body?.application_number) || "";
     const waPhone = last10(req.body?.wa_phone || req.body?.phone);
-    const queryDigits = query.replace(/\D/g, "");
-    const queryIsPhone = queryDigits.length >= 10 && queryDigits.length <= 13 && /^[\d\s+()-]+$/.test(query);
+    const queryIsPhone = isPhoneLike(query);
+
+    const conv = await findActiveWaConversation(waPhone);
+    const centreId = conv?.centre_id || null;
 
     let rows = [];
     let note = null;
+    let masked = false;
 
-    // 1. Application number
+    // 1. Application number (may exist in more than one centre)
     if (query && !queryIsPhone) {
-      rows = await findByApplicationNumber(query);
+      const matches = await findByApplicationNumber(query);
+      const picked = pickApplication(matches, waPhone, centreId);
+      if (picked.ambiguous) {
+        return res.json({
+          found: false,
+          count: 0,
+          reply:
+            `We found more than one application with number *${query}*.\n` +
+            "Please send your registered phone number so we can show the right one.",
+        });
+      }
+      rows = picked.rows;
+      if (rows.length && rows.some((r) => last10(r.phone) !== waPhone)) masked = true;
       if (!rows.length) note = `We couldn't find application number *${query}*.`;
     }
 
     // 2. Phone number typed by the customer
     if (!rows.length && queryIsPhone) {
-      const typed = last10(queryDigits);
+      const typed = last10(query);
       if (typed === waPhone || ALLOW_OTHER_PHONE_LOOKUP) {
-        rows = await findByPhone(typed);
+        rows = await findByPhone(typed, centreId);
+        masked = typed !== waPhone;
       } else {
-        // Privacy: don't show another person's applications
         note = "For privacy, we can only show applications linked to the number you are chatting from.";
       }
     }
 
     // 3. Fall back to the WhatsApp number they are chatting from
     if (!rows.length && waPhone) {
-      rows = await findByPhone(waPhone);
+      rows = await findByPhone(waPhone, centreId);
+      masked = false;
       if (rows.length && note) note += "\nBut we found these applications for your WhatsApp number:";
     }
 
@@ -168,20 +259,21 @@ router.post("/track-application", async (req, res) => {
         count: 0,
         reply:
           (note ? note + "\n\n" : "") +
-          "We couldn't find any application for this number. Please check the application number and try again, or reply *Staff* to talk to our team.",
+          "We couldn't find any application for this number. Please check the number and try again.",
       });
     }
 
     return res.json({
       found: true,
       count: rows.length,
-      reply: buildReply(rows, { intro: note || undefined }),
+      application_number: rows.length === 1 ? rows[0].application_number : "",
+      reply: buildReply(rows, { intro: note || undefined, masked }),
     });
   } catch (err) {
     console.error("[track-application] Error:", err);
     return res.status(500).json({
       found: false,
-      reply: "Sorry, we couldn't check the status right now. Please try again later or reply *Staff*.",
+      reply: "Sorry, we couldn't check the status right now. Please try again later.",
     });
   }
 });
@@ -378,38 +470,15 @@ router.post("/service-documents", async (req, res) => {
            "customer_details": "{{customer_details}}",
            "docs_ready": "{{docs_ready}}" }
 
-   Centre: the bot can't tell which number the customer wrote to, so we use
-   the WhatsApp conversation in Sahayi that most recently received a message
-   from this phone (the Messenger webhook already stores centre_id on it).
-   Duplicate protection: an open lead for the same phone + centre in the last
-   7 days is updated instead of creating a new one.
+   Centre = the centre whose WhatsApp number the customer just messaged
+   (findActiveWaConversation). A customer of centres A, B and C gets a
+   separate lead in each centre they enquire with.
+   Duplicate protection: an open lead for the same phone + centre in the
+   last 7 days is updated instead of creating a new one.
    ===================================================================== */
 
-// Libromi sends "{{var}}" literally when a variable is empty — treat that as empty
-const clean = (v) => {
-  const s = String(v ?? "").trim();
-  return !s || /^\{\{.*\}\}$/.test(s) ? null : s.slice(0, 1000);
-};
-
-async function findCentreForPhone(phone10) {
-  const { rows } = await pool.query(
-    `SELECT c.centre_id
-     FROM chat_conversations c
-     JOIN chat_messages m ON m.conversation_id = c.id
-     WHERE c.channel = 'whatsapp'
-       AND c.centre_id IS NOT NULL
-       AND RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10) = $1
-     ORDER BY m.created_at DESC
-     LIMIT 1`,
-    [phone10]
-  );
-  return rows[0]?.centre_id || null;
-}
-
 router.post("/create-lead", async (req, res) => {
-  if (BOT_API_KEY && req.get("x-bot-key") !== BOT_API_KEY) {
-    return res.status(401).json({ ok: false });
-  }
+  if (!botAuthOk(req)) return res.status(401).json({ ok: false });
 
   try {
     const phone = last10(req.body?.wa_phone || req.body?.phone);
@@ -424,7 +493,8 @@ router.post("/create-lead", async (req, res) => {
       docs_ready: clean(req.body?.docs_ready),
     };
 
-    const centreId = await findCentreForPhone(phone);
+    const conv = await findActiveWaConversation(phone);
+    const centreId = conv?.centre_id || null;
 
     // Existing customer? (helps staff; not required)
     const cust = await pool.query(
@@ -435,7 +505,6 @@ router.post("/create-lead", async (req, res) => {
     );
     const customerId = cust.rows[0]?.id || null;
 
-    // Update an open lead from the last 7 days instead of duplicating
     const existing = await pool.query(
       `SELECT id FROM leads
        WHERE phone = $1
@@ -472,7 +541,6 @@ router.post("/create-lead", async (req, res) => {
       lead = rows[0];
     }
 
-    // Live alert for staff of that centre (and superadmins listening to all)
     const io = req.io || req.app.get("io");
     if (io) {
       const payload = { lead, message: `New WhatsApp lead: ${data.service_needed || "Service enquiry"}` };
@@ -485,6 +553,152 @@ router.post("/create-lead", async (req, res) => {
   } catch (err) {
     console.error("[create-lead] Error:", err);
     return res.status(500).json({ ok: false });
+  }
+});
+
+/* =====================================================================
+   🤖 BOT: TALK TO STAFF → connect to the staff who handled the application
+   POST /api/whatsapp/connect-staff
+   Header: x-bot-key: <BOT_API_KEY>
+   Body: { "wa_phone": "{{STAT_PHONE}}", "query": "{{status_query}}" }
+   Reply: { ok, staff_name, reply }   → bot sends `reply`, then disables itself
+
+   Who gets the chat (always someone from the centre the customer messaged,
+   because replies go out from that centre's number):
+     1. Staff handling the customer's application IN THIS CENTRE
+        (service_tracking.assigned_to, else service_entries.staff_id),
+        if Active and belonging to this centre
+     2. Staff already assigned to this WhatsApp chat, if Active in this centre
+     3. Centre admin
+   Only this centre's applications are considered.
+   ===================================================================== */
+
+async function activeStaffInCentre(ids, centreId) {
+  const list = ids.filter(Boolean).map(Number);
+  if (!list.length || !centreId) return null;
+  const { rows } = await pool.query(
+    `SELECT id, name, centre_id FROM staff
+     WHERE id = ANY($1::int[]) AND status = 'Active' AND centre_id = $2`,
+    [list, centreId]
+  );
+  // keep the priority order of `ids`
+  for (const id of list) {
+    const s = rows.find((r) => Number(r.id) === id);
+    if (s) return s;
+  }
+  return null;
+}
+
+router.post("/connect-staff", async (req, res) => {
+  const fallbackReply = "Sure! One of our staff will reply to you here shortly. 🙏";
+  if (!botAuthOk(req)) return res.status(401).json({ ok: false, reply: fallbackReply });
+
+  try {
+    const waPhone = last10(req.body?.wa_phone || req.body?.phone);
+    const query = clean(req.body?.query);
+
+    const conv = await findActiveWaConversation(waPhone);
+    if (!conv || !conv.centre_id) {
+      console.warn(`[connect-staff] No WhatsApp conversation found for ${waPhone}`);
+      return res.json({ ok: false, reply: fallbackReply });
+    }
+    const centreId = conv.centre_id;
+
+    // --- 1. Which application is this about? ---
+    let candidates = [];
+    if (query && !isPhoneLike(query)) {
+      const matches = await findByApplicationNumber(query);
+      // only applications of this centre
+      candidates = matches.filter((r) => Number(r.centre_id) === Number(centreId));
+    }
+    if (!candidates.length) candidates = await findByPhone(waPhone, centreId); // this centre only, newest first
+
+    const appHere = candidates[0] || null;
+
+    // --- 2. Pick the staff member (always from this centre) ---
+    let staff = null;
+    let reason = "";
+    if (appHere) {
+      staff = await activeStaffInCentre([appHere.assigned_to, appHere.staff_id], centreId);
+      if (staff) reason = `handles application ${appHere.application_number || "#" + appHere.service_entry_id}`;
+    }
+    if (!staff && conv.assigned_staff_id) {
+      staff = await activeStaffInCentre([conv.assigned_staff_id], centreId);
+      if (staff) reason = "already assigned to this chat";
+    }
+    let toAdmin = false;
+    if (!staff && conv.admin_id) {
+      const { rows } = await pool.query(`SELECT id, name, centre_id FROM staff WHERE id = $1`, [conv.admin_id]);
+      staff = rows[0] || null;
+      toAdmin = !!staff;
+      reason = "centre admin (no handling staff found)";
+    }
+
+    // --- 3. Assign the chat ---
+    const io = req.io || req.app.get("io");
+    if (staff) {
+      await addStaffToConversation(conv.id, staff.id, "owner");
+      await pool.query(
+        `UPDATE chat_conversations
+         SET assigned_staff_id = $2, status = 'active', updated_at = NOW()
+         WHERE id = $1`,
+        [conv.id, staff.id]
+      );
+
+      // Lead for this phone + centre → give it to the same person if nobody has it
+      try {
+        await pool.query(
+          `UPDATE leads SET assigned_to = $3, updated_at = NOW()
+           WHERE phone = $1 AND centre_id = $2 AND assigned_to IS NULL
+             AND status IN ('new', 'contacted', 'follow_up')`,
+          [waPhone, centreId, staff.id]
+        );
+      } catch (e) {
+        /* leads table not deployed yet — ignore */
+      }
+    }
+
+    // --- 4. Internal note in the chat (customer does not see this) ---
+    const noteParts = ["🙋 Customer asked to talk to staff."];
+    if (appHere) {
+      const svc = [appHere.service_name, appHere.subcategory_name].filter(Boolean).join(" – ");
+      noteParts.push(`Application: ${appHere.application_number || "-"}${svc ? ` (${svc})` : ""}, status: ${appHere.status}.`);
+    }
+    noteParts.push(staff ? `Connected to ${staff.name} — ${reason}.` : "No staff could be assigned automatically.");
+    await sendSystemMessage(conv.id, noteParts.join("\n"), io);
+
+    // --- 5. Live alert for the chosen staff member ---
+    if (io && staff) {
+      const unread = await getUnreadCount(staff.id, conv.id);
+      io.to(`user:${staff.id}`).emit("unread_update", { conversationId: Number(conv.id), unread });
+      io.to(`user:${staff.id}`).emit("conversation_updated", {
+        conversationId: Number(conv.id),
+        lastMessage: "🙋 Customer asked to talk to staff",
+        lastMessageSender: "System",
+        time: new Date().toISOString(),
+        unread,
+      });
+      io.to(`user:${staff.id}`).emit("staff_requested", {
+        conversationId: Number(conv.id),
+        phone: waPhone,
+        centreId,
+        applicationNumber: appHere?.application_number || null,
+        message: "A customer wants to talk to you on WhatsApp",
+      });
+    }
+
+    console.log(`[connect-staff] ${waPhone} → staff ${staff?.id ?? "none"} (centre ${centreId}, ${reason})`);
+
+    const centreLabel = conv.centre_name ? ` at ${conv.centre_name}` : "";
+    const reply =
+      staff && !toAdmin
+        ? `You're now connected to *${staff.name}*${centreLabel}. They will reply to you here shortly. 🙏`
+        : `Sure! Our team${centreLabel} will reply to you here shortly. 🙏`;
+
+    return res.json({ ok: !!staff, staff_name: staff && !toAdmin ? staff.name : "", reply });
+  } catch (err) {
+    console.error("[connect-staff] Error:", err);
+    return res.status(500).json({ ok: false, reply: fallbackReply });
   }
 });
 
