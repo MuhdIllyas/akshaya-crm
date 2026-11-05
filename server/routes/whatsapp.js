@@ -539,6 +539,10 @@ router.post("/create-lead", async (req, res) => {
         [centreId, phone, data.whatsapp_name, data.customer_details, data.service_needed, data.docs_ready, customerId]
       );
       lead = rows[0];
+      await pool.query(
+        `INSERT INTO lead_activities (lead_id, staff_id, action, details) VALUES ($1, NULL, 'created', $2)`,
+        [lead.id, `From WhatsApp bot${data.docs_ready ? ` · Documents: ${data.docs_ready}` : ""}`]
+      ).catch((e) => console.warn("[create-lead] activity log skipped:", e.message));
     }
 
     const io = req.io || req.app.get("io");
@@ -647,12 +651,19 @@ router.post("/connect-staff", async (req, res) => {
 
       // Lead for this phone + centre → give it to the same person if nobody has it
       try {
-        await pool.query(
+        const upd = await pool.query(
           `UPDATE leads SET assigned_to = $3, updated_at = NOW()
            WHERE phone = $1 AND centre_id = $2 AND assigned_to IS NULL
-             AND status IN ('new', 'contacted', 'follow_up')`,
+             AND status IN ('new', 'contacted', 'follow_up')
+           RETURNING id`,
           [waPhone, centreId, staff.id]
         );
+        for (const r of upd.rows) {
+          await pool.query(
+            `INSERT INTO lead_activities (lead_id, staff_id, action, details) VALUES ($1, NULL, 'assigned', $2)`,
+            [r.id, `Customer asked for staff on WhatsApp → assigned to ${staff.name}`]
+          );
+        }
       } catch (e) {
         /* leads table not deployed yet — ignore */
       }

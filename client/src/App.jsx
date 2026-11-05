@@ -38,6 +38,7 @@ import ServiceWorkspace from './components/ServiceWorkspace';
 import StaffPerformance from './pages/staff/StaffPerformance';
 import StaffAttendance from "./pages/staff/StaffAttendance";
 import ServiceEntry from "./pages/staff/ServiceEntry";
+import Leads from "./pages/leads/Leads";
 import ServiceRequirementsPrint from './pages/staff/ServiceRequirementsPrint';
 import ExpenseEntry from "./pages/staff/ExpenseEntry";
 import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
@@ -336,6 +337,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
+              path="admin/leads"
+              element={<ProtectedRoute allowedRoles={["admin"]}><Leads /></ProtectedRoute>}
+            />
+            <Route
               path="admin/operationshub"
               element={<ProtectedRoute allowedRoles={["admin", "supervisor"]}><OperationsHub /></ProtectedRoute>}
             />
@@ -432,6 +437,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["superadmin"]}><Messenger /></ProtectedRoute>}
             />
             <Route
+              path="superadmin/leads"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><Leads /></ProtectedRoute>}
+            />
+            <Route
               path="superadmin/operationshub"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><OperationsHub /></ProtectedRoute>}
             />
@@ -484,6 +493,10 @@ const App = () => {
             <Route
               path="staff/service_entry"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><ServiceEntry /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/leads"
+              element={<ProtectedRoute allowedRoles={["staff"]}><Leads /></ProtectedRoute>}
             />
             <Route
               path="staff/service_checklist"

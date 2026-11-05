@@ -82,6 +82,9 @@ import contactRoutes from "./routes/contact.js";
 //Task Automations
 import automationRoutes from "./routes/automations.js";
 
+//Leads Routes
+import leadsRoutes from "./routes/leads.js";
+
 import "./routes/scheduler.js";
 
 const { Pool } = pkg;
@@ -474,6 +477,9 @@ app.use("/api/contact", contactRoutes);
 
 /* Task Automations */
 app.use("/api/automations", automationRoutes);
+
+/* Leads Routes */
+app.use("/api/leads", leadsRoutes);
 
 /* ================================
    STATIC FILES
