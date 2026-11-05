@@ -21,6 +21,7 @@ const DashboardLayout = () => {
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
   const [unreadNotesCount, setUnreadNotesCount] = useState(0);
+  const [newLeadsCount, setNewLeadsCount] = useState(0);
   const [socketConnected, setSocketConnected] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
@@ -84,11 +85,28 @@ const DashboardLayout = () => {
     }
   };
 
+  // New leads waiting for a reply (badge on "Leads")
+  const hasLeads = ["staff", "admin", "superadmin"].includes(role);
+  const fetchNewLeadsCount = async () => {
+    if (!token || !hasLeads) return;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/leads/summary`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setNewLeadsCount(Number(data.new) || 0);
+    } catch (err) {
+      console.error('Error fetching leads count:', err);
+    }
+  };
+
   // Initial fetch on component mount
   useEffect(() => {
     if (token && currentUserId) {
       fetchAllUnreadCounts();
       fetchUnreadNotesCount();
+      fetchNewLeadsCount();
     }
   }, [token, currentUserId]);
 
@@ -103,6 +121,14 @@ const DashboardLayout = () => {
       setSocketConnected(true);
       fetchAllUnreadCounts();
       fetchUnreadNotesCount();
+      fetchNewLeadsCount();
+    };
+
+    // A lead was created or changed anywhere → refresh the badge (server counts only this user's centre)
+    let leadsTimer;
+    const handleLeadsChange = () => {
+      clearTimeout(leadsTimer);
+      leadsTimer = setTimeout(fetchNewLeadsCount, 500);
     };
 
     const handleUnreadNotesUpdate = () => {
@@ -137,6 +163,8 @@ const DashboardLayout = () => {
     socket.on("new_message", handleNewMessage);
     socket.on("messages_read", handleMessagesRead);
     socket.on("disconnect", handleDisconnect);
+    socket.on("new_lead_global", handleLeadsChange);
+    socket.on("lead_changed_global", handleLeadsChange);
 
     // If socket is already connected when this component mounts, run logic manually
     if (socket.connected) {
@@ -151,6 +179,9 @@ const DashboardLayout = () => {
       socket.off("new_message", handleNewMessage);
       socket.off("messages_read", handleMessagesRead);
       socket.off("disconnect", handleDisconnect);
+      socket.off("new_lead_global", handleLeadsChange);
+      socket.off("lead_changed_global", handleLeadsChange);
+      clearTimeout(leadsTimer);
     };
   }, [token, currentUserId]);
 
@@ -164,6 +195,7 @@ const DashboardLayout = () => {
         console.log("Polling for unread counts...");
         fetchAllUnreadCounts();
         fetchUnreadNotesCount();
+        fetchNewLeadsCount();
       }
     }, 15000); // Poll every 15 seconds as fallback
     
@@ -224,6 +256,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
       { path: "/dashboard/superadmin/teams", label: "Teams", icon: TeamIcon },
       { path: "/dashboard/superadmin/notifications", label: "Notifications", icon: NotificationsIconWithBadge },
+      { path: "/dashboard/superadmin/leads", label: "Leads", icon: LeadsIconWithBadge },
       { path: "/dashboard/superadmin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/superadmin/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/superadmin/campaigns", label: "Campaigns", icon: CampaignIcon },
@@ -244,6 +277,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/admin/attendancemanagement", label: "Salary Calculations", icon: SalaryIcon },
       { path: "/dashboard/admin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
       { path: "/dashboard/admin/notifications", label: "Notifications", icon: NotificationsIconWithBadge },
+      { path: "/dashboard/admin/leads", label: "Leads", icon: LeadsIconWithBadge },
       { path: "/dashboard/admin/messenger", label: "Messenger", icon: MessengerIconWithBadge },
       { path: "/dashboard/admin/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
       { path: "/dashboard/admin/teams", label: "Teams", icon: TeamIcon },
@@ -260,6 +294,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/performance", label: "Performance", icon: ChartIcon },
       { path: "/dashboard/staff/attendance", label: "Salary & Attendance", icon: SalaryAttendanceIcon },
       { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
+      { path: "/dashboard/staff/leads", label: "Leads", icon: LeadsIconWithBadge },
       { path: "/dashboard/staff/expense_entry", label: "Expense Entry", icon: ExpenseEntryIcon },
       { path: "/dashboard/staff/pending_payments", label: "Pending Payments", icon: PendingPaymentIcon },
       { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIconWithBadge }, 
@@ -380,6 +415,7 @@ const DashboardLayout = () => {
               const isMessenger = item.label === "Messenger";
               const isNotes = item.label === "Notes";
               const isNotifications = item.label === "Notifications";
+              const isLeads = item.label === "Leads";
               
               return (
                 <Link 
@@ -404,7 +440,8 @@ const DashboardLayout = () => {
                       unreadCount={
                         isMessenger ? unreadCount : 
                         isNotes ? unreadNotesCount : 
-                        isNotifications ? notificationsCount : 0 
+                        isNotifications ? notificationsCount :
+                        isLeads ? newLeadsCount : 0 
                       }
                     />
                   </div>
@@ -432,6 +469,12 @@ const DashboardLayout = () => {
                       {isNotes && unreadNotesCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
                           {unreadNotesCount > 99 ? '99+' : unreadNotesCount}
+                        </span>
+                      )}
+
+                      {isLeads && newLeadsCount > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {newLeadsCount > 99 ? '99+' : newLeadsCount}
                         </span>
                       )}
 
@@ -546,7 +589,7 @@ const DashboardLayout = () => {
             aria-controls="app-sidebar"
           >
             <MenuIcon />
-            {(unreadCount + unreadNotesCount + (notificationsCount || 0)) > 0 && (
+            {(unreadCount + unreadNotesCount + (notificationsCount || 0) + newLeadsCount) > 0 && (
               <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-navy-800"></span>
             )}
           </button>
@@ -709,6 +752,28 @@ const NotificationsIconWithBadge = ({ isActive = false, isCollapsed = false, unr
       <span className={`absolute ${
         isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
       } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
+      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+        {unreadCount > 99 ? '99+' : unreadCount}
+      </span>
+    )}
+  </div>
+);
+
+// Leads Icon with Badge (new leads waiting for a reply)
+const LeadsIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount = 0 }) => (
+  <div className="relative inline-block">
+    <svg
+      className={isCollapsed ? "w-6 h-6" : "w-5 h-5"}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={isActive ? 2.2 : 1.8} d="M3 4h18l-7 8.5V19l-4 2v-8.5L3 4z" />
+    </svg>
+    {unreadCount > 0 && (
+      <span className={`absolute ${
+        isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
+      } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px]
       flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
         {unreadCount > 99 ? '99+' : unreadCount}
       </span>
