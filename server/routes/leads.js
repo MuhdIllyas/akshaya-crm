@@ -25,7 +25,8 @@ const OPEN = ["new", "contacted", "follow_up"];
 const STATUS_LABEL = { new: "New", contacted: "Contacted", follow_up: "Follow-up", converted: "Converted", lost: "Lost" };
 
 const isSuper = (u) => u.role === "superadmin";
-const isManager = (u) => ["admin", "superadmin", "supervisor"].includes(u.role);
+// Only admin and superadmin assign / reassign leads. Staff and supervisors can only take a free lead for themselves.
+const isManager = (u) => ["admin", "superadmin"].includes(u.role);
 const myId = (u) => parseInt(u.id);
 const myCentre = (u) => (u.centre_id ? parseInt(u.centre_id) : null);
 const last10 = (v) => String(v || "").replace(/\D/g, "").slice(-10);
@@ -398,7 +399,7 @@ router.patch("/:id", async (req, res) => {
           return res.status(403).json({ error: "You can only take a lead for yourself. Ask your admin to assign others." });
         }
         if (takingForSelf && lead.assigned_to && lead.assigned_to !== me) {
-          return res.status(409).json({ error: "Someone else already took this lead" });
+          return res.status(409).json({ error: "Someone else already has this lead. Ask your admin to reassign it." });
         }
       }
       if (newAssignee) {
@@ -435,8 +436,11 @@ router.patch("/:id", async (req, res) => {
       add("assigned_to", newAssignee);
       if (newAssignee === me && !isManager(req.user)) acts.push(["claimed", null]);
       else if (newAssignee) {
-        const n = await client.query(`SELECT name FROM staff WHERE id = $1`, [newAssignee]);
-        acts.push(["assigned", `Assigned to ${n.rows[0]?.name}`]);
+        const n = await client.query(`SELECT id, name FROM staff WHERE id = ANY($1::int[])`, [[newAssignee, lead.assigned_to].filter(Boolean)]);
+        const nameOf = (id) => n.rows.find((r) => r.id === id)?.name || "someone";
+        acts.push(["assigned", lead.assigned_to
+          ? `Reassigned from ${nameOf(lead.assigned_to)} to ${nameOf(newAssignee)}`
+          : `Assigned to ${nameOf(newAssignee)}`]);
       } else acts.push(["assigned", "Unassigned"]);
     }
     if (follow_up_date !== undefined) {

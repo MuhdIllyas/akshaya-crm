@@ -53,7 +53,8 @@ function readUser(user) {
   };
 }
 
-const isManagerRole = (r) => ["admin", "superadmin", "supervisor"].includes(r);
+// Only admin and superadmin can assign / reassign leads
+const isManagerRole = (r) => ["admin", "superadmin"].includes(r);
 
 function timeAgo(v) {
   if (!v) return "";
@@ -348,6 +349,12 @@ export default function Leads({ user }) {
                                   {(l.assigned_to_name || "?")[0]}
                                 </span>
                                 {l.assigned_to === me.id ? "You" : l.assigned_to_name}
+                                {manager && ["new", "contacted", "follow_up"].includes(l.status) && (
+                                  <button type="button" onClick={() => setSelectedId(l.id)}
+                                          className="text-xs font-semibold text-navy-700 underline underline-offset-2 hover:text-navy-800">
+                                    Change
+                                  </button>
+                                )}
                               </span>
                             ) : ["new", "contacted", "follow_up"].includes(l.status) ? (
                               manager ? (
@@ -577,13 +584,13 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
 
         {/* Assignment */}
         <div className="flex items-center justify-between gap-3 text-sm">
-          <span className="text-gray-600">Assigned to</span>
+          <label htmlFor="lead-assign" className="text-gray-600">{manager && lead.assigned_to ? "Reassign to" : "Assigned to"}</label>
           {manager ? (
             <select
               value={lead.assigned_to || ""}
               onChange={(e) => onPatch(lead, { assigned_to: e.target.value || null }, "Assignment saved")}
+              id="lead-assign"
               className="h-10 border border-gray-300 rounded-lg px-2 text-sm bg-white max-w-[60%]"
-              aria-label="Assign to staff"
             >
               <option value="">Not assigned – pick staff</option>
               {lead.assigned_to && !staff.some((s) => s.id === lead.assigned_to) && (
