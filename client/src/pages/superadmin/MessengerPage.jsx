@@ -313,7 +313,8 @@ const MessengerPage = ({ user }) => {
     role: user?.role || decodedPayload?.role || localStorage.getItem("role") || "staff", 
     id: user?.id || decodedPayload?.id || 1,
     centreId: user?.centre_id || decodedPayload?.centre_id || localStorage.getItem("centreId") || null,
-    name: user?.name || decodedPayload?.username || "Current User",
+    // The login token only carries the username; the display name is saved at login as "name"
+    name: user?.name || localStorage.getItem("name") || decodedPayload?.name || decodedPayload?.username || "Current User",
     username: user?.username || decodedPayload?.username || ""
   };
 
