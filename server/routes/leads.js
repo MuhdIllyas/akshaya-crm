@@ -25,7 +25,8 @@ const OPEN = ["new", "contacted", "follow_up"];
 const STATUS_LABEL = { new: "New", contacted: "Contacted", follow_up: "Follow-up", converted: "Converted", lost: "Lost" };
 
 const isSuper = (u) => u.role === "superadmin";
-const isManager = (u) => ["admin", "superadmin", "supervisor"].includes(u.role);
+// Only admin and superadmin assign / reassign leads. Staff and supervisors can only take a free lead for themselves.
+const isManager = (u) => ["admin", "superadmin"].includes(u.role);
 const myId = (u) => parseInt(u.id);
 const myCentre = (u) => (u.centre_id ? parseInt(u.centre_id) : null);
 const last10 = (v) => String(v || "").replace(/\D/g, "").slice(-10);
@@ -124,6 +125,9 @@ router.get("/", async (req, res) => {
                   AND re.created_at >= l.created_at - INTERVAL '1 day'
                 ORDER BY re.created_at ASC LIMIT 1) AS matched_entry_id,
               to_char(l.follow_up_date, 'YYYY-MM-DD') AS follow_up_day,
+              -- The database keeps IST wall-clock time; send it with its offset so browsers read it right
+              to_char(l.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS created_at_ist,
+              to_char(l.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS updated_at_ist,
               (l.status = 'follow_up' AND l.follow_up_date IS NOT NULL AND l.follow_up_date <= CURRENT_DATE) AS follow_up_due
        FROM leads l
        LEFT JOIN staff a   ON a.id = l.assigned_to
@@ -275,7 +279,9 @@ router.get("/:id/activity", async (req, res) => {
     const { error } = await loadLeadForUser(parseInt(req.params.id), req.user);
     if (error) return res.status(error[0]).json({ error: error[1] });
     const { rows } = await pool.query(
-      `SELECT la.id, la.action, la.details, la.created_at, s.name AS staff_name
+      `SELECT la.id, la.action, la.details, la.created_at,
+              to_char(la.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS created_at_ist,
+              s.name AS staff_name
        FROM lead_activities la
        LEFT JOIN staff s ON s.id = la.staff_id
        WHERE la.lead_id = $1
@@ -398,7 +404,7 @@ router.patch("/:id", async (req, res) => {
           return res.status(403).json({ error: "You can only take a lead for yourself. Ask your admin to assign others." });
         }
         if (takingForSelf && lead.assigned_to && lead.assigned_to !== me) {
-          return res.status(409).json({ error: "Someone else already took this lead" });
+          return res.status(409).json({ error: "Someone else already has this lead. Ask your admin to reassign it." });
         }
       }
       if (newAssignee) {
@@ -435,8 +441,11 @@ router.patch("/:id", async (req, res) => {
       add("assigned_to", newAssignee);
       if (newAssignee === me && !isManager(req.user)) acts.push(["claimed", null]);
       else if (newAssignee) {
-        const n = await client.query(`SELECT name FROM staff WHERE id = $1`, [newAssignee]);
-        acts.push(["assigned", `Assigned to ${n.rows[0]?.name}`]);
+        const n = await client.query(`SELECT id, name FROM staff WHERE id = ANY($1::int[])`, [[newAssignee, lead.assigned_to].filter(Boolean)]);
+        const nameOf = (id) => n.rows.find((r) => r.id === id)?.name || "someone";
+        acts.push(["assigned", lead.assigned_to
+          ? `Reassigned from ${nameOf(lead.assigned_to)} to ${nameOf(newAssignee)}`
+          : `Assigned to ${nameOf(newAssignee)}`]);
       } else acts.push(["assigned", "Unassigned"]);
     }
     if (follow_up_date !== undefined) {

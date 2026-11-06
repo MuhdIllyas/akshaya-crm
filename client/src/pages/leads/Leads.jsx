@@ -53,8 +53,10 @@ function readUser(user) {
   };
 }
 
-const isManagerRole = (r) => ["admin", "superadmin", "supervisor"].includes(r);
+// Only admin and superadmin can assign / reassign leads
+const isManagerRole = (r) => ["admin", "superadmin"].includes(r);
 
+// Pass the "_ist" timestamps from the API (they carry +05:30); plain DB timestamps are IST wall time
 function timeAgo(v) {
   if (!v) return "";
   const d = new Date(v);
@@ -93,11 +95,12 @@ function whenText(l) {
   if (l.status === "follow_up" && l.follow_up_day) {
     return { text: l.follow_up_due ? `Due ${l.follow_up_day === todayStr() ? "today" : fmtDay(l.follow_up_day)}` : `On ${fmtDay(l.follow_up_day)}`, late: l.follow_up_due };
   }
-  return { text: timeAgo(l.created_at), late: l.status === "new" && Date.now() - new Date(l.created_at).getTime() > 30 * 60000 };
+  const created = l.created_at_ist || l.created_at;
+  return { text: timeAgo(created), late: l.status === "new" && Date.now() - new Date(created).getTime() > 30 * 60000 };
 }
 
 const ACTIVITY_TEXT = {
-  created: "Lead created", claimed: "Took the lead", assigned: "Assignment changed",
+  created: "Lead created", enquiry: "New enquiry from bot", claimed: "Took the lead", assigned: "Assignment changed",
   status: "Status changed", follow_up: "Follow-up set", note: "Note",
   lost: "Marked lost", converted: "Converted", chat_opened: "Opened chat",
 };
@@ -348,6 +351,12 @@ export default function Leads({ user }) {
                                   {(l.assigned_to_name || "?")[0]}
                                 </span>
                                 {l.assigned_to === me.id ? "You" : l.assigned_to_name}
+                                {manager && ["new", "contacted", "follow_up"].includes(l.status) && (
+                                  <button type="button" onClick={() => setSelectedId(l.id)}
+                                          className="text-xs font-semibold text-navy-700 underline underline-offset-2 hover:text-navy-800">
+                                    Change
+                                  </button>
+                                )}
                               </span>
                             ) : ["new", "contacted", "follow_up"].includes(l.status) ? (
                               manager ? (
@@ -485,7 +494,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
     api(`/${lead.id}/activity`).then(setActivity).catch(() => setActivity([]));
   }, [api, lead.id]);
 
-  useEffect(() => { loadActivity(); }, [loadActivity, lead.updated_at]);
+  useEffect(() => { loadActivity(); }, [loadActivity, lead.updated_at_ist, lead.updated_at]);
   useEffect(() => {
     const onKey = (e) => e.key === "Escape" && onClose();
     document.addEventListener("keydown", onKey);
@@ -558,7 +567,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
             <h2 className="text-xl font-bold text-gray-900 truncate">{leadName(lead)}</h2>
             <div className="text-sm text-gray-700">{fmtPhone(lead.phone)}</div>
             <div className="text-xs text-gray-600 mt-0.5">
-              {SOURCE_LABEL[lead.source] || lead.source}{lead.centre_name ? ` · ${lead.centre_name}` : ""} · {timeAgo(lead.created_at)}
+              {SOURCE_LABEL[lead.source] || lead.source}{lead.centre_name ? ` · ${lead.centre_name}` : ""} · {timeAgo(lead.created_at_ist || lead.created_at)}
             </div>
           </div>
           <span className={`text-xs font-semibold rounded-full px-3 py-1 whitespace-nowrap ${STATUS[lead.status].chip}`}>{STATUS[lead.status].label}</span>
@@ -577,13 +586,13 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
 
         {/* Assignment */}
         <div className="flex items-center justify-between gap-3 text-sm">
-          <span className="text-gray-600">Assigned to</span>
+          <label htmlFor="lead-assign" className="text-gray-600">{manager && lead.assigned_to ? "Reassign to" : "Assigned to"}</label>
           {manager ? (
             <select
               value={lead.assigned_to || ""}
               onChange={(e) => onPatch(lead, { assigned_to: e.target.value || null }, "Assignment saved")}
+              id="lead-assign"
               className="h-10 border border-gray-300 rounded-lg px-2 text-sm bg-white max-w-[60%]"
-              aria-label="Assign to staff"
             >
               <option value="">Not assigned – pick staff</option>
               {lead.assigned_to && !staff.some((s) => s.id === lead.assigned_to) && (
@@ -721,7 +730,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
                   {" · "}{ACTIVITY_TEXT[a.action] || a.action}
                 </div>
                 {a.details && <div className={`text-gray-700 ${a.action === "note" ? "whitespace-pre-line bg-gray-50 rounded-lg px-3 py-2 mt-1" : ""}`}>{a.details}</div>}
-                <div className="text-xs text-gray-500 mt-0.5">{timeAgo(a.created_at)}</div>
+                <div className="text-xs text-gray-500 mt-0.5">{timeAgo(a.created_at_ist || a.created_at)}</div>
               </div>
             </div>
           ))}

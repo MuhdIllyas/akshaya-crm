@@ -536,6 +536,10 @@ router.post("/create-lead", async (req, res) => {
         [existing.rows[0].id, data.whatsapp_name, data.customer_details, data.service_needed, data.docs_ready, customerId]
       );
       lead = rows[0];
+      await pool.query(
+        `INSERT INTO lead_activities (lead_id, staff_id, action, details) VALUES ($1, NULL, 'enquiry', $2)`,
+        [lead.id, `Customer asked again on WhatsApp: ${data.service_needed || "service"}${data.docs_ready ? ` · Documents: ${data.docs_ready}` : ""}`]
+      ).catch((e) => console.warn("[create-lead] activity log skipped:", e.message));
     } else {
       const { rows } = await pool.query(
         `INSERT INTO leads (centre_id, phone, whatsapp_name, customer_details, service_needed, docs_ready, customer_id)
@@ -622,18 +626,55 @@ router.post("/connect-staff", async (req, res) => {
     }
     if (!candidates.length) candidates = await findByPhone(waPhone, centreId); // this centre only, newest first
 
-    const appHere = candidates[0] || null;
+    // Prefer an application that is still being worked on; a finished one is only a last resort
+    const DONE = ["completed", "paid", "rejected"];
+    const openApp = candidates.find((r) => !DONE.includes(r.status)) || null;
+    const doneApp = !openApp ? candidates[0] || null : null;
+    const appHere = openApp || doneApp;
 
-    // --- 2. Pick the staff member (always from this centre) ---
+    // Open lead for this customer at this centre (the enquiry staff are already handling)
+    let openLead = null;
+    try {
+      const { rows } = await pool.query(
+        `SELECT id, assigned_to, service_needed, updated_at FROM leads
+         WHERE phone = $1 AND centre_id = $2 AND status IN ('new', 'contacted', 'follow_up')
+         ORDER BY updated_at DESC LIMIT 1`,
+        [waPhone, centreId]
+      );
+      openLead = rows[0] || null;
+    } catch (e) {
+      /* leads table missing — ignore */
+    }
+
+    // --- 2. Pick the staff member (always active staff of this centre) ---
+    //   1. staff on an OPEN application or on the customer's open lead — whichever was touched last
+    //   2. staff already assigned to this chat
+    //   3. staff on their latest finished application
+    const appLabel = (r) =>
+      r.application_number || [r.service_name, r.subcategory_name].filter(Boolean).join(" – ") || `entry #${r.service_entry_id}`;
     let staff = null;
     let reason = "";
-    if (appHere) {
-      staff = await activeStaffInCentre([appHere.assigned_to, appHere.staff_id], centreId);
-      if (staff) reason = `handles application ${appHere.application_number || "#" + appHere.service_entry_id}`;
-    }
+    const tryApp = async () => {
+      if (staff || !openApp) return;
+      staff = await activeStaffInCentre([openApp.assigned_to, openApp.staff_id], centreId);
+      if (staff) reason = `handles open application ${appLabel(openApp)}`;
+    };
+    const tryLead = async () => {
+      if (staff || !openLead?.assigned_to) return;
+      staff = await activeStaffInCentre([openLead.assigned_to], centreId);
+      if (staff) reason = `has the customer's enquiry${openLead.service_needed ? ` (${openLead.service_needed})` : ""}`;
+    };
+    const leadIsNewer =
+      openLead && (!openApp || new Date(openLead.updated_at) > new Date(openApp.updated_at));
+    if (leadIsNewer) { await tryLead(); await tryApp(); }
+    else { await tryApp(); await tryLead(); }
     if (!staff && conv.assigned_staff_id) {
       staff = await activeStaffInCentre([conv.assigned_staff_id], centreId);
       if (staff) reason = "already assigned to this chat";
+    }
+    if (!staff && doneApp) {
+      staff = await activeStaffInCentre([doneApp.assigned_to, doneApp.staff_id], centreId);
+      if (staff) reason = `handled their last application ${appLabel(doneApp)}`;
     }
     // No staff found → the centre admin is alerted to ASSIGN someone.
     // Admins don't do service entries, so they never become the owner of the chat or the lead.
@@ -680,7 +721,7 @@ router.post("/connect-staff", async (req, res) => {
     const noteParts = ["🙋 Customer asked to talk to staff."];
     if (appHere) {
       const svc = [appHere.service_name, appHere.subcategory_name].filter(Boolean).join(" – ");
-      noteParts.push(`Application: ${appHere.application_number || "-"}${svc ? ` (${svc})` : ""}, status: ${appHere.status}.`);
+      noteParts.push(`Application: ${appHere.application_number ? `${appHere.application_number} · ` : ""}${svc || "service"} · ${appHere.status}.`);
     }
     if (staff && !toAdmin) noteParts.push(`Connected to ${staff.name} — ${reason}.`);
     else noteParts.push("No staff found for this customer — admin, please assign a staff member.");
