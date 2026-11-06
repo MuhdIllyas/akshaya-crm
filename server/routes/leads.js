@@ -419,7 +419,11 @@ router.patch("/:id", async (req, res) => {
     }
     if (follow_up_date !== undefined) {
       add("follow_up_date", follow_up_date || null);
-      if (follow_up_date) acts.push(["follow_up", `Follow-up on ${follow_up_date}`]);
+      if (follow_up_date) {
+        const [y, m, d] = String(follow_up_date).slice(0, 10).split("-").map(Number);
+        const nice = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+        acts.push(["follow_up", `Follow-up on ${nice}`]);
+      }
     }
     if (lost_reason !== undefined) {
       add("lost_reason", lost_reason || null);
