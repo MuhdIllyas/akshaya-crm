@@ -607,7 +607,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
           </div>
           <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2 text-sm">
             <dt className="text-gray-600">Service</dt><dd className="font-semibold text-gray-900">{lead.service_needed || "Not given"}</dd>
-            <dt className="text-gray-600">Name & place</dt><dd className="text-gray-900">{tidy(lead.customer_details) || "—"}</dd>
+            <dt className="text-gray-600">Name</dt><dd className="text-gray-900">{tidy(lead.customer_details) || "—"}</dd>
             {lead.whatsapp_name && (<><dt className="text-gray-600">WhatsApp name</dt><dd className="text-gray-900">{lead.whatsapp_name}</dd></>)}
             <dt className="text-gray-600">Documents</dt><dd><span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${docs.cls}`}>{docs.text}</span></dd>
             {lead.customer_id && (<><dt className="text-gray-600">Customer</dt><dd className="text-green-800 font-medium">Existing customer</dd></>)}
@@ -779,8 +779,8 @@ function AddLeadModal({ api, me, onClose, onSaved }) {
         <Field label="Service needed" required>
           <input required value={form.service_needed} onChange={set("service_needed")} placeholder="Eg: Passport – Fresh" className="input-lead" />
         </Field>
-        <Field label="Name and place">
-          <input value={form.customer_details} onChange={set("customer_details")} placeholder="Eg: Shameer, Vengara" className="input-lead" />
+        <Field label="Customer name">
+          <input value={form.customer_details} onChange={set("customer_details")} placeholder="Eg: Shameer" className="input-lead" />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           <Field label="How did they contact?">
