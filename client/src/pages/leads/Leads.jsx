@@ -76,7 +76,9 @@ function todayStr() {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD
 }
 
-const leadName = (l) => l.customer_details?.split(",")[0]?.trim() || l.whatsapp_name || "Unknown";
+// Older bot leads may contain a literal "\n" between name and place
+const tidy = (s) => String(s || "").replace(/\s*(?:\\n|\r?\n)+\s*/g, ", ").trim();
+const leadName = (l) => tidy(l.customer_details).split(",")[0]?.trim() || l.whatsapp_name || "Unknown";
 const fmtPhone = (p) => (p && p.length === 10 ? `+91 ${p.slice(0, 5)} ${p.slice(5)}` : p || "");
 
 function docsChip(d) {
@@ -233,8 +235,8 @@ export default function Leads({ user }) {
             className="h-11 border border-gray-300 rounded-lg px-3 text-sm bg-white"
           >
             <option value="all">All leads</option>
-            <option value="me">My leads</option>
-            <option value="unassigned">Not taken yet</option>
+            {!manager && <option value="me">My leads</option>}
+            <option value="unassigned">{manager ? "Not assigned yet" : "Not taken yet"}</option>
           </select>
           {me.role === "superadmin" && (
             <>
@@ -275,7 +277,11 @@ export default function Leads({ user }) {
         <Kpi label="New – waiting for reply" value={summary?.new} tone="text-blue-700"
              hint={summary?.unassigned ? `${summary.unassigned} not taken yet` : "All taken"} />
         <Kpi label="Follow-ups due" value={summary?.due_today} tone="text-amber-700" hint="Today or overdue" />
-        <Kpi label="My open leads" value={summary?.mine} tone="text-navy-700" hint="Assigned to you" />
+        {manager ? (
+          <Kpi label="Not assigned yet" value={summary?.unassigned} tone="text-navy-700" hint="Open a lead to assign a staff member" />
+        ) : (
+          <Kpi label="My open leads" value={summary?.mine} tone="text-navy-700" hint="Assigned to you" />
+        )}
         <Kpi label="Converted this month" value={summary?.converted_month} tone="text-green-700"
              hint={summary?.created_month ? `of ${summary.created_month} leads this month` : "This month"} />
       </div>
@@ -344,9 +350,15 @@ export default function Leads({ user }) {
                                 {l.assigned_to === me.id ? "You" : l.assigned_to_name}
                               </span>
                             ) : ["new", "contacted", "follow_up"].includes(l.status) ? (
-                              <button type="button" onClick={() => claim(l)} className="h-8 px-3 rounded-lg border border-navy-700 text-navy-700 text-xs font-semibold hover:bg-indigo-50">
-                                Take it
-                              </button>
+                              manager ? (
+                                <button type="button" onClick={() => setSelectedId(l.id)} className="h-8 px-3 rounded-lg border border-navy-700 text-navy-700 text-xs font-semibold hover:bg-indigo-50">
+                                  Assign
+                                </button>
+                              ) : (
+                                <button type="button" onClick={() => claim(l)} className="h-8 px-3 rounded-lg border border-navy-700 text-navy-700 text-xs font-semibold hover:bg-indigo-50">
+                                  Take it
+                                </button>
+                              )
                             ) : <span className="text-gray-500">—</span>}
                           </td>
                           <td className="px-3 py-3"><span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${STATUS[l.status].chip}`}>{STATUS[l.status].label}</span></td>
@@ -389,8 +401,10 @@ export default function Leads({ user }) {
                         <span className={when.late ? "text-red-700 font-semibold" : "text-gray-600"}>{when.text}</span>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        {open && !l.assigned_to ? (
+                        {open && !l.assigned_to && !manager ? (
                           <button type="button" onClick={() => claim(l)} className="h-11 rounded-lg bg-navy-700 text-white text-sm font-semibold">Take it</button>
+                        ) : open && !l.assigned_to ? (
+                          <button type="button" onClick={() => setSelectedId(l.id)} className="h-11 rounded-lg bg-navy-700 text-white text-sm font-semibold">Assign</button>
                         ) : (
                           <button type="button" onClick={() => setSelectedId(l.id)} className="h-11 rounded-lg bg-navy-700 text-white text-sm font-semibold">Update</button>
                         )}
@@ -571,8 +585,11 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
               className="h-10 border border-gray-300 rounded-lg px-2 text-sm bg-white max-w-[60%]"
               aria-label="Assign to staff"
             >
-              <option value="">Not assigned</option>
-              {staff.map((s) => <option key={s.id} value={s.id}>{s.id === me.id ? `${s.name} (you)` : s.name}</option>)}
+              <option value="">Not assigned – pick staff</option>
+              {lead.assigned_to && !staff.some((s) => s.id === lead.assigned_to) && (
+                <option value={lead.assigned_to}>{lead.assigned_to_name} (not staff)</option>
+              )}
+              {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           ) : lead.assigned_to ? (
             <span className="font-semibold text-gray-900">{lead.assigned_to === me.id ? "You" : lead.assigned_to_name}</span>
@@ -590,7 +607,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
           </div>
           <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2 text-sm">
             <dt className="text-gray-600">Service</dt><dd className="font-semibold text-gray-900">{lead.service_needed || "Not given"}</dd>
-            <dt className="text-gray-600">Name & place</dt><dd className="text-gray-900">{lead.customer_details || "—"}</dd>
+            <dt className="text-gray-600">Name & place</dt><dd className="text-gray-900">{tidy(lead.customer_details) || "—"}</dd>
             {lead.whatsapp_name && (<><dt className="text-gray-600">WhatsApp name</dt><dd className="text-gray-900">{lead.whatsapp_name}</dd></>)}
             <dt className="text-gray-600">Documents</dt><dd><span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${docs.cls}`}>{docs.text}</span></dd>
             {lead.customer_id && (<><dt className="text-gray-600">Customer</dt><dd className="text-green-800 font-medium">Existing customer</dd></>)}
@@ -727,8 +744,13 @@ function PanelButtons({ saving, onSave, onCancel, saveText = "Save" }) {
 
 /* =================== Add walk-in / call lead =================== */
 function AddLeadModal({ api, me, onClose, onSaved }) {
-  const [form, setForm] = useState({ phone: "", customer_details: "", service_needed: "", docs_ready: "", source: "walk_in", notes: "", assign_to_me: true });
+  const manager = isManagerRole(me.role);
+  const [form, setForm] = useState({ phone: "", customer_details: "", service_needed: "", docs_ready: "", source: "walk_in", notes: "", assign_to_me: true, assigned_to: "" });
   const [saving, setSaving] = useState(false);
+  const [staffList, setStaffList] = useState([]);
+  useEffect(() => {
+    if (manager && me.role !== "superadmin") api("/staff").then(setStaffList).catch(() => setStaffList([]));
+  }, [api, manager, me.role]);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
 
   const save = async (e) => {
@@ -781,10 +803,21 @@ function AddLeadModal({ api, me, onClose, onSaved }) {
         <Field label="Note">
           <textarea rows={2} value={form.notes} onChange={set("notes")} className="input-lead py-2 h-auto" />
         </Field>
-        <label className="flex items-center gap-2 text-sm text-gray-800">
-          <input type="checkbox" checked={form.assign_to_me} onChange={set("assign_to_me")} className="w-4 h-4" />
-          Assign to me
-        </label>
+        {manager ? (
+          me.role !== "superadmin" && (
+            <Field label="Assign to staff">
+              <select value={form.assigned_to} onChange={set("assigned_to")} className="input-lead">
+                <option value="">Leave unassigned</option>
+                {staffList.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </Field>
+          )
+        ) : (
+          <label className="flex items-center gap-2 text-sm text-gray-800">
+            <input type="checkbox" checked={form.assign_to_me} onChange={set("assign_to_me")} className="w-4 h-4" />
+            Assign to me
+          </label>
+        )}
         <div className="flex gap-2 justify-end">
           <button type="button" onClick={onClose} className="h-11 px-4 rounded-lg border border-gray-300 text-sm font-semibold text-gray-700">Cancel</button>
           <button type="submit" disabled={saving} className="h-11 px-5 rounded-lg bg-navy-700 hover:bg-navy-800 text-white text-sm font-semibold disabled:opacity-50">

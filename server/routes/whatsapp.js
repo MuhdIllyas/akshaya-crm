@@ -39,9 +39,14 @@ const botAuthOk = (req) => !BOT_API_KEY || req.get("x-bot-key") === BOT_API_KEY;
 
 const last10 = (v) => String(v || "").replace(/\D/g, "").slice(-10);
 
-// Libromi sends "{{var}}" literally when a variable is empty — treat that as empty
+// Libromi sends "{{var}}" literally when a variable is empty — treat that as empty.
+// A customer's multi-line answer arrives with a literal "\n" (backslash + n):
+// turn line breaks into ", " so "Illyas\nMamburam" becomes "Illyas, Mamburam".
 const clean = (v) => {
-  const s = String(v ?? "").trim();
+  const s = String(v ?? "")
+    .replace(/\s*(?:\\r\\n|\\n|\\r|\r?\n)+\s*/g, ", ")
+    .replace(/^[,\s]+|[,\s]+$/g, "")
+    .trim();
   return !s || /^\{\{.*\}\}$/.test(s) ? null : s.slice(0, 1000);
 };
 
@@ -630,17 +635,19 @@ router.post("/connect-staff", async (req, res) => {
       staff = await activeStaffInCentre([conv.assigned_staff_id], centreId);
       if (staff) reason = "already assigned to this chat";
     }
+    // No staff found → the centre admin is alerted to ASSIGN someone.
+    // Admins don't do service entries, so they never become the owner of the chat or the lead.
     let toAdmin = false;
     if (!staff && conv.admin_id) {
       const { rows } = await pool.query(`SELECT id, name, centre_id FROM staff WHERE id = $1`, [conv.admin_id]);
       staff = rows[0] || null;
       toAdmin = !!staff;
-      reason = "centre admin (no handling staff found)";
+      reason = "please assign a staff member";
     }
 
-    // --- 3. Assign the chat ---
+    // --- 3. Assign the chat (only to real staff) ---
     const io = req.io || req.app.get("io");
-    if (staff) {
+    if (staff && !toAdmin) {
       await addStaffToConversation(conv.id, staff.id, "owner");
       await pool.query(
         `UPDATE chat_conversations
@@ -675,7 +682,8 @@ router.post("/connect-staff", async (req, res) => {
       const svc = [appHere.service_name, appHere.subcategory_name].filter(Boolean).join(" – ");
       noteParts.push(`Application: ${appHere.application_number || "-"}${svc ? ` (${svc})` : ""}, status: ${appHere.status}.`);
     }
-    noteParts.push(staff ? `Connected to ${staff.name} — ${reason}.` : "No staff could be assigned automatically.");
+    if (staff && !toAdmin) noteParts.push(`Connected to ${staff.name} — ${reason}.`);
+    else noteParts.push("No staff found for this customer — admin, please assign a staff member.");
     await sendSystemMessage(conv.id, noteParts.join("\n"), io);
 
     // --- 5. Live alert for the chosen staff member ---
@@ -694,7 +702,9 @@ router.post("/connect-staff", async (req, res) => {
         phone: waPhone,
         centreId,
         applicationNumber: appHere?.application_number || null,
-        message: "A customer wants to talk to you on WhatsApp",
+        message: toAdmin
+          ? "A customer wants to talk to staff — please assign someone"
+          : "A customer wants to talk to you on WhatsApp",
       });
     }
 

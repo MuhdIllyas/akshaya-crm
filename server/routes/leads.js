@@ -30,6 +30,11 @@ const myId = (u) => parseInt(u.id);
 const myCentre = (u) => (u.centre_id ? parseInt(u.centre_id) : null);
 const last10 = (v) => String(v || "").replace(/\D/g, "").slice(-10);
 
+// Only these roles do service work, so only they can own a lead.
+// Admins and superadmins assign leads to staff; they don't take leads themselves.
+const LEAD_OWNER_ROLES = ["staff", "supervisor"];
+const OWNER_ROLE_SQL = `COALESCE(LOWER(role), 'staff') IN ('staff', 'supervisor')`;
+
 async function logActivity(db, leadId, staffId, action, details = null) {
   await db.query(
     `INSERT INTO lead_activities (lead_id, staff_id, action, details) VALUES ($1, $2, $3, $4)`,
@@ -192,7 +197,9 @@ router.get("/staff", async (req, res) => {
     const centreId = isSuper(req.user) ? parseInt(req.query.centre_id) || null : myCentre(req.user);
     if (!centreId) return res.json([]);
     const { rows } = await pool.query(
-      `SELECT id, name FROM staff WHERE centre_id = $1 AND status = 'Active' ORDER BY name`,
+      `SELECT id, name FROM staff
+       WHERE centre_id = $1 AND status = 'Active' AND ${OWNER_ROLE_SQL}
+       ORDER BY name`,
       [centreId]
     );
     res.json(rows);
@@ -215,7 +222,19 @@ router.post("/", async (req, res) => {
 
     const centreId = isSuper(req.user) ? parseInt(req.body.centre_id) || null : myCentre(req.user);
     const source = ["walk_in", "phone_call", "whatsapp_manual", "referral"].includes(req.body.source) ? req.body.source : "walk_in";
-    const assignTo = req.body.assign_to_me === false ? null : myId(req.user);
+    let assignTo = null;
+    if (isManager(req.user)) {
+      if (req.body.assigned_to) {
+        const s = await client.query(
+          `SELECT id FROM staff WHERE id = $1 AND status = 'Active' AND centre_id = $2 AND ${OWNER_ROLE_SQL}`,
+          [parseInt(req.body.assigned_to), centreId]
+        );
+        if (!s.rows.length) return res.status(400).json({ error: "Pick an active staff member of this centre" });
+        assignTo = s.rows[0].id;
+      }
+    } else if (req.body.assign_to_me !== false) {
+      assignTo = myId(req.user);
+    }
 
     const cust = await client.query(
       `SELECT id FROM customers WHERE RIGHT(regexp_replace(primary_phone, '\\D', '', 'g'), 10) = $1 LIMIT 1`,
@@ -226,10 +245,10 @@ router.post("/", async (req, res) => {
     const { rows } = await client.query(
       `INSERT INTO leads (centre_id, phone, customer_details, service_needed, docs_ready, source, status,
                           assigned_to, customer_id, notes, created_by, first_contact_at)
-       VALUES ($1, $2, $3, $4, $5, $6, 'contacted', $7, $8, $9, $10, NOW())
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW())
        RETURNING *`,
       [centreId, phone, req.body.customer_details?.trim() || null, req.body.service_needed.trim(),
-       req.body.docs_ready || null, source, assignTo, cust.rows[0]?.id || null,
+       req.body.docs_ready || null, source, assignTo ? "contacted" : "new", assignTo, cust.rows[0]?.id || null,
        req.body.notes?.trim() || null, myId(req.user)]
     );
     const lead = rows[0];
@@ -324,7 +343,7 @@ router.post("/:id/open-chat", async (req, res) => {
     const conversationId = rows[0].id;
 
     await addStaffToConversation(conversationId, myId(req.user), "member");
-    if (!lead.assigned_to) {
+    if (!lead.assigned_to && !isManager(req.user)) {
       await pool.query(
         `UPDATE leads SET assigned_to = $2, centre_id = COALESCE(centre_id, $3), updated_at = NOW() WHERE id = $1`,
         [id, myId(req.user), myCentre(req.user)]
@@ -383,8 +402,11 @@ router.patch("/:id", async (req, res) => {
         }
       }
       if (newAssignee) {
-        const s = await client.query(`SELECT id, name, centre_id FROM staff WHERE id = $1 AND status = 'Active'`, [newAssignee]);
-        if (!s.rows.length) return res.status(400).json({ error: "Staff not found or not active" });
+        const s = await client.query(
+          `SELECT id, name, centre_id FROM staff WHERE id = $1 AND status = 'Active' AND ${OWNER_ROLE_SQL}`,
+          [newAssignee]
+        );
+        if (!s.rows.length) return res.status(400).json({ error: "Leads can only be given to active staff members" });
         const leadCentre = lead.centre_id ?? myCentre(req.user);
         if (leadCentre && s.rows[0].centre_id !== leadCentre) {
           return res.status(400).json({ error: "That staff member is in another centre" });
