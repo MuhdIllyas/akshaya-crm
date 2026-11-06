@@ -1971,12 +1971,30 @@ const MessengerPage = ({ user }) => {
     else handleNormalTaskStatusUpdate(task.id, task.status);
   };
 
+  // /api/chat/staff leaves out the logged-in user. Add them back (and the assigned person, if missing),
+  // otherwise the "Assigned to" box shows "Unassigned" when the chat is assigned to the viewer.
+  const detailsStaffList = (() => {
+    const list = [...staffList];
+    if (currentUser?.id && !list.some((s) => String(s.id) === String(currentUser.id))) {
+      list.unshift({ id: Number(currentUser.id), name: `${currentUser.name} (Me)`, role: currentUser.role });
+    }
+    const assignedId = activeConversation?.assigned_staff_id;
+    if (assignedId && !list.some((s) => String(s.id) === String(assignedId))) {
+      list.push({
+        id: Number(assignedId),
+        name: activeConversation.assigned_staff_name || "Assigned staff",
+        role: "staff",
+      });
+    }
+    return list;
+  })();
+
   const renderDetails = (onClose) => (
     <ConversationDetails
       conversation={activeConversation}
       currentUser={currentUser}
       onlineUsers={onlineUsers}
-      staffList={staffList}
+      staffList={detailsStaffList}
       onAssign={handleAssignChat}
       serviceDetails={serviceDetails}
       loadingServiceDetails={loadingServiceDetails}
