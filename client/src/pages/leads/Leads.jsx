@@ -280,9 +280,9 @@ export default function Leads({ user }) {
              hint={summary?.created_month ? `of ${summary.created_month} leads this month` : "This month"} />
       </div>
 
-      <div className="flex flex-col lg:flex-row gap-5 items-start">
+      <div className="flex flex-col 2xl:flex-row gap-5 items-start">
         {/* List */}
-        <section aria-label="Lead list" className="w-full lg:flex-1 min-w-0 bg-white border border-gray-200 rounded-xl overflow-hidden">
+        <section aria-label="Lead list" className="w-full 2xl:flex-1 min-w-0 bg-white border border-gray-200 rounded-xl overflow-hidden">
           <div className="flex gap-5 px-4 border-b border-gray-200 overflow-x-auto">
             {TABS.map(([k, label]) => (
               <button
@@ -473,6 +473,11 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
 
   useEffect(() => { loadActivity(); }, [loadActivity, lead.updated_at]);
   useEffect(() => {
+    const onKey = (e) => e.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  useEffect(() => {
     if (!manager) return;
     const q = me.role === "superadmin" && lead.centre_id ? `?centre_id=${lead.centre_id}` : "";
     api(`/staff${q}`).then(setStaff).catch(() => setStaff([]));
@@ -522,18 +527,18 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
 
   return (
     <>
-      {/* phone: dim background */}
-      <div className="fixed inset-0 bg-black/30 z-40 lg:hidden" onClick={onClose} aria-hidden="true" />
+      {/* Phone: full screen. Laptop: slides over from the right. Very wide screens: sits beside the list. */}
+      <div className="fixed inset-0 bg-black/30 z-40 2xl:hidden" onClick={onClose} aria-hidden="true" />
       <aside
         aria-label="Lead details"
-        className="fixed inset-0 z-50 overflow-y-auto bg-white p-5 flex flex-col gap-5
-                   lg:z-auto lg:inset-auto lg:w-[400px] lg:shrink-0 lg:border lg:border-gray-200 lg:rounded-xl lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]"
+        className="fixed inset-y-0 right-0 w-full sm:w-[440px] z-50 overflow-y-auto bg-white p-5 flex flex-col gap-5 shadow-2xl
+                   2xl:shadow-none 2xl:z-auto 2xl:inset-auto 2xl:w-[400px] 2xl:shrink-0 2xl:border 2xl:border-gray-200 2xl:rounded-xl 2xl:sticky 2xl:top-4 2xl:max-h-[calc(100vh-2rem)]"
       >
         {/* Head */}
         <div className="flex items-start gap-3">
           <button type="button" onClick={onClose} aria-label="Close" className="h-10 w-10 -ml-2 flex items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100">
-            <FiChevronLeft className="lg:hidden" size={22} />
-            <FiX className="hidden lg:block" size={20} />
+            <FiChevronLeft className="sm:hidden" size={22} />
+            <FiX className="hidden sm:block" size={20} />
           </button>
           <div className="flex-1 min-w-0">
             <h2 className="text-xl font-bold text-gray-900 truncate">{leadName(lead)}</h2>
