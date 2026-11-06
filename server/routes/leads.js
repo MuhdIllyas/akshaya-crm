@@ -125,6 +125,9 @@ router.get("/", async (req, res) => {
                   AND re.created_at >= l.created_at - INTERVAL '1 day'
                 ORDER BY re.created_at ASC LIMIT 1) AS matched_entry_id,
               to_char(l.follow_up_date, 'YYYY-MM-DD') AS follow_up_day,
+              -- The database keeps IST wall-clock time; send it with its offset so browsers read it right
+              to_char(l.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS created_at_ist,
+              to_char(l.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS updated_at_ist,
               (l.status = 'follow_up' AND l.follow_up_date IS NOT NULL AND l.follow_up_date <= CURRENT_DATE) AS follow_up_due
        FROM leads l
        LEFT JOIN staff a   ON a.id = l.assigned_to
@@ -276,7 +279,9 @@ router.get("/:id/activity", async (req, res) => {
     const { error } = await loadLeadForUser(parseInt(req.params.id), req.user);
     if (error) return res.status(error[0]).json({ error: error[1] });
     const { rows } = await pool.query(
-      `SELECT la.id, la.action, la.details, la.created_at, s.name AS staff_name
+      `SELECT la.id, la.action, la.details, la.created_at,
+              to_char(la.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS created_at_ist,
+              s.name AS staff_name
        FROM lead_activities la
        LEFT JOIN staff s ON s.id = la.staff_id
        WHERE la.lead_id = $1
