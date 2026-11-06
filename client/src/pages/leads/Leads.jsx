@@ -102,7 +102,7 @@ function whenText(l) {
 const ACTIVITY_TEXT = {
   created: "Lead created", enquiry: "New enquiry from bot", claimed: "Took the lead", assigned: "Assignment changed",
   status: "Status changed", follow_up: "Follow-up set", note: "Note",
-  lost: "Marked lost", converted: "Converted", chat_opened: "Opened chat",
+  lost: "Marked lost", converted: "Converted", chat_opened: "Opened chat", edited: "Details changed",
 };
 
 /* =================================================================== */
@@ -121,6 +121,7 @@ export default function Leads({ user }) {
   const [selectedId, setSelectedId] = useState(null);
   const [showAdd, setShowAdd] = useState(false);
   const [centres, setCentres] = useState({});
+  const [catalog, setCatalog] = useState([]); // services + sub-categories for the pickers
 
   const api = useCallback(async (path, opts = {}) => {
     const res = await fetch(`${API_BASE_URL}/api/leads${path}`, {
@@ -155,6 +156,10 @@ export default function Leads({ user }) {
       setLoading(false);
     }
   }, [api, tab, assigned, search, centreFilter, me.role]);
+
+  useEffect(() => {
+    api("/services").then((d) => setCatalog(Array.isArray(d) ? d : [])).catch(() => setCatalog([]));
+  }, [api]);
 
   // reload on filter change (search is debounced)
   useEffect(() => {
@@ -441,6 +446,7 @@ export default function Leads({ user }) {
             onClaim={claim}
             onOpenChat={openChat}
             onReload={() => load({ quiet: true })}
+            catalog={catalog}
             onCreateEntry={(l) =>
               navigate(SERVICE_ENTRY_PATH(me.role), {
                 state: { fromLead: { lead_id: l.id, phone: l.phone, customer_name: leadName(l), service: l.service_needed } },
@@ -454,6 +460,7 @@ export default function Leads({ user }) {
         <AddLeadModal
           api={api}
           me={me}
+          catalog={catalog}
           onClose={() => setShowAdd(false)}
           onSaved={() => { setShowAdd(false); load({ quiet: true }); }}
         />
@@ -480,7 +487,7 @@ function IconBtn({ label, onClick, href, disabled, children }) {
 }
 
 /* =================== Lead detail panel =================== */
-function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenChat, onReload, onCreateEntry }) {
+function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenChat, onReload, onCreateEntry, catalog }) {
   const [activity, setActivity] = useState([]);
   const [staff, setStaff] = useState([]);
   const [pending, setPending] = useState(null); // 'follow_up' | 'lost' | 'converted'
@@ -489,6 +496,15 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
   const [entryId, setEntryId] = useState(lead.converted_service_entry_id || lead.matched_entry_id || "");
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({
+    customer_details: tidy(lead.customer_details),
+    service_needed: lead.service_needed || "",
+    docs_ready: lead.docs_ready || "",
+  });
+  // Staff can work on their own lead (or a free one); admins on any
+  const canEdit = manager || !lead.assigned_to || lead.assigned_to === me.id;
+  const canStartEntry = !!SERVICE_ENTRY_PATH(me.role) && canEdit && ["new", "contacted", "follow_up"].includes(lead.status);
 
   const loadActivity = useCallback(() => {
     api(`/${lead.id}/activity`).then(setActivity).catch(() => setActivity([]));
@@ -508,6 +524,13 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
 
   const docs = docsChip(lead.docs_ready);
   const isOpen = ["new", "contacted", "follow_up"].includes(lead.status);
+
+  const saveDetails = async () => {
+    if (!draft.service_needed.trim()) return toast.error("Service can't be empty");
+    setSaving(true);
+    if (await onPatch(lead, draft, "Details saved")) setEditing(false);
+    setSaving(false);
+  };
 
   const pickStatus = async (s) => {
     if (s === lead.status && s !== "follow_up") return;
@@ -584,6 +607,18 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
           </a>
         </div>
 
+        {canStartEntry && (
+          <button type="button" onClick={() => onCreateEntry(lead)}
+                  className="h-12 rounded-lg bg-green-700 hover:bg-green-800 text-white text-sm font-bold flex items-center justify-center gap-2">
+            <FiCheckCircle /> Start service entry
+          </button>
+        )}
+        {!canEdit && (
+          <p className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">
+            This lead is with <strong>{lead.assigned_to_name}</strong>. Only they or an admin can update it.
+          </p>
+        )}
+
         {/* Assignment */}
         <div className="flex items-center justify-between gap-3 text-sm">
           <label htmlFor="lead-assign" className="text-gray-600">{manager && lead.assigned_to ? "Reassign to" : "Assigned to"}</label>
@@ -611,9 +646,38 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
 
         {/* What the customer told the bot */}
         <div className="bg-gray-50 border border-gray-100 rounded-xl p-4">
-          <div className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2.5">
-            {lead.source === "whatsapp_bot" ? "Customer told the bot" : "Lead details"}
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              {lead.source === "whatsapp_bot" ? "Customer told the bot" : "Lead details"}
+            </span>
+            {canEdit && !editing && (
+              <button type="button" onClick={() => setEditing(true)} className="text-sm font-semibold text-navy-700 underline underline-offset-2">
+                Edit
+              </button>
+            )}
           </div>
+          {editing ? (
+            <div className="flex flex-col gap-3">
+              <label className="flex flex-col gap-1 text-sm font-semibold text-gray-900">
+                Name
+                <input value={draft.customer_details} onChange={(e) => setDraft({ ...draft, customer_details: e.target.value })}
+                       className="h-10 border border-gray-300 rounded-lg px-3 text-sm font-normal bg-white" />
+              </label>
+              <ServicePicker catalog={catalog} value={draft.service_needed}
+                             onChange={(v) => setDraft({ ...draft, service_needed: v })} />
+              <label className="flex flex-col gap-1 text-sm font-semibold text-gray-900">
+                Documents ready?
+                <select value={draft.docs_ready} onChange={(e) => setDraft({ ...draft, docs_ready: e.target.value })}
+                        className="h-10 border border-gray-300 rounded-lg px-2 text-sm font-normal bg-white">
+                  <option value="">Don't know</option>
+                  <option value="Yes, ready">Yes, ready</option>
+                  <option value="Not yet">Not yet</option>
+                  <option value="Not sure">Not sure</option>
+                </select>
+              </label>
+              <PanelButtons saving={saving} onSave={saveDetails} onCancel={() => setEditing(false)} />
+            </div>
+          ) : (
           <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2 text-sm">
             <dt className="text-gray-600">Service</dt><dd className="font-semibold text-gray-900">{lead.service_needed || "Not given"}</dd>
             <dt className="text-gray-600">Name</dt><dd className="text-gray-900">{tidy(lead.customer_details) || "—"}</dd>
@@ -621,6 +685,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
             <dt className="text-gray-600">Documents</dt><dd><span className={`text-xs font-semibold rounded-full px-2.5 py-1 ${docs.cls}`}>{docs.text}</span></dd>
             {lead.customer_id && (<><dt className="text-gray-600">Customer</dt><dd className="text-green-800 font-medium">Existing customer</dd></>)}
           </dl>
+          )}
         </div>
 
         {/* Service entry found automatically */}
@@ -637,6 +702,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
         )}
 
         {/* Status */}
+        {canEdit && (
         <div className="flex flex-col gap-2">
           <span className="text-sm font-semibold text-gray-900">Update status</span>
           <div className="flex flex-wrap gap-2">
@@ -704,6 +770,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
             <p className="text-sm text-green-800">Linked to service entry #{lead.converted_service_entry_id}</p>
           )}
         </div>
+        )}
 
         {/* Note */}
         <div className="flex flex-col gap-2">
@@ -752,7 +819,7 @@ function PanelButtons({ saving, onSave, onCancel, saveText = "Save" }) {
 }
 
 /* =================== Add walk-in / call lead =================== */
-function AddLeadModal({ api, me, onClose, onSaved }) {
+function AddLeadModal({ api, me, onClose, onSaved, catalog }) {
   const manager = isManagerRole(me.role);
   const [form, setForm] = useState({ phone: "", customer_details: "", service_needed: "", docs_ready: "", source: "walk_in", notes: "", assign_to_me: true, assigned_to: "" });
   const [saving, setSaving] = useState(false);
@@ -764,6 +831,7 @@ function AddLeadModal({ api, me, onClose, onSaved }) {
 
   const save = async (e) => {
     e.preventDefault();
+    if (!form.service_needed.trim()) return toast.error("Choose the service");
     setSaving(true);
     try {
       await api("", { method: "POST", body: JSON.stringify(form) });
@@ -785,9 +853,8 @@ function AddLeadModal({ api, me, onClose, onSaved }) {
         <Field label="Phone number" required>
           <input required inputMode="tel" value={form.phone} onChange={set("phone")} placeholder="10-digit mobile number" className="input-lead" />
         </Field>
-        <Field label="Service needed" required>
-          <input required value={form.service_needed} onChange={set("service_needed")} placeholder="Eg: Passport – Fresh" className="input-lead" />
-        </Field>
+        <ServicePicker catalog={catalog} value={form.service_needed} required
+                       onChange={(v) => setForm((f) => ({ ...f, service_needed: v }))} />
         <Field label="Customer name">
           <input value={form.customer_details} onChange={set("customer_details")} placeholder="Eg: Shameer" className="input-lead" />
         </Field>
@@ -835,6 +902,76 @@ function AddLeadModal({ api, me, onClose, onSaved }) {
         </div>
       </form>
       <style>{`.input-lead{height:2.75rem;width:100%;border:1px solid #d1d5db;border-radius:.5rem;padding:0 .75rem;font-size:.875rem;background:#fff}`}</style>
+    </div>
+  );
+}
+
+/* ---------- Service + sub-category picker (from Service Management) ----------
+   The value is a text label "Service – Sub-category" — the same format the WhatsApp bot
+   saves, so Service Entry can fill in the service from it. "Other" allows free text. */
+const OTHER = "__other__";
+const SEP = " – ";
+function parseServiceLabel(catalog, value) {
+  const v = String(value || "").trim();
+  if (!v) return { svcId: "", subId: "", other: "" };
+  const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const [a, b] = v.split(/\s+[–-]\s+/);
+  const svc = catalog.find((s) => norm(s.name) === norm(a));
+  if (!svc) return { svcId: OTHER, subId: "", other: v };
+  const sub = (svc.subcategories || []).find((x) => norm(x.name) === norm(b));
+  return { svcId: String(svc.id), subId: sub ? String(sub.id) : "", other: "" };
+}
+
+function ServicePicker({ catalog, value, onChange, required }) {
+  const [state, setState] = useState(() => parseServiceLabel(catalog, value));
+  // catalogue arrives after first render → re-read the current value once it's there
+  useEffect(() => { if (catalog.length) setState(parseServiceLabel(catalog, value)); }, [catalog.length]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const svc = catalog.find((s) => String(s.id) === state.svcId);
+  const subs = svc?.subcategories || [];
+
+  const emit = (next) => {
+    setState(next);
+    if (next.svcId === OTHER) return onChange(next.other.trim());
+    const s = catalog.find((x) => String(x.id) === next.svcId);
+    if (!s) return onChange("");
+    const sub = (s.subcategories || []).find((x) => String(x.id) === next.subId);
+    onChange(sub ? `${s.name}${SEP}${sub.name}` : s.name);
+  };
+
+  const cls = "h-11 w-full border border-gray-300 rounded-lg px-3 text-sm font-normal bg-white";
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-900">
+        <span>Service{required && <span className="text-red-700"> *</span>}</span>
+        <select value={state.svcId} required={required} className={cls}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  const s = catalog.find((x) => String(x.id) === id);
+                  const firstSub = s?.subcategories?.length === 1 ? String(s.subcategories[0].id) : "";
+                  emit({ svcId: id, subId: firstSub, other: state.other });
+                }}>
+          <option value="">{catalog.length ? "Choose service" : "Loading services…"}</option>
+          {catalog.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+          <option value={OTHER}>Other (type it)</option>
+        </select>
+      </label>
+      {state.svcId === OTHER ? (
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-900">
+          <span>Service name</span>
+          <input value={state.other} required={required} placeholder="Type the service" className={cls}
+                 onChange={(e) => emit({ ...state, other: e.target.value })} />
+        </label>
+      ) : (
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-gray-900">
+          <span>Sub-category</span>
+          <select value={state.subId} disabled={!svc || subs.length === 0} className={`${cls} disabled:bg-gray-50 disabled:text-gray-500`}
+                  onChange={(e) => emit({ ...state, subId: e.target.value })}>
+            <option value="">{!svc ? "Choose service first" : subs.length ? "Choose sub-category" : "No sub-categories"}</option>
+            {subs.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+          </select>
+        </label>
+      )}
     </div>
   );
 }
