@@ -1248,7 +1248,7 @@ function CalendarToolbar({
     <motion.div
       initial={{ y: -10, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="relative z-10 bg-white/90 backdrop-blur-sm border-b border-slate-200 px-4 py-2.5"
+      className="relative bg-white/90 backdrop-blur-sm border-b border-slate-200 px-4 py-2.5"
     >
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
