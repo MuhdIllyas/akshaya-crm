@@ -2,6 +2,9 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { addStaffToConversation } from "../utils/conversationService.js";
+// Same task creator the Tasks page uses, so follow-ups behave like any other task
+// (My Tasks, Calendar, notifications). Path: routes/leads.js → services/taskService.js
+import { createTask } from "../services/taskService.js";
 
 const router = express.Router();
 
@@ -50,6 +53,86 @@ function emitLeadChange(req, lead, type = "updated") {
   const payload = { type, lead_id: lead.id, centre_id: lead.centre_id };
   if (lead.centre_id) io.to(`centre:${lead.centre_id}`).emit("lead_changed", payload);
   io.emit("lead_changed_global", payload);
+}
+
+/* =====================================================================
+   FOLLOW-UP → TASK
+   A lead in "Follow-up" with a date and an owner gets one task:
+     "📞 Follow up: <name> – <service>", due on the follow-up date, for the owner.
+   It shows in My Tasks and on the Calendar (both list tasks by due date).
+   The task moves when the date or owner changes, and is closed when the
+   lead leaves Follow-up (contacted / converted / lost).
+   Never blocks the lead update: problems are written to the lead history.
+   ===================================================================== */
+const followUpTitle = (lead) => {
+  const name = String(lead.customer_details || lead.whatsapp_name || "Customer")
+    .replace(/\s*(?:\\n|\r?\n)+\s*/g, ", ").split(",")[0].trim();
+  return `📞 Follow up: ${name}${lead.service_needed ? ` – ${lead.service_needed}` : ""}`.slice(0, 200);
+};
+
+async function closeFollowUpTask(taskId) {
+  await pool.query(
+    `UPDATE tasks SET status = 'completed', completed_at = NOW(), updated_at = NOW()
+     WHERE id = $1 AND status <> 'completed'`,
+    [taskId]
+  );
+  await pool.query(`DELETE FROM calendar_events WHERE related_task_id = $1`, [taskId]); // same as the Tasks route does
+}
+
+async function syncFollowUpTask(lead, actor) {
+  try {
+    const task = lead.follow_up_task_id
+      ? (await pool.query(`SELECT id, status FROM tasks WHERE id = $1`, [lead.follow_up_task_id])).rows[0]
+      : null;
+    const taskOpen = task && task.status !== "completed";
+    // read the date as text straight from the DB (avoids any timezone shift)
+    const day = (await pool.query(
+      `SELECT to_char(follow_up_date, 'YYYY-MM-DD') AS d FROM leads WHERE id = $1`, [lead.id]
+    )).rows[0]?.d || null;
+
+    const wantsTask = lead.status === "follow_up" && day && lead.assigned_to;
+
+    if (!wantsTask) {
+      if (taskOpen) {
+        await closeFollowUpTask(task.id);
+        await logActivity(pool, lead.id, actor.id, "task", "Follow-up task closed");
+      }
+      return;
+    }
+
+    if (taskOpen) {
+      // keep the existing task in step with the lead
+      await pool.query(
+        `UPDATE tasks SET due_date = $2, assigned_to = $3, title = $4, updated_at = NOW() WHERE id = $1`,
+        [task.id, day, lead.assigned_to, followUpTitle(lead)]
+      );
+      return;
+    }
+
+    const { task: created } = await createTask({
+      actor,
+      title: followUpTitle(lead),
+      description:
+        `WhatsApp lead #${lead.id} · Phone ${lead.phone}` +
+        (lead.docs_ready ? ` · Documents: ${lead.docs_ready}` : "") +
+        `\nOpen Leads to update the customer after following up.`,
+      assigned_to: lead.assigned_to,
+      due_date: day,
+      priority: "medium",
+      related_service_id: null,
+      related_service_entry_id: null,
+      related_customer_id: lead.customer_id || null,
+      note_id: null,
+      source: "manual",
+    });
+    if (created?.id) {
+      await pool.query(`UPDATE leads SET follow_up_task_id = $2 WHERE id = $1`, [lead.id, created.id]);
+      await logActivity(pool, lead.id, actor.id, "task", `Follow-up task added to My Tasks and Calendar for ${day}`);
+    }
+  } catch (err) {
+    console.error("[leads] follow-up task sync failed:", err.message);
+    await logActivity(pool, lead.id, actor.id, "task", `Could not create the follow-up task: ${err.message}`).catch(() => {});
+  }
 }
 
 async function loadLeadForUser(id, user) {
@@ -125,6 +208,7 @@ router.get("/", async (req, res) => {
                   AND re.created_at >= l.created_at - INTERVAL '1 day'
                 ORDER BY re.created_at ASC LIMIT 1) AS matched_entry_id,
               to_char(l.follow_up_date, 'YYYY-MM-DD') AS follow_up_day,
+              ft.status AS follow_up_task_status,
               -- The database keeps IST wall-clock time; send it with its offset so browsers read it right
               to_char(l.created_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS created_at_ist,
               to_char(l.updated_at, 'YYYY-MM-DD"T"HH24:MI:SS') || '+05:30' AS updated_at_ist,
@@ -134,6 +218,7 @@ router.get("/", async (req, res) => {
        LEFT JOIN staff cr  ON cr.id = l.created_by
        LEFT JOIN centres c ON c.id = l.centre_id
        LEFT JOIN conv      ON conv.p10 = l.phone AND conv.centre_id = l.centre_id
+       LEFT JOIN tasks ft  ON ft.id = l.follow_up_task_id
        ${where.length ? "WHERE " + where.join(" AND ") : ""}
        ORDER BY
          CASE WHEN l.status = 'new' THEN 0
@@ -528,6 +613,11 @@ router.patch("/:id", async (req, res) => {
     for (const [action, details] of acts) await logActivity(client, id, me, action, details);
     await client.query("COMMIT");
 
+    // Follow-up date / status / owner changed → keep the follow-up task in step
+    if (status !== undefined || follow_up_date !== undefined || assigned_to !== undefined || lead.follow_up_task_id) {
+      await syncFollowUpTask(rows[0], { ...req.user, id: me });
+    }
+
     emitLeadChange(req, rows[0]);
     res.json(rows[0]);
   } catch (err) {
@@ -536,6 +626,37 @@ router.patch("/:id", async (req, res) => {
     res.status(500).json({ error: "Failed to update lead" });
   } finally {
     client.release();
+  }
+});
+
+/* =====================================================================
+   DELETE /api/leads/:id   — admin (own centre) and superadmin only
+   Removes the lead and its history (lead_activities cascade).
+   An open follow-up task is closed first so it leaves My Tasks / Calendar.
+   The WhatsApp chat and any service entry are NOT touched.
+   ===================================================================== */
+router.delete("/:id", async (req, res) => {
+  try {
+    if (!isManager(req.user)) {
+      return res.status(403).json({ error: "Only an admin can delete leads" });
+    }
+    const id = parseInt(req.params.id);
+    const { lead, error } = await loadLeadForUser(id, req.user);
+    if (error) return res.status(error[0]).json({ error: error[1] });
+
+    if (lead.follow_up_task_id) {
+      await closeFollowUpTask(lead.follow_up_task_id).catch((e) =>
+        console.warn("[leads] could not close follow-up task on delete:", e.message)
+      );
+    }
+    await pool.query(`DELETE FROM leads WHERE id = $1`, [id]);
+
+    console.log(`[leads] Lead #${id} (${lead.phone}) deleted by ${req.user.role} #${myId(req.user)}`);
+    emitLeadChange(req, lead, "deleted");
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("[leads] delete error:", err);
+    res.status(500).json({ error: "Failed to delete lead" });
   }
 });
 
