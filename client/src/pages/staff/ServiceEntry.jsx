@@ -413,6 +413,8 @@ const ServiceEntry = () => {
   const [staffList, setStaffList] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const submitLock = useRef(false); // a ref, so a fast double click can't slip past a stale closure
+  // Lead being converted (opened from the Leads page with "Create service entry")
+  const [fromLead, setFromLead] = useState(null);
 
   // Refresh today's table without blocking whatever the user is doing.
   const refreshEntries = async () => {
@@ -1232,6 +1234,59 @@ const ServiceEntry = () => {
     setDaysRemaining(days);
   };
 
+  // ===== Lead → Service Entry: fill name, phone and service from the lead =====
+  useEffect(() => {
+    const lead = location.state?.fromLead;
+    if (!lead || categories.length === 0) return;
+
+    setFromLead(lead);
+    const phone10 = String(lead.phone || '').replace(/\D/g, '').slice(-10);
+    setEditingEntryId(null);
+    setFormData(prev => ({
+      ...prev,
+      tokenId: null,
+      customerName: lead.customer_name || prev.customerName || '',
+      phone: phone10 || prev.phone || '',
+      services: [createEmptyService()],
+    }));
+
+    // The bot saves the service as "Service – Sub-category"; match it to the catalogue
+    const norm = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const [svcPart, subPart] = String(lead.service || '').split(/\s+[–-]\s+/);
+    const cat = categories.find(c => norm(c.name) === norm(svcPart))
+      || categories.find(c => (c.subcategories || []).some(sc => norm(`${c.name} ${sc.name}`) === norm(lead.service)));
+    if (cat) {
+      handleCartChange(0, 'category', String(cat.id));
+      const sub = (cat.subcategories || []).find(sc => norm(sc.name) === norm(subPart))
+        || (cat.subcategories || []).find(sc => norm(`${cat.name} ${sc.name}`) === norm(lead.service));
+      if (sub) handleCartChange(0, 'subcategory', String(sub.id));
+      else toast.info('Please pick the sub-category for this service.');
+    } else if (lead.service) {
+      toast.info(`Customer asked for "${lead.service}". Please pick the service.`);
+    }
+
+    window.history.replaceState({}, document.title); // don't refill on refresh
+  }, [location.state, categories.length]);
+
+  // After the entry is saved: mark the lead converted and link the first new entry to it
+  const completeLeadConversion = async (serviceEntryId) => {
+    if (!fromLead?.lead_id) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/leads/${fromLead.lead_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
+        body: JSON.stringify({ status: 'converted', ...(serviceEntryId ? { converted_service_entry_id: serviceEntryId } : {}) }),
+      });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Could not update the lead');
+      toast.success('Lead marked as converted');
+    } catch (err) {
+      console.error('Lead conversion failed:', err);
+      toast.warn(`Service saved, but the lead was not updated: ${err.message}. Mark it converted on the Leads page.`);
+    } finally {
+      setFromLead(null);
+    }
+  };
+
   useEffect(() => {
     if (location.state && location.state.adminEditEntry && categories.length > 0) {
       const adminEntry = location.state.adminEditEntry;
@@ -1532,6 +1587,10 @@ const ServiceEntry = () => {
           const createdServices = response.data.createdServices || [];
 
           toast.success('Services successfully created and paid!');
+          if (fromLead) {
+            const firstEntry = createdServices[0];
+            completeLeadConversion(firstEntry ? (firstEntry.serviceEntryId || firstEntry.id) : null);
+          }
           
           setFormData({
             tokenId: '', customerName: '', phone: '', status: 'pending', payments: [],
@@ -1851,6 +1910,21 @@ const ServiceEntry = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {fromLead && (
+            <div className="bg-green-50 p-4 rounded-lg border border-green-200 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-green-800">Converting a WhatsApp lead</p>
+                <p className="text-sm text-green-900 mt-0.5">
+                  {fromLead.customer_name || 'Customer'} · {fromLead.phone}{fromLead.service ? ` · asked for ${fromLead.service}` : ''}
+                </p>
+                <p className="text-xs text-green-800 mt-1">When you save this entry, the lead will be marked Converted and linked to it.</p>
+              </div>
+              <button type="button" onClick={() => setFromLead(null)}
+                      className="text-sm font-semibold text-green-800 underline underline-offset-2">
+                Not converting this lead
+              </button>
+            </div>
+          )}
           {tokenId && (
             <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
               <div className="flex items-start">

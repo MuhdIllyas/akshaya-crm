@@ -214,6 +214,29 @@ router.get("/staff", async (req, res) => {
 });
 
 /* =====================================================================
+   GET /api/leads/services  → active services with their sub-categories
+   (for the service pickers on the Leads page)
+   ===================================================================== */
+router.get("/services", async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT s.id, s.name,
+              COALESCE(json_agg(json_build_object('id', sc.id, 'name', sc.name) ORDER BY sc.name)
+                       FILTER (WHERE sc.id IS NOT NULL), '[]') AS subcategories
+       FROM services s
+       LEFT JOIN subcategories sc ON sc.service_id = s.id
+       WHERE s.status = 'active'
+       GROUP BY s.id, s.name
+       ORDER BY s.name`
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("[leads] services error:", err);
+    res.status(500).json({ error: "Failed to load services" });
+  }
+});
+
+/* =====================================================================
    POST /api/leads  → walk-in / phone-call lead added by staff
    Body: { phone, customer_details, service_needed, docs_ready, source, notes, assign_to_me }
    ===================================================================== */
@@ -381,8 +404,19 @@ router.patch("/:id", async (req, res) => {
     const { lead, error } = await loadLeadForUser(id, req.user);
     if (error) return res.status(error[0]).json({ error: error[1] });
 
-    const { status, assigned_to, follow_up_date, lost_reason, converted_service_entry_id, centre_id } = req.body;
+    const { status, assigned_to, follow_up_date, lost_reason, converted_service_entry_id, centre_id,
+            customer_details, service_needed, docs_ready } = req.body;
     const me = myId(req.user);
+
+    // Staff can only work on a lead that is theirs (or still free). Admins can work on any.
+    const onlyClaiming = Object.keys(req.body).every((k) => ["assigned_to", "status"].includes(k)) && assigned_to !== undefined;
+    if (!isManager(req.user) && lead.assigned_to && lead.assigned_to !== me && !onlyClaiming) {
+      const owner = await client.query(`SELECT name FROM staff WHERE id = $1`, [lead.assigned_to]);
+      return res.status(403).json({ error: `This lead is with ${owner.rows[0]?.name || "another staff member"}. Ask your admin to reassign it.` });
+    }
+    if (service_needed !== undefined && !String(service_needed).trim()) {
+      return res.status(400).json({ error: "Service can't be empty" });
+    }
 
     if (status !== undefined && !STATUSES.includes(status)) {
       return res.status(400).json({ error: `status must be one of: ${STATUSES.join(", ")}` });
@@ -456,6 +490,20 @@ router.patch("/:id", async (req, res) => {
         acts.push(["follow_up", `Follow-up on ${nice}`]);
       }
     }
+    const detailChanges = [];
+    if (customer_details !== undefined && String(customer_details || "").trim() !== String(lead.customer_details || "")) {
+      add("customer_details", String(customer_details || "").trim().slice(0, 500) || null);
+      detailChanges.push("name");
+    }
+    if (service_needed !== undefined && String(service_needed).trim() !== String(lead.service_needed || "")) {
+      add("service_needed", String(service_needed).trim().slice(0, 300));
+      detailChanges.push(`service → ${String(service_needed).trim()}`);
+    }
+    if (docs_ready !== undefined && String(docs_ready || "") !== String(lead.docs_ready || "")) {
+      add("docs_ready", docs_ready || null);
+      detailChanges.push(`documents → ${docs_ready || "unknown"}`);
+    }
+    if (detailChanges.length) acts.push(["edited", `Updated ${detailChanges.join(", ")}`]);
     if (lost_reason !== undefined) {
       add("lost_reason", lost_reason || null);
       if (status === "lost") acts.push(["lost", lost_reason]);
