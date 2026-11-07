@@ -395,6 +395,13 @@ const DashboardLayout = () => {
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
+  // Staff photo (same source as the Staff Dashboard); initials are the fallback
+  const rawPhoto = localStorage.getItem("photo");
+  const profilePhoto =
+    role !== "customer" && rawPhoto && rawPhoto !== "null" && rawPhoto !== "undefined"
+      ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:image") ? rawPhoto : `${API_BASE_URL}${rawPhoto}`)
+      : "";
+
   return (
     <div className="flex min-h-screen min-h-dvh bg-slate-50">
       {/* Phone: dimmed backdrop behind the open drawer */}
@@ -454,9 +461,14 @@ const DashboardLayout = () => {
               <CloseIcon />
             </button>
           </div>
+          {isCollapsed && (
+            <div className="mt-3 flex justify-center">
+              <span className="grid h-9 w-9 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700"><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
+            </div>
+          )}
           {!isCollapsed && (
             <div className="relative mt-3 flex items-center gap-2.5 rounded-xl p-2 bg-slate-50 border border-slate-200">
-              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700">{userInitials}</span>
+              <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700"><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-sm font-semibold text-slate-900">{roleDisplayNames[role] || "User"}</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>{role === "customer" ? "Customer" : "Online"}</p>
@@ -798,6 +810,15 @@ const DashboardLayout = () => {
       `}</style>
     </div>
   );
+};
+
+// Staff photo when there is one, otherwise the initials
+const UserAvatar = ({ photo, initials }) => {
+  const [failed, setFailed] = useState(false);
+  if (photo && !failed) {
+    return <img src={photo} alt="" className="h-full w-full object-cover" onError={() => setFailed(true)} />;
+  }
+  return <>{initials}</>;
 };
 
 // Toggle Icons
