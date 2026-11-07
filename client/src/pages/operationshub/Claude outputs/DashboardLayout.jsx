@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Link, Outlet, useLocation } from "react-router-dom";
+import React, { useState, useEffect, useRef } from 'react';
+import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
 
@@ -16,6 +16,22 @@ const DashboardLayout = () => {
   const isCollapsed = collapsedPref && isDesktop;
   const [activePath, setActivePath] = useState(window.location.pathname);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Top bar "jump to page" box (Ctrl/Cmd + K focuses it)
+  const [jumpQuery, setJumpQuery] = useState("");
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const jumpRef = useRef(null);
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && String(e.key).toLowerCase() === "k") {
+        e.preventDefault();
+        jumpRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
   const token = localStorage.getItem("token");
   
   // Add state for conversations and unread count
@@ -365,12 +381,18 @@ const DashboardLayout = () => {
     .filter((section) => section.items.length > 0);
   const showSectionTitles = userNavigation.length > 6;
 
-  // Page title for the top bar + bell shortcut
-  const currentNavItem = [...userNavigation]
-    .sort((a, b) => b.path.length - a.path.length)
-    .find((item) => location.pathname === item.path || location.pathname.startsWith(item.path + "/"));
-  const pageTitle = currentNavItem ? currentNavItem.label : (location.pathname === "/dashboard/my-profile" ? "My Profile" : "Dashboard");
   const notificationsItem = userNavigation.find((item) => item.label === "Notifications");
+  const jumpMatches = jumpQuery.trim()
+    ? userNavigation.filter((item) => item.label.toLowerCase().includes(jumpQuery.trim().toLowerCase())).slice(0, 6)
+    : [];
+  const goTo = (path) => {
+    navigate(path);
+    setJumpQuery("");
+    setJumpOpen(false);
+    jumpRef.current?.blur();
+  };
+  const quickTokenItem = userNavigation.find((item) => item.label === "Token Generator");
+  const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
   return (
@@ -394,10 +416,10 @@ const DashboardLayout = () => {
         }`}
       >
         {/* Header Section */}
-        <div className={`p-4 border-b border-slate-200 ${isCollapsed ? "px-3" : ""}`}>
+        <div className={`p-4 bg-navy-700 text-white ${isCollapsed ? "px-3" : ""}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="bg-navy-700 p-2 rounded-xl shadow-sm">
+              <div className="bg-white/15 p-2 rounded-xl">
                 <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M16 21V5C16 4.46957 15.7893 3.96086 15.4142 3.58579C15.0391 3.21071 14.5304 3 14 3H10C9.46957 3 8.96086 3.21071 8.58579 3.58579C8.21071 3.96086 8 4.46957 8 5V21" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -405,10 +427,10 @@ const DashboardLayout = () => {
               </div>
               {!isCollapsed && (
                 <div className="ml-3">
-                  <h1 className="text-base font-semibold text-navy-700">
+                  <h1 className="text-base font-semibold text-white">
                     {role === "customer" ? "Client Suite" : "Office Suite"}
                   </h1>
-                  <p className="text-slate-500 text-xs">
+                  <p className="text-white/70 text-xs">
                     {role === "customer" ? "Service Portal" : "Management Portal"}
                   </p>
                 </div>
@@ -417,7 +439,7 @@ const DashboardLayout = () => {
             {!isCollapsed && (
               <button
                 onClick={toggleSidebar}
-                className="hidden md:block p-2 rounded-lg hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
+                className="hidden md:block p-2 rounded-lg hover:bg-white/10 transition duration-200 text-white/70 hover:text-white"
                 title="Collapse Sidebar"
               >
                 <CollapseIcon />
@@ -425,14 +447,14 @@ const DashboardLayout = () => {
             )}
             <button
               onClick={() => setIsMobileOpen(false)}
-              className="md:hidden grid h-11 w-11 place-items-center rounded-lg hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
+              className="md:hidden grid h-11 w-11 place-items-center rounded-lg hover:bg-white/10 transition duration-200 text-white/70 hover:text-white"
               aria-label="Close menu"
             >
               <CloseIcon />
             </button>
           </div>
           {!isCollapsed && (
-            <p className="text-slate-500 text-sm mt-3 truncate">
+            <p className="text-white/70 text-sm mt-3 truncate">
               Hello, {roleDisplayNames[role] || "User"}
             </p>
           )}
@@ -624,7 +646,7 @@ const DashboardLayout = () => {
           isCollapsed ? "md:ml-20" : "md:ml-64"
         }`}
       >
-        {/* Top bar: menu button on phones, page title, notifications and profile */}
+        {/* Top bar: menu button on phones, jump-to-page search, quick actions, notifications, profile */}
         <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 md:py-2.5">
           <button
             onClick={() => setIsMobileOpen(true)}
@@ -638,28 +660,87 @@ const DashboardLayout = () => {
               <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white"></span>
             )}
           </button>
-          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg">{pageTitle}</h2>
-          {notificationsItem && (
+
+          <div className="relative min-w-0 flex-1 max-w-md">
+            <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4-4M11 18a7 7 0 110-14 7 7 0 010 14z" />
+            </svg>
+            <input
+              ref={jumpRef}
+              type="text"
+              value={jumpQuery}
+              onChange={(e) => { setJumpQuery(e.target.value); setJumpOpen(true); }}
+              onFocus={() => setJumpOpen(true)}
+              onBlur={() => setTimeout(() => setJumpOpen(false), 150)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && jumpMatches[0]) goTo(jumpMatches[0].path);
+                if (e.key === "Escape") { setJumpQuery(""); e.currentTarget.blur(); }
+              }}
+              placeholder="Jump to page…"
+              aria-label="Jump to page"
+              className="min-h-[44px] w-full rounded-xl border border-transparent bg-slate-100 py-2 pl-9 pr-3 text-base focus:border-navy-500 focus:bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/30 sm:text-sm md:pr-14"
+            />
+            <span className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded bg-white px-1.5 py-0.5 text-[11px] text-slate-400 md:block">Ctrl K</span>
+            {jumpOpen && jumpMatches.length > 0 && (
+              <div className="absolute left-0 right-0 top-full z-40 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
+                {jumpMatches.map((item) => (
+                  <button
+                    key={item.path}
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => goTo(item.path)}
+                    className="flex min-h-[40px] w-full items-center rounded-lg px-3 text-left text-sm text-slate-700 hover:bg-slate-100"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {quickTokenItem && (
+              <Link
+                to={quickTokenItem.path}
+                className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white transition-colors hover:bg-navy-800"
+                title="New Token"
+              >
+                <span className="text-lg leading-none">+</span>
+                <span className="hidden lg:inline">New Token</span>
+              </Link>
+            )}
+            {quickEntryItem && (
+              <Link
+                to={quickEntryItem.path}
+                className="hidden h-11 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-navy-700 transition-colors hover:bg-slate-50 sm:inline-flex"
+                title="Service Entry"
+              >
+                <span className="text-lg leading-none">+</span>
+                <span className="hidden lg:inline">Service Entry</span>
+              </Link>
+            )}
+            {notificationsItem && (
+              <Link
+                to={notificationsItem.path}
+                className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                aria-label="Notifications"
+              >
+                <NotificationsIcon />
+                {notificationsCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[18px] text-center border-2 border-white">
+                    {notificationsCount > 99 ? '99+' : notificationsCount}
+                  </span>
+                )}
+              </Link>
+            )}
             <Link
-              to={notificationsItem.path}
-              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              aria-label="Notifications"
+              to="/dashboard/my-profile"
+              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700 hover:bg-navy-500/20"
+              aria-label="My profile"
             >
-              <NotificationsIcon />
-              {notificationsCount > 0 && (
-                <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[18px] text-center border-2 border-white">
-                  {notificationsCount > 99 ? '99+' : notificationsCount}
-                </span>
-              )}
+              {userInitials}
             </Link>
-          )}
-          <Link
-            to="/dashboard/my-profile"
-            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700 hover:bg-navy-500/20"
-            aria-label="My profile"
-          >
-            {userInitials}
-          </Link>
+          </div>
         </header>
 
         {/* Hidden scrollbar */}
