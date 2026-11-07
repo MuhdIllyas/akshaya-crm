@@ -341,6 +341,38 @@ const DashboardLayout = () => {
     setActivePath(path);
   };
 
+  // Group the menu into sections (display only; routes and labels are unchanged)
+  const sectionByLabel = {
+    "Overview": "Main", "My Dashboard": "Main", "Team Overview": "Main", "Home": "Main",
+    "Calendar": "Workspace", "My Tasks": "Workspace", "Notes": "Workspace", "Messenger": "Workspace",
+    "Notifications": "Workspace", "Knowledge Hub": "Workspace",
+    "Service Entry": "Operations", "Track Service": "Operations", "Service Logs": "Operations",
+    "Service Management": "Operations", "Token Generator": "Operations", "Pending Payments": "Operations",
+    "Leads": "Operations", "Campaigns": "Operations", "Customers Profile": "Operations",
+    "My Services": "Operations", "My Documents": "Operations", "Approvals": "Operations",
+    "Staff Management": "People", "Teams": "People", "My Team": "People", "Centre Management": "People",
+    "Salary Calculations": "People", "Salary & Attendance": "People", "Performance": "People",
+    "Wallets": "Money", "Expense Management": "Money", "Expense Entry": "Money",
+    "Reports": "Insights", "Analytics": "Insights",
+    "Settings": "System", "Profile": "System"
+  };
+  const sectionOrder = ["Main", "Workspace", "Operations", "People", "Money", "Insights", "System"];
+  const navSections = sectionOrder
+    .map((name) => ({
+      name,
+      items: userNavigation.filter((item) => (sectionByLabel[item.label] || "Main") === name)
+    }))
+    .filter((section) => section.items.length > 0);
+  const showSectionTitles = userNavigation.length > 6;
+
+  // Page title for the top bar + bell shortcut
+  const currentNavItem = [...userNavigation]
+    .sort((a, b) => b.path.length - a.path.length)
+    .find((item) => location.pathname === item.path || location.pathname.startsWith(item.path + "/"));
+  const pageTitle = currentNavItem ? currentNavItem.label : (location.pathname === "/dashboard/my-profile" ? "My Profile" : "Dashboard");
+  const notificationsItem = userNavigation.find((item) => item.label === "Notifications");
+  const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
   return (
     <div className="flex min-h-screen min-h-dvh bg-slate-50">
       {/* Phone: dimmed backdrop behind the open drawer */}
@@ -355,28 +387,28 @@ const DashboardLayout = () => {
       {/* Sidebar with original navy blue colors (off-canvas drawer on phones) */}
       <aside 
         id="app-sidebar"
-        className={`bg-navy-800 text-white fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
+        className={`bg-white text-slate-700 border-r border-slate-200 fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:max-w-none ${
           isCollapsed ? "md:w-20" : "md:w-64"
         }`}
       >
         {/* Header Section */}
-        <div className={`p-6 border-b border-navy-700 ${isCollapsed ? "px-4" : ""}`}>
+        <div className={`p-4 border-b border-slate-200 ${isCollapsed ? "px-3" : ""}`}>
           <div className="flex items-center justify-between">
             <div className="flex items-center">
-              <div className="bg-white p-2 rounded-xl shadow-lg">
+              <div className="bg-navy-700 p-2 rounded-xl shadow-sm">
                 <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z" stroke="#172a45" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 21V5C16 4.46957 15.7893 3.96086 15.4142 3.58579C15.0391 3.21071 14.5304 3 14 3H10C9.46957 3 8.96086 3.21071 8.58579 3.58579C8.21071 3.96086 8 4.46957 8 5V21" stroke="#172a45" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M16 21V5C16 4.46957 15.7893 3.96086 15.4142 3.58579C15.0391 3.21071 14.5304 3 14 3H10C9.46957 3 8.96086 3.21071 8.58579 3.58579C8.21071 3.96086 8 4.46957 8 5V21" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
               {!isCollapsed && (
                 <div className="ml-3">
-                  <h1 className="text-xl font-bold text-white">
+                  <h1 className="text-base font-semibold text-navy-700">
                     {role === "customer" ? "Client Suite" : "Office Suite"}
                   </h1>
-                  <p className="text-blue-200 text-xs">
+                  <p className="text-slate-500 text-xs">
                     {role === "customer" ? "Service Portal" : "Management Portal"}
                   </p>
                 </div>
@@ -385,7 +417,7 @@ const DashboardLayout = () => {
             {!isCollapsed && (
               <button
                 onClick={toggleSidebar}
-                className="hidden md:block p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+                className="hidden md:block p-2 rounded-lg hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
                 title="Collapse Sidebar"
               >
                 <CollapseIcon />
@@ -393,14 +425,14 @@ const DashboardLayout = () => {
             )}
             <button
               onClick={() => setIsMobileOpen(false)}
-              className="md:hidden p-2 rounded-lg hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+              className="md:hidden grid h-11 w-11 place-items-center rounded-lg hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
               aria-label="Close menu"
             >
               <CloseIcon />
             </button>
           </div>
           {!isCollapsed && (
-            <p className="text-blue-200 text-sm mt-3">
+            <p className="text-slate-500 text-sm mt-3 truncate">
               Hello, {roleDisplayNames[role] || "User"}
             </p>
           )}
@@ -408,8 +440,18 @@ const DashboardLayout = () => {
         
         {/* Navigation Section - Custom scrollbar */}
         <div className="flex-1 py-4 overflow-y-auto custom-scrollbar">
-          <nav className="space-y-1 px-3" aria-label="Main navigation">
-            {userNavigation.map((item, index) => {
+          <nav className="px-3" aria-label="Main navigation">
+            {navSections.map((section) => (
+              <div key={section.name} className={showSectionTitles ? "mb-2" : ""}>
+                {showSectionTitles && !isCollapsed && (
+                  <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{section.name}</p>
+                )}
+                {showSectionTitles && isCollapsed && (
+                  <div className="mx-3 my-2 border-t border-slate-200"></div>
+                )}
+                <div className="space-y-0.5">
+            {section.items.map((item) => {
+              const index = userNavigation.indexOf(item);
               const isActive = activePath === item.path;
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
@@ -423,11 +465,11 @@ const DashboardLayout = () => {
                   to={item.path}
                   onClick={() => handleNavigation(item.path)}
                   className={`flex items-center rounded-xl transition-all duration-200 group relative ${
-                    isCollapsed ? "justify-center p-3" : "p-3"
+                    isCollapsed ? "justify-center p-3" : "px-3 py-2.5"
                   } ${
                     isActive 
-                      ? "bg-navy-700 text-white border-r-2 border-blue-400 shadow-sm" 
-                      : "text-blue-200 hover:bg-navy-700 hover:text-white"
+                      ? "bg-navy-700 text-white shadow-sm" 
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                   title={isCollapsed ? item.label : ""}
                 >
@@ -447,7 +489,7 @@ const DashboardLayout = () => {
                   </div>
                   {!isCollapsed && (
                     <span className={`ml-3 font-medium transition-all duration-200 ${
-                      isActive ? "text-white" : "text-blue-200 group-hover:text-white"
+                      isActive ? "text-white" : "text-slate-600 group-hover:text-slate-900"
                     }`}>
                       {item.label}
                     </span>
@@ -455,7 +497,7 @@ const DashboardLayout = () => {
 
                   {/* Enhanced Tooltip */}
                   {isCollapsed && (
-                    <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
+                    <div className="absolute left-full ml-3 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
                       {item.label}
                       
                       {/* Messenger Badge */}
@@ -485,30 +527,33 @@ const DashboardLayout = () => {
                         </span>
                       )}
 
-                      <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-gray-900 border-transparent"></div>
+                      <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-slate-900 border-transparent"></div>
                     </div>
                   )}
                   {!isCollapsed && isActive && (
-                    <div className="absolute right-3 w-2 h-2 bg-blue-400 rounded-full"></div>
+                    <div className="absolute right-3 w-2 h-2 bg-white/70 rounded-full"></div>
                   )}
                 </Link>
               );
             })}
+                </div>
+              </div>
+            ))}
           </nav>
         </div>
 
         {/* Common Actions Section */}
-        <div className="border-t border-navy-700 py-4 px-3">
+        <div className="border-t border-slate-200 py-3 px-3">
           <nav className="space-y-1">
             <Link 
               to="/dashboard/my-profile"   // Changed from "/dashboard/profile" to the unified profile route
               onClick={() => handleNavigation("/dashboard/my-profile")}
               className={`flex items-center rounded-xl transition-all duration-200 group relative ${
-                isCollapsed ? "justify-center p-3" : "p-3"
+                isCollapsed ? "justify-center p-3" : "px-3 py-2.5"
               } ${
                 activePath === "/dashboard/my-profile"
-                  ? "bg-navy-700 text-white border-r-2 border-blue-400 shadow-sm" 
-                  : "text-blue-200 hover:bg-navy-700 hover:text-white"
+                  ? "bg-navy-700 text-white shadow-sm" 
+                  : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
               }`}
               title={isCollapsed ? "My Profile" : ""}
             >
@@ -517,15 +562,15 @@ const DashboardLayout = () => {
               </div>
               {!isCollapsed && (
                 <span className={`ml-3 font-medium ${
-                  activePath === "/dashboard/my-profile" ? "text-white" : "text-blue-200"
+                  activePath === "/dashboard/my-profile" ? "text-white" : "text-slate-600"
                 }`}>
                   My Profile
                 </span>
               )}
               {isCollapsed && (
-                <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap shadow-lg">
+                <div className="absolute left-full ml-3 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap shadow-lg">
                   My Profile
-                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-gray-900 border-transparent"></div>
+                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-slate-900 border-transparent"></div>
                 </div>
               )}
             </Link>
@@ -533,8 +578,8 @@ const DashboardLayout = () => {
             <Link 
               to="/logout"
               className={`flex items-center rounded-xl transition-all duration-200 group relative ${
-                isCollapsed ? "justify-center p-3" : "p-3"
-              } text-blue-200 hover:bg-navy-700 hover:text-white`}
+                isCollapsed ? "justify-center p-3" : "px-3 py-2.5"
+              } text-slate-600 hover:bg-slate-100 hover:text-slate-900`}
               title={isCollapsed ? "Logout" : ""}
             >
               <div className={isCollapsed ? "w-6 h-6" : "w-5 h-5"}>
@@ -542,9 +587,9 @@ const DashboardLayout = () => {
               </div>
               {!isCollapsed && <span className="ml-3 font-medium">Logout</span>}
               {isCollapsed && (
-                <div className="absolute left-full ml-3 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap shadow-lg">
+                <div className="absolute left-full ml-3 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap shadow-lg">
                   Logout
-                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-gray-900 border-transparent"></div>
+                  <div className="absolute right-full top-1/2 transform -translate-y-1/2 w-0 h-0 border-t-2 border-b-2 border-l-0 border-r-2 border-r-slate-900 border-transparent"></div>
                 </div>
               )}
             </Link>
@@ -552,12 +597,12 @@ const DashboardLayout = () => {
         </div>
         
         {/* Footer Section */}
-        <div className="border-t border-navy-700 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="border-t border-slate-200 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
           {/* Toggle Button for collapsed state */}
           {isCollapsed && (
             <button
               onClick={toggleSidebar}
-              className="w-full flex items-center justify-center p-4 hover:bg-navy-700 transition duration-200 text-blue-200 hover:text-white"
+              className="w-full flex items-center justify-center p-4 hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
               title="Expand Sidebar"
             >
               <ExpandIcon />
@@ -565,9 +610,9 @@ const DashboardLayout = () => {
           )}
 
           {!isCollapsed && (
-            <div className="px-4">
-              <p className="text-blue-200 text-xs text-center">© 2026 Business Management System</p>
-              <p className="text-blue-200 text-xs text-center mt-1">All rights reserved</p>
+            <div className="px-4 [@media(max-height:820px)]:hidden">
+              <p className="text-slate-400 text-xs text-center">© 2026 Business Management System</p>
+              <p className="text-slate-400 text-xs text-center mt-1">All rights reserved</p>
             </div>
           )}
         </div>
@@ -579,29 +624,48 @@ const DashboardLayout = () => {
           isCollapsed ? "md:ml-20" : "md:ml-64"
         }`}
       >
-        {/* Phone top bar with the menu button */}
-        <header className="md:hidden sticky top-0 z-30 flex items-center gap-3 bg-navy-800 text-white px-3 py-2.5 shadow-sm">
+        {/* Top bar: menu button on phones, page title, notifications and profile */}
+        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 md:py-2.5">
           <button
             onClick={() => setIsMobileOpen(true)}
-            className="relative p-2 rounded-lg hover:bg-navy-700 text-blue-200 hover:text-white"
+            className="md:hidden relative grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-600 hover:bg-slate-100"
             aria-label="Open menu"
             aria-expanded={isMobileOpen}
             aria-controls="app-sidebar"
           >
             <MenuIcon />
             {(unreadCount + unreadNotesCount + (notificationsCount || 0) + newLeadsCount) > 0 && (
-              <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-navy-800"></span>
+              <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white"></span>
             )}
           </button>
-          <span className="font-bold">{role === "customer" ? "Client Suite" : "Office Suite"}</span>
+          <h2 className="min-w-0 flex-1 truncate text-base font-semibold text-slate-900 sm:text-lg">{pageTitle}</h2>
+          {notificationsItem && (
+            <Link
+              to={notificationsItem.path}
+              className="relative grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              aria-label="Notifications"
+            >
+              <NotificationsIcon />
+              {notificationsCount > 0 && (
+                <span className="absolute top-1.5 right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[11px] leading-[18px] text-center border-2 border-white">
+                  {notificationsCount > 99 ? '99+' : notificationsCount}
+                </span>
+              )}
+            </Link>
+          )}
+          <Link
+            to="/dashboard/my-profile"
+            className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700 hover:bg-navy-500/20"
+            aria-label="My profile"
+          >
+            {userInitials}
+          </Link>
         </header>
 
         {/* Hidden scrollbar */}
         <main className="flex-1 min-w-0 overflow-auto main-content-scrollbar">
-          <div className="p-2 sm:p-4 md:p-6">
-            <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-5 md:p-6 min-h-full border border-slate-200">
-              <Outlet />
-            </div>
+          <div className="p-3 sm:p-4 md:p-5">
+            <Outlet />
           </div>
         </main>
       </div>
@@ -629,16 +693,16 @@ const DashboardLayout = () => {
         }
         
         .custom-scrollbar:hover::-webkit-scrollbar-track {
-          background: #172a45;
+          background: #f1f5f9;
         }
         
         .custom-scrollbar:hover::-webkit-scrollbar-thumb {
-          background: #1e3a5f;
+          background: #cbd5e1;
           border-radius: 3px;
         }
         
         .custom-scrollbar:hover::-webkit-scrollbar-thumb:hover {
-          background: #2d4a75;
+          background: #94a3b8;
         }
         
         /* Main content scrollbar - completely hidden */
@@ -707,7 +771,7 @@ const MessengerIconWithBadge = ({ isActive = false, isCollapsed = false, unreadC
       <span className={`absolute ${
         isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
       } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
-      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+      flex items-center justify-center px-1 border-2 border-white z-10`}>
         {unreadCount > 99 ? '99+' : unreadCount}
       </span>
     )}
@@ -730,7 +794,7 @@ const NotesIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount
       <span className={`absolute ${
         isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
       } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
-      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+      flex items-center justify-center px-1 border-2 border-white z-10`}>
         {unreadCount > 99 ? '99+' : unreadCount}
       </span>
     )}
@@ -752,7 +816,7 @@ const NotificationsIconWithBadge = ({ isActive = false, isCollapsed = false, unr
       <span className={`absolute ${
         isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
       } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px] 
-      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+      flex items-center justify-center px-1 border-2 border-white z-10`}>
         {unreadCount > 99 ? '99+' : unreadCount}
       </span>
     )}
@@ -774,7 +838,7 @@ const LeadsIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount
       <span className={`absolute ${
         isCollapsed ? '-top-2 -right-2' : '-top-2 -right-3'
       } bg-red-500 text-white text-xs rounded-full min-w-[18px] h-[18px]
-      flex items-center justify-center px-1 border-2 border-navy-800 z-10`}>
+      flex items-center justify-center px-1 border-2 border-white z-10`}>
         {unreadCount > 99 ? '99+' : unreadCount}
       </span>
     )}
