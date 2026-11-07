@@ -699,7 +699,7 @@ const DashboardLayout = () => {
         }`}
       >
         {/* Top bar: menu button on phones, jump-to-page search, quick actions, notifications, profile */}
-        <div className="sticky top-0 z-30 bg-slate-50 px-2 pb-2 pt-2 after:pointer-events-none after:absolute after:inset-x-0 after:top-full after:h-5 after:bg-gradient-to-b after:from-slate-50 after:to-transparent sm:px-4 sm:pt-4 md:px-6">
+        <div className="sticky top-0 z-30 bg-slate-50 px-2 pb-2 pt-2 sm:px-4 sm:pt-4 md:px-6">
         <header className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm sm:px-4">
           <button
             onClick={() => setIsMobileOpen(true)}
