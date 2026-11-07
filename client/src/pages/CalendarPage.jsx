@@ -1860,7 +1860,7 @@ export default function CalendarPage() {
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       {/* Top Bar with Centre Switcher */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm z-50">
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-slate-800 tracking-tight">
             📅 Calendar
