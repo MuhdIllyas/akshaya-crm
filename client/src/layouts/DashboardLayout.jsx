@@ -738,13 +738,6 @@ const DashboardLayout = () => {
                 )}
               </Link>
             )}
-            <Link
-              to="/dashboard/my-profile"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700 hover:bg-navy-500/20"
-              aria-label="My profile"
-            >
-              {userInitials}
-            </Link>
           </div>
         </header>
 
