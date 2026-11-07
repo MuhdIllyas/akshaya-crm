@@ -610,10 +610,10 @@ function CalendarView({
           const displayType = event_type || type; // Fallback to type
           
           return (
-            <div className="min-w-0 overflow-hidden px-1 py-0.5 text-xs font-medium leading-tight">
-              <div className="capitalize truncate">{arg.event.title}</div>
+            <div className="px-1 py-0.5 text-xs font-medium leading-tight">
+              <div className="capitalize">{arg.event.title}</div>
               {displayType && (
-                <div className="text-[10px] opacity-70 capitalize truncate">
+                <div className="text-[10px] opacity-70 capitalize">
                   {displayType}
                   {priority && priority !== "medium" && ` · ${priority}`}
                 </div>
