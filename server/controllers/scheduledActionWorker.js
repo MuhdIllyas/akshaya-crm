@@ -95,7 +95,16 @@ async function recoverStuckActions() {
 ========================================================= */
 async function executeAction(action) {
   try {
-    const entry = action.service_entry_id ? await loadServiceEntry(action.service_entry_id) : null;
+    // A reminder set on a lead uses the lead until it becomes a service entry
+    // (on conversion, leads.js moves pending reminders onto the new entry).
+    const leadOnly = action.lead_id && !action.service_entry_id;
+    const lead = leadOnly ? await loadLead(action.lead_id) : null;
+    if (leadOnly && !lead) return markCancelled(action, "Lead no longer exists");
+    if (leadOnly && !["new", "contacted", "follow_up"].includes(lead.status)) {
+      return markCancelled(action, `Lead is ${lead.status === "lost" ? "marked lost" : "closed"}`);
+    }
+
+    const entry = action.service_entry_id ? await loadServiceEntry(action.service_entry_id) : lead;
 
     // Guards: don't fire for things that no longer make sense
     if (action.service_entry_id && !entry) {
@@ -132,6 +141,22 @@ async function loadServiceEntry(id) {
     [id]
   );
   return rows[0] || null;
+}
+
+// Lead shaped like a service entry, so templates and tasks can use the same fields
+async function loadLead(id) {
+  const { rows } = await pool.query(`SELECT * FROM leads WHERE id = $1`, [id]);
+  const l = rows[0];
+  if (!l) return null;
+  const name = String(l.customer_details || l.whatsapp_name || "")
+    .replace(/\s*(?:\\n|\r?\n)+\s*/g, ", ").split(",")[0].trim();
+  return {
+    ...l,
+    customer_name: name || null,
+    service_name: l.service_needed || null,
+    staff_id: l.assigned_to,
+    category_id: null,
+  };
 }
 
 /* ---------- WhatsApp ---------- */

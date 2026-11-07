@@ -6,6 +6,8 @@ import {
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
+// Same reminders panel as Service Entry (WhatsApp templates + staff tasks)
+import ScheduledActionsPanel from "@/components/automations/ScheduledActionsPanel";
 
 /* ------------------------------------------------------------------
    Paths in your app — change these two if your routes are different
@@ -531,10 +533,13 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
   useEffect(() => {
-    if (!manager) return;
+    // staff list: reassigning (admins) and choosing who gets a reminder task (everyone)
     const q = me.role === "superadmin" && lead.centre_id ? `?centre_id=${lead.centre_id}` : "";
     api(`/staff${q}`).then(setStaff).catch(() => setStaff([]));
-  }, [api, manager, me.role, lead.centre_id]);
+  }, [api, me.role, lead.centre_id]);
+  // Reminders use the service picked on the lead ("Service – Sub-category")
+  const svcIds = useMemo(() => parseServiceLabel(catalog, lead.service_needed), [catalog, lead.service_needed]);
+  const reminderStaff = useMemo(() => staff.map((s) => ({ id: s.id, display: s.name })), [staff]);
 
   const docs = docsChip(lead.docs_ready);
   const isOpen = ["new", "contacted", "follow_up"].includes(lead.status);
@@ -737,6 +742,31 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
               <button type="button" onClick={() => setPending("lost")}
                       className="h-9 px-3 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-800">Lost</button>
             </div>
+          </div>
+        )}
+
+        {/* Scheduled reminders (WhatsApp to the customer / task for staff).
+            They move to the service entry when this lead is converted,
+            and stop if it is marked Lost or deleted. */}
+        {(isOpen || lead.status === "lost") && (
+          <div className="border border-gray-200 rounded-xl p-4">
+            {isOpen && catalog.length > 0 && svcIds.svcId === OTHER && (
+              <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3">
+                Pick a service from the list (Edit above) to see the reminders set up for it.
+              </p>
+            )}
+            <ScheduledActionsPanel
+              key={lead.id}
+              leadId={lead.id}
+              readOnly={!isOpen || !canEdit}
+              categoryId={svcIds.svcId && svcIds.svcId !== OTHER ? svcIds.svcId : ""}
+              subcategoryId={svcIds.subId}
+              customerName={leadName(lead) === "Unknown" ? "" : leadName(lead)}
+              serviceName={lead.service_needed || ""}
+              staffList={reminderStaff}
+              suggestedDocs={[]}
+              defaultAssignee={lead.assigned_to || (manager ? "" : me.id) || ""}
+            />
           </div>
         )}
 

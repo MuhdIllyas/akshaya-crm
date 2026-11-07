@@ -135,6 +135,42 @@ async function syncFollowUpTask(lead, actor) {
   }
 }
 
+/* =====================================================================
+   SCHEDULED REMINDERS ON A LEAD (scheduled_actions.lead_id)
+   Converted with a service entry → pending ones move to that entry, so they
+   show in Service Entry and keep running. Lost / deleted → pending ones are
+   cancelled. (The worker also skips any lead reminder once the lead is closed.)
+   ===================================================================== */
+async function moveLeadSchedules(lead, entryId, actorId) {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE scheduled_actions SET service_entry_id = $2, updated_at = NOW()
+        WHERE lead_id = $1 AND service_entry_id IS NULL AND status IN ('pending', 'failed')`,
+      [lead.id, entryId]
+    );
+    if (rowCount) await logActivity(pool, lead.id, actorId, "scheduled", `${rowCount} reminder(s) moved to service entry #${entryId}`);
+  } catch (err) {
+    console.error("[leads] moving reminders failed:", err.message);
+  }
+}
+
+async function cancelLeadSchedules(lead, actorId, why) {
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE scheduled_actions
+          SET status = 'cancelled', cancelled_at = NOW(), cancelled_by = $2,
+              last_error = $3, updated_at = NOW()
+        WHERE lead_id = $1 AND service_entry_id IS NULL AND status IN ('pending', 'failed')`,
+      [lead.id, actorId || null, why]
+    );
+    if (rowCount && why !== "Lead deleted") {
+      await logActivity(pool, lead.id, actorId, "scheduled", `${rowCount} reminder(s) cancelled – ${why.toLowerCase()}`);
+    }
+  } catch (err) {
+    console.error("[leads] cancelling reminders failed:", err.message);
+  }
+}
+
 async function loadLeadForUser(id, user) {
   const { rows } = await pool.query(`SELECT * FROM leads WHERE id = $1`, [id]);
   if (!rows.length) return { error: [404, "Lead not found"] };
@@ -613,6 +649,14 @@ router.patch("/:id", async (req, res) => {
     for (const [action, details] of acts) await logActivity(client, id, me, action, details);
     await client.query("COMMIT");
 
+    // Reminders set on the lead follow it into the service entry, or stop when it's lost
+    const saved = rows[0];
+    if (saved.converted_service_entry_id && saved.converted_service_entry_id !== lead.converted_service_entry_id) {
+      await moveLeadSchedules(saved, saved.converted_service_entry_id, me);
+    } else if (status === "lost" && lead.status !== "lost") {
+      await cancelLeadSchedules(saved, me, "Lead marked lost");
+    }
+
     // Follow-up date / status / owner changed → keep the follow-up task in step
     if (status !== undefined || follow_up_date !== undefined || assigned_to !== undefined || lead.follow_up_task_id) {
       await syncFollowUpTask(rows[0], { ...req.user, id: me });
@@ -649,6 +693,7 @@ router.delete("/:id", async (req, res) => {
         console.warn("[leads] could not close follow-up task on delete:", e.message)
       );
     }
+    await cancelLeadSchedules(lead, myId(req.user), "Lead deleted");
     await pool.query(`DELETE FROM leads WHERE id = $1`, [id]);
 
     console.log(`[leads] Lead #${id} (${lead.phone}) deleted by ${req.user.role} #${myId(req.user)}`);
