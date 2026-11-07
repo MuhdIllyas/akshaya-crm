@@ -409,28 +409,29 @@ const DashboardLayout = () => {
       {/* Sidebar with original navy blue colors (off-canvas drawer on phones) */}
       <aside 
         id="app-sidebar"
-        className={`bg-white text-slate-700 border-r border-slate-200 fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
+        className={`bg-slate-50 text-slate-700 p-2 gap-2 fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:max-w-none ${
           isCollapsed ? "md:w-20" : "md:w-64"
         }`}
       >
         {/* Header Section */}
-        <div className={`p-4 bg-navy-700 text-white ${isCollapsed ? "px-3" : ""}`}>
-          <div className="flex items-center justify-between">
+        <div className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${isCollapsed ? "p-2" : "p-3"}`}>
+          
+          <div className={`relative flex items-center ${isCollapsed ? "justify-center" : "justify-between"}`}>
             <div className="flex items-center">
-              <div className="bg-white/15 p-2 rounded-xl">
+              <div className="bg-navy-700 text-white p-2 rounded-xl">
                 <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 21V5C16 4.46957 15.7893 3.96086 15.4142 3.58579C15.0391 3.21071 14.5304 3 14 3H10C9.46957 3 8.96086 3.21071 8.58579 3.58579C8.21071 3.96086 8 4.46957 8 5V21" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  <path d="M16 21V5C16 4.46957 15.7893 3.96086 15.4142 3.58579C15.0391 3.21071 14.5304 3 14 3H10C9.46957 3 8.96086 3.21071 8.58579 3.58579C8.21071 3.96086 8 4.46957 8 5V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                 </svg>
               </div>
               {!isCollapsed && (
                 <div className="ml-3">
-                  <h1 className="text-base font-semibold text-white">
+                  <h1 className="text-base font-semibold text-slate-900">
                     {role === "customer" ? "Client Suite" : "Office Suite"}
                   </h1>
-                  <p className="text-white/70 text-xs">
+                  <p className="text-slate-500 text-xs">
                     {role === "customer" ? "Service Portal" : "Management Portal"}
                   </p>
                 </div>
@@ -439,7 +440,7 @@ const DashboardLayout = () => {
             {!isCollapsed && (
               <button
                 onClick={toggleSidebar}
-                className="hidden md:block p-2 rounded-lg hover:bg-white/10 transition duration-200 text-white/70 hover:text-white"
+                className="hidden md:block p-2 rounded-lg transition duration-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                 title="Collapse Sidebar"
               >
                 <CollapseIcon />
@@ -447,22 +448,26 @@ const DashboardLayout = () => {
             )}
             <button
               onClick={() => setIsMobileOpen(false)}
-              className="md:hidden grid h-11 w-11 place-items-center rounded-lg hover:bg-white/10 transition duration-200 text-white/70 hover:text-white"
+              className="md:hidden grid h-11 w-11 place-items-center rounded-lg transition duration-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
               aria-label="Close menu"
             >
               <CloseIcon />
             </button>
           </div>
           {!isCollapsed && (
-            <p className="text-white/70 text-sm mt-3 truncate">
-              Hello, {roleDisplayNames[role] || "User"}
-            </p>
+            <div className="relative mt-3 flex items-center gap-2.5 rounded-xl p-2 bg-slate-50 border border-slate-200">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700">{userInitials}</span>
+              <div className="min-w-0 leading-tight">
+                <p className="truncate text-sm font-semibold text-slate-900">{roleDisplayNames[role] || "User"}</p>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>{role === "customer" ? "Customer" : "Online"}</p>
+              </div>
+            </div>
           )}
         </div>
         
         {/* Navigation Section - Custom scrollbar */}
-        <div className="flex-1 py-4 overflow-y-auto custom-scrollbar">
-          <nav className="px-3" aria-label="Main navigation">
+        <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-2xl border border-slate-200 bg-white py-2 shadow-sm">
+          <nav className={isCollapsed ? "px-2" : "px-3"} aria-label="Main navigation">
             {navSections.map((section) => (
               <div key={section.name} className={showSectionTitles ? "mb-2" : ""}>
                 {showSectionTitles && !isCollapsed && (
@@ -565,7 +570,7 @@ const DashboardLayout = () => {
         </div>
 
         {/* Common Actions Section */}
-        <div className="border-t border-slate-200 py-3 px-3">
+        <div className={`rounded-2xl border border-slate-200 bg-white py-2 shadow-sm ${isCollapsed ? "px-2" : "px-3"}`}>
           <nav className="space-y-1">
             <Link 
               to="/dashboard/my-profile"   // Changed from "/dashboard/profile" to the unified profile route
@@ -619,12 +624,12 @@ const DashboardLayout = () => {
         </div>
         
         {/* Footer Section */}
-        <div className="border-t border-slate-200 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        <div className="pb-[max(0.25rem,env(safe-area-inset-bottom))]">
           {/* Toggle Button for collapsed state */}
           {isCollapsed && (
             <button
               onClick={toggleSidebar}
-              className="w-full flex items-center justify-center p-4 hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
+              className="w-full flex items-center justify-center p-3 rounded-2xl border border-slate-200 bg-white shadow-sm hover:bg-slate-100 transition duration-200 text-slate-500 hover:text-slate-900"
               title="Expand Sidebar"
             >
               <ExpandIcon />
