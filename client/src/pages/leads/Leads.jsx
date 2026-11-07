@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom";
 import {
   FiSearch, FiPlus, FiMessageSquare, FiPhone, FiX, FiChevronLeft,
-  FiRefreshCw, FiLink, FiCheckCircle, FiUserPlus, FiClock, FiSend,
+  FiRefreshCw, FiLink, FiCheckCircle, FiUserPlus, FiClock, FiSend, FiTrash2,
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
@@ -102,7 +102,7 @@ function whenText(l) {
 const ACTIVITY_TEXT = {
   created: "Lead created", enquiry: "New enquiry from bot", claimed: "Took the lead", assigned: "Assignment changed",
   status: "Status changed", follow_up: "Follow-up set", note: "Note",
-  lost: "Marked lost", converted: "Converted", chat_opened: "Opened chat", edited: "Details changed",
+  lost: "Marked lost", converted: "Converted", chat_opened: "Opened chat", edited: "Details changed", task: "Follow-up task",
 };
 
 /* =================================================================== */
@@ -446,6 +446,7 @@ export default function Leads({ user }) {
             onClaim={claim}
             onOpenChat={openChat}
             onReload={() => load({ quiet: true })}
+            onDeleted={() => { setSelectedId(null); load({ quiet: true }); }}
             catalog={catalog}
             onCreateEntry={(l) =>
               navigate(SERVICE_ENTRY_PATH(me.role), {
@@ -487,7 +488,7 @@ function IconBtn({ label, onClick, href, disabled, children }) {
 }
 
 /* =================== Lead detail panel =================== */
-function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenChat, onReload, onCreateEntry, catalog }) {
+function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenChat, onReload, onCreateEntry, catalog, onDeleted }) {
   const [activity, setActivity] = useState([]);
   const [staff, setStaff] = useState([]);
   const [pending, setPending] = useState(null); // 'follow_up' | 'lost' | 'converted'
@@ -497,6 +498,19 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const deleteLead = async () => {
+    setSaving(true);
+    try {
+      await api(`/${lead.id}`, { method: "DELETE" });
+      toast.success("Lead deleted");
+      onDeleted();
+    } catch (e) {
+      toast.error(e.message);
+      setSaving(false);
+    }
+  };
   const [draft, setDraft] = useState({
     customer_details: tidy(lead.customer_details),
     service_needed: lead.service_needed || "",
@@ -701,6 +715,31 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
           </div>
         )}
 
+        {/* Follow-up task (My Tasks + Calendar) */}
+        {lead.status === "follow_up" && lead.follow_up_task_id && lead.follow_up_task_status !== "completed" && (
+          <p className="text-sm bg-indigo-50 border border-indigo-100 text-indigo-900 rounded-lg px-3 py-2">
+            📅 Follow-up task on <strong>{fmtDay(lead.follow_up_day)}</strong> is in{" "}
+            {lead.assigned_to === me.id ? "your" : `${lead.assigned_to_name}'s`} My Tasks and on the Calendar.
+          </p>
+        )}
+        {lead.status === "follow_up" && lead.follow_up_task_status === "completed" && canEdit && (
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex flex-col gap-2">
+            <p className="text-sm font-semibold text-amber-900">Follow-up task is done. What happened with the customer?</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" onClick={() => onPatch(lead, { status: "contacted" }, "Marked Contacted")}
+                      className="h-9 px-3 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-800">Spoke – still deciding</button>
+              <button type="button" onClick={() => setPending("follow_up")}
+                      className="h-9 px-3 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-800">Follow up again</button>
+              {canStartEntry && (
+                <button type="button" onClick={() => onCreateEntry(lead)}
+                        className="h-9 px-3 rounded-lg bg-green-700 text-white text-sm font-semibold">Start service entry</button>
+              )}
+              <button type="button" onClick={() => setPending("lost")}
+                      className="h-9 px-3 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-800">Lost</button>
+            </div>
+          </div>
+        )}
+
         {/* Status */}
         {canEdit && (
         <div className="flex flex-col gap-2">
@@ -723,6 +762,11 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
           {pending === "follow_up" && (
             <div className="flex flex-col gap-2 border border-amber-200 bg-amber-50 rounded-xl p-3">
               <label className="text-sm font-semibold text-gray-900" htmlFor="fu-date">Follow up on</label>
+              <p className="text-xs text-gray-700">
+                {lead.assigned_to
+                  ? "A follow-up task will be added to My Tasks and the Calendar for this date."
+                  : "Assign the lead to a staff member to get a follow-up task in My Tasks and the Calendar."}
+              </p>
               <div className="flex flex-wrap gap-2">
                 {[["Tomorrow", 1], ["In 3 days", 3], ["Next week", 7]].map(([t, n]) => (
                   <button key={t} type="button"
@@ -802,6 +846,35 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
             </div>
           ))}
         </div>
+
+        {/* Delete — admin / superadmin only */}
+        {manager && (
+          <div className="border-t border-gray-200 pt-4">
+            {!confirmDelete ? (
+              <button type="button" onClick={() => setConfirmDelete(true)}
+                      className="h-10 px-4 rounded-lg border border-red-200 text-red-700 text-sm font-semibold flex items-center gap-2 hover:bg-red-50">
+                <FiTrash2 /> Delete lead
+              </button>
+            ) : (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex flex-col gap-2">
+                <p className="text-sm text-red-900">
+                  <strong>Delete this lead permanently?</strong> Its notes and history will be removed
+                  {lead.follow_up_task_id ? " and its follow-up task closed" : ""}. The WhatsApp chat
+                  {lead.converted_service_entry_id ? " and the service entry stay" : " stays"} as they are.
+                  {["new", "contacted", "follow_up"].includes(lead.status) && " If it's just closed, marking it Lost keeps the record instead."}
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <button type="button" onClick={() => setConfirmDelete(false)}
+                          className="h-10 px-4 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-700">Cancel</button>
+                  <button type="button" onClick={deleteLead} disabled={saving}
+                          className="h-10 px-4 rounded-lg bg-red-700 hover:bg-red-800 text-white text-sm font-semibold disabled:opacity-50">
+                    {saving ? "Deleting…" : "Yes, delete"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
     </>
   );
