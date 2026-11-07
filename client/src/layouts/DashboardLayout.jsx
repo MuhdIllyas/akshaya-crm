@@ -34,26 +34,9 @@ const DashboardLayout = () => {
   }, []);
   const token = localStorage.getItem("token");
 
-  // Centre name shown under the admin's name (saved name if present, otherwise looked up once)
-  const [centreName, setCentreName] = useState(localStorage.getItem("centre_name") || "");
-  useEffect(() => {
-    if (role !== "admin" || centreName) return;
-    const centreId = localStorage.getItem("centre_id");
-    const base = import.meta.env.VITE_API_URL;
-    if (!centreId || !base || !token) return;
-    let cancelled = false;
-    fetch(`${base}/api/centres`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : []))
-      .then((list) => {
-        const found = (Array.isArray(list) ? list : list?.centres || []).find((c) => String(c.id) === String(centreId));
-        if (!cancelled && found?.name) {
-          setCentreName(found.name);
-          try { localStorage.setItem("centre_name", found.name); } catch { /* ignore */ }
-        }
-      })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [role, centreName, token]);
+  // Centre name shown under the admin's name. Read from localStorage ("centre_name", saved at login);
+  // no API call here because /api/centres is superadmin-only.
+  const centreName = localStorage.getItem("centre_name") || "";
   
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
