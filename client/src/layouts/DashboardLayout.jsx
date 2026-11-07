@@ -664,7 +664,8 @@ const DashboardLayout = () => {
         }`}
       >
         {/* Top bar: menu button on phones, jump-to-page search, quick actions, notifications, profile */}
-        <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-slate-200 bg-white px-3 py-2 sm:px-5 md:py-2.5">
+        <div className="sticky top-0 z-30 bg-slate-50 px-2 pt-2 sm:px-4 sm:pt-4 md:px-6">
+        <header className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 shadow-sm sm:px-4">
           <button
             onClick={() => setIsMobileOpen(true)}
             className="md:hidden relative grid h-11 w-11 shrink-0 place-items-center rounded-xl text-slate-600 hover:bg-slate-100"
@@ -752,10 +753,11 @@ const DashboardLayout = () => {
             )}
           </div>
         </header>
+        </div>
 
         {/* Hidden scrollbar */}
         <main className="flex-1 min-w-0 overflow-auto main-content-scrollbar">
-          <div className="p-2 sm:p-4 md:p-6">
+          <div className="p-2 sm:p-4 md:px-6 md:pb-6 md:pt-4">
             <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-5 md:p-6 min-h-full border border-slate-200">
               <Outlet />
             </div>
