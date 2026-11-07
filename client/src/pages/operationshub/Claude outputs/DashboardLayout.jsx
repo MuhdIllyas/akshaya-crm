@@ -745,8 +745,10 @@ const DashboardLayout = () => {
 
         {/* Hidden scrollbar */}
         <main className="flex-1 min-w-0 overflow-auto main-content-scrollbar">
-          <div className="p-3 sm:p-4 md:p-5">
-            <Outlet />
+          <div className="p-2 sm:p-4 md:p-6">
+            <div className="bg-white rounded-2xl shadow-sm p-3 sm:p-5 md:p-6 min-h-full border border-slate-200">
+              <Outlet />
+            </div>
           </div>
         </main>
       </div>
