@@ -15,8 +15,13 @@ router.post("/login", async (req, res) => {
   }
 
   try {
+    // LEFT JOIN so superadmin (no centre) still logs in
     const result = await pool.query(
-      "SELECT id, name, username, password, role, centre_id, photo FROM staff WHERE username = $1",
+      `SELECT s.id, s.name, s.username, s.password, s.role, s.centre_id, s.photo,
+              c.name AS centre_name
+         FROM staff s
+         LEFT JOIN centres c ON c.id = s.centre_id
+        WHERE s.username = $1`,
       [username]
     );
 
@@ -46,6 +51,7 @@ router.post("/login", async (req, res) => {
       username: user.username,
       role: user.role,
       centre_id: user.centre_id || null,
+      centre_name: user.centre_name || null,
       photo: user.photo || null
     });
   } catch (err) {
@@ -65,7 +71,11 @@ router.get("/verify", async (req, res) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const result = await pool.query(
-      "SELECT id, name, username, role, centre_id, photo FROM staff WHERE id = $1",
+      `SELECT s.id, s.name, s.username, s.role, s.centre_id, s.photo,
+              c.name AS centre_name
+         FROM staff s
+         LEFT JOIN centres c ON c.id = s.centre_id
+        WHERE s.id = $1`,
       [decoded.id]
     );
 
@@ -81,6 +91,7 @@ router.get("/verify", async (req, res) => {
       username: user.username,
       role: user.role,
       centre_id: user.centre_id || null,
+      centre_name: user.centre_name || null,
       photo: user.photo || null
     });
   } catch (err) {
