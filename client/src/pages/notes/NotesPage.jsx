@@ -432,9 +432,9 @@ const NotesPage = () => {
   const creatorColor = colorOf(noteColor);
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-16 text-slate-700">
+    <div className="min-h-[60vh] rounded-2xl bg-slate-50 pb-10 text-slate-700">
       {/* ===== TOP BAR ===== */}
-      <div className="sticky top-0 z-30 flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
+      <div className="sticky top-[4.75rem] z-20 flex flex-wrap items-center justify-between gap-3 rounded-t-2xl border-b border-slate-200 bg-white px-4 py-3 sm:top-[5.5rem] sm:px-6">
         <div className="flex items-center gap-3">
           <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-50 text-navy-700">
             <FiEdit3 className="h-5 w-5" />
