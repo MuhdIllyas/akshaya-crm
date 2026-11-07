@@ -62,20 +62,6 @@ const DashboardLayout = () => {
       throw new Error("VITE_API_URL is not defined");
   }
 
-  // Staff photo for the sidebar user card (falls back to initials when there is none)
-  const [profilePhoto, setProfilePhoto] = useState("");
-  useEffect(() => {
-    if (!token || !currentUserId || role === "customer") return;
-    let cancelled = false;
-    fetch(`${API_BASE_URL}/api/staff/${currentUserId}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => { if (!cancelled && data?.photo) setProfilePhoto(data.photo); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [token, currentUserId, role]);
-
   // Fetch all unread counts from the new API endpoint
   const fetchAllUnreadCounts = async () => {
     if (!token) return;
@@ -468,14 +454,9 @@ const DashboardLayout = () => {
               <CloseIcon />
             </button>
           </div>
-          {isCollapsed && (
-            <div className="mt-3 flex justify-center">
-              <span className="grid h-9 w-9 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700"><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
-            </div>
-          )}
           {!isCollapsed && (
             <div className="relative mt-3 flex items-center gap-2.5 rounded-xl p-2 bg-slate-50 border border-slate-200">
-              <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700"><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700">{userInitials}</span>
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-sm font-semibold text-slate-900">{roleDisplayNames[role] || "User"}</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>{role === "customer" ? "Customer" : "Online"}</p>
@@ -757,13 +738,6 @@ const DashboardLayout = () => {
                 )}
               </Link>
             )}
-            <Link
-              to="/dashboard/my-profile"
-              className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700 hover:bg-navy-500/20"
-              aria-label="My profile"
-            >
-              {userInitials}
-            </Link>
           </div>
         </header>
 
@@ -824,15 +798,6 @@ const DashboardLayout = () => {
       `}</style>
     </div>
   );
-};
-
-// Staff photo when there is one, otherwise the initials
-const UserAvatar = ({ photo, initials }) => {
-  const [failed, setFailed] = useState(false);
-  if (photo && !failed) {
-    return <img src={photo} alt="" className="h-full w-full object-cover" onError={() => setFailed(true)} />;
-  }
-  return <>{initials}</>;
 };
 
 // Toggle Icons
