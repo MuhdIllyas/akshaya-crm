@@ -33,6 +33,27 @@ const DashboardLayout = () => {
     return () => document.removeEventListener("keydown", onKey);
   }, []);
   const token = localStorage.getItem("token");
+
+  // Centre name shown under the admin's name (saved name if present, otherwise looked up once)
+  const [centreName, setCentreName] = useState(localStorage.getItem("centre_name") || "");
+  useEffect(() => {
+    if (role !== "admin" || centreName) return;
+    const centreId = localStorage.getItem("centre_id");
+    const base = import.meta.env.VITE_API_URL;
+    if (!centreId || !base || !token) return;
+    let cancelled = false;
+    fetch(`${base}/api/centres`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((list) => {
+        const found = (Array.isArray(list) ? list : list?.centres || []).find((c) => String(c.id) === String(centreId));
+        if (!cancelled && found?.name) {
+          setCentreName(found.name);
+          try { localStorage.setItem("centre_name", found.name); } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [role, centreName, token]);
   
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
@@ -343,9 +364,9 @@ const DashboardLayout = () => {
   // Role display names
   const roleDisplayNames = {
     superadmin: "Super Admin",
-    admin: "Administrator",
+    admin: staffName || "Administrator",
     staff: staffName || "Staff Member",
-    supervisor: "Supervisor",
+    supervisor: staffName || "Supervisor",
     customer: customerName
   };
 
@@ -471,6 +492,14 @@ const DashboardLayout = () => {
               <span className="grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700"><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
               <div className="min-w-0 leading-tight">
                 <p className="truncate text-sm font-semibold text-slate-900">{roleDisplayNames[role] || "User"}</p>
+                {role !== "customer" && (
+                  <p className="truncate text-[11px] font-medium text-navy-700">
+                    {{ superadmin: "Super Admin", admin: "Admin", staff: "Staff", supervisor: "Supervisor" }[role] || role}
+                  </p>
+                )}
+                {role === "admin" && centreName && (
+                  <p className="truncate text-[11px] text-slate-500" title={centreName}>{centreName}</p>
+                )}
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500"><span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>{role === "customer" ? "Customer" : "Online"}</p>
               </div>
             </div>
