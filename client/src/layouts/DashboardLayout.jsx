@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
-import useEvents from '@/hooks/useEvents';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -397,7 +396,6 @@ const DashboardLayout = () => {
     jumpRef.current?.blur();
   };
   const quickTokenItem = userNavigation.find((item) => item.label === "Token Generator");
-  const calendarItem = userNavigation.find((item) => item.label === "Calendar");
   // Notification / event strip in the top bar (desktop only; not for customers or supervisors)
   const showTicker = ["staff", "admin", "superadmin"].includes(role) && !!notificationsItem;
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
@@ -773,8 +771,6 @@ const DashboardLayout = () => {
               apiBase={API_BASE_URL}
               unreadSignal={notificationsCount}
               notificationsPath={notificationsItem?.path}
-              calendarPath={calendarItem?.path}
-              centreId={role === "superadmin" ? null : localStorage.getItem("centre_id") || null}
               navigate={navigate}
             />
           )}
@@ -881,9 +877,7 @@ const DashboardLayout = () => {
   );
 };
 
-// ---- Top bar strip: rotates through unread notifications and upcoming events ----
-const IST = "Asia/Kolkata";
-const istDay = (d) => d.toLocaleDateString("en-CA", { timeZone: IST });
+// ---- Top bar strip: rotates through your recent unread notifications ----
 const timeAgoShort = (value) => {
   const diff = Math.max(0, Date.now() - new Date(value).getTime());
   const m = Math.floor(diff / 60000);
@@ -893,24 +887,10 @@ const timeAgoShort = (value) => {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 };
-const eventWhen = (value) => {
-  const d = new Date(value);
-  if (isNaN(d.getTime())) return "";
-  const today = istDay(new Date());
-  const tomorrow = istDay(new Date(Date.now() + 86400000));
-  const day = istDay(d);
-  const hasTime = /T\d/.test(String(value)) && !/T00:00(:00)?(\.000)?Z?$/.test(String(value));
-  const time = hasTime ? d.toLocaleTimeString("en-IN", { timeZone: IST, hour: "numeric", minute: "2-digit", hour12: true }) : "";
-  const label = day === today ? "Today" : day === tomorrow ? "Tomorrow"
-    : d.toLocaleDateString("en-IN", { timeZone: IST, weekday: "short", day: "numeric", month: "short" });
-  return time ? `${label}, ${time}` : label;
-};
-
-const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, calendarPath, centreId, navigate }) => {
+const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, navigate }) => {
   const [notifs, setNotifs] = useState([]);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
-  const { events = [] } = useEvents({ centreId }) || {};
 
   // recent notifications (same route as the Notifications page)
   useEffect(() => {
@@ -940,29 +920,12 @@ const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, calenda
     const sorted = [...notifs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     const unread = sorted.filter((n) => !n.is_read).slice(0, 4);
     const noteItems = (unread.length ? unread : sorted.slice(0, 2)).map((n) => ({
-      key: `n${n.id}`, kind: "notification",
+      key: `n${n.id}`,
       title: n.title || "Notification",
       meta: [n.sender_name, timeAgoShort(n.created_at)].filter(Boolean).join(" · "),
     }));
-    const now = Date.now();
-    const horizon = now + 14 * 86400000;
-    const eventItems = (Array.isArray(events) ? events : [])
-      .map((e) => ({ e, at: new Date(e.start_datetime || e.date || e.start_date).getTime() }))
-      .filter(({ at }) => !isNaN(at) && at >= now - 3600000 && at <= horizon)
-      .sort((a, b) => a.at - b.at)
-      .slice(0, 3)
-      .map(({ e, at }) => ({
-        key: `e${e.id ?? at}`, kind: "event",
-        title: e.title || "Event",
-        meta: eventWhen(e.start_datetime || e.date || e.start_date),
-      }));
-    const out = [];
-    for (let i = 0; i < Math.max(noteItems.length, eventItems.length); i++) {
-      if (noteItems[i]) out.push(noteItems[i]);
-      if (eventItems[i]) out.push(eventItems[i]);
-    }
-    return out;
-  }, [notifs, events]);
+    return noteItems;
+  }, [notifs]);
 
   useEffect(() => { if (index >= items.length) setIndex(0); }, [items.length, index]);
   useEffect(() => {
@@ -973,10 +936,7 @@ const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, calenda
 
   if (items.length === 0) return <div className="hidden min-w-0 flex-1 xl:block" />;
   const item = items[Math.min(index, items.length - 1)];
-  const go = () => {
-    const path = item.kind === "event" ? calendarPath : notificationsPath;
-    if (path) navigate(path);
-  };
+  const go = () => { if (notificationsPath) navigate(notificationsPath); };
 
   return (
     <div className="hidden min-w-0 flex-1 xl:block" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
@@ -986,8 +946,8 @@ const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, calenda
         className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-left transition-colors hover:bg-slate-100"
         title={`${item.title} — ${item.meta}`}
       >
-        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${item.kind === "event" ? "bg-emerald-50 text-emerald-700" : "bg-navy-500/10 text-navy-700"}`}>
-          <span className="block h-4 w-4 [&>svg]:h-4 [&>svg]:w-4">{item.kind === "event" ? <CalendarIcon /> : <NotificationsIcon />}</span>
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-navy-500/10 text-navy-700">
+          <span className="block h-4 w-4 [&>svg]:h-4 [&>svg]:w-4"><NotificationsIcon /></span>
         </span>
         <span key={item.key} className="header-ticker-fade flex min-w-0 flex-1 items-baseline gap-2">
           <span className="truncate text-sm font-medium text-slate-900">{item.title}</span>
