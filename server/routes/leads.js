@@ -5,6 +5,8 @@ import { addStaffToConversation } from "../utils/conversationService.js";
 // Same task creator the Tasks page uses, so follow-ups behave like any other task
 // (My Tasks, Calendar, notifications). Path: routes/leads.js → services/taskService.js
 import { createTask } from "../services/taskService.js";
+// Bell / Notifications page entries for new and assigned leads
+import { notifyNewLead, notifyLeadAssigned } from "../utils/leadNotifications.js";
 
 const router = express.Router();
 
@@ -404,6 +406,10 @@ router.post("/", async (req, res) => {
     if (lead.notes) await logActivity(client, lead.id, myId(req.user), "note", lead.notes);
     await client.query("COMMIT");
 
+    // Given to someone else → tell them; nobody yet → tell the centre team
+    if (lead.assigned_to) notifyLeadAssigned(lead, lead.assigned_to, myId(req.user));
+    else notifyNewLead(lead, { senderId: myId(req.user) });
+
     emitLeadChange(req, lead, "created");
     res.status(201).json(lead);
   } catch (err) {
@@ -660,6 +666,11 @@ router.patch("/:id", async (req, res) => {
     // Follow-up date / status / owner changed → keep the follow-up task in step
     if (status !== undefined || follow_up_date !== undefined || assigned_to !== undefined || lead.follow_up_task_id) {
       await syncFollowUpTask(rows[0], { ...req.user, id: me });
+    }
+
+    // Admin assigned / reassigned it to someone → notify that staff member
+    if (assigned_to !== undefined && newAssignee && newAssignee !== lead.assigned_to) {
+      notifyLeadAssigned(rows[0], newAssignee, me);
     }
 
     emitLeadChange(req, rows[0]);

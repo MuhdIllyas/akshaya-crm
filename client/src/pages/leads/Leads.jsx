@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   FiSearch, FiPlus, FiMessageSquare, FiPhone, FiX, FiChevronLeft,
-  FiRefreshCw, FiLink, FiCheckCircle, FiUserPlus, FiClock, FiSend, FiTrash2,
+  FiRefreshCw, FiLink, FiCheckCircle, FiUserPlus, FiClock, FiSend, FiTrash2, FiFileText, FiArrowRight,
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
@@ -121,6 +121,16 @@ export default function Leads({ user }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+
+  // Opened from a notification ("Lead assigned to you" etc.) → show that lead
+  const location = useLocation();
+  useEffect(() => {
+    const id = Number(location.state?.openLeadId);
+    if (!id) return;
+    setTab("open");
+    setSelectedId(id);
+    navigate(location.pathname, { replace: true, state: {} }); // don't reopen on refresh
+  }, [location.state?.openLeadId]); // eslint-disable-line react-hooks/exhaustive-deps
   const [showAdd, setShowAdd] = useState(false);
   const [centres, setCentres] = useState({});
   const [catalog, setCatalog] = useState([]); // services + sub-categories for the pickers
@@ -616,22 +626,28 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
         </div>
 
         {/* Main actions */}
+        {/* When staff can start the entry, that is the main action (navy);
+            chat and call become the secondary outline buttons. */}
+        {canStartEntry && (
+          <button type="button" onClick={() => onCreateEntry(lead)}
+                  className="w-full min-h-[44px] py-2.5 rounded-lg bg-navy-700 hover:bg-navy-800 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-sm">
+            <FiFileText className="shrink-0" /> Start service entry
+            <FiArrowRight className="shrink-0 opacity-80" />
+          </button>
+        )}
         <div className="grid grid-cols-2 gap-2.5">
           <button type="button" onClick={() => onOpenChat(lead)} disabled={!lead.conversation_id}
-                  className="h-11 rounded-lg bg-navy-700 hover:bg-navy-800 text-white text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40">
+                  className={`h-11 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-40 ${
+                    canStartEntry
+                      ? "border border-gray-300 text-navy-700 hover:bg-gray-50"
+                      : "bg-navy-700 hover:bg-navy-800 text-white"
+                  }`}>
             <FiMessageSquare /> Open chat
           </button>
           <a href={`tel:+91${lead.phone}`} className="h-11 rounded-lg border border-gray-300 text-navy-700 text-sm font-semibold flex items-center justify-center gap-2 hover:bg-gray-50">
             <FiPhone /> Call
           </a>
         </div>
-
-        {canStartEntry && (
-          <button type="button" onClick={() => onCreateEntry(lead)}
-                  className="h-12 rounded-lg bg-green-700 hover:bg-green-800 text-white text-sm font-bold flex items-center justify-center gap-2">
-            <FiCheckCircle /> Start service entry
-          </button>
-        )}
         {!canEdit && (
           <p className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">
             This lead is with <strong>{lead.assigned_to_name}</strong>. Only they or an admin can update it.
@@ -737,7 +753,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
                       className="h-9 px-3 rounded-lg border border-gray-300 bg-white text-sm font-semibold text-gray-800">Follow up again</button>
               {canStartEntry && (
                 <button type="button" onClick={() => onCreateEntry(lead)}
-                        className="h-9 px-3 rounded-lg bg-green-700 text-white text-sm font-semibold">Start service entry</button>
+                        className="h-9 px-3 rounded-lg bg-navy-700 hover:bg-navy-800 text-white text-sm font-semibold">Start service entry</button>
               )}
               <button type="button" onClick={() => setPending("lost")}
                       className="h-9 px-3 rounded-lg border border-red-200 bg-white text-sm font-semibold text-red-800">Lost</button>

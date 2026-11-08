@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import { sendManualWhatsAppTemplate, sendSystemMessage, getUnreadCount } from "../utils/messageRouter.js";
 import { addStaffToConversation } from "../utils/conversationService.js";
+import { notifyNewLead } from "../utils/leadNotifications.js";
 
 const router = express.Router();
 
@@ -553,6 +554,9 @@ router.post("/create-lead", async (req, res) => {
         [lead.id, `From WhatsApp bot${data.docs_ready ? ` · Documents: ${data.docs_ready}` : ""}`]
       ).catch((e) => console.warn("[create-lead] activity log skipped:", e.message));
     }
+
+    // Bell + Notifications page (new lead → centre team; repeat enquiry → the lead's owner)
+    notifyNewLead(lead, { repeat: existing.rows.length > 0 });
 
     const io = req.io || req.app.get("io");
     if (io) {
