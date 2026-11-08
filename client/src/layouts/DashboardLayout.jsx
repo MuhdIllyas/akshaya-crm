@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
+import useEvents from '@/hooks/useEvents';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -396,6 +397,9 @@ const DashboardLayout = () => {
     jumpRef.current?.blur();
   };
   const quickTokenItem = userNavigation.find((item) => item.label === "Token Generator");
+  const calendarItem = userNavigation.find((item) => item.label === "Calendar");
+  // Notification / event strip in the top bar (desktop only; not for customers or supervisors)
+  const showTicker = ["staff", "admin", "superadmin"].includes(role) && !!notificationsItem;
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -697,7 +701,7 @@ const DashboardLayout = () => {
             )}
           </button>
 
-          <div className="relative min-w-0 flex-1 max-w-md">
+          <div className={`relative min-w-0 flex-1 max-w-md ${showTicker ? "xl:max-w-[240px]" : ""}`}>
             <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4-4M11 18a7 7 0 110-14 7 7 0 010 14z" />
             </svg>
@@ -733,6 +737,18 @@ const DashboardLayout = () => {
               </div>
             )}
           </div>
+
+          {showTicker && (
+            <HeaderTicker
+              token={token}
+              apiBase={API_BASE_URL}
+              unreadSignal={notificationsCount}
+              notificationsPath={notificationsItem?.path}
+              calendarPath={calendarItem?.path}
+              centreId={role === "superadmin" ? null : localStorage.getItem("centre_id") || null}
+              navigate={navigate}
+            />
+          )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
             {quickTokenItem && (
@@ -818,6 +834,10 @@ const DashboardLayout = () => {
           background: #94a3b8;
         }
         
+        .header-ticker-fade { animation: headerTickerFade 0.35s ease-out; }
+        @keyframes headerTickerFade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+        @media (prefers-reduced-motion: reduce) { .header-ticker-fade { animation: none; } }
+
         /* Main content scrollbar - completely hidden */
         .main-content-scrollbar {
           scrollbar-width: none; /* Firefox */
@@ -828,6 +848,130 @@ const DashboardLayout = () => {
           display: none; /* Chrome, Safari, Opera */
         }
       `}</style>
+    </div>
+  );
+};
+
+// ---- Top bar strip: rotates through unread notifications and upcoming events ----
+const IST = "Asia/Kolkata";
+const istDay = (d) => d.toLocaleDateString("en-CA", { timeZone: IST });
+const timeAgoShort = (value) => {
+  const diff = Math.max(0, Date.now() - new Date(value).getTime());
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "now";
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+};
+const eventWhen = (value) => {
+  const d = new Date(value);
+  if (isNaN(d.getTime())) return "";
+  const today = istDay(new Date());
+  const tomorrow = istDay(new Date(Date.now() + 86400000));
+  const day = istDay(d);
+  const hasTime = /T\d/.test(String(value)) && !/T00:00(:00)?(\.000)?Z?$/.test(String(value));
+  const time = hasTime ? d.toLocaleTimeString("en-IN", { timeZone: IST, hour: "numeric", minute: "2-digit", hour12: true }) : "";
+  const label = day === today ? "Today" : day === tomorrow ? "Tomorrow"
+    : d.toLocaleDateString("en-IN", { timeZone: IST, weekday: "short", day: "numeric", month: "short" });
+  return time ? `${label}, ${time}` : label;
+};
+
+const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, calendarPath, centreId, navigate }) => {
+  const [notifs, setNotifs] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const { events = [] } = useEvents({ centreId }) || {};
+
+  // recent notifications (same route as the Notifications page)
+  useEffect(() => {
+    if (!token || !apiBase) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${apiBase}/api/notifications?limit=20`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const data = await res.json();
+        const list = Array.isArray(data) ? data : Array.isArray(data?.notifications) ? data.notifications : [];
+        if (!cancelled) setNotifs(list);
+      } catch { /* the strip simply stays empty */ }
+    })();
+    return () => { cancelled = true; };
+  }, [token, apiBase, unreadSignal]);
+
+  useEffect(() => {
+    const onNew = (n) => setNotifs((prev) => [n, ...prev.filter((x) => x.id !== n.id)]);
+    const onUpd = (n) => setNotifs((prev) => prev.map((x) => (x.id === n.id ? { ...x, ...n } : x)));
+    socket.on("notification", onNew);
+    socket.on("notification_updated", onUpd);
+    return () => { socket.off("notification", onNew); socket.off("notification_updated", onUpd); };
+  }, []);
+
+  const items = React.useMemo(() => {
+    const sorted = [...notifs].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    const unread = sorted.filter((n) => !n.is_read).slice(0, 4);
+    const noteItems = (unread.length ? unread : sorted.slice(0, 2)).map((n) => ({
+      key: `n${n.id}`, kind: "notification",
+      title: n.title || "Notification",
+      meta: [n.sender_name, timeAgoShort(n.created_at)].filter(Boolean).join(" · "),
+    }));
+    const now = Date.now();
+    const horizon = now + 14 * 86400000;
+    const eventItems = (Array.isArray(events) ? events : [])
+      .map((e) => ({ e, at: new Date(e.start_datetime || e.date || e.start_date).getTime() }))
+      .filter(({ at }) => !isNaN(at) && at >= now - 3600000 && at <= horizon)
+      .sort((a, b) => a.at - b.at)
+      .slice(0, 3)
+      .map(({ e, at }) => ({
+        key: `e${e.id ?? at}`, kind: "event",
+        title: e.title || "Event",
+        meta: eventWhen(e.start_datetime || e.date || e.start_date),
+      }));
+    const out = [];
+    for (let i = 0; i < Math.max(noteItems.length, eventItems.length); i++) {
+      if (noteItems[i]) out.push(noteItems[i]);
+      if (eventItems[i]) out.push(eventItems[i]);
+    }
+    return out;
+  }, [notifs, events]);
+
+  useEffect(() => { if (index >= items.length) setIndex(0); }, [items.length, index]);
+  useEffect(() => {
+    if (paused || items.length < 2) return undefined;
+    const t = setInterval(() => setIndex((i) => (i + 1) % items.length), 5000);
+    return () => clearInterval(t);
+  }, [paused, items.length]);
+
+  if (items.length === 0) return <div className="hidden min-w-0 flex-1 xl:block" />;
+  const item = items[Math.min(index, items.length - 1)];
+  const go = () => {
+    const path = item.kind === "event" ? calendarPath : notificationsPath;
+    if (path) navigate(path);
+  };
+
+  return (
+    <div className="hidden min-w-0 flex-1 xl:block" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)}>
+      <button
+        type="button"
+        onClick={go}
+        className="flex h-11 w-full min-w-0 items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-left transition-colors hover:bg-slate-100"
+        title={`${item.title} — ${item.meta}`}
+      >
+        <span className={`grid h-7 w-7 shrink-0 place-items-center rounded-lg ${item.kind === "event" ? "bg-emerald-50 text-emerald-700" : "bg-navy-500/10 text-navy-700"}`}>
+          <span className="block h-4 w-4 [&>svg]:h-4 [&>svg]:w-4">{item.kind === "event" ? <CalendarIcon /> : <NotificationsIcon />}</span>
+        </span>
+        <span key={item.key} className="header-ticker-fade flex min-w-0 flex-1 items-baseline gap-2">
+          <span className="truncate text-sm font-medium text-slate-900">{item.title}</span>
+          <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">{item.meta}</span>
+        </span>
+        {items.length > 1 && (
+          <span className="flex shrink-0 items-center gap-1" aria-hidden="true">
+            {items.map((it, i) => (
+              <span key={it.key} className={`h-1.5 rounded-full transition-all ${i === index ? "w-3 bg-navy-700" : "w-1.5 bg-slate-300"}`} />
+            ))}
+          </span>
+        )}
+      </button>
     </div>
   );
 };
