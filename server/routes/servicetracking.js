@@ -322,6 +322,17 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
   }
 };
 
+// Used by routes AFTER their COMMIT: the data is already saved, so a notification problem must
+// never turn into a 500 / ROLLBACK for the staff member. Failures are logged (and audit-logged inside).
+const notifyAfterCommit = async (...args) => {
+  try {
+    return await sendStatusNotification(...args);
+  } catch (err) {
+    console.warn('servicetracking.js: Notification after commit failed:', err.message);
+    return { success: false, error: err.message };
+  }
+};
+
 // Middleware to verify token and role
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -1600,9 +1611,6 @@ router.post('/', authenticateToken, async (req, res) => {
     });
     // ======================================
 
-    // Send notification with status (not currentStep)
-    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes, newEntry.public_token, newEntry.application_number);
-
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: newEntry.application_number,
       status: newEntry.status,
@@ -1618,6 +1626,9 @@ router.post('/', authenticateToken, async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // Send notification with status (not currentStep) — only after the data is saved
+    await notifyAfterCommit(serviceEntryId, status, currentStep || 'Submitted', notes, newEntry.public_token, newEntry.application_number);
 
     res.status(201).json({
       message: 'Service tracking entry created successfully',
@@ -2260,18 +2271,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
 
     // ======================================
 
-    // Send notification with the appropriate status
-    if (status !== undefined && existingEntry.status !== status) {
-      await sendStatusNotification(
-        updatedEntry.service_entry_id, 
-        status, 
-        currentStep || updatedEntry.current_step,
-        notes || updatedEntry.notes,
-        updatedEntry.public_token,
-        updatedEntry.application_number
-      );
-    }
-
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: updatedEntry.application_number,
       status: updatedEntry.status,
@@ -2288,6 +2287,18 @@ router.put('/:id', authenticateToken, async (req, res) => {
     }
 
     await client.query('COMMIT');
+
+    // Send notification with the appropriate status — only after the data is saved
+    if (status !== undefined && existingEntry.status !== status) {
+      await notifyAfterCommit(
+        updatedEntry.service_entry_id,
+        status,
+        currentStep || updatedEntry.current_step,
+        notes || updatedEntry.notes,
+        updatedEntry.public_token,
+        updatedEntry.application_number
+      );
+    }
 
     res.json({
       message: 'Service tracking entry updated successfully',
@@ -2433,17 +2444,13 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     console.log("🔥 STATUS COMPLETED CHECK - Status value:", status);
     console.log("🔥 STATUS COMPLETED BLOCK ENTERED:", status === 'completed');
 
-    // Send notification with the status (not current_step)
-    await sendStatusNotification(
-      updatedEntry.service_entry_id, 
-      status, // Pass the actual status, not current_step
-      existingEntry.current_step, // Keep current_step for reference but not used in notification
-      updatedEntry.notes
-    );
-    
+    // (Status WhatsApp notification is sent after COMMIT, below.)
+
     // ======================================
-    // 🔹 AUTO CREATE REVIEW 
+    // 🔹 AUTO CREATE REVIEW
     // ======================================
+    // Scheduled only after the status message has gone out (after COMMIT), so it still arrives second.
+    let scheduleReview = null;
     if (status === 'completed') {
       const entryData = serviceEntry.rows[0];
       
@@ -2463,7 +2470,7 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
 
             // Delay the feedback form by 2 seconds so the completion message arrives first.
             // Using setTimeout ensures the API doesn't hang for the user while waiting.
-            setTimeout(() => {
+            scheduleReview = () => setTimeout(() => {
               createReviewRequest({
                 centreId: centreId,
                 trackingId: updatedEntry.id,
@@ -2553,6 +2560,17 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     }
 
     await client.query('COMMIT');
+
+    // Send notification with the status (not current_step) — only after the data is saved
+    await notifyAfterCommit(
+      updatedEntry.service_entry_id,
+      status, // Pass the actual status, not current_step
+      existingEntry.current_step, // Keep current_step for reference but not used in notification
+      updatedEntry.notes,
+      updatedEntry.public_token,
+      updatedEntry.application_number
+    );
+    if (scheduleReview) scheduleReview();
 
     res.json({
       message: 'Service tracking status updated successfully',
