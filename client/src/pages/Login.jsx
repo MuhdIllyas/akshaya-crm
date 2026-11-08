@@ -106,6 +106,8 @@ const Login = () => {
         localStorage.setItem("username", res.data.username);
         localStorage.setItem("name", res.data.name);
         localStorage.setItem("centre_id", res.data.centre_id || "");
+        // Shown under the admin's name in the sidebar (needs centre_name in the login response)
+        localStorage.setItem("centre_name", res.data.centre_name || "");
 
         // Save the profile photo if it exists, otherwise clear any old ones
         if (res.data.photo) {

@@ -2,6 +2,7 @@
 // Shows the reminders scheduled for one service entry, lets staff
 // cancel / send now / retry / move them, and schedule new ones later
 // (e.g. when the passport appointment gets booked after the entry).
+// Also used on the Leads page: pass leadId instead of serviceEntryId.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { toast } from 'react-toastify';
@@ -11,6 +12,7 @@ import { validateDraft, toApiAction, formatWhen, toLocalInput } from '@/utils/au
 import {
   getEntryAutomations, createAutomations, cancelAutomation,
   runAutomationNow, rescheduleAutomation, getPresets,
+  getLeadAutomations, createLeadAutomations,
 } from '/src/services/automationService';
 
 const STATUS = {
@@ -26,6 +28,8 @@ const btnCls =
 
 export default function ScheduledActionsPanel({
   serviceEntryId,
+  leadId,
+  readOnly = false,
   categoryId,
   subcategoryId,
   customerName,
@@ -51,16 +55,16 @@ export default function ScheduledActionsPanel({
   }, [presetsProp]);
 
   const load = useCallback(async () => {
-    if (!serviceEntryId) return;
+    if (!serviceEntryId && !leadId) return;
     setLoading(true);
     try {
-      setItems(await getEntryAutomations(serviceEntryId));
+      setItems(serviceEntryId ? await getEntryAutomations(serviceEntryId) : await getLeadAutomations(leadId));
     } catch {
       toast.error('Failed to load scheduled reminders');
     } finally {
       setLoading(false);
     }
-  }, [serviceEntryId]);
+  }, [serviceEntryId, leadId]);
 
   useEffect(() => {
     load();
@@ -92,10 +96,10 @@ export default function ScheduledActionsPanel({
     }
     setSaving(true);
     try {
-      const res = await createAutomations(
-        serviceEntryId,
-        drafts.map((d) => toApiAction(d, { service_name: serviceName }))
-      );
+      const actions = drafts.map((d) => toApiAction(d, { service_name: serviceName }));
+      const res = serviceEntryId
+        ? await createAutomations(serviceEntryId, actions)
+        : await createLeadAutomations(leadId, actions);
       toast.success(`⏰ ${res.created.length} reminder(s) scheduled`);
       setDrafts([]);
       setAdding(false);
@@ -121,7 +125,7 @@ export default function ScheduledActionsPanel({
             {items.filter((i) => i.status === 'pending').length} upcoming
           </span>
         )}
-        {!adding && (
+        {!adding && !readOnly && (
           <button
             type="button"
             onClick={() => setAdding(true)}
@@ -138,7 +142,7 @@ export default function ScheduledActionsPanel({
         </div>
       ) : items.length === 0 && !adding ? (
         <p className="text-xs text-gray-400 bg-gray-50 border border-dashed border-gray-200 rounded-lg p-3 text-center">
-          No reminders scheduled for this entry.
+          No reminders scheduled for this {leadId && !serviceEntryId ? 'lead' : 'entry'}.
         </p>
       ) : (
         <div className="space-y-2">
@@ -206,7 +210,7 @@ export default function ScheduledActionsPanel({
                   </div>
                 </div>
 
-                {['pending', 'failed'].includes(a.status) && editing.id !== a.id && (
+                {!readOnly && ['pending', 'failed'].includes(a.status) && editing.id !== a.id && (
                   <div className="flex flex-wrap gap-1.5 mt-2 pl-8">
                     {a.status === 'pending' && (
                       <>

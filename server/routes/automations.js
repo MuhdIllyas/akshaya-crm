@@ -89,6 +89,49 @@ async function loadEntry(id) {
   return rows[0] || null;
 }
 
+// A lead (WhatsApp / walk-in enquiry) looks like a service entry to the
+// automation code: same centre, phone, name and service. The service is
+// matched by name from "Service – Sub-category", so presets for that service apply.
+const norm = (x) => String(x || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const leadName = (l) =>
+  String(l.customer_details || l.whatsapp_name || "")
+    .replace(/\s*(?:\\n|\r?\n)+\s*/g, ", ").split(",")[0].trim() || null;
+
+async function loadLeadAsEntry(id) {
+  const { rows } = await pool.query(`SELECT * FROM leads WHERE id = $1`, [id]);
+  const lead = rows[0];
+  if (!lead) return null;
+
+  let categoryId = null;
+  let subcategoryId = null;
+  const [svcName, subName] = String(lead.service_needed || "").split(/\s+[–-]\s+/);
+  if (svcName) {
+    const svc = await pool.query(`SELECT id, name FROM services`);
+    const hit = svc.rows.find((r) => norm(r.name) === norm(svcName));
+    if (hit) {
+      categoryId = hit.id;
+      if (subName) {
+        const sub = await pool.query(`SELECT id, name FROM subcategories WHERE service_id = $1`, [hit.id]).catch(() => ({ rows: [] }));
+        subcategoryId = sub.rows.find((r) => norm(r.name) === norm(subName))?.id || null;
+      }
+    }
+  }
+
+  return {
+    lead,
+    id: null,
+    lead_id: lead.id,
+    centre_id: lead.centre_id,
+    phone: lead.phone,
+    customer_name: leadName(lead),
+    service_name: lead.service_needed || null,
+    staff_id: lead.assigned_to,
+    category_id: categoryId,
+    subcategory_id: subcategoryId,
+    status: ["new", "contacted", "follow_up"].includes(lead.status) ? "open" : lead.status,
+  };
+}
+
 async function loadActionForUser(id, user) {
   const { rows } = await pool.query(`SELECT * FROM scheduled_actions WHERE id = $1`, [id]);
   const action = rows[0];
@@ -235,22 +278,33 @@ router.post("/preview", async (req, res) => {
 /* ================================
    POST /
    { service_entry_id, actions: [{ preset_id, fields, triggers: [...] }] }
+   or { lead_id, actions: [...] }  — reminders for an open lead (moved to the
+   service entry when the lead is converted; cancelled if it is lost/deleted)
    triggers: { kind: 'offset', minutes_before, label } | { kind: 'at', at: 'YYYY-MM-DDTHH:mm' (IST) }
 ================================ */
 router.post("/", async (req, res) => {
   const client = await pool.connect();
   try {
-    const { service_entry_id, actions } = req.body;
+    const { service_entry_id, lead_id, actions } = req.body;
 
-    if (!service_entry_id) return res.status(400).json({ error: "service_entry_id required" });
+    if (!service_entry_id && !lead_id) return res.status(400).json({ error: "service_entry_id or lead_id required" });
     if (!Array.isArray(actions) || actions.length === 0) return res.status(400).json({ error: "No actions given" });
     if (actions.length > MAX_ACTIONS) return res.status(400).json({ error: `Maximum ${MAX_ACTIONS} automations at once` });
 
-    const entry = await loadEntry(service_entry_id);
-    if (!entry) return res.status(404).json({ error: "Service entry not found" });
-    if (!entry.centre_id) return res.status(400).json({ error: "Could not determine the centre for this entry" });
+    const forLead = !service_entry_id;
+    const entry = forLead ? await loadLeadAsEntry(lead_id) : await loadEntry(service_entry_id);
+    if (!entry) return res.status(404).json({ error: forLead ? "Lead not found" : "Service entry not found" });
+    if (!entry.centre_id) return res.status(400).json({ error: `Could not determine the centre for this ${forLead ? "lead" : "entry"}` });
     if (!canAccessCentre(req.user, entry.centre_id)) return res.status(403).json({ error: "Not allowed" });
     if (entry.status === "cancelled") return res.status(400).json({ error: "Service entry is cancelled" });
+    if (forLead) {
+      if (entry.status !== "open") return res.status(400).json({ error: "This lead is closed. Reminders can only be set on open leads." });
+      // Staff can schedule on their own lead (or a free one); admins on any lead in their centre
+      const me = Number(req.user.id);
+      if (!["admin", "superadmin"].includes(req.user.role) && entry.staff_id && Number(entry.staff_id) !== me) {
+        return res.status(403).json({ error: "This lead is with another staff member" });
+      }
+    }
 
     const presetIds = [...new Set(actions.map((a) => Number(a.preset_id)).filter(Boolean))];
     const presetRes = await pool.query(
@@ -329,13 +383,14 @@ router.post("/", async (req, res) => {
     for (const r of rowsToInsert) {
       const ins = await client.query(
         `INSERT INTO scheduled_actions
-           (centre_id, service_entry_id, customer_phone, action_type, preset_id,
+           (centre_id, service_entry_id, lead_id, customer_phone, action_type, preset_id,
             template_key, payload, run_at, created_by)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
          RETURNING *`,
         [
           entry.centre_id,
           entry.id,
+          entry.lead_id || null,
           r.customer_phone,
           r.preset.action_type,
           r.preset.id,
@@ -350,10 +405,16 @@ router.post("/", async (req, res) => {
     await client.query("COMMIT");
 
     try {
+      if (forLead) {
+        await pool.query(
+          `INSERT INTO lead_activities (lead_id, staff_id, action, details) VALUES ($1, $2, 'scheduled', $3)`,
+          [entry.lead_id, req.user.id, created.map((c) => `${c.payload.label} – ${fmtIST(new Date(c.run_at))}`).join("; ")]
+        );
+      }
       await logActivity({
         centre_id: entry.centre_id,
-        related_type: "service_entry",
-        related_id: entry.id,
+        related_type: forLead ? "lead" : "service_entry",
+        related_id: forLead ? entry.lead_id : entry.id,
         action: "Reminders Scheduled",
         description: `Scheduled ${created.length} automation(s) for ${entry.customer_name}: ${created
           .map((c) => `${c.payload.label} at ${fmtIST(new Date(c.run_at))}`)
@@ -420,7 +481,7 @@ function buildScope(req, values) {
   if (req.query.search && String(req.query.search).trim()) {
     values.push(`%${String(req.query.search).trim()}%`);
     const n = values.length;
-    where.push(`(se.customer_name ILIKE $${n} OR sa.customer_phone ILIKE $${n}
+    where.push(`(se.customer_name ILIKE $${n} OR ld.customer_details ILIKE $${n} OR sa.customer_phone ILIKE $${n}
                  OR se.phone ILIKE $${n} OR sa.payload->>'label' ILIKE $${n})`);
   }
 
@@ -439,6 +500,7 @@ router.get("/", async (req, res) => {
     const FROM = `
       FROM scheduled_actions sa
       LEFT JOIN service_entries se ON se.id = sa.service_entry_id
+      LEFT JOIN leads ld ON ld.id = sa.lead_id
       LEFT JOIN services s ON s.id = se.category_id
       LEFT JOIN staff cb ON cb.id = sa.created_by
       LEFT JOIN staff asg ON asg.id = ${ASSIGNEE_SQL}
@@ -468,8 +530,11 @@ router.get("/", async (req, res) => {
     listValues.push(limit + 1, offset);
     const listRes = await pool.query(
       `SELECT sa.*,
-              se.customer_name, se.phone AS entry_phone, se.category_id, se.subcategory_id,
-              s.name AS service_name,
+              COALESCE(se.customer_name,
+                       NULLIF(split_part(regexp_replace(COALESCE(ld.customer_details, ld.whatsapp_name, ''), '(\\\\n|\\n)+', ', ', 'g'), ',', 1), ''))
+                AS customer_name,
+              COALESCE(se.phone, ld.phone) AS entry_phone, se.category_id, se.subcategory_id,
+              COALESCE(s.name, ld.service_needed) AS service_name,
               cb.name AS created_by_name,
               asg.name AS assignee_name,
               c.name AS centre_name,
@@ -525,6 +590,30 @@ router.get("/entry/:id", async (req, res) => {
         WHERE sa.service_entry_id = $1
         ORDER BY sa.run_at ASC`,
       [entry.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ================================
+   GET /lead/:id   — reminders set on a lead (before it became a service entry)
+================================ */
+router.get("/lead/:id", async (req, res) => {
+  try {
+    const { rows: l } = await pool.query(`SELECT id, centre_id FROM leads WHERE id = $1`, [req.params.id]);
+    if (!l.length) return res.status(404).json({ error: "Lead not found" });
+    if (!canAccessCentre(req.user, l[0].centre_id)) return res.status(403).json({ error: "Not allowed" });
+
+    const { rows } = await pool.query(
+      `SELECT sa.*, st.name AS created_by_name, t.id AS task_id, t.status AS task_status
+         FROM scheduled_actions sa
+         LEFT JOIN staff st ON st.id = sa.created_by
+         LEFT JOIN tasks t ON t.scheduled_action_id = sa.id
+        WHERE sa.lead_id = $1
+        ORDER BY sa.run_at ASC`,
+      [l[0].id]
     );
     res.json(rows);
   } catch (err) {

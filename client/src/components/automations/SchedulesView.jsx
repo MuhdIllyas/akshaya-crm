@@ -383,6 +383,15 @@ function ScheduleRow({ a, tab, showCentre, busy, editing, setEditing, act }) {
               <span className="inline-flex items-center gap-1"><FiPhone className="h-3 w-3 text-gray-400" />{phone}</span>
             )}
             {a.service_entry_id && <ServiceLinkChip item={a} />}
+            {!a.service_entry_id && a.lead_id && (
+              <a
+                href={`/dashboard/${localStorage.getItem('role') || 'staff'}/leads`}
+                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 hover:bg-indigo-100"
+                title="Set on a lead – moves to the service entry when the lead is converted"
+              >
+                Lead{a.service_name ? ` · ${a.service_name}` : ''}
+              </a>
+            )}
             {!whatsapp && a.assignee_name && (
               <span className="inline-flex items-center gap-1"><FiUserCheck className="h-3 w-3 text-gray-400" />{a.assignee_name}</span>
             )}

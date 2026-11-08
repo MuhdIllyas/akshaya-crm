@@ -592,6 +592,7 @@ function CalendarView({
         headerToolbar={{ left: "prev,next today", center: "title", right: "" }}
         height="auto"
         dayMaxEvents={true}
+        stickyHeaderDates={false}
         eventTimeFormat={{
           hour: "2-digit",
           minute: "2-digit",
@@ -610,10 +611,10 @@ function CalendarView({
           const displayType = event_type || type; // Fallback to type
           
           return (
-            <div className="px-1 py-0.5 text-xs font-medium leading-tight">
-              <div className="capitalize">{arg.event.title}</div>
+            <div className="min-w-0 overflow-hidden px-1 py-0.5 text-xs font-medium leading-tight">
+              <div className="capitalize truncate">{arg.event.title}</div>
               {displayType && (
-                <div className="text-[10px] opacity-70 capitalize">
+                <div className="text-[10px] opacity-70 capitalize truncate">
                   {displayType}
                   {priority && priority !== "medium" && ` · ${priority}`}
                 </div>
@@ -1247,7 +1248,7 @@ function CalendarToolbar({
     <motion.div
       initial={{ y: -10, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="sticky top-0 z-40 bg-white/90 backdrop-blur-sm border-b border-slate-200 px-4 py-2.5"
+      className="relative bg-white/90 backdrop-blur-sm border-b border-slate-200 px-4 py-2.5"
     >
       <div className="flex items-center justify-between flex-wrap gap-2 mb-2">
         <div className="flex items-center gap-2 flex-wrap">
@@ -1859,7 +1860,7 @@ export default function CalendarPage() {
   return (
     <div className="h-screen flex flex-col bg-slate-50">
       {/* Top Bar with Centre Switcher */}
-      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm z-50">
+      <div className="bg-white border-b border-slate-200 px-6 py-3 flex items-center justify-between gap-4 shadow-sm">
         <div className="flex items-center gap-3">
           <h1 className="text-lg font-bold text-slate-800 tracking-tight">
             📅 Calendar

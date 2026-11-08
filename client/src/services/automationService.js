@@ -32,3 +32,9 @@ export const rescheduleAutomation = (id, runAt) =>
 // params: { status, type, search, mine, centre_id, from, to, limit, offset }
 export const listSchedules = (params = {}) =>
   client.get('/', { params }).then((r) => r.data);
+// Reminders on a lead (before it becomes a service entry)
+export const createLeadAutomations = (leadId, actions) =>
+  client.post('/', { lead_id: leadId, actions }).then((r) => r.data);
+
+export const getLeadAutomations = (leadId) =>
+  client.get(`/lead/${leadId}`).then((r) => r.data);
