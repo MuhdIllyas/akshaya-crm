@@ -204,7 +204,9 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
 
     // Fetch application_number + public link token from service_tracking
     const trackingResult = await client.query(
-      `SELECT application_number, public_token FROM service_tracking WHERE service_entry_id = $1 LIMIT 1`,
+      `SELECT application_number, public_token,
+              TO_CHAR(estimated_delivery, 'DD/MM/YYYY') AS estimated_delivery_text
+       FROM service_tracking WHERE service_entry_id = $1 LIMIT 1`,
       [serviceEntryId]
     );
     const publicToken = publicTokenFromCaller || trackingResult.rows[0]?.public_token || null;
@@ -236,7 +238,10 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
     const totalEstimatedDays = parseInt(stepsResult.rows[0]?.total_estimated_days) || 0;
     const estimatedDeliveryDate = new Date(entry.created_at || new Date());
     estimatedDeliveryDate.setDate(estimatedDeliveryDate.getDate() + totalEstimatedDays);
-    const deliDate = estimatedDeliveryDate.toLocaleDateString('en-IN', IST);
+    // Use the Estimated delivery date staff set; fall back to the step-based estimate only when it's empty.
+    // (Formatted in SQL as DD/MM/YYYY, so no timezone shift.)
+    const deliDate = trackingResult.rows[0]?.estimated_delivery_text
+      || estimatedDeliveryDate.toLocaleDateString('en-IN', IST);
 
     // Format status for display
     let displayStatus = 'Submitted';
