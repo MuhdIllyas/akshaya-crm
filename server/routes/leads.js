@@ -304,7 +304,14 @@ router.get("/summary", async (req, res) => {
          COUNT(*) FILTER (WHERE status IN ('new','contacted','follow_up') AND assigned_to = ${me})::int AS mine,
          COUNT(*) FILTER (WHERE status IN ('new','contacted','follow_up') AND assigned_to IS NULL)::int AS unassigned,
          COUNT(*) FILTER (WHERE status = 'converted' AND converted_at >= date_trunc('month', CURRENT_DATE))::int AS converted_month,
-         COUNT(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::int AS created_month
+         COUNT(*) FILTER (WHERE created_at >= date_trunc('month', CURRENT_DATE))::int AS created_month,
+         -- Sidebar badge: leads waiting on THIS person
+         --   admin / superadmin → open leads nobody is assigned to yet
+         --   staff              → new leads given to me, new leads free to take, my follow-ups due
+         COUNT(*) FILTER (WHERE ${isManager(req.user)
+           ? `status IN ('new','contacted','follow_up') AND assigned_to IS NULL`
+           : `(status = 'new' AND (assigned_to = ${me} OR assigned_to IS NULL))
+              OR (status = 'follow_up' AND assigned_to = ${me} AND follow_up_date <= CURRENT_DATE)`})::int AS attention
        FROM leads ${where}`,
       vals
     );
@@ -687,7 +694,7 @@ router.patch("/:id", async (req, res) => {
 /* =====================================================================
    DELETE /api/leads/:id   — admin (own centre) and superadmin only
    Removes the lead and its history (lead_activities cascade).
-   An open follow-up task is closed first so it leaves My Tasks / Calendar.
+   Its open tasks (follow-up + reminder tasks) are deleted too, like the Tasks page does.
    The WhatsApp chat and any service entry are NOT touched.
    ===================================================================== */
 router.delete("/:id", async (req, res) => {
@@ -699,10 +706,27 @@ router.delete("/:id", async (req, res) => {
     const { lead, error } = await loadLeadForUser(id, req.user);
     if (error) return res.status(error[0]).json({ error: error[1] });
 
-    if (lead.follow_up_task_id) {
-      await closeFollowUpTask(lead.follow_up_task_id).catch((e) =>
-        console.warn("[leads] could not close follow-up task on delete:", e.message)
+    // Remove the lead's open tasks (its follow-up task + tasks its reminders created),
+    // the same way the Tasks page deletes a task: calendar entry first, then the task.
+    // Finished tasks are kept as history.
+    try {
+      const { rows: tasks } = await pool.query(
+        `SELECT id FROM tasks
+          WHERE status NOT IN ('completed', 'cancelled')
+            AND (id = $2
+                 OR scheduled_action_id IN (SELECT id FROM scheduled_actions
+                                             WHERE lead_id = $1 AND service_entry_id IS NULL))`,
+        [id, lead.follow_up_task_id || 0]
       );
+      const taskIds = tasks.map((t) => t.id);
+      if (taskIds.length) {
+        await pool.query(`DELETE FROM calendar_events WHERE related_task_id = ANY($1::int[])`, [taskIds]);
+        await pool.query(`DELETE FROM tasks WHERE id = ANY($1::int[])`, [taskIds]);
+        const io = req.io || req.app.get("io");
+        if (io && lead.centre_id) taskIds.forEach((tid) => io.to(`centre_${lead.centre_id}`).emit("taskDeleted", { id: tid }));
+      }
+    } catch (e) {
+      console.warn("[leads] could not remove the lead's tasks on delete:", e.message);
     }
     await cancelLeadSchedules(lead, myId(req.user), "Lead deleted");
     await pool.query(`DELETE FROM leads WHERE id = $1`, [id]);
