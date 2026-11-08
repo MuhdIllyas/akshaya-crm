@@ -408,11 +408,11 @@ const DashboardLayout = () => {
       ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:image") ? rawPhoto : `${API_BASE_URL}${rawPhoto}`)
       : "";
 
-  // Single-key shortcuts: T = New Token, S = Service Entry (ignored while typing or with Ctrl/Alt/Cmd held)
-  const tokenPath = quickTokenItem?.path;
+  // Single-key shortcuts: T = Track Service, S = Service Entry (ignored while typing or with Ctrl/Alt/Cmd held)
+  const trackPath = userNavigation.find((item) => item.label === "Track Service")?.path;
   const entryPath = quickEntryItem?.path;
   useEffect(() => {
-    if (!tokenPath && !entryPath) return undefined;
+    if (!trackPath && !entryPath) return undefined;
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
       const el = e.target;
@@ -420,12 +420,12 @@ const DashboardLayout = () => {
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
       if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
       const k = String(e.key).toLowerCase();
-      if (k === "t" && tokenPath) { e.preventDefault(); navigate(tokenPath); }
+      if (k === "t" && trackPath) { e.preventDefault(); navigate(trackPath); }
       if (k === "s" && entryPath) { e.preventDefault(); navigate(entryPath); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [tokenPath, entryPath, navigate]);
+  }, [trackPath, entryPath, navigate]);
 
   // Unread total in the browser tab title, e.g. "(3) Akshaya Sahayi" (same total as the phone menu dot)
   const unreadTotal = role === "customer" ? 0 : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
@@ -780,7 +780,7 @@ const DashboardLayout = () => {
               <Link
                 to={quickTokenItem.path}
                 className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white transition-colors hover:bg-navy-800"
-                title="New Token (T)"
+                title="New Token"
               >
                 <span className="text-lg leading-none">+</span>
                 <span className="hidden lg:inline">New Token</span>
