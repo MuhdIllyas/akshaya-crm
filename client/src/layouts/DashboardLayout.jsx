@@ -400,6 +400,15 @@ const DashboardLayout = () => {
   const calendarItem = userNavigation.find((item) => item.label === "Calendar");
   // Notification / event strip in the top bar (desktop only; not for customers or supervisors)
   const showTicker = ["staff", "admin", "superadmin"].includes(role) && !!notificationsItem;
+  const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
+  const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
+
+  // Staff photo (same source as the Staff Dashboard); initials are the fallback
+  const rawPhoto = localStorage.getItem("photo");
+  const profilePhoto =
+    role !== "customer" && rawPhoto && rawPhoto !== "null" && rawPhoto !== "undefined"
+      ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:image") ? rawPhoto : `${API_BASE_URL}${rawPhoto}`)
+      : "";
 
   // Single-key shortcuts: T = New Token, S = Service Entry (ignored while typing or with Ctrl/Alt/Cmd held)
   const tokenPath = quickTokenItem?.path;
@@ -429,15 +438,6 @@ const DashboardLayout = () => {
     document.title = unreadTotal > 0 ? `(${unreadTotal > 99 ? "99+" : unreadTotal}) ${base}` : base;
   }, [unreadTotal, location.pathname]);
   useEffect(() => () => { if (baseTitleRef.current !== null) document.title = baseTitleRef.current; }, []);
-  const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
-  const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
-
-  // Staff photo (same source as the Staff Dashboard); initials are the fallback
-  const rawPhoto = localStorage.getItem("photo");
-  const profilePhoto =
-    role !== "customer" && rawPhoto && rawPhoto !== "null" && rawPhoto !== "undefined"
-      ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:image") ? rawPhoto : `${API_BASE_URL}${rawPhoto}`)
-      : "";
 
   return (
     <div className="flex min-h-screen min-h-dvh bg-slate-50">
