@@ -177,7 +177,9 @@ router.get('/public/status/:identifier/documents/:docId/download', async (req, r
 // ==========================================
 // CENTRAL COMMUNICATION ENGINE INTEGRATION
 // ==========================================
-const sendStatusNotification = async (serviceEntryId, status, currentStep, notes, publicTokenFromCaller = null) => {
+// applicationNumberFromCaller: callers that run inside an open transaction pass the number they just
+// saved, because this function reads on a separate connection and can't see uncommitted changes.
+const sendStatusNotification = async (serviceEntryId, status, currentStep, notes, publicTokenFromCaller = null, applicationNumberFromCaller = null) => {
   const client = await pool.connect();
   try {
     // 1. Fetch service entry details AND the centre_id (crucial for routing)
@@ -213,7 +215,9 @@ const sendStatusNotification = async (serviceEntryId, status, currentStep, notes
 
     // Determine application number
     let appNum;
-    if (trackingResult.rows.length > 0 && trackingResult.rows[0].application_number) {
+    if (applicationNumberFromCaller) {
+      appNum = applicationNumberFromCaller;
+    } else if (trackingResult.rows.length > 0 && trackingResult.rows[0].application_number) {
       appNum = trackingResult.rows[0].application_number;
     } else if (entry.token_id) {
       appNum = `T${entry.token_id}`;
@@ -1597,7 +1601,7 @@ router.post('/', authenticateToken, async (req, res) => {
     // ======================================
 
     // Send notification with status (not currentStep)
-    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes, newEntry.public_token);
+    await sendStatusNotification(serviceEntryId, status, currentStep || 'Submitted', notes, newEntry.public_token, newEntry.application_number);
 
     io.to(`centre_${centreId}`).emit('serviceTrackingUpdate', {
       application_number: newEntry.application_number,
@@ -2261,8 +2265,10 @@ router.put('/:id', authenticateToken, async (req, res) => {
       await sendStatusNotification(
         updatedEntry.service_entry_id, 
         status, 
-        currentStep || updatedEntry.current_step, 
-        notes || updatedEntry.notes
+        currentStep || updatedEntry.current_step,
+        notes || updatedEntry.notes,
+        updatedEntry.public_token,
+        updatedEntry.application_number
       );
     }
 
