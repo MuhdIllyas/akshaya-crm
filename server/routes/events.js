@@ -249,6 +249,7 @@ router.get("/", async (req, res) => {
         ON st.id = t.assigned_to
 
       WHERE t.due_date IS NOT NULL
+        AND t.status <> 'cancelled'
       ${taskFilter}
     `;
 
@@ -777,6 +778,37 @@ router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
+    /* ======================
+       TASK ON THE CALENDAR
+       The feed shows tasks with their TASK id (source: 'task'), not a
+       calendar_events id. Looking that number up in calendar_events gives
+       a 404 — or deletes an unrelated event that has the same number.
+       So a task is deleted the same way the Tasks page does it
+       (same centre check, calendar entry first, then the task).
+       Frontend sends ?source=task for these.
+    ====================== */
+    if (req.query.source === "task") {
+      const taskRes = await client.query(`SELECT * FROM tasks WHERE id = $1`, [id]);
+      if (!taskRes.rows.length) {
+        return res.status(404).json({ message: "Task not found" });
+      }
+      const task = taskRes.rows[0];
+
+      if (req.user.role !== "superadmin" && task.centre_id !== req.user.centre_id) {
+        return res.status(403).json({ message: "Access denied" });
+      }
+
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM calendar_events WHERE related_task_id = $1`, [id]);
+      await client.query(`DELETE FROM tasks WHERE id = $1`, [id]);
+      await client.query("COMMIT");
+
+      const io = req.io || req.app.get("io");
+      if (io) io.to(`centre_${task.centre_id}`).emit("taskDeleted", { id: Number(id) });
+
+      return res.json({ message: "Task deleted successfully" });
+    }
+
     const existing = await client.query(
       `
       SELECT * FROM calendar_events
@@ -819,6 +851,7 @@ router.delete("/:id", async (req, res) => {
     });
 
   } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("DELETE EVENT ERROR:", err);
 
     res.status(500).json({

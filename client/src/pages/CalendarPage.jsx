@@ -29,6 +29,18 @@ import { useNavigate } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
 
 // ----------------------------------------------------------------------
+//  What kind of item is this?
+//  The feed mixes rows from different tables, each with its own ids:
+//    source 'calendar_event'  → calendar_events row  (edit/delete via /api/events)
+//    source 'task'            → tasks row            (delete via /api/tasks, edit on the Tasks page)
+//    expiry / delivery / announcement → generated from services & the hub (read-only here)
+// ----------------------------------------------------------------------
+const isCalendarRow = (e) => !!e && (!e.source || e.source === "calendar_event");
+const isTaskItem = (e) => e?.source === "task";
+const canEditItem = (e) => isCalendarRow(e);
+const canDeleteItem = (e) => isCalendarRow(e) || isTaskItem(e);
+
+// ----------------------------------------------------------------------
 //  Tooltip Card
 // ----------------------------------------------------------------------
 function TooltipCard({ event, position }) {
@@ -426,24 +438,28 @@ function AgendaView({
                   </div>
                 </div>
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onEdit(item);
-                    }}
-                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-navy-700"
-                  >
-                    <FiEdit className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDelete(item);
-                    }}
-                    className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-rose-600"
-                  >
-                    <FiTrash2 className="h-3.5 w-3.5" />
-                  </button>
+                  {canEditItem(item) && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEdit(item);
+                      }}
+                      className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-navy-700"
+                    >
+                      <FiEdit className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  {canDeleteItem(item) && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDelete(item);
+                      }}
+                      className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-rose-600"
+                    >
+                      <FiTrash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -791,7 +807,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
             )}
           </div>
           <div className="flex gap-2 mt-6 pt-4 border-t">
-            {onEdit && (
+            {onEdit && canEditItem(event) && (
               <button
                 onClick={() => {
                   onEdit(event);
@@ -816,15 +832,17 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
               </button>
             )}
             
-            <button
-              onClick={() => {
-                onDelete(event.id);
-                onClose();
-              }}
-              className="flex-1 bg-white border border-rose-200 text-rose-600 py-2 rounded-xl text-sm"
-            >
-              Delete
-            </button>
+            {canDeleteItem(event) && (
+              <button
+                onClick={() => {
+                  onDelete(event); // whole item, so tasks and events go to the right place
+                  onClose();
+                }}
+                className="flex-1 bg-white border border-rose-200 text-rose-600 py-2 rounded-xl text-sm"
+              >
+                Delete
+              </button>
+            )}
           </div>
         </motion.div>
       </motion.div>
@@ -1708,14 +1726,34 @@ export default function CalendarPage() {
     [hookUpdateEvent]
   );
 
+  // Tasks live in the tasks table: delete them through the Tasks route
+  // (removes the calendar entry too). Only real calendar events go to /api/events.
   const handleDeleteEvent = useCallback(
-    async (id) => {
+    async (item) => {
+      const ev = item && typeof item === "object" ? item : { id: item };
       try {
-        await hookDeleteEvent(id);
-        toast.success("Event deleted");
+        if (isTaskItem(ev)) {
+          if (!window.confirm(`Delete the task "${ev.title || "Untitled"}"?`)) return;
+          const res = await fetch(`${import.meta.env.VITE_API_URL}/api/tasks/${ev.id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data.error || "Failed to delete task");
+          }
+          toast.success("Task deleted");
+          setHookFilters((prev) => ({ ...prev, _refresh: Date.now() }));
+        } else if (isCalendarRow(ev)) {
+          await hookDeleteEvent(ev.id);
+          toast.success("Event deleted");
+        } else {
+          toast.info("This comes from a service or announcement and can't be deleted here.");
+          return;
+        }
         setSelectedEvent(null);
       } catch (err) {
-        toast.error(err?.message || "Failed to delete event");
+        toast.error(err?.message || "Failed to delete");
       }
     },
     [hookDeleteEvent]
@@ -1921,7 +1959,7 @@ export default function CalendarPage() {
               leavesData={leavesData}
               onEventClick={setSelectedEvent}
               onEdit={openEditModal}
-              onDelete={(item) => handleDeleteEvent(item.id)}
+              onDelete={(item) => handleDeleteEvent(item)}
             />
           ) : !hasEvents ? (
             <div className="flex flex-col items-center justify-center h-full text-slate-400">
