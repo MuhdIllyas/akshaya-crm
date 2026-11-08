@@ -400,6 +400,35 @@ const DashboardLayout = () => {
   const calendarItem = userNavigation.find((item) => item.label === "Calendar");
   // Notification / event strip in the top bar (desktop only; not for customers or supervisors)
   const showTicker = ["staff", "admin", "superadmin"].includes(role) && !!notificationsItem;
+
+  // Single-key shortcuts: T = New Token, S = Service Entry (ignored while typing or with Ctrl/Alt/Cmd held)
+  const tokenPath = quickTokenItem?.path;
+  const entryPath = quickEntryItem?.path;
+  useEffect(() => {
+    if (!tokenPath && !entryPath) return undefined;
+    const onKey = (e) => {
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
+      const el = e.target;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el?.isContentEditable) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+      const k = String(e.key).toLowerCase();
+      if (k === "t" && tokenPath) { e.preventDefault(); navigate(tokenPath); }
+      if (k === "s" && entryPath) { e.preventDefault(); navigate(entryPath); }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [tokenPath, entryPath, navigate]);
+
+  // Unread total in the browser tab title, e.g. "(3) Akshaya Sahayi" (same total as the phone menu dot)
+  const unreadTotal = role === "customer" ? 0 : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
+  const baseTitleRef = useRef(null);
+  useEffect(() => {
+    if (baseTitleRef.current === null) baseTitleRef.current = document.title.replace(/^\(\d+\+?\)\s*/, "");
+    const base = baseTitleRef.current;
+    document.title = unreadTotal > 0 ? `(${unreadTotal > 99 ? "99+" : unreadTotal}) ${base}` : base;
+  }, [unreadTotal, location.pathname]);
+  useEffect(() => () => { if (baseTitleRef.current !== null) document.title = baseTitleRef.current; }, []);
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -755,7 +784,7 @@ const DashboardLayout = () => {
               <Link
                 to={quickTokenItem.path}
                 className="inline-flex h-11 items-center gap-1.5 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white transition-colors hover:bg-navy-800"
-                title="New Token"
+                title="New Token (T)"
               >
                 <span className="text-lg leading-none">+</span>
                 <span className="hidden lg:inline">New Token</span>
@@ -765,7 +794,7 @@ const DashboardLayout = () => {
               <Link
                 to={quickEntryItem.path}
                 className="hidden h-11 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-navy-700 transition-colors hover:bg-slate-50 sm:inline-flex"
-                title="Service Entry"
+                title="Service Entry (S)"
               >
                 <span className="text-lg leading-none">+</span>
                 <span className="hidden lg:inline">Service Entry</span>

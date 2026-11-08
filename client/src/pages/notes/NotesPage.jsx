@@ -633,8 +633,17 @@ const NotesPage = () => {
                   {searchQuery.trim() ? 'No notes match your search' : 'No notes yet'}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
-                  {searchQuery.trim() ? 'Try different keywords.' : 'Pin your first note above.'}
+                  {searchQuery.trim()
+                    ? 'Try different keywords, or clear the search.'
+                    : 'Jot down a reminder, tag a colleague with @, or link a note to a service.'}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => (searchQuery.trim() ? setSearchQuery('') : setIsCreating(true))}
+                  className="mt-4 rounded-lg bg-navy-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-navy-800"
+                >
+                  {searchQuery.trim() ? 'Clear search' : 'Write your first note'}
+                </button>
               </div>
             )}
           </div>
