@@ -92,6 +92,11 @@ const mapDBNotificationToUI = (dbNotif) => {
     actionUrl = getNotificationLink(dbNotif) || `/dashboard/${role}/operationshub`;
   }
 
+  // 🔥 Route for Leads (new WhatsApp lead / lead assigned to you / customer asked again)
+  if (dbNotif.related_entity_type === 'lead' || dbNotif.type?.startsWith('lead_')) {
+    actionUrl = `/dashboard/${role}/leads`;
+  }
+
   // Safely get type to prevent .includes() crashing
   const typeStr = dbNotif.type || 'system';
 
@@ -104,11 +109,13 @@ const mapDBNotificationToUI = (dbNotif) => {
       
       type: typeStr,
       icon: typeStr === 'salary_paid' ? FiDollarSign :
+            typeStr.startsWith('lead_') ? FiFilter :
             typeStr.startsWith('knowledge_') ? FiMessageCircle :
             typeStr.includes('message') ? FiMessageSquareIcon : 
             typeStr.includes('task') ? FiCheckSquare : 
             typeStr.includes('service') ? FiBriefcase : FiBell,
       color: typeStr === 'salary_paid' ? 'emerald' :
+            typeStr.startsWith('lead_') ? 'orange' :
             typeStr === 'knowledge_solved' ? 'emerald' : 
             typeStr.startsWith('knowledge_') ? 'indigo' :
             typeStr.includes('message') ? 'blue' : 
@@ -132,6 +139,9 @@ const mapDBNotificationToUI = (dbNotif) => {
         openConversationId: dbNotif.conversation_id,
         // Only real discussions carry a discussion id (an announcement/suggestion id is NOT a discussion id)
         openDiscussionId: dbNotif.related_entity_type === 'discussion' ? dbNotif.related_entity_id : undefined,
+
+        // Leads page opens this lead's side panel
+        openLeadId: dbNotif.related_entity_type === 'lead' ? dbNotif.related_entity_id : undefined,
 
         // 🔥 Tell Messenger to open the Tasks tab for admins
         openTasksView: dbNotif.related_entity_type === 'task' && ["admin", "superadmin"].includes(role) ? true : undefined
@@ -188,6 +198,11 @@ const TYPE_ACTIONS = {
   system: ['view', 'mark_read'],
   salary_paid: ['view', 'mark_read'],
 
+  // leads
+  lead_new: ['view', 'mark_read'],
+  lead_assigned: ['view', 'mark_read'],
+  lead_enquiry: ['view', 'mark_read'],
+
   // 🔥 knowledge hub
   knowledge_mention: ['reply', 'mark_read'],
   knowledge_reply: ['reply', 'mark_read'],
@@ -206,7 +221,8 @@ const matchesTab = (n, tabId) => {
     case 'tasks': return type.includes('task');
     case 'messages': return type === 'whatsapp_message' || type === 'message';
     case 'services': return type.includes('service');
-    case 'assignments': return type.includes('task') || type.includes('service');
+    case 'assignments': return type.includes('task') || type.includes('service') || type === 'lead_assigned';
+    case 'leads': return type.startsWith('lead_');
     case 'system': return type === 'system';
     case 'hub': return type.startsWith('knowledge_');
     default: return true;
@@ -465,6 +481,7 @@ const NotificationsPage = () => {
     { id: 'messages', label: 'Messages', icon: FiMessageCircle },
     { id: 'services', label: 'Services', icon: FiBriefcase },
     { id: 'assignments', label: 'Assignments', icon: FiCheckSquare },
+    { id: 'leads', label: 'Leads', icon: FiFilter },
     { id: 'hub', label: 'Knowledge Hub', icon: FiBookOpen },
     { id: 'system', label: 'System', icon: FiActivity },
   ];
@@ -653,6 +670,13 @@ const NotificationsPage = () => {
       // Grab the ID from the notification metadata/entity and open the drawer
       setSelectedPaymentId(notification.related_entity_id || id);
       setIsReceiptDrawerOpen(true);
+      return;
+    }
+
+    // Handle "View Details" for Leads → open that lead on the Leads page
+    if (action === 'view' && (notification.related_entity_type === 'lead' || notification.type.startsWith('lead_'))) {
+      handleMarkRead(id);
+      navigate(`/dashboard/${role}/leads`, { state: { openLeadId: notification.related_entity_id } });
       return;
     }
 

@@ -44,7 +44,12 @@ export const NOTIFICATION_TYPES = {
   KNOWLEDGE_TRAINING: 'knowledge_training',
   KNOWLEDGE_CONTRIBUTOR_ADDED: 'knowledge_contributor_added',
   KNOWLEDGE_RESOURCE_ADDED: 'knowledge_resource_added',
-  KNOWLEDGE_WORKSPACE_PUBLISHED: 'knowledge_workspace_published'
+  KNOWLEDGE_WORKSPACE_PUBLISHED: 'knowledge_workspace_published',
+
+  // Leads (WhatsApp bot / walk-in enquiries)
+  LEAD_NEW: 'lead_new',
+  LEAD_ASSIGNED: 'lead_assigned',
+  LEAD_ENQUIRY: 'lead_enquiry'
 };
 
 export const notificationTemplates = {
@@ -374,6 +379,51 @@ export const notificationTemplates = {
       'Month': data.month,
       'Net Pay': data.amount,
       'Disbursed By': data.disbursedBy
+    }
+  }),
+
+  // ==========================================
+  // 🔥 LEADS
+  // ==========================================
+  leadNew: (data) => ({
+    type: NOTIFICATION_TYPES.LEAD_NEW,
+    category: NOTIFICATION_CATEGORIES.WORK,
+    title: data.fromBot ? '🟢 New WhatsApp lead' : '🟢 New lead',
+    message: `${data.customerName} is asking about ${data.serviceName}. ` +
+      (data.forAdmin ? 'Assign it to a staff member.' : 'Open Leads to take it.'),
+    priority: 'high',
+    metadata: {
+      'Customer': data.customerName,
+      'Phone': data.phone,
+      'Service': data.serviceName,
+      ...(data.docsReady ? { 'Documents': data.docsReady } : {})
+    }
+  }),
+
+  leadAssigned: (data) => ({
+    type: NOTIFICATION_TYPES.LEAD_ASSIGNED,
+    category: NOTIFICATION_CATEGORIES.WORK,
+    title: '👤 Lead assigned to you',
+    message: `${data.customerName} · ${data.serviceName}. Contact the customer and update the lead.`,
+    priority: 'high',
+    metadata: {
+      'Customer': data.customerName,
+      'Phone': data.phone,
+      'Service': data.serviceName,
+      ...(data.assignedByName ? { 'Assigned by': data.assignedByName } : {})
+    }
+  }),
+
+  leadEnquiry: (data) => ({
+    type: NOTIFICATION_TYPES.LEAD_ENQUIRY,
+    category: NOTIFICATION_CATEGORIES.WORK,
+    title: '🔁 Your lead asked again',
+    message: `${data.customerName} messaged again on WhatsApp about ${data.serviceName}.`,
+    priority: 'high',
+    metadata: {
+      'Customer': data.customerName,
+      'Phone': data.phone,
+      'Service': data.serviceName
     }
   })
   

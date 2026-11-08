@@ -15,6 +15,7 @@ export const getNotificationLink = (n) => {
     case 'knowledge_announcement': return `${hub()}/announcements`;
     case 'knowledge_training':     return `${hub()}/learning`;
     case 'discussion':             return id ? `${hub()}?discussion=${id}` : hub();
+    case 'lead':                   return `/dashboard/${role()}/leads`;
     default:                       return null;
   }
 };
