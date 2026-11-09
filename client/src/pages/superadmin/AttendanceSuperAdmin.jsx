@@ -20,7 +20,6 @@ import { getWalletsByCentre } from "@/services/walletService";
 import CalendarView from "@/components/CalendarView";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
-ChartJS.defaults.color = "#64748b";
 
 /* ---------------------------------------------------------------------
    Date + time helpers (everything is India time, whatever the browser's zone is)

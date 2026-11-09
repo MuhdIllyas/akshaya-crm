@@ -277,7 +277,7 @@ const NoteEditorModal = ({
                     backgroundColor: palette.hex,
                     fontSize: 14,
                     width: '100%',
-                    border: '1px solid #e2e8f0',
+                    border: '1px solid var(--ui-line, #e2e8f0)',
                     borderRadius: '0.75rem',
                     minHeight: '120px',
                     lineHeight: '1.5',
@@ -294,12 +294,12 @@ const NoteEditorModal = ({
                     width: '100%',
                     height: '100%',
                     margin: 0,
-                    color: '#1e293b',
+                    color: 'var(--ui-text, #1e293b)',
                   },
                   suggestions: {
                     list: {
-                      backgroundColor: 'white',
-                      border: '1px solid #e2e8f0',
+                      backgroundColor: 'var(--ui-card, white)',
+                      border: '1px solid var(--ui-line, #e2e8f0)',
                       borderRadius: '0.5rem',
                       fontSize: 13,
                       zIndex: 100,
@@ -309,8 +309,8 @@ const NoteEditorModal = ({
                     },
                     item: {
                       padding: '8px 12px',
-                      borderBottom: '1px solid #f1f5f9',
-                      '&focused': { backgroundColor: '#eaf0f8' },
+                      borderBottom: '1px solid var(--ui-line, #f1f5f9)',
+                      '&focused': { backgroundColor: 'var(--ui-hover, #eaf0f8)' },
                     },
                   },
                 }}

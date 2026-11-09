@@ -2400,10 +2400,10 @@ const ServiceEntry = () => {
                                 className="mentions-input text-sm"
                                 placeholder="Write an internal note... Type @ to assign staff members"
                                 style={{
-                                  control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
+                                  control: { backgroundColor: 'var(--ui-card, #fff)', border: '1px solid var(--ui-line, #e2e8f0)', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
                                   highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
                                   input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
-                                  suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
+                                  suggestions: { list: { backgroundColor: 'var(--ui-card, white)', border: '1px solid var(--ui-line, #e2e8f0)', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid var(--ui-line, #f1f5f9)' } }
                                 }}
                               >
                                 <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`}

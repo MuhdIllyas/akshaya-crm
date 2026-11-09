@@ -1,0 +1,811 @@
+/*
+ * Soft dim dark theme.
+ *
+ * Tailwind looks up --background-color-*, --text-color-*, --border-color-* and
+ * --ring-color-* before --color-*, so one colour can behave differently per
+ * property: in dark mode bg-white becomes a dark card while text-white stays white.
+ * The light values below equal Tailwind's defaults, so light mode doesn't change.
+ *
+ * Everything dark sits inside @media screen, so printing always uses light colours.
+ */
+@theme {
+  --background-color-white: var(--color-white);
+  --text-color-black: var(--color-black);
+  --border-color-white: var(--color-white);
+  --background-color-slate-50: var(--color-slate-50);
+  --background-color-slate-100: var(--color-slate-100);
+  --background-color-slate-200: var(--color-slate-200);
+  --background-color-slate-300: var(--color-slate-300);
+  --text-color-slate-950: var(--color-slate-950);
+  --text-color-slate-900: var(--color-slate-900);
+  --text-color-slate-800: var(--color-slate-800);
+  --text-color-slate-700: var(--color-slate-700);
+  --text-color-slate-600: var(--color-slate-600);
+  --text-color-slate-500: var(--color-slate-500);
+  --text-color-slate-400: var(--color-slate-400);
+  --text-color-slate-300: var(--color-slate-300);
+  --border-color-slate-50: var(--color-slate-50);
+  --ring-color-slate-50: var(--color-slate-50);
+  --border-color-slate-100: var(--color-slate-100);
+  --ring-color-slate-100: var(--color-slate-100);
+  --border-color-slate-200: var(--color-slate-200);
+  --ring-color-slate-200: var(--color-slate-200);
+  --border-color-slate-300: var(--color-slate-300);
+  --ring-color-slate-300: var(--color-slate-300);
+  --background-color-gray-50: var(--color-gray-50);
+  --background-color-gray-100: var(--color-gray-100);
+  --background-color-gray-200: var(--color-gray-200);
+  --background-color-gray-300: var(--color-gray-300);
+  --text-color-gray-950: var(--color-gray-950);
+  --text-color-gray-900: var(--color-gray-900);
+  --text-color-gray-800: var(--color-gray-800);
+  --text-color-gray-700: var(--color-gray-700);
+  --text-color-gray-600: var(--color-gray-600);
+  --text-color-gray-500: var(--color-gray-500);
+  --text-color-gray-400: var(--color-gray-400);
+  --text-color-gray-300: var(--color-gray-300);
+  --border-color-gray-50: var(--color-gray-50);
+  --ring-color-gray-50: var(--color-gray-50);
+  --border-color-gray-100: var(--color-gray-100);
+  --ring-color-gray-100: var(--color-gray-100);
+  --border-color-gray-200: var(--color-gray-200);
+  --ring-color-gray-200: var(--color-gray-200);
+  --border-color-gray-300: var(--color-gray-300);
+  --ring-color-gray-300: var(--color-gray-300);
+  --background-color-stone-50: var(--color-stone-50);
+  --background-color-stone-100: var(--color-stone-100);
+  --background-color-stone-200: var(--color-stone-200);
+  --background-color-stone-300: var(--color-stone-300);
+  --text-color-stone-950: var(--color-stone-950);
+  --text-color-stone-900: var(--color-stone-900);
+  --text-color-stone-800: var(--color-stone-800);
+  --text-color-stone-700: var(--color-stone-700);
+  --text-color-stone-600: var(--color-stone-600);
+  --text-color-stone-500: var(--color-stone-500);
+  --text-color-stone-400: var(--color-stone-400);
+  --text-color-stone-300: var(--color-stone-300);
+  --border-color-stone-50: var(--color-stone-50);
+  --ring-color-stone-50: var(--color-stone-50);
+  --border-color-stone-100: var(--color-stone-100);
+  --ring-color-stone-100: var(--color-stone-100);
+  --border-color-stone-200: var(--color-stone-200);
+  --ring-color-stone-200: var(--color-stone-200);
+  --border-color-stone-300: var(--color-stone-300);
+  --ring-color-stone-300: var(--color-stone-300);
+  --background-color-navy-50: #f0f4f8;
+  --background-color-navy-100: #d9e2ec;
+  --background-color-navy-200: #bccde0;
+  --background-color-navy-700: #1e3a5f;
+  --background-color-navy-800: #172a45;
+  --background-color-navy-900: #0a192f;
+  --text-color-navy-900: #0a192f;
+  --text-color-navy-800: #172a45;
+  --text-color-navy-700: #1e3a5f;
+  --text-color-navy-600: #2c5282;
+  --text-color-navy-500: #3b6ea5;
+  --border-color-navy-700: #1e3a5f;
+  --border-color-navy-800: #172a45;
+  --border-color-navy-100: #d9e2ec;
+  --ring-color-navy-100: #d9e2ec;
+  --border-color-navy-200: #bccde0;
+  --ring-color-navy-200: #bccde0;
+  --background-color-emerald-50: var(--color-emerald-50);
+  --background-color-emerald-100: var(--color-emerald-100);
+  --background-color-emerald-200: var(--color-emerald-200);
+  --text-color-emerald-950: var(--color-emerald-950);
+  --text-color-emerald-900: var(--color-emerald-900);
+  --text-color-emerald-800: var(--color-emerald-800);
+  --text-color-emerald-700: var(--color-emerald-700);
+  --text-color-emerald-600: var(--color-emerald-600);
+  --text-color-emerald-500: var(--color-emerald-500);
+  --border-color-emerald-50: var(--color-emerald-50);
+  --ring-color-emerald-50: var(--color-emerald-50);
+  --border-color-emerald-100: var(--color-emerald-100);
+  --ring-color-emerald-100: var(--color-emerald-100);
+  --border-color-emerald-200: var(--color-emerald-200);
+  --ring-color-emerald-200: var(--color-emerald-200);
+  --border-color-emerald-300: var(--color-emerald-300);
+  --ring-color-emerald-300: var(--color-emerald-300);
+  --background-color-rose-50: var(--color-rose-50);
+  --background-color-rose-100: var(--color-rose-100);
+  --background-color-rose-200: var(--color-rose-200);
+  --text-color-rose-950: var(--color-rose-950);
+  --text-color-rose-900: var(--color-rose-900);
+  --text-color-rose-800: var(--color-rose-800);
+  --text-color-rose-700: var(--color-rose-700);
+  --text-color-rose-600: var(--color-rose-600);
+  --text-color-rose-500: var(--color-rose-500);
+  --border-color-rose-50: var(--color-rose-50);
+  --ring-color-rose-50: var(--color-rose-50);
+  --border-color-rose-100: var(--color-rose-100);
+  --ring-color-rose-100: var(--color-rose-100);
+  --border-color-rose-200: var(--color-rose-200);
+  --ring-color-rose-200: var(--color-rose-200);
+  --border-color-rose-300: var(--color-rose-300);
+  --ring-color-rose-300: var(--color-rose-300);
+  --background-color-amber-50: var(--color-amber-50);
+  --background-color-amber-100: var(--color-amber-100);
+  --background-color-amber-200: var(--color-amber-200);
+  --text-color-amber-950: var(--color-amber-950);
+  --text-color-amber-900: var(--color-amber-900);
+  --text-color-amber-800: var(--color-amber-800);
+  --text-color-amber-700: var(--color-amber-700);
+  --text-color-amber-600: var(--color-amber-600);
+  --text-color-amber-500: var(--color-amber-500);
+  --border-color-amber-50: var(--color-amber-50);
+  --ring-color-amber-50: var(--color-amber-50);
+  --border-color-amber-100: var(--color-amber-100);
+  --ring-color-amber-100: var(--color-amber-100);
+  --border-color-amber-200: var(--color-amber-200);
+  --ring-color-amber-200: var(--color-amber-200);
+  --border-color-amber-300: var(--color-amber-300);
+  --ring-color-amber-300: var(--color-amber-300);
+  --background-color-blue-50: var(--color-blue-50);
+  --background-color-blue-100: var(--color-blue-100);
+  --background-color-blue-200: var(--color-blue-200);
+  --text-color-blue-950: var(--color-blue-950);
+  --text-color-blue-900: var(--color-blue-900);
+  --text-color-blue-800: var(--color-blue-800);
+  --text-color-blue-700: var(--color-blue-700);
+  --text-color-blue-600: var(--color-blue-600);
+  --text-color-blue-500: var(--color-blue-500);
+  --border-color-blue-50: var(--color-blue-50);
+  --ring-color-blue-50: var(--color-blue-50);
+  --border-color-blue-100: var(--color-blue-100);
+  --ring-color-blue-100: var(--color-blue-100);
+  --border-color-blue-200: var(--color-blue-200);
+  --ring-color-blue-200: var(--color-blue-200);
+  --border-color-blue-300: var(--color-blue-300);
+  --ring-color-blue-300: var(--color-blue-300);
+  --background-color-teal-50: var(--color-teal-50);
+  --background-color-teal-100: var(--color-teal-100);
+  --background-color-teal-200: var(--color-teal-200);
+  --text-color-teal-950: var(--color-teal-950);
+  --text-color-teal-900: var(--color-teal-900);
+  --text-color-teal-800: var(--color-teal-800);
+  --text-color-teal-700: var(--color-teal-700);
+  --text-color-teal-600: var(--color-teal-600);
+  --text-color-teal-500: var(--color-teal-500);
+  --border-color-teal-50: var(--color-teal-50);
+  --ring-color-teal-50: var(--color-teal-50);
+  --border-color-teal-100: var(--color-teal-100);
+  --ring-color-teal-100: var(--color-teal-100);
+  --border-color-teal-200: var(--color-teal-200);
+  --ring-color-teal-200: var(--color-teal-200);
+  --border-color-teal-300: var(--color-teal-300);
+  --ring-color-teal-300: var(--color-teal-300);
+  --background-color-indigo-50: var(--color-indigo-50);
+  --background-color-indigo-100: var(--color-indigo-100);
+  --background-color-indigo-200: var(--color-indigo-200);
+  --text-color-indigo-950: var(--color-indigo-950);
+  --text-color-indigo-900: var(--color-indigo-900);
+  --text-color-indigo-800: var(--color-indigo-800);
+  --text-color-indigo-700: var(--color-indigo-700);
+  --text-color-indigo-600: var(--color-indigo-600);
+  --text-color-indigo-500: var(--color-indigo-500);
+  --border-color-indigo-50: var(--color-indigo-50);
+  --ring-color-indigo-50: var(--color-indigo-50);
+  --border-color-indigo-100: var(--color-indigo-100);
+  --ring-color-indigo-100: var(--color-indigo-100);
+  --border-color-indigo-200: var(--color-indigo-200);
+  --ring-color-indigo-200: var(--color-indigo-200);
+  --border-color-indigo-300: var(--color-indigo-300);
+  --ring-color-indigo-300: var(--color-indigo-300);
+  --background-color-red-50: var(--color-red-50);
+  --background-color-red-100: var(--color-red-100);
+  --background-color-red-200: var(--color-red-200);
+  --text-color-red-950: var(--color-red-950);
+  --text-color-red-900: var(--color-red-900);
+  --text-color-red-800: var(--color-red-800);
+  --text-color-red-700: var(--color-red-700);
+  --text-color-red-600: var(--color-red-600);
+  --text-color-red-500: var(--color-red-500);
+  --border-color-red-50: var(--color-red-50);
+  --ring-color-red-50: var(--color-red-50);
+  --border-color-red-100: var(--color-red-100);
+  --ring-color-red-100: var(--color-red-100);
+  --border-color-red-200: var(--color-red-200);
+  --ring-color-red-200: var(--color-red-200);
+  --border-color-red-300: var(--color-red-300);
+  --ring-color-red-300: var(--color-red-300);
+  --background-color-green-50: var(--color-green-50);
+  --background-color-green-100: var(--color-green-100);
+  --background-color-green-200: var(--color-green-200);
+  --text-color-green-950: var(--color-green-950);
+  --text-color-green-900: var(--color-green-900);
+  --text-color-green-800: var(--color-green-800);
+  --text-color-green-700: var(--color-green-700);
+  --text-color-green-600: var(--color-green-600);
+  --text-color-green-500: var(--color-green-500);
+  --border-color-green-50: var(--color-green-50);
+  --ring-color-green-50: var(--color-green-50);
+  --border-color-green-100: var(--color-green-100);
+  --ring-color-green-100: var(--color-green-100);
+  --border-color-green-200: var(--color-green-200);
+  --ring-color-green-200: var(--color-green-200);
+  --border-color-green-300: var(--color-green-300);
+  --ring-color-green-300: var(--color-green-300);
+  --background-color-sky-50: var(--color-sky-50);
+  --background-color-sky-100: var(--color-sky-100);
+  --background-color-sky-200: var(--color-sky-200);
+  --text-color-sky-950: var(--color-sky-950);
+  --text-color-sky-900: var(--color-sky-900);
+  --text-color-sky-800: var(--color-sky-800);
+  --text-color-sky-700: var(--color-sky-700);
+  --text-color-sky-600: var(--color-sky-600);
+  --text-color-sky-500: var(--color-sky-500);
+  --border-color-sky-50: var(--color-sky-50);
+  --ring-color-sky-50: var(--color-sky-50);
+  --border-color-sky-100: var(--color-sky-100);
+  --ring-color-sky-100: var(--color-sky-100);
+  --border-color-sky-200: var(--color-sky-200);
+  --ring-color-sky-200: var(--color-sky-200);
+  --border-color-sky-300: var(--color-sky-300);
+  --ring-color-sky-300: var(--color-sky-300);
+  --background-color-violet-50: var(--color-violet-50);
+  --background-color-violet-100: var(--color-violet-100);
+  --background-color-violet-200: var(--color-violet-200);
+  --text-color-violet-950: var(--color-violet-950);
+  --text-color-violet-900: var(--color-violet-900);
+  --text-color-violet-800: var(--color-violet-800);
+  --text-color-violet-700: var(--color-violet-700);
+  --text-color-violet-600: var(--color-violet-600);
+  --text-color-violet-500: var(--color-violet-500);
+  --border-color-violet-50: var(--color-violet-50);
+  --ring-color-violet-50: var(--color-violet-50);
+  --border-color-violet-100: var(--color-violet-100);
+  --ring-color-violet-100: var(--color-violet-100);
+  --border-color-violet-200: var(--color-violet-200);
+  --ring-color-violet-200: var(--color-violet-200);
+  --border-color-violet-300: var(--color-violet-300);
+  --ring-color-violet-300: var(--color-violet-300);
+  --background-color-purple-50: var(--color-purple-50);
+  --background-color-purple-100: var(--color-purple-100);
+  --background-color-purple-200: var(--color-purple-200);
+  --text-color-purple-950: var(--color-purple-950);
+  --text-color-purple-900: var(--color-purple-900);
+  --text-color-purple-800: var(--color-purple-800);
+  --text-color-purple-700: var(--color-purple-700);
+  --text-color-purple-600: var(--color-purple-600);
+  --text-color-purple-500: var(--color-purple-500);
+  --border-color-purple-50: var(--color-purple-50);
+  --ring-color-purple-50: var(--color-purple-50);
+  --border-color-purple-100: var(--color-purple-100);
+  --ring-color-purple-100: var(--color-purple-100);
+  --border-color-purple-200: var(--color-purple-200);
+  --ring-color-purple-200: var(--color-purple-200);
+  --border-color-purple-300: var(--color-purple-300);
+  --ring-color-purple-300: var(--color-purple-300);
+  --background-color-orange-50: var(--color-orange-50);
+  --background-color-orange-100: var(--color-orange-100);
+  --background-color-orange-200: var(--color-orange-200);
+  --text-color-orange-950: var(--color-orange-950);
+  --text-color-orange-900: var(--color-orange-900);
+  --text-color-orange-800: var(--color-orange-800);
+  --text-color-orange-700: var(--color-orange-700);
+  --text-color-orange-600: var(--color-orange-600);
+  --text-color-orange-500: var(--color-orange-500);
+  --border-color-orange-50: var(--color-orange-50);
+  --ring-color-orange-50: var(--color-orange-50);
+  --border-color-orange-100: var(--color-orange-100);
+  --ring-color-orange-100: var(--color-orange-100);
+  --border-color-orange-200: var(--color-orange-200);
+  --ring-color-orange-200: var(--color-orange-200);
+  --border-color-orange-300: var(--color-orange-300);
+  --ring-color-orange-300: var(--color-orange-300);
+  --background-color-yellow-50: var(--color-yellow-50);
+  --background-color-yellow-100: var(--color-yellow-100);
+  --background-color-yellow-200: var(--color-yellow-200);
+  --text-color-yellow-950: var(--color-yellow-950);
+  --text-color-yellow-900: var(--color-yellow-900);
+  --text-color-yellow-800: var(--color-yellow-800);
+  --text-color-yellow-700: var(--color-yellow-700);
+  --text-color-yellow-600: var(--color-yellow-600);
+  --text-color-yellow-500: var(--color-yellow-500);
+  --border-color-yellow-50: var(--color-yellow-50);
+  --ring-color-yellow-50: var(--color-yellow-50);
+  --border-color-yellow-100: var(--color-yellow-100);
+  --ring-color-yellow-100: var(--color-yellow-100);
+  --border-color-yellow-200: var(--color-yellow-200);
+  --ring-color-yellow-200: var(--color-yellow-200);
+  --border-color-yellow-300: var(--color-yellow-300);
+  --ring-color-yellow-300: var(--color-yellow-300);
+  --background-color-pink-50: var(--color-pink-50);
+  --background-color-pink-100: var(--color-pink-100);
+  --background-color-pink-200: var(--color-pink-200);
+  --text-color-pink-950: var(--color-pink-950);
+  --text-color-pink-900: var(--color-pink-900);
+  --text-color-pink-800: var(--color-pink-800);
+  --text-color-pink-700: var(--color-pink-700);
+  --text-color-pink-600: var(--color-pink-600);
+  --text-color-pink-500: var(--color-pink-500);
+  --border-color-pink-50: var(--color-pink-50);
+  --ring-color-pink-50: var(--color-pink-50);
+  --border-color-pink-100: var(--color-pink-100);
+  --ring-color-pink-100: var(--color-pink-100);
+  --border-color-pink-200: var(--color-pink-200);
+  --ring-color-pink-200: var(--color-pink-200);
+  --border-color-pink-300: var(--color-pink-300);
+  --ring-color-pink-300: var(--color-pink-300);
+  --background-color-cyan-50: var(--color-cyan-50);
+  --background-color-cyan-100: var(--color-cyan-100);
+  --background-color-cyan-200: var(--color-cyan-200);
+  --text-color-cyan-950: var(--color-cyan-950);
+  --text-color-cyan-900: var(--color-cyan-900);
+  --text-color-cyan-800: var(--color-cyan-800);
+  --text-color-cyan-700: var(--color-cyan-700);
+  --text-color-cyan-600: var(--color-cyan-600);
+  --text-color-cyan-500: var(--color-cyan-500);
+  --border-color-cyan-50: var(--color-cyan-50);
+  --ring-color-cyan-50: var(--color-cyan-50);
+  --border-color-cyan-100: var(--color-cyan-100);
+  --ring-color-cyan-100: var(--color-cyan-100);
+  --border-color-cyan-200: var(--color-cyan-200);
+  --ring-color-cyan-200: var(--color-cyan-200);
+  --border-color-cyan-300: var(--color-cyan-300);
+  --ring-color-cyan-300: var(--color-cyan-300);
+}
+
+@media screen {
+  :root.dark {
+    color-scheme: dark;
+
+    --dm-page: #1c2430;
+    --dm-card: #252f3d;
+    --dm-raised: #2e3a4a;
+    --dm-line-soft: #323e4e;
+    --dm-line: #3b4859;
+    --dm-line-strong: #4a5869;
+    --dm-text-strong: #e6ebf2;
+    --dm-text: #dde4ec;
+    --dm-muted: #a9b5c2;
+    --dm-subtle: #8f9cab;
+    --dm-accent: #8fb8e3;
+    --dm-btn: #2f5f94;
+    --dm-btn-hover: #274d7a;
+
+    --background: var(--dm-page);
+    --foreground: var(--dm-text);
+    --card: var(--dm-card);
+    --card-foreground: var(--dm-text);
+    --popover: var(--dm-card);
+    --popover-foreground: var(--dm-text);
+    --primary: var(--dm-text-strong);
+    --primary-foreground: var(--dm-page);
+    --secondary: var(--dm-raised);
+    --secondary-foreground: var(--dm-text);
+    --muted: var(--dm-raised);
+    --muted-foreground: var(--dm-muted);
+    --accent: var(--dm-raised);
+    --accent-foreground: var(--dm-text);
+    --destructive: oklch(0.704 0.191 22.216);
+    --border: var(--dm-line);
+    --input: var(--dm-line);
+    --ring: var(--dm-accent);
+    --sidebar: var(--dm-card);
+    --sidebar-foreground: var(--dm-text);
+    --sidebar-primary: var(--dm-btn);
+    --sidebar-primary-foreground: #fff;
+    --sidebar-accent: var(--dm-raised);
+    --sidebar-accent-foreground: var(--dm-text);
+    --sidebar-border: var(--dm-line);
+    --sidebar-ring: var(--dm-accent);
+    --chart-1: oklch(0.488 0.243 264.376);
+    --chart-2: oklch(0.696 0.17 162.48);
+    --chart-3: oklch(0.769 0.188 70.08);
+    --chart-4: oklch(0.627 0.265 303.9);
+    --chart-5: oklch(0.645 0.246 16.439);
+
+    /* For inline styles that can't use classes: var(--ui-*, <light value>) */
+    --ui-card: var(--dm-card);
+    --ui-line: var(--dm-line);
+    --ui-text: var(--dm-text);
+    --ui-hover: var(--dm-raised);
+    --ui-mention-bg: color-mix(in oklab, #3b6ea5 32%, transparent);
+    --ui-mention-text: var(--dm-accent);
+
+    --background-color-white: var(--dm-card);
+    --text-color-black: var(--dm-text);
+    --border-color-white: var(--dm-card);
+    --background-color-slate-50: var(--dm-page);
+    --background-color-slate-100: var(--dm-raised);
+    --background-color-slate-200: var(--dm-line);
+    --background-color-slate-300: var(--dm-line-strong);
+    --text-color-slate-950: var(--dm-text-strong);
+    --text-color-slate-900: var(--dm-text-strong);
+    --text-color-slate-800: var(--dm-text);
+    --text-color-slate-700: #cfd8e2;
+    --text-color-slate-600: #b9c4d0;
+    --text-color-slate-500: var(--dm-muted);
+    --text-color-slate-400: var(--dm-subtle);
+    --text-color-slate-300: #74828f;
+    --border-color-slate-50: var(--dm-line-soft);
+    --ring-color-slate-50: var(--dm-line-soft);
+    --border-color-slate-100: var(--dm-line-soft);
+    --ring-color-slate-100: var(--dm-line-soft);
+    --border-color-slate-200: var(--dm-line);
+    --ring-color-slate-200: var(--dm-line);
+    --border-color-slate-300: var(--dm-line-strong);
+    --ring-color-slate-300: var(--dm-line-strong);
+    --background-color-gray-50: var(--dm-page);
+    --background-color-gray-100: var(--dm-raised);
+    --background-color-gray-200: var(--dm-line);
+    --background-color-gray-300: var(--dm-line-strong);
+    --text-color-gray-950: var(--dm-text-strong);
+    --text-color-gray-900: var(--dm-text-strong);
+    --text-color-gray-800: var(--dm-text);
+    --text-color-gray-700: #cfd8e2;
+    --text-color-gray-600: #b9c4d0;
+    --text-color-gray-500: var(--dm-muted);
+    --text-color-gray-400: var(--dm-subtle);
+    --text-color-gray-300: #74828f;
+    --border-color-gray-50: var(--dm-line-soft);
+    --ring-color-gray-50: var(--dm-line-soft);
+    --border-color-gray-100: var(--dm-line-soft);
+    --ring-color-gray-100: var(--dm-line-soft);
+    --border-color-gray-200: var(--dm-line);
+    --ring-color-gray-200: var(--dm-line);
+    --border-color-gray-300: var(--dm-line-strong);
+    --ring-color-gray-300: var(--dm-line-strong);
+    --background-color-stone-50: var(--dm-page);
+    --background-color-stone-100: var(--dm-raised);
+    --background-color-stone-200: var(--dm-line);
+    --background-color-stone-300: var(--dm-line-strong);
+    --text-color-stone-950: var(--dm-text-strong);
+    --text-color-stone-900: var(--dm-text-strong);
+    --text-color-stone-800: var(--dm-text);
+    --text-color-stone-700: #cfd8e2;
+    --text-color-stone-600: #b9c4d0;
+    --text-color-stone-500: var(--dm-muted);
+    --text-color-stone-400: var(--dm-subtle);
+    --text-color-stone-300: #74828f;
+    --border-color-stone-50: var(--dm-line-soft);
+    --ring-color-stone-50: var(--dm-line-soft);
+    --border-color-stone-100: var(--dm-line-soft);
+    --ring-color-stone-100: var(--dm-line-soft);
+    --border-color-stone-200: var(--dm-line);
+    --ring-color-stone-200: var(--dm-line);
+    --border-color-stone-300: var(--dm-line-strong);
+    --ring-color-stone-300: var(--dm-line-strong);
+    --background-color-navy-50: color-mix(in oklab, #3b6ea5 18%, transparent);
+    --background-color-navy-100: color-mix(in oklab, #3b6ea5 28%, transparent);
+    --background-color-navy-200: color-mix(in oklab, #3b6ea5 38%, transparent);
+    --background-color-navy-700: var(--dm-btn);
+    --background-color-navy-800: var(--dm-btn-hover);
+    --background-color-navy-900: #1f3d61;
+    --text-color-navy-900: var(--dm-accent);
+    --text-color-navy-800: var(--dm-accent);
+    --text-color-navy-700: var(--dm-accent);
+    --text-color-navy-600: var(--dm-accent);
+    --text-color-navy-500: #7fa9d8;
+    --border-color-navy-700: #5b85b3;
+    --border-color-navy-800: #5b85b3;
+    --border-color-navy-100: color-mix(in oklab, #3b6ea5 30%, transparent);
+    --ring-color-navy-100: color-mix(in oklab, #3b6ea5 30%, transparent);
+    --border-color-navy-200: color-mix(in oklab, #3b6ea5 42%, transparent);
+    --ring-color-navy-200: color-mix(in oklab, #3b6ea5 42%, transparent);
+    --background-color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 12%, transparent);
+    --background-color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 18%, transparent);
+    --background-color-emerald-200: color-mix(in oklab, var(--color-emerald-500) 26%, transparent);
+    --text-color-emerald-950: var(--color-emerald-300);
+    --text-color-emerald-900: var(--color-emerald-300);
+    --text-color-emerald-800: var(--color-emerald-300);
+    --text-color-emerald-700: var(--color-emerald-300);
+    --text-color-emerald-600: var(--color-emerald-300);
+    --text-color-emerald-500: var(--color-emerald-400);
+    --border-color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 22%, transparent);
+    --ring-color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 22%, transparent);
+    --border-color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 24%, transparent);
+    --ring-color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 24%, transparent);
+    --border-color-emerald-200: color-mix(in oklab, var(--color-emerald-500) 32%, transparent);
+    --ring-color-emerald-200: color-mix(in oklab, var(--color-emerald-500) 32%, transparent);
+    --border-color-emerald-300: color-mix(in oklab, var(--color-emerald-500) 44%, transparent);
+    --ring-color-emerald-300: color-mix(in oklab, var(--color-emerald-500) 44%, transparent);
+    --background-color-rose-50: color-mix(in oklab, var(--color-rose-500) 12%, transparent);
+    --background-color-rose-100: color-mix(in oklab, var(--color-rose-500) 18%, transparent);
+    --background-color-rose-200: color-mix(in oklab, var(--color-rose-500) 26%, transparent);
+    --text-color-rose-950: var(--color-rose-300);
+    --text-color-rose-900: var(--color-rose-300);
+    --text-color-rose-800: var(--color-rose-300);
+    --text-color-rose-700: var(--color-rose-300);
+    --text-color-rose-600: var(--color-rose-300);
+    --text-color-rose-500: var(--color-rose-400);
+    --border-color-rose-50: color-mix(in oklab, var(--color-rose-500) 22%, transparent);
+    --ring-color-rose-50: color-mix(in oklab, var(--color-rose-500) 22%, transparent);
+    --border-color-rose-100: color-mix(in oklab, var(--color-rose-500) 24%, transparent);
+    --ring-color-rose-100: color-mix(in oklab, var(--color-rose-500) 24%, transparent);
+    --border-color-rose-200: color-mix(in oklab, var(--color-rose-500) 32%, transparent);
+    --ring-color-rose-200: color-mix(in oklab, var(--color-rose-500) 32%, transparent);
+    --border-color-rose-300: color-mix(in oklab, var(--color-rose-500) 44%, transparent);
+    --ring-color-rose-300: color-mix(in oklab, var(--color-rose-500) 44%, transparent);
+    --background-color-amber-50: color-mix(in oklab, var(--color-amber-500) 12%, transparent);
+    --background-color-amber-100: color-mix(in oklab, var(--color-amber-500) 18%, transparent);
+    --background-color-amber-200: color-mix(in oklab, var(--color-amber-500) 26%, transparent);
+    --text-color-amber-950: var(--color-amber-300);
+    --text-color-amber-900: var(--color-amber-300);
+    --text-color-amber-800: var(--color-amber-300);
+    --text-color-amber-700: var(--color-amber-300);
+    --text-color-amber-600: var(--color-amber-300);
+    --text-color-amber-500: var(--color-amber-400);
+    --border-color-amber-50: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
+    --ring-color-amber-50: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
+    --border-color-amber-100: color-mix(in oklab, var(--color-amber-500) 24%, transparent);
+    --ring-color-amber-100: color-mix(in oklab, var(--color-amber-500) 24%, transparent);
+    --border-color-amber-200: color-mix(in oklab, var(--color-amber-500) 32%, transparent);
+    --ring-color-amber-200: color-mix(in oklab, var(--color-amber-500) 32%, transparent);
+    --border-color-amber-300: color-mix(in oklab, var(--color-amber-500) 44%, transparent);
+    --ring-color-amber-300: color-mix(in oklab, var(--color-amber-500) 44%, transparent);
+    --background-color-blue-50: color-mix(in oklab, var(--color-blue-500) 12%, transparent);
+    --background-color-blue-100: color-mix(in oklab, var(--color-blue-500) 18%, transparent);
+    --background-color-blue-200: color-mix(in oklab, var(--color-blue-500) 26%, transparent);
+    --text-color-blue-950: var(--color-blue-300);
+    --text-color-blue-900: var(--color-blue-300);
+    --text-color-blue-800: var(--color-blue-300);
+    --text-color-blue-700: var(--color-blue-300);
+    --text-color-blue-600: var(--color-blue-300);
+    --text-color-blue-500: var(--color-blue-400);
+    --border-color-blue-50: color-mix(in oklab, var(--color-blue-500) 22%, transparent);
+    --ring-color-blue-50: color-mix(in oklab, var(--color-blue-500) 22%, transparent);
+    --border-color-blue-100: color-mix(in oklab, var(--color-blue-500) 24%, transparent);
+    --ring-color-blue-100: color-mix(in oklab, var(--color-blue-500) 24%, transparent);
+    --border-color-blue-200: color-mix(in oklab, var(--color-blue-500) 32%, transparent);
+    --ring-color-blue-200: color-mix(in oklab, var(--color-blue-500) 32%, transparent);
+    --border-color-blue-300: color-mix(in oklab, var(--color-blue-500) 44%, transparent);
+    --ring-color-blue-300: color-mix(in oklab, var(--color-blue-500) 44%, transparent);
+    --background-color-teal-50: color-mix(in oklab, var(--color-teal-500) 12%, transparent);
+    --background-color-teal-100: color-mix(in oklab, var(--color-teal-500) 18%, transparent);
+    --background-color-teal-200: color-mix(in oklab, var(--color-teal-500) 26%, transparent);
+    --text-color-teal-950: var(--color-teal-300);
+    --text-color-teal-900: var(--color-teal-300);
+    --text-color-teal-800: var(--color-teal-300);
+    --text-color-teal-700: var(--color-teal-300);
+    --text-color-teal-600: var(--color-teal-300);
+    --text-color-teal-500: var(--color-teal-400);
+    --border-color-teal-50: color-mix(in oklab, var(--color-teal-500) 22%, transparent);
+    --ring-color-teal-50: color-mix(in oklab, var(--color-teal-500) 22%, transparent);
+    --border-color-teal-100: color-mix(in oklab, var(--color-teal-500) 24%, transparent);
+    --ring-color-teal-100: color-mix(in oklab, var(--color-teal-500) 24%, transparent);
+    --border-color-teal-200: color-mix(in oklab, var(--color-teal-500) 32%, transparent);
+    --ring-color-teal-200: color-mix(in oklab, var(--color-teal-500) 32%, transparent);
+    --border-color-teal-300: color-mix(in oklab, var(--color-teal-500) 44%, transparent);
+    --ring-color-teal-300: color-mix(in oklab, var(--color-teal-500) 44%, transparent);
+    --background-color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 12%, transparent);
+    --background-color-indigo-100: color-mix(in oklab, var(--color-indigo-500) 18%, transparent);
+    --background-color-indigo-200: color-mix(in oklab, var(--color-indigo-500) 26%, transparent);
+    --text-color-indigo-950: var(--color-indigo-300);
+    --text-color-indigo-900: var(--color-indigo-300);
+    --text-color-indigo-800: var(--color-indigo-300);
+    --text-color-indigo-700: var(--color-indigo-300);
+    --text-color-indigo-600: var(--color-indigo-300);
+    --text-color-indigo-500: var(--color-indigo-400);
+    --border-color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 22%, transparent);
+    --ring-color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 22%, transparent);
+    --border-color-indigo-100: color-mix(in oklab, var(--color-indigo-500) 24%, transparent);
+    --ring-color-indigo-100: color-mix(in oklab, var(--color-indigo-500) 24%, transparent);
+    --border-color-indigo-200: color-mix(in oklab, var(--color-indigo-500) 32%, transparent);
+    --ring-color-indigo-200: color-mix(in oklab, var(--color-indigo-500) 32%, transparent);
+    --border-color-indigo-300: color-mix(in oklab, var(--color-indigo-500) 44%, transparent);
+    --ring-color-indigo-300: color-mix(in oklab, var(--color-indigo-500) 44%, transparent);
+    --background-color-red-50: color-mix(in oklab, var(--color-red-500) 12%, transparent);
+    --background-color-red-100: color-mix(in oklab, var(--color-red-500) 18%, transparent);
+    --background-color-red-200: color-mix(in oklab, var(--color-red-500) 26%, transparent);
+    --text-color-red-950: var(--color-red-300);
+    --text-color-red-900: var(--color-red-300);
+    --text-color-red-800: var(--color-red-300);
+    --text-color-red-700: var(--color-red-300);
+    --text-color-red-600: var(--color-red-300);
+    --text-color-red-500: var(--color-red-400);
+    --border-color-red-50: color-mix(in oklab, var(--color-red-500) 22%, transparent);
+    --ring-color-red-50: color-mix(in oklab, var(--color-red-500) 22%, transparent);
+    --border-color-red-100: color-mix(in oklab, var(--color-red-500) 24%, transparent);
+    --ring-color-red-100: color-mix(in oklab, var(--color-red-500) 24%, transparent);
+    --border-color-red-200: color-mix(in oklab, var(--color-red-500) 32%, transparent);
+    --ring-color-red-200: color-mix(in oklab, var(--color-red-500) 32%, transparent);
+    --border-color-red-300: color-mix(in oklab, var(--color-red-500) 44%, transparent);
+    --ring-color-red-300: color-mix(in oklab, var(--color-red-500) 44%, transparent);
+    --background-color-green-50: color-mix(in oklab, var(--color-green-500) 12%, transparent);
+    --background-color-green-100: color-mix(in oklab, var(--color-green-500) 18%, transparent);
+    --background-color-green-200: color-mix(in oklab, var(--color-green-500) 26%, transparent);
+    --text-color-green-950: var(--color-green-300);
+    --text-color-green-900: var(--color-green-300);
+    --text-color-green-800: var(--color-green-300);
+    --text-color-green-700: var(--color-green-300);
+    --text-color-green-600: var(--color-green-300);
+    --text-color-green-500: var(--color-green-400);
+    --border-color-green-50: color-mix(in oklab, var(--color-green-500) 22%, transparent);
+    --ring-color-green-50: color-mix(in oklab, var(--color-green-500) 22%, transparent);
+    --border-color-green-100: color-mix(in oklab, var(--color-green-500) 24%, transparent);
+    --ring-color-green-100: color-mix(in oklab, var(--color-green-500) 24%, transparent);
+    --border-color-green-200: color-mix(in oklab, var(--color-green-500) 32%, transparent);
+    --ring-color-green-200: color-mix(in oklab, var(--color-green-500) 32%, transparent);
+    --border-color-green-300: color-mix(in oklab, var(--color-green-500) 44%, transparent);
+    --ring-color-green-300: color-mix(in oklab, var(--color-green-500) 44%, transparent);
+    --background-color-sky-50: color-mix(in oklab, var(--color-sky-500) 12%, transparent);
+    --background-color-sky-100: color-mix(in oklab, var(--color-sky-500) 18%, transparent);
+    --background-color-sky-200: color-mix(in oklab, var(--color-sky-500) 26%, transparent);
+    --text-color-sky-950: var(--color-sky-300);
+    --text-color-sky-900: var(--color-sky-300);
+    --text-color-sky-800: var(--color-sky-300);
+    --text-color-sky-700: var(--color-sky-300);
+    --text-color-sky-600: var(--color-sky-300);
+    --text-color-sky-500: var(--color-sky-400);
+    --border-color-sky-50: color-mix(in oklab, var(--color-sky-500) 22%, transparent);
+    --ring-color-sky-50: color-mix(in oklab, var(--color-sky-500) 22%, transparent);
+    --border-color-sky-100: color-mix(in oklab, var(--color-sky-500) 24%, transparent);
+    --ring-color-sky-100: color-mix(in oklab, var(--color-sky-500) 24%, transparent);
+    --border-color-sky-200: color-mix(in oklab, var(--color-sky-500) 32%, transparent);
+    --ring-color-sky-200: color-mix(in oklab, var(--color-sky-500) 32%, transparent);
+    --border-color-sky-300: color-mix(in oklab, var(--color-sky-500) 44%, transparent);
+    --ring-color-sky-300: color-mix(in oklab, var(--color-sky-500) 44%, transparent);
+    --background-color-violet-50: color-mix(in oklab, var(--color-violet-500) 12%, transparent);
+    --background-color-violet-100: color-mix(in oklab, var(--color-violet-500) 18%, transparent);
+    --background-color-violet-200: color-mix(in oklab, var(--color-violet-500) 26%, transparent);
+    --text-color-violet-950: var(--color-violet-300);
+    --text-color-violet-900: var(--color-violet-300);
+    --text-color-violet-800: var(--color-violet-300);
+    --text-color-violet-700: var(--color-violet-300);
+    --text-color-violet-600: var(--color-violet-300);
+    --text-color-violet-500: var(--color-violet-400);
+    --border-color-violet-50: color-mix(in oklab, var(--color-violet-500) 22%, transparent);
+    --ring-color-violet-50: color-mix(in oklab, var(--color-violet-500) 22%, transparent);
+    --border-color-violet-100: color-mix(in oklab, var(--color-violet-500) 24%, transparent);
+    --ring-color-violet-100: color-mix(in oklab, var(--color-violet-500) 24%, transparent);
+    --border-color-violet-200: color-mix(in oklab, var(--color-violet-500) 32%, transparent);
+    --ring-color-violet-200: color-mix(in oklab, var(--color-violet-500) 32%, transparent);
+    --border-color-violet-300: color-mix(in oklab, var(--color-violet-500) 44%, transparent);
+    --ring-color-violet-300: color-mix(in oklab, var(--color-violet-500) 44%, transparent);
+    --background-color-purple-50: color-mix(in oklab, var(--color-purple-500) 12%, transparent);
+    --background-color-purple-100: color-mix(in oklab, var(--color-purple-500) 18%, transparent);
+    --background-color-purple-200: color-mix(in oklab, var(--color-purple-500) 26%, transparent);
+    --text-color-purple-950: var(--color-purple-300);
+    --text-color-purple-900: var(--color-purple-300);
+    --text-color-purple-800: var(--color-purple-300);
+    --text-color-purple-700: var(--color-purple-300);
+    --text-color-purple-600: var(--color-purple-300);
+    --text-color-purple-500: var(--color-purple-400);
+    --border-color-purple-50: color-mix(in oklab, var(--color-purple-500) 22%, transparent);
+    --ring-color-purple-50: color-mix(in oklab, var(--color-purple-500) 22%, transparent);
+    --border-color-purple-100: color-mix(in oklab, var(--color-purple-500) 24%, transparent);
+    --ring-color-purple-100: color-mix(in oklab, var(--color-purple-500) 24%, transparent);
+    --border-color-purple-200: color-mix(in oklab, var(--color-purple-500) 32%, transparent);
+    --ring-color-purple-200: color-mix(in oklab, var(--color-purple-500) 32%, transparent);
+    --border-color-purple-300: color-mix(in oklab, var(--color-purple-500) 44%, transparent);
+    --ring-color-purple-300: color-mix(in oklab, var(--color-purple-500) 44%, transparent);
+    --background-color-orange-50: color-mix(in oklab, var(--color-orange-500) 12%, transparent);
+    --background-color-orange-100: color-mix(in oklab, var(--color-orange-500) 18%, transparent);
+    --background-color-orange-200: color-mix(in oklab, var(--color-orange-500) 26%, transparent);
+    --text-color-orange-950: var(--color-orange-300);
+    --text-color-orange-900: var(--color-orange-300);
+    --text-color-orange-800: var(--color-orange-300);
+    --text-color-orange-700: var(--color-orange-300);
+    --text-color-orange-600: var(--color-orange-300);
+    --text-color-orange-500: var(--color-orange-400);
+    --border-color-orange-50: color-mix(in oklab, var(--color-orange-500) 22%, transparent);
+    --ring-color-orange-50: color-mix(in oklab, var(--color-orange-500) 22%, transparent);
+    --border-color-orange-100: color-mix(in oklab, var(--color-orange-500) 24%, transparent);
+    --ring-color-orange-100: color-mix(in oklab, var(--color-orange-500) 24%, transparent);
+    --border-color-orange-200: color-mix(in oklab, var(--color-orange-500) 32%, transparent);
+    --ring-color-orange-200: color-mix(in oklab, var(--color-orange-500) 32%, transparent);
+    --border-color-orange-300: color-mix(in oklab, var(--color-orange-500) 44%, transparent);
+    --ring-color-orange-300: color-mix(in oklab, var(--color-orange-500) 44%, transparent);
+    --background-color-yellow-50: color-mix(in oklab, var(--color-yellow-500) 12%, transparent);
+    --background-color-yellow-100: color-mix(in oklab, var(--color-yellow-500) 18%, transparent);
+    --background-color-yellow-200: color-mix(in oklab, var(--color-yellow-500) 26%, transparent);
+    --text-color-yellow-950: var(--color-yellow-300);
+    --text-color-yellow-900: var(--color-yellow-300);
+    --text-color-yellow-800: var(--color-yellow-300);
+    --text-color-yellow-700: var(--color-yellow-300);
+    --text-color-yellow-600: var(--color-yellow-300);
+    --text-color-yellow-500: var(--color-yellow-400);
+    --border-color-yellow-50: color-mix(in oklab, var(--color-yellow-500) 22%, transparent);
+    --ring-color-yellow-50: color-mix(in oklab, var(--color-yellow-500) 22%, transparent);
+    --border-color-yellow-100: color-mix(in oklab, var(--color-yellow-500) 24%, transparent);
+    --ring-color-yellow-100: color-mix(in oklab, var(--color-yellow-500) 24%, transparent);
+    --border-color-yellow-200: color-mix(in oklab, var(--color-yellow-500) 32%, transparent);
+    --ring-color-yellow-200: color-mix(in oklab, var(--color-yellow-500) 32%, transparent);
+    --border-color-yellow-300: color-mix(in oklab, var(--color-yellow-500) 44%, transparent);
+    --ring-color-yellow-300: color-mix(in oklab, var(--color-yellow-500) 44%, transparent);
+    --background-color-pink-50: color-mix(in oklab, var(--color-pink-500) 12%, transparent);
+    --background-color-pink-100: color-mix(in oklab, var(--color-pink-500) 18%, transparent);
+    --background-color-pink-200: color-mix(in oklab, var(--color-pink-500) 26%, transparent);
+    --text-color-pink-950: var(--color-pink-300);
+    --text-color-pink-900: var(--color-pink-300);
+    --text-color-pink-800: var(--color-pink-300);
+    --text-color-pink-700: var(--color-pink-300);
+    --text-color-pink-600: var(--color-pink-300);
+    --text-color-pink-500: var(--color-pink-400);
+    --border-color-pink-50: color-mix(in oklab, var(--color-pink-500) 22%, transparent);
+    --ring-color-pink-50: color-mix(in oklab, var(--color-pink-500) 22%, transparent);
+    --border-color-pink-100: color-mix(in oklab, var(--color-pink-500) 24%, transparent);
+    --ring-color-pink-100: color-mix(in oklab, var(--color-pink-500) 24%, transparent);
+    --border-color-pink-200: color-mix(in oklab, var(--color-pink-500) 32%, transparent);
+    --ring-color-pink-200: color-mix(in oklab, var(--color-pink-500) 32%, transparent);
+    --border-color-pink-300: color-mix(in oklab, var(--color-pink-500) 44%, transparent);
+    --ring-color-pink-300: color-mix(in oklab, var(--color-pink-500) 44%, transparent);
+    --background-color-cyan-50: color-mix(in oklab, var(--color-cyan-500) 12%, transparent);
+    --background-color-cyan-100: color-mix(in oklab, var(--color-cyan-500) 18%, transparent);
+    --background-color-cyan-200: color-mix(in oklab, var(--color-cyan-500) 26%, transparent);
+    --text-color-cyan-950: var(--color-cyan-300);
+    --text-color-cyan-900: var(--color-cyan-300);
+    --text-color-cyan-800: var(--color-cyan-300);
+    --text-color-cyan-700: var(--color-cyan-300);
+    --text-color-cyan-600: var(--color-cyan-300);
+    --text-color-cyan-500: var(--color-cyan-400);
+    --border-color-cyan-50: color-mix(in oklab, var(--color-cyan-500) 22%, transparent);
+    --ring-color-cyan-50: color-mix(in oklab, var(--color-cyan-500) 22%, transparent);
+    --border-color-cyan-100: color-mix(in oklab, var(--color-cyan-500) 24%, transparent);
+    --ring-color-cyan-100: color-mix(in oklab, var(--color-cyan-500) 24%, transparent);
+    --border-color-cyan-200: color-mix(in oklab, var(--color-cyan-500) 32%, transparent);
+    --ring-color-cyan-200: color-mix(in oklab, var(--color-cyan-500) 32%, transparent);
+    --border-color-cyan-300: color-mix(in oklab, var(--color-cyan-500) 44%, transparent);
+    --ring-color-cyan-300: color-mix(in oklab, var(--color-cyan-500) 44%, transparent);
+  }
+
+  /* Faint white glass only appears on coloured banners, so it stays real white. */
+  .dark .bg-white\/5 { background-color: rgb(255 255 255 / 0.05); }
+  .dark .bg-white\/10 { background-color: rgb(255 255 255 / 0.1); }
+  .dark .bg-white\/15 { background-color: rgb(255 255 255 / 0.15); }
+  .dark .bg-white\/20 { background-color: rgb(255 255 255 / 0.2); }
+  .dark .bg-white\/40 { background-color: rgb(255 255 255 / 0.4); }
+  .dark .hover\:bg-white\/10:hover { background-color: rgb(255 255 255 / 0.1); }
+  .dark .hover\:bg-white\/15:hover { background-color: rgb(255 255 255 / 0.15); }
+  .dark .hover\:bg-white\/20:hover { background-color: rgb(255 255 255 / 0.2); }
+  .dark .hover\:bg-white\/30:hover { background-color: rgb(255 255 255 / 0.3); }
+
+  /*
+   * DashboardLayout and ActivityPanel inject unlayered .bg-navy-* / .text-navy-* rules
+   * that beat Tailwind's utilities, and these hex classes bypass the palette entirely.
+   */
+  .dark .bg-navy-700, .dark .bg-\[\#172a45\], .dark .bg-\[\#1e3a5f\], .dark .bg-\[\#0F2B5B\], .dark .bg-\[\#0A1F44\] { background-color: var(--dm-btn); }
+  .dark .bg-navy-800 { background-color: var(--dm-btn-hover); }
+  .dark .hover\:bg-navy-800:hover, .dark .hover\:bg-\[\#1e3a5f\]:hover, .dark .hover\:bg-\[\#172a45\]:hover, .dark .hover\:bg-\[\#0F2B5B\]:hover { background-color: var(--dm-btn-hover); }
+  .dark .bg-navy-50 { background-color: color-mix(in oklab, #3b6ea5 18%, transparent); }
+  .dark .bg-navy-100 { background-color: color-mix(in oklab, #3b6ea5 28%, transparent); }
+  .dark .bg-\[\#F7F9FC\] { background-color: var(--dm-page); }
+  .dark .bg-\[\#DDE5F0\] { background-color: var(--dm-raised); }
+  .dark .text-navy-700, .dark .text-\[\#172a45\], .dark .text-\[\#0F2B5B\], .dark .hover\:text-navy-700:hover, .dark .hover\:text-\[\#172a45\]:hover, .dark .hover\:text-\[\#0F2B5B\]:hover { color: var(--dm-accent); }
+  .dark .border-navy-700, .dark .border-\[\#172a45\], .dark .border-\[\#0F2B5B\] { border-color: #5b85b3; }
+  .dark .border-navy-200 { border-color: color-mix(in oklab, #3b6ea5 42%, transparent); }
+
+  /* Scrollbars and form details */
+  .dark .custom-scrollbar:hover::-webkit-scrollbar-track, .dark .custom-scrollbar::-webkit-scrollbar-track { background: var(--dm-page); }
+  .dark .custom-scrollbar:hover::-webkit-scrollbar-thumb, .dark .custom-scrollbar::-webkit-scrollbar-thumb, .dark .chat-scroll::-webkit-scrollbar-thumb { background: var(--dm-line-strong); }
+  .dark .input-lead { background: var(--dm-raised); border-color: var(--dm-line); }
+  .dark option { background-color: var(--dm-card); color: var(--dm-text); }
+  .dark input:-webkit-autofill, .dark textarea:-webkit-autofill, .dark select:-webkit-autofill {
+    -webkit-text-fill-color: var(--dm-text);
+    box-shadow: 0 0 0 1000px var(--dm-raised) inset;
+  }
+
+  /* Recharts: hardcoded props render as SVG attributes, and CSS outranks attributes. */
+  .dark [stroke="#e2e8f0"], .dark [stroke="#f1f5f9"], .dark [stroke="#e5e7eb"] { stroke: var(--dm-line); }
+  .dark [stroke="#1e3a5f"] { stroke: var(--dm-accent); }
+  .dark [fill="#1e3a5f"] { fill: var(--dm-accent); }
+  .dark .recharts-text, .dark .recharts-cartesian-axis-tick-value { fill: var(--dm-muted); }
+  .dark .recharts-pie-sector [stroke="#fff"] { stroke: var(--dm-card); }
+  .dark .recharts-default-tooltip {
+    background-color: var(--dm-raised) !important;
+    border-color: var(--dm-line) !important;
+    color: var(--dm-text);
+  }
+  .dark .recharts-tooltip-cursor { fill: var(--dm-raised); }
+
+  /* FullCalendar */
+  .dark .fc { --fc-border-color: var(--dm-line); --fc-page-bg-color: var(--dm-card); --fc-neutral-bg-color: var(--dm-raised); --fc-neutral-text-color: var(--dm-muted); --fc-list-event-hover-bg-color: var(--dm-raised); --fc-today-bg-color: var(--dm-raised); }
+  .dark .fc-navy .fc .fc-toolbar-title { color: var(--dm-text-strong); }
+  .dark .fc-navy .fc-theme-standard td, .dark .fc-navy .fc-theme-standard th, .dark .fc-navy .fc-theme-standard .fc-scrollgrid { border-color: var(--dm-line); }
+  .dark .fc-navy .fc .fc-day-today { background: var(--dm-raised) !important; }
+  .dark .fc-navy .fc .fc-button-primary { background: var(--dm-btn); border-color: var(--dm-btn); }
+  .dark .fc-navy .fc .fc-button-primary:hover { background: var(--dm-btn-hover); border-color: var(--dm-btn-hover); }
+  .dark .fc-navy .fc .fc-timegrid-now-indicator-line { border-color: var(--dm-accent); }
+
+  /* react-datepicker */
+  .dark .react-datepicker { background-color: var(--dm-card); border-color: var(--dm-line); color: var(--dm-text); }
+  .dark .react-datepicker__header { background-color: var(--dm-raised); border-color: var(--dm-line); }
+  .dark .react-datepicker__current-month, .dark .react-datepicker-time__header, .dark .react-datepicker__day-name, .dark .react-datepicker__day, .dark .react-datepicker__time-name { color: var(--dm-text); }
+  .dark .react-datepicker__day--disabled { color: var(--dm-subtle); }
+  .dark .react-datepicker__day:not(.react-datepicker__day--selected):hover { background-color: var(--dm-raised); }
+  .dark .react-datepicker__time-container, .dark .react-datepicker__time { background-color: var(--dm-card); border-color: var(--dm-line); }
+  .dark .react-datepicker__time-list-item:hover { background-color: var(--dm-raised) !important; }
+  .dark .react-datepicker__triangle { display: none; }
+}

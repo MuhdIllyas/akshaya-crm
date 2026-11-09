@@ -62,6 +62,7 @@ import OperationsHub from './pages/operationshub/OperationsHub';
 //Notification Page
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import { NotificationProvider } from './context/NotificationContext';
+import { useTheme } from './context/ThemeContext';
 
 //Analytics Page
 import ReportsSection from './pages/ReportsSection';
@@ -212,6 +213,7 @@ const CustomerProtectedRoute = ({ children }) => {
 // Main App Component
 // ---------------------------------------------------------------------
 const App = () => {
+  const { isDark } = useTheme();
 
   // ---> NEW: Global SMS Listener for Instant OTP Popups <---
   useEffect(() => {
@@ -258,7 +260,7 @@ const App = () => {
         pauseOnFocusLoss
         draggable
         pauseOnHover
-        theme="light"
+        theme={isDark ? "dark" : "light"}
         style={{ zIndex: 999999 }}
       />
       <Routes>

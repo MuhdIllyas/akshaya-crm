@@ -426,7 +426,7 @@ const StaffPerformance = () => {
       }
     },
     scales: {
-      y: { beginAtZero: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 }, callback: (v) => `₹${Number(v).toLocaleString('en-IN')}` } },
+      y: { beginAtZero: true, grid: { color: 'rgba(148, 163, 184, 0.18)' }, ticks: { font: { size: 10 }, callback: (v) => `₹${Number(v).toLocaleString('en-IN')}` } },
       x: { grid: { display: false }, ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: true, maxTicksLimit: 12 } }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -37,7 +37,7 @@ ChartJS.register(
 );
 
 // Shared chart text style (UI only)
-const TICK = { font: { size: 11 }, color: '#64748b' };
+const TICK = { font: { size: 11 } };
 const GRID = { color: 'rgba(148, 163, 184, 0.18)' };
 
 // Card shell used by every chart (UI only)

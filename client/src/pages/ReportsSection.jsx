@@ -16,6 +16,7 @@ import {
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
 import { toPng } from 'html-to-image';
+import { withLightTheme } from '../context/ThemeContext';
 import { jsPDF } from "jspdf";
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
@@ -331,10 +332,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
 
         try {
             // Take snapshot using native browser rendering (Supports oklch & modern CSS!)
-            const dataUrl = await toPng(reportRef.current, {
+            const dataUrl = await withLightTheme(() => toPng(reportRef.current, {
                 pixelRatio: 2, // High resolution for crisp charts
                 backgroundColor: '#ffffff'
-            });
+            }));
 
             // Set up the PDF
             const pdf = new jsPDF('p', 'mm', 'a4');

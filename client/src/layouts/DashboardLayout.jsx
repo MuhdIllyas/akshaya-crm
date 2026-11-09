@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
+import ThemeToggle from '../components/ThemeToggle';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -633,7 +634,8 @@ const DashboardLayout = () => {
         {/* Common Actions Section */}
         <div className={`rounded-2xl border border-slate-200 bg-white py-2 shadow-sm ${isCollapsed ? "px-2" : "px-3"}`}>
           <nav className="space-y-1">
-            <Link 
+            <ThemeToggle collapsed={isCollapsed} />
+            <Link
               to="/dashboard/my-profile"   // Changed from "/dashboard/profile" to the unified profile route
               onClick={() => handleNavigation("/dashboard/my-profile")}
               className={`flex items-center rounded-xl transition-all duration-200 group relative ${
