@@ -407,6 +407,11 @@
     /* Wallet accents: var(--wallet-*, <light value>) */
     --wallet-bank: var(--dm-accent);
     --wallet-card: var(--dm-muted);
+    --wallet-blue: #93c5fd;
+    --wallet-green: #34d399;
+    --wallet-purple: #d8b4fe;
+    --wallet-orange: #fb923c;
+    --wallet-rose: #fda4af;
 
     /* Calendar events: var(--cal-*, <light value>) in CalendarPage.jsx */
     --cal-deadline-bg: color-mix(in oklab, #ea8a3a 24%, var(--dm-card));

@@ -42,9 +42,10 @@ const WALLET_TYPES = [
   { id: "savings", name: "Savings", icon: FiBriefcase },
 ];
 // One accent colour per wallet category (same as the admin page)
-const TYPE_COLOR = { bank: "#2563eb", cash: "#059669", card: "#9333ea", digital: "#ea580c", savings: "#e11d48" };
+const TYPE_COLOR = { bank: "var(--wallet-blue, #2563eb)", cash: "var(--wallet-green, #059669)", card: "var(--wallet-purple, #9333ea)", digital: "var(--wallet-orange, #ea580c)", savings: "var(--wallet-rose, #e11d48)" };
 const walletColor = (w) => TYPE_COLOR[w?.wallet_type] || "#64748b";
-const tint = (hex, alpha = "1A") => `${hex}${alpha}`;
+// color-mix because colours can be CSS variables, which can't take a hex alpha suffix
+const tint = (color, alpha = "1A") => `color-mix(in srgb, ${color} ${((parseInt(alpha, 16) / 255) * 100).toFixed(1)}%, transparent)`;
 const getType = (id) => WALLET_TYPES.find((t) => t.id === id) || { id, name: "Wallet", icon: FiCreditCard };
 
 const formatAmount = (amount) =>
@@ -984,7 +985,7 @@ const WalletManagementSuperAdmin = () => {
                     type="button"
                     onClick={() => setFormField("walletType", t.id)}
                     className={`flex flex-col items-center gap-1 p-2.5 rounded-lg border text-xs font-medium transition-colors ${active ? "" : "border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-                    style={active ? { borderColor: c, background: `${c}14`, color: c } : undefined}
+                    style={active ? { borderColor: c, background: tint(c, "14"), color: c } : undefined}
                   >
                     <Icon size={16} style={active ? undefined : { color: c }} />
                     <span className="truncate w-full text-center">{t.name}</span>

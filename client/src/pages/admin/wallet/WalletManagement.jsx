@@ -40,7 +40,7 @@ const WALLET_TYPES = [
 ];
 
 // One accent colour per wallet category (all bank wallets share a colour, etc.)
-const TYPE_COLOR = { bank: "var(--wallet-bank, #1e3a5f)", cash: "#059669", card: "var(--wallet-card, #475569)", digital: "#ea580c", savings: "#e11d48" };
+const TYPE_COLOR = { bank: "var(--wallet-bank, #1e3a5f)", cash: "var(--wallet-green, #059669)", card: "var(--wallet-card, #475569)", digital: "var(--wallet-orange, #ea580c)", savings: "var(--wallet-rose, #e11d48)" };
 const walletColor = (w) => TYPE_COLOR[w?.wallet_type] || "#64748b";
 // color-mix because colours can be CSS variables, which can't take a hex alpha suffix
 const tint = (color, alpha = "1A") => `color-mix(in srgb, ${color} ${((parseInt(alpha, 16) / 255) * 100).toFixed(1)}%, transparent)`;

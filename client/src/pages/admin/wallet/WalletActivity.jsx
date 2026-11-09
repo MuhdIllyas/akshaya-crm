@@ -407,7 +407,7 @@ const WalletActivity = () => {
   }
 
   const type = WALLET_TYPES[wallet.type] || { name: "Wallet", icon: FiCreditCard, tone: "bg-slate-50 text-slate-600 border-slate-100" };
-  const TYPE_COLOR = { bank: "var(--wallet-bank, #1e3a5f)", cash: "#059669", card: "var(--wallet-card, #475569)", digital: "#ea580c", savings: "#e11d48" };
+  const TYPE_COLOR = { bank: "var(--wallet-bank, #1e3a5f)", cash: "var(--wallet-green, #059669)", card: "var(--wallet-card, #475569)", digital: "var(--wallet-orange, #ea580c)", savings: "var(--wallet-rose, #e11d48)" };
   const accent = TYPE_COLOR[wallet.type] || "#64748b";
   const TypeIcon = type.icon;
   const online = wallet.status === "online";
