@@ -1,8 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import { FiUser, FiLock, FiEye, FiEyeOff, FiPhone, FiCheck } from "react-icons/fi";
+import BackwatersScene from "../components/login/BackwatersScene";
 
 // Array of services for the animation
 const servicesList = [
@@ -17,6 +19,91 @@ const servicesList = [
   "Citizen-Friendly Digital Support"
 ];
 
+const OTP_LENGTH = 6;
+
+// Six boxes that behave like one input: type to move forward, backspace to go back, paste fills all.
+const OtpInput = ({ onChange, disabled }) => {
+  const refs = useRef([]);
+  // Kept in a ref so fast typing (or the phone autofilling the code) never reads a stale value.
+  const digitsRef = useRef(Array(OTP_LENGTH).fill(""));
+  const [, rerender] = useState(0);
+  const digits = digitsRef.current;
+
+  const commit = (next) => {
+    digitsRef.current = next;
+    rerender((n) => n + 1);
+    onChange(next.join(""));
+  };
+
+  // The boxes appear after "Send OTP", so move the cursor straight into the first one.
+  useEffect(() => {
+    refs.current[0]?.focus();
+  }, []);
+
+  const setAt = (index, digit) => {
+    const next = digitsRef.current.slice();
+    next[index] = digit;
+    commit(next);
+  };
+
+  return (
+    <div className="flex gap-2" onPaste={(e) => {
+      const pasted = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, OTP_LENGTH);
+      if (!pasted) return;
+      e.preventDefault();
+      commit(Array.from({ length: OTP_LENGTH }, (_, i) => pasted[i] || ""));
+      refs.current[Math.min(pasted.length, OTP_LENGTH - 1)]?.focus();
+    }}>
+      {digits.map((digit, i) => (
+        <input
+          key={i}
+          ref={(el) => (refs.current[i] = el)}
+          type="text"
+          inputMode="numeric"
+          autoComplete={i === 0 ? "one-time-code" : "off"}
+          maxLength={OTP_LENGTH}
+          value={digit}
+          disabled={disabled}
+          aria-label={`OTP digit ${i + 1}`}
+          onChange={(e) => {
+            // Strip the digit already in the box so we only see what was just typed.
+            const typed = e.target.value.replace(digit, "").replace(/\D/g, "") || e.target.value.replace(/\D/g, "").slice(-1);
+            if (typed.length > 1) {
+              // Autofill or a fast insert put several digits in one box: spread them out.
+              const next = digitsRef.current.slice();
+              typed.split("").slice(0, OTP_LENGTH - i).forEach((d, k) => { next[i + k] = d; });
+              commit(next);
+              refs.current[Math.min(i + typed.length, OTP_LENGTH - 1)]?.focus();
+              return;
+            }
+            setAt(i, typed);
+            if (typed && i < OTP_LENGTH - 1) refs.current[i + 1]?.focus();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Backspace" && !digitsRef.current[i] && i > 0) refs.current[i - 1]?.focus();
+          }}
+          className="login-field h-12 w-11 rounded-xl text-center text-lg font-semibold text-slate-900 disabled:opacity-60"
+        />
+      ))}
+    </div>
+  );
+};
+
+// Filled field with the label inside the box and an icon on the right, as in the design reference.
+const Field = ({ id, label, icon: Icon, trailing, ...inputProps }) => (
+  <div className="login-field relative flex h-14 items-center rounded-xl px-4">
+    <label htmlFor={id} className="absolute left-4 top-2 text-[11px] font-medium text-slate-500">
+      {label}
+    </label>
+    <input
+      id={id}
+      className="w-full bg-transparent pt-4 text-sm font-medium text-slate-900 placeholder:text-slate-400 focus:outline-none disabled:opacity-60"
+      {...inputProps}
+    />
+    {trailing || (Icon && <Icon className="h-4 w-4 shrink-0 text-slate-400" aria-hidden="true" />)}
+  </div>
+);
+
 const Login = () => {
   const [user, setUser] = useState({ username: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
@@ -27,10 +114,10 @@ const Login = () => {
   const [customerOtp, setCustomerOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
   const [otpTimer, setOtpTimer] = useState(0);
-  
+
   // State for the animated text index
   const [serviceIndex, setServiceIndex] = useState(0);
-  
+
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -63,13 +150,16 @@ const Login = () => {
 
   // Load remembered username (with delay to avoid mount collision)
   useEffect(() => {
+    // Older versions also stored the password in plain text; remove it.
+    localStorage.removeItem("remembered_password");
+
     const savedUsername = localStorage.getItem("remembered_username");
     const savedRememberMe = localStorage.getItem("remember_me") === "true";
-    
+
     if (savedUsername && savedRememberMe) {
       setUser((prev) => ({ ...prev, username: savedUsername }));
       setRememberMe(true);
-      
+
       setTimeout(() => {
         toast.info("Username auto-filled from saved credentials", {
           position: "top-right",
@@ -116,11 +206,11 @@ const Login = () => {
           localStorage.removeItem("photo");
         }
 
+        // Only the username is remembered; never store the password in the browser.
         if (rememberMe) {
           localStorage.setItem("remembered_username", user.username);
-          localStorage.setItem("remembered_password", user.password);
           localStorage.setItem("remember_me", "true");
-          toast.success("Credentials saved for next login", {
+          toast.success("Username saved for next login", {
             position: "top-right",
             autoClose: 3000,
             toastId: "save-credentials",
@@ -195,7 +285,7 @@ const Login = () => {
         localStorage.setItem("customer_token", response.data.token);
         localStorage.setItem("customer_id", response.data.customerId);
         localStorage.setItem("customer_name", response.data.name);
-        
+
         toast.success(`Welcome ${response.data.name}`, {
           position: "top-right",
           autoClose: 3000,
@@ -226,296 +316,238 @@ const Login = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-5xl flex flex-col md:flex-row bg-white rounded-2xl shadow-xl overflow-hidden border border-gray-200">
-        
-        {/* Left Panel - Navy & Teal Branding */}
-        <div className="w-full md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-10 flex flex-col justify-between relative">
-          <div className="absolute inset-0 opacity-10 pointer-events-none">
-            <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-              <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
-              <circle cx="20" cy="80" r="15" fill="#fff" />
-              <circle cx="80" cy="20" r="10" fill="#fff" />
-            </svg>
-          </div>
-          
-          <div className="z-10">
-            <div className="flex flex-col items-center mb-12">
-              <div className="bg-white p-3 rounded-2xl shadow-[0_10px_40px_-10px_rgba(20,184,166,0.3)] mb-6 border border-teal-50 hover:shadow-[0_10px_40px_-10px_rgba(20,184,166,0.5)] transition-all duration-300">
-                <img 
-                  src="/logo-light.png" 
-                  alt="Akshaya Sahayi Logo" 
-                  className="h-20 w-20 object-contain drop-shadow-sm" 
-                />
-              </div>
-              <div className="text-center">
-                <h1 className="text-3xl font-bold text-white mb-2">
-                  Akshaya <span className="text-teal-400">Sahayi</span>
-                </h1>
-                <p className="text-navy-100 mb-2">Your Trusted Digital Service Companion</p>
-              </div>
-            </div>
-            
-            <div className="mt-16 bg-white/5 backdrop-blur-md rounded-2xl p-6 border border-white/10 shadow-lg">
-              <h2 className="text-xl font-bold text-white mb-2">
-                {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
-              </h2>
-              <p className="text-navy-100 mb-2 text-sm leading-relaxed">
-                {isCustomerLogin 
-                  ? "Access your account seamlessly with WhatsApp OTP or register to access new e-governance services."
-                  : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
-              </p>
+  const submitDisabled =
+    loading ||
+    (isCustomerLogin
+      ? (!otpSent ? !customerPhone : !customerOtp)
+      : (!user.username.trim() || !user.password.trim()));
 
-              {/* Animated Services List */}
-              {!isCustomerLogin && (
-                <div className="mt-4 pt-4 border-t border-white/10 h-12 overflow-hidden flex items-center">
-                  <p 
-                    key={serviceIndex} 
-                    className="text-white font-semibold text-sm animate-fade-slide flex items-center gap-2"
-                  >
-                    <svg className="w-4 h-4 text-teal-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                    </svg>
-                    {servicesList[serviceIndex]}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-          
-          <div className="z-10 mt-8">
-            <p className="text-navy-300 mb-2 text-xs text-center">© {new Date().getFullYear()} Muhammed Illyas. All rights reserved.</p>
-            <p className="text-navy-300 mb-2 text-xs text-center mt-1 flex justify-center items-center gap-1">
-              Made with <span className="text-teal-400">❤️</span>
-            </p>
-          </div>
+  const brandCard = (
+    <>
+      <h2 className="text-lg font-bold text-white">
+        {isCustomerLogin ? "Customer Portal" : "Empowering Digital Kerala"}
+      </h2>
+      <p className="mt-1.5 text-sm leading-relaxed text-white/80">
+        {isCustomerLogin
+          ? "Access your account seamlessly with WhatsApp OTP or register to access new e-governance services."
+          : "Empowering citizens through smart, reliable, and people-friendly digital services across Kerala."}
+      </p>
+
+      {/* Animated Services List */}
+      {!isCustomerLogin && (
+        <div className="mt-4 flex min-h-[3.25rem] items-center overflow-hidden border-t border-white/15 pt-3">
+          <p key={serviceIndex} className="animate-fade-slide flex items-center gap-2 text-sm font-semibold leading-snug text-white">
+            <FiCheck className="h-4 w-4 shrink-0 text-teal-300" aria-hidden="true" />
+            {servicesList[serviceIndex]}
+          </p>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="login-page flex min-h-screen min-h-dvh items-center justify-center bg-slate-100 dark:bg-slate-50 p-3 sm:p-6">
+      <div className="relative w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:min-h-[640px]">
+
+        {/* Backwaters panel (tablets and up) */}
+        <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[58%] md:block">
+          <BackwatersScene className="h-full w-full" />
         </div>
 
-        {/* Right Panel - Login Forms */}
-        <div className="w-full md:w-3/5 p-8 md:p-10">
-          <div className="max-w-md mx-auto">
-            
-            {/* Toggle Switch */}
-            <div className="flex mb-8 border-b border-gray-200">
-              <button
-                className={`flex-1 py-3 text-center font-semibold text-sm transition-colors ${!isCustomerLogin ? 'text-teal-700 border-b-2 border-teal-500' : 'text-gray-500 hover:text-teal-600'}`}
-                onClick={() => setIsCustomerLogin(false)}
-              >
-                Admin/Staff Login
-              </button>
-              <button
-                className={`flex-1 py-3 text-center font-semibold text-sm transition-colors ${isCustomerLogin ? 'text-teal-700 border-b-2 border-teal-500' : 'text-gray-500 hover:text-teal-600'}`}
-                onClick={() => setIsCustomerLogin(true)}
-              >
-                Public Login
-              </button>
-            </div>
+        <div className="relative z-10 flex flex-col px-6 py-6 sm:px-10 md:min-h-[640px] md:w-[50%] md:py-8 lg:px-14">
 
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">
+          {/* Brand */}
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+              <img src="/logo-light.png" alt="Akshaya Sahayi logo" className="h-9 w-9 object-contain" />
+            </div>
+            <div>
+              <p className="text-lg font-bold leading-tight text-slate-900">
+                Akshaya <span className="text-teal-600">Sahayi</span>
+              </p>
+              <p className="text-xs text-slate-500">Your Trusted Digital Service Companion</p>
+            </div>
+          </div>
+
+          {/* Form */}
+          <form
+            className="my-auto max-w-sm py-8"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!submitDisabled) handleLogin();
+            }}
+          >
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {isCustomerLogin ? "Public Login" : "Admin / Staff Login"}
+            </p>
+            <h1 className="mt-2 text-3xl font-bold text-slate-900 sm:text-4xl">
               {isCustomerLogin ? "Customer Login" : "Sign In"}
-            </h2>
-            <p className="text-gray-500 mb-8 text-sm">
-              {isCustomerLogin 
+              <span className="text-teal-500">.</span>
+            </h1>
+            <p className="mt-2 text-sm text-slate-500">
+              {isCustomerLogin
                 ? "Enter your phone number to receive a secure OTP via WhatsApp."
                 : "Enter your credentials to securely access your dashboard."}
             </p>
 
-            <div className="space-y-5">
+            <div className="mt-7 space-y-3">
               {isCustomerLogin ? (
-                // Customer Login Form
                 <>
-                  <div>
-                    <label htmlFor="customerPhone" className="block text-gray-700 text-sm font-semibold mb-2">
-                      Phone Number (WhatsApp)
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="tel"
-                        id="customerPhone"
-                        placeholder="Enter your WhatsApp number"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
-                        disabled={loading || otpSent}
-                      />
-                    </div>
-                  </div>
+                  <Field
+                    id="customerPhone"
+                    label="Phone Number (WhatsApp)"
+                    icon={FiPhone}
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    placeholder="Enter your WhatsApp number"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                    disabled={loading || otpSent}
+                  />
 
                   {otpSent && (
-                    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}>
-                      <label htmlFor="customerOtp" className="block text-gray-700 text-sm font-semibold mb-2 mt-2">
-                        Enter OTP
-                      </label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                          </svg>
-                        </div>
-                        <input
-                          type="text"
-                          id="customerOtp"
-                          placeholder="Enter 6-digit OTP"
-                          value={customerOtp}
-                          onChange={(e) => setCustomerOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                          className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
-                          disabled={loading}
-                        />
-                      </div>
+                    <div className="animate-otp-in">
+                      <p className="mb-2 mt-1 text-xs font-medium text-slate-500">Enter OTP</p>
+                      <OtpInput onChange={setCustomerOtp} disabled={loading} />
                       {otpTimer > 0 && (
-                        <p className="text-xs text-gray-500 mt-2 font-medium">
+                        <p className="mt-2 text-xs font-medium text-slate-500">
                           OTP expires in <span className="text-teal-600">{otpTimer} seconds</span>
                         </p>
                       )}
-                    </motion.div>
+                    </div>
                   )}
 
-                  <div className="flex justify-between items-center pt-2">
+                  {otpSent && (
                     <button
-                      onClick={otpSent ? sendCustomerOTP : undefined}
-                      disabled={otpTimer > 0}
-                      className="text-sm font-semibold text-teal-600 hover:text-teal-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      type="button"
+                      onClick={sendCustomerOTP}
+                      disabled={otpTimer > 0 || loading}
+                      className="text-sm font-semibold text-teal-600 transition-colors hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {otpTimer > 0 ? `Resend OTP (${otpTimer}s)` : 'Resend OTP'}
+                      {otpTimer > 0 ? `Resend OTP (${otpTimer}s)` : "Resend OTP"}
                     </button>
-                  </div>
+                  )}
                 </>
               ) : (
-                // Admin/Staff Login Form
                 <>
-                  <div>
-                    <label htmlFor="username" className="block text-gray-700 text-sm font-semibold mb-2">
-                      Username
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 015.905-.75 1 1 0 001.937-.5A5.002 5.002 0 0010 2z" />
-                        </svg>
-                      </div>
-                      <input
-                        type="text"
-                        id="username"
-                        placeholder="Enter your username"
-                        value={user.username}
-                        onChange={(e) => setUser({ ...user, username: e.target.value })}
-                        className="w-full pl-10 pr-4 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
-                        disabled={loading}
-                      />
-                    </div>
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="password" className="block text-gray-700 text-sm font-semibold mb-2">
-                      Password
-                    </label>
-                    <div className="relative">
-                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" />
-                        </svg>
-                      </div>
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        id="password"
-                        placeholder="Enter your password"
-                        value={user.password}
-                        onChange={(e) => setUser({ ...user, password: e.target.value })}
-                        className="w-full pl-10 pr-12 py-3 bg-white border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-teal-500 text-gray-900 placeholder-gray-400 transition-all"
-                        disabled={loading}
-                      />
-                      <button 
-                        onClick={togglePasswordVisibility}
-                        className="absolute inset-y-0 right-0 pr-4 flex items-center"
-                        disabled={loading}
+                  <Field
+                    id="username"
+                    label="Username"
+                    icon={FiUser}
+                    type="text"
+                    autoComplete="username"
+                    placeholder="Enter your username"
+                    value={user.username}
+                    onChange={(e) => setUser({ ...user, username: e.target.value })}
+                    disabled={loading}
+                  />
+                  <Field
+                    id="password"
+                    label="Password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    value={user.password}
+                    onChange={(e) => setUser({ ...user, password: e.target.value })}
+                    disabled={loading}
+                    trailing={
+                      <button
                         type="button"
+                        onClick={togglePasswordVisibility}
+                        disabled={loading}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="shrink-0 text-slate-400 transition-colors hover:text-teal-600"
                       >
-                        {showPassword ? (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 hover:text-teal-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                          </svg>
-                        ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 hover:text-teal-600 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
-                          </svg>
-                        )}
+                        {showPassword ? <FiEyeOff className="h-4 w-4" /> : <FiEye className="h-4 w-4" />}
                       </button>
-                    </div>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pt-1">
-                    <label className="flex items-center text-sm text-gray-700 cursor-pointer">
+                    }
+                  />
+
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex cursor-pointer items-center text-sm text-slate-600">
                       <input
                         type="checkbox"
                         checked={rememberMe}
                         onChange={(e) => setRememberMe(e.target.checked)}
-                        className="form-checkbox h-4 w-4 rounded border-gray-300 text-teal-600 focus:ring-teal-500 transition-all cursor-pointer"
+                        className="h-4 w-4 cursor-pointer rounded border-slate-300 accent-teal-600"
                         disabled={loading}
                       />
                       <span className="ml-2 select-none font-medium">Remember me</span>
                     </label>
-                    <a href="#" className="text-sm font-semibold text-teal-600 hover:text-teal-800 transition-colors">Forgot password?</a>
+                    <a href="#" className="text-sm font-semibold text-teal-600 transition-colors hover:text-teal-700">
+                      Forgot password?
+                    </a>
                   </div>
                 </>
               )}
-              
+            </div>
+
+            <div className="mt-7 flex gap-3">
               <button
-                onClick={handleLogin}
-                className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(20,184,166,0.39)] hover:shadow-[0_6px_20px_rgba(20,184,166,0.23)] transition-all duration-300 disabled:opacity-60 disabled:cursor-not-allowed mt-4"
-                disabled={
-                  loading || 
-                  (isCustomerLogin 
-                    ? (!otpSent ? !customerPhone : !customerOtp)
-                    : (!user.username.trim() || !user.password.trim())
-                  )
-                }
+                type="button"
+                onClick={() => setIsCustomerLogin(!isCustomerLogin)}
+                disabled={loading}
+                className="h-12 flex-1 rounded-full bg-slate-100 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-200 disabled:opacity-60"
+              >
+                {isCustomerLogin ? "Staff Login" : "Public Login"}
+              </button>
+              <button
+                type="submit"
+                disabled={submitDisabled}
+                className="h-12 flex-1 rounded-full bg-teal-600 text-sm font-semibold text-white shadow-[0_8px_20px_-6px_rgba(13,148,136,0.55)] transition-all hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {loading ? (
                   <span className="flex items-center justify-center">
-                    <svg className="animate-spin h-5 w-5 mr-2 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <svg className="mr-2 h-5 w-5 animate-spin text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                     </svg>
                     {isCustomerLogin ? (otpSent ? "Verifying..." : "Sending OTP...") : "Signing In..."}
                   </span>
                 ) : (
-                  isCustomerLogin 
-                    ? (otpSent ? "Verify OTP" : "Send OTP") 
+                  isCustomerLogin
+                    ? (otpSent ? "Verify OTP" : "Send OTP")
                     : "Sign In"
                 )}
               </button>
-              
-              {isCustomerLogin && (
-                <div className="text-center mt-6">
-                  <p className="text-gray-600 text-sm font-medium">
-                    New User?{" "}
-                    <Link 
-                      to="/customer/register" 
-                      className="text-teal-600 hover:text-teal-800 font-bold ml-1 transition-colors"
-                    >
-                      Register here
-                    </Link>
-                  </p>
-                </div>
-              )}
-              
-              <div className="text-center mt-6">
-                <p className="text-gray-500 text-sm">
-                  Need help? <Link to="/contact" className="text-teal-600 hover:text-teal-800 font-semibold ml-1 transition-colors">Contact Support</Link>
-                </p>
-              </div>
             </div>
+
+            {isCustomerLogin && (
+              <p className="mt-6 text-sm font-medium text-slate-600">
+                New User?{" "}
+                <Link to="/customer/register" className="ml-1 font-bold text-teal-600 transition-colors hover:text-teal-700">
+                  Register here
+                </Link>
+              </p>
+            )}
+
+            <p className="mt-4 text-sm text-slate-500">
+              Need help?{" "}
+              <Link to="/contact" className="ml-1 font-semibold text-teal-600 transition-colors hover:text-teal-700">
+                Contact Support
+              </Link>
+            </p>
+          </form>
+
+          {/* Brand card for phones, where the backwaters panel is hidden */}
+          <div className="rounded-2xl bg-gradient-to-b from-navy-900 to-navy-800 p-5 md:hidden">{brandCard}</div>
+          <p className="mt-4 text-center text-xs text-slate-400 md:hidden">
+            © {new Date().getFullYear()} Muhammed Illyas. All rights reserved.
+          </p>
+        </div>
+
+        {/* Glass card and footer over the backwaters panel */}
+        <div className="absolute bottom-6 right-6 z-10 hidden w-[min(340px,36%)] md:block">
+          <div className="rounded-2xl border border-white/20 bg-[rgba(15,30,51,0.55)] p-5 shadow-lg backdrop-blur-md">
+            {brandCard}
           </div>
+          <p className="mt-3 text-right text-xs text-white/80 drop-shadow">
+            © {new Date().getFullYear()} Muhammed Illyas. All rights reserved. · Made with <span className="text-teal-300">❤️</span>
+          </p>
         </div>
       </div>
-      
+
       <style>{`
         /* Minimal Keyframes for Services Text Animation */
         @keyframes fadeSlide {
@@ -526,6 +558,56 @@ const Login = () => {
         }
         .animate-fade-slide {
           animation: fadeSlide 3s ease-in-out forwards;
+        }
+        @keyframes otpIn {
+          from { opacity: 0; transform: translateY(-6px); }
+          to { opacity: 1; transform: none; }
+        }
+        .animate-otp-in { animation: otpIn 0.25s ease-out; }
+        @media (prefers-reduced-motion: reduce) {
+          .animate-fade-slide, .animate-otp-in { animation: none; }
+        }
+
+        .login-page .login-field {
+          background: #f1f5f9;
+          border: 1.5px solid transparent;
+          transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .login-page .login-field:focus-within,
+        .login-page input.login-field:focus {
+          outline: none;
+          border-color: #14b8a6;
+          box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
+        }
+        .login-page .login-field:focus-within label { color: #0d9488; }
+
+        .login-page {
+          --scene-sky-top: #9fd8cf;
+          --scene-sky-bottom: #eaf7f4;
+          --scene-sun: #fde68a;
+          --scene-hill-far: #7fb3a3;
+          --scene-hill-near: #3f7d69;
+          --scene-water-top: #3f9a8d;
+          --scene-water-bottom: #1f5f57;
+          --scene-palm: #163d33;
+          --scene-ripple: rgba(255, 255, 255, 0.5);
+          --scene-dash: #cbd5e1;
+        }
+        @media screen {
+          .dark .login-page .login-field { background: #2e3a4a; }
+          .dark .login-page .login-field:focus-within label { color: #5eead4; }
+          .dark .login-page {
+            --scene-sky-top: #16283c;
+            --scene-sky-bottom: #284656;
+            --scene-sun: #e2e8f0;
+            --scene-hill-far: #24423f;
+            --scene-hill-near: #1a3532;
+            --scene-water-top: #1c434a;
+            --scene-water-bottom: #0f2930;
+            --scene-palm: #08140f;
+            --scene-ripple: rgba(255, 255, 255, 0.15);
+            --scene-dash: #4a5869;
+          }
         }
       `}</style>
     </div>
