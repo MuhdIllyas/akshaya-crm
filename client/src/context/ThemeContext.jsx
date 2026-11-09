@@ -27,6 +27,7 @@ const DATASET_DARK_COLORS = {
   '#0f1f3a': '#b8d0ea',
   'rgba(30,58,95,0.1)': 'rgba(143,184,227,0.12)',
   'rgba(30,58,95,0.10)': 'rgba(143,184,227,0.13)',
+  'rgba(30, 58, 95, 0.85)': 'rgba(143, 184, 227, 0.8)',
 };
 const DATASET_LIGHT_COLORS = Object.fromEntries(Object.entries(DATASET_DARK_COLORS).map(([light, dark]) => [dark, light]));
 

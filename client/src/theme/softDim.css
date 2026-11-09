@@ -404,6 +404,10 @@
     --ui-mention-bg: color-mix(in oklab, #3b6ea5 32%, transparent);
     --ui-mention-text: var(--dm-accent);
 
+    /* Wallet accents: var(--wallet-*, <light value>) */
+    --wallet-bank: var(--dm-accent);
+    --wallet-card: var(--dm-muted);
+
     /* Calendar events: var(--cal-*, <light value>) in CalendarPage.jsx */
     --cal-deadline-bg: color-mix(in oklab, #ea8a3a 24%, var(--dm-card));
     --cal-deadline-border: #ea8a3a;

@@ -39,6 +39,7 @@ ChartJS.register(
 // Shared chart text style (UI only)
 const TICK = { font: { size: 11 } };
 const GRID = { color: 'rgba(148, 163, 184, 0.18)' };
+const legendColor = () => (document.documentElement.classList.contains('dark') ? '#a9b5c2' : '#475569');
 
 // Card shell used by every chart (UI only)
 const ChartCard = ({ title, icon: Icon, children }) => (
@@ -107,7 +108,7 @@ const RevenueTrendChart = ({ data }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: legendColor } },
       title: { display: false },
     },
     scales: {
@@ -141,7 +142,7 @@ const WalletBalanceChart = ({ wallets }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 12, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 12, font: { size: 11 }, color: legendColor } },
       title: { display: false },
     },
   };
@@ -175,7 +176,7 @@ const StaffPerformanceChart = ({ staffData }) => {
     maintainAspectRatio: false,
     indexAxis: 'y',
     plugins: {
-      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: legendColor } },
       title: { display: false },
     },
     scales: {

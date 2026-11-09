@@ -407,7 +407,7 @@ const WalletActivity = () => {
   }
 
   const type = WALLET_TYPES[wallet.type] || { name: "Wallet", icon: FiCreditCard, tone: "bg-slate-50 text-slate-600 border-slate-100" };
-  const TYPE_COLOR = { bank: "#1e3a5f", cash: "#059669", card: "#475569", digital: "#ea580c", savings: "#e11d48" };
+  const TYPE_COLOR = { bank: "var(--wallet-bank, #1e3a5f)", cash: "#059669", card: "var(--wallet-card, #475569)", digital: "#ea580c", savings: "#e11d48" };
   const accent = TYPE_COLOR[wallet.type] || "#64748b";
   const TypeIcon = type.icon;
   const online = wallet.status === "online";
@@ -440,7 +440,7 @@ const WalletActivity = () => {
             </Link>
             <div
               className="w-12 h-12 rounded-xl border flex items-center justify-center shrink-0"
-              style={{ background: `${accent}1A`, borderColor: `${accent}33`, color: accent }}
+              style={{ background: `color-mix(in srgb, ${accent} 10.2%, transparent)`, borderColor: `color-mix(in srgb, ${accent} 20%, transparent)`, color: accent }}
             >
               <TypeIcon size={22} />
             </div>

@@ -40,9 +40,10 @@ const WALLET_TYPES = [
 ];
 
 // One accent colour per wallet category (all bank wallets share a colour, etc.)
-const TYPE_COLOR = { bank: "#1e3a5f", cash: "#059669", card: "#475569", digital: "#ea580c", savings: "#e11d48" };
+const TYPE_COLOR = { bank: "var(--wallet-bank, #1e3a5f)", cash: "#059669", card: "var(--wallet-card, #475569)", digital: "#ea580c", savings: "#e11d48" };
 const walletColor = (w) => TYPE_COLOR[w?.wallet_type] || "#64748b";
-const tint = (hex, alpha = "1A") => `${hex}${alpha}`; // hex + 2-digit alpha
+// color-mix because colours can be CSS variables, which can't take a hex alpha suffix
+const tint = (color, alpha = "1A") => `color-mix(in srgb, ${color} ${((parseInt(alpha, 16) / 255) * 100).toFixed(1)}%, transparent)`;
 
 const getType = (id) => WALLET_TYPES.find((t) => t.id === id) || { id, name: "Wallet", icon: FiCreditCard, tone: "bg-slate-50 text-slate-600 border-slate-100" };
 
@@ -776,7 +777,7 @@ const WalletManagement = () => {
                     className={`flex flex-col items-center gap-1 p-2.5 rounded-xl border text-xs font-medium transition-colors ${
                       active ? "" : "border-slate-200 text-slate-600 hover:bg-slate-50"
                     }`}
-                    style={active ? { borderColor: TYPE_COLOR[t.id], background: `${TYPE_COLOR[t.id]}14`, color: TYPE_COLOR[t.id] } : undefined}
+                    style={active ? { borderColor: TYPE_COLOR[t.id], background: tint(TYPE_COLOR[t.id], "14"), color: TYPE_COLOR[t.id] } : undefined}
                   >
                     <Icon size={16} style={active ? undefined : { color: TYPE_COLOR[t.id] }} />
                     <span className="truncate w-full text-center">{t.name}</span>
