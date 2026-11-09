@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
+import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo } from "react-icons/fi";
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -212,6 +213,14 @@ const CustomerProtectedRoute = ({ children }) => {
 // ---------------------------------------------------------------------
 // Main App Component
 // ---------------------------------------------------------------------
+const TOAST_ICONS = { success: FiCheck, error: FiAlertCircle, warning: FiAlertTriangle };
+
+const toastIcon = ({ type, isLoading }) => {
+  if (isLoading) return <div className="Toastify__spinner" />;
+  const Icon = TOAST_ICONS[type] || FiInfo;
+  return <Icon aria-hidden="true" />;
+};
+
 const App = () => {
   const { isDark } = useTheme();
 
@@ -261,6 +270,7 @@ const App = () => {
         draggable
         pauseOnHover
         theme={isDark ? "dark" : "light"}
+        icon={toastIcon}
         style={{ zIndex: 999999 }}
       />
       <Routes>

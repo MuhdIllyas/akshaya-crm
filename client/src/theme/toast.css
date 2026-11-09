@@ -1,0 +1,128 @@
+/*
+ * Clean card toasts, shared by every toast through the ToastContainer in App.jsx.
+ * Dark values sit inside @media screen like the rest of the Soft dim theme.
+ */
+:root {
+  --toast-bg: #ffffff;
+  --toast-border: #e2e8f0;
+  --toast-text: #0f172a;
+  --toast-close: #64748b;
+  --toast-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
+
+  --toast-success-bg: #ecfdf5;
+  --toast-success-fg: #047857;
+  --toast-success-bar: #10b981;
+  --toast-error-bg: #fff1f2;
+  --toast-error-fg: #be123c;
+  --toast-error-bar: #f43f5e;
+  --toast-warning-bg: #fffbeb;
+  --toast-warning-fg: #b45309;
+  --toast-warning-bar: #f59e0b;
+  --toast-info-bg: #eff6ff;
+  --toast-info-fg: #1e3a5f;
+  --toast-info-bar: #3b6ea5;
+}
+
+@media screen {
+  :root.dark {
+    --toast-bg: #2e3a4a;
+    --toast-border: #4a5869;
+    --toast-text: #e6ebf2;
+    --toast-close: #a9b5c2;
+    --toast-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
+
+    --toast-success-bg: rgb(16 185 129 / 0.18);
+    --toast-success-fg: #6ee7b7;
+    --toast-success-bar: #34d399;
+    --toast-error-bg: rgb(244 63 94 / 0.18);
+    --toast-error-fg: #fda4af;
+    --toast-error-bar: #fb7185;
+    --toast-warning-bg: rgb(245 158 11 / 0.18);
+    --toast-warning-fg: #fcd34d;
+    --toast-warning-bar: #fbbf24;
+    --toast-info-bg: rgb(59 110 165 / 0.32);
+    --toast-info-fg: #8fb8e3;
+    --toast-info-bar: #8fb8e3;
+  }
+}
+
+.Toastify .Toastify__toast {
+  --tone-bg: var(--toast-info-bg);
+  --tone-fg: var(--toast-info-fg);
+  --tone-bar: var(--toast-info-bar);
+  --toastify-spinner-color: var(--tone-fg);
+  --toastify-spinner-color-empty-area: var(--toast-border);
+
+  min-height: 56px;
+  padding: 12px 32px 14px 12px;
+  overflow: hidden;
+  border: 1px solid var(--toast-border);
+  border-radius: 12px;
+  background: var(--toast-bg);
+  box-shadow: var(--toast-shadow);
+  color: var(--toast-text);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.Toastify .Toastify__toast--success {
+  --tone-bg: var(--toast-success-bg);
+  --tone-fg: var(--toast-success-fg);
+  --tone-bar: var(--toast-success-bar);
+}
+
+.Toastify .Toastify__toast--error {
+  --tone-bg: var(--toast-error-bg);
+  --tone-fg: var(--toast-error-fg);
+  --tone-bar: var(--toast-error-bar);
+}
+
+.Toastify .Toastify__toast--warning {
+  --tone-bg: var(--toast-warning-bg);
+  --tone-fg: var(--toast-warning-fg);
+  --tone-bar: var(--toast-warning-bar);
+}
+
+.Toastify .Toastify__toast-icon {
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  align-self: flex-start;
+  justify-content: center;
+  margin-inline-end: 10px;
+  border-radius: 8px;
+  background: var(--tone-bg);
+  color: var(--tone-fg);
+  font-size: 16px;
+}
+
+.Toastify .Toastify__toast-icon .Toastify__spinner {
+  width: 16px;
+  height: 16px;
+}
+
+.Toastify .Toastify__close-button {
+  top: 8px;
+  right: 8px;
+  color: var(--toast-close);
+  opacity: 0.7;
+}
+
+.Toastify .Toastify__close-button:hover,
+.Toastify .Toastify__close-button:focus {
+  opacity: 1;
+}
+
+.Toastify .Toastify__progress-bar--wrp {
+  height: 3px;
+}
+
+.Toastify .Toastify__progress-bar--bg {
+  background: transparent;
+  opacity: 0;
+}
+
+.Toastify .Toastify__progress-bar {
+  background: var(--tone-bar);
+}
