@@ -599,6 +599,7 @@ const Login = () => {
           --scene-water-top: #3f9a8d;
           --scene-water-bottom: #1f5f57;
           --scene-palm: #163d33;
+          --scene-ripple: rgba(255, 255, 255, 0.5);
           --scene-dash: #cbd5e1;
         }
         @media screen {
@@ -620,6 +621,7 @@ const Login = () => {
             --scene-water-top: #1c434a;
             --scene-water-bottom: #0f2930;
             --scene-palm: #08140f;
+            --scene-ripple: rgba(255, 255, 255, 0.15);
             --scene-dash: #4a5869;
           }
         }

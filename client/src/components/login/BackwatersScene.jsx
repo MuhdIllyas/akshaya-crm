@@ -57,6 +57,13 @@ const BackwatersScene = ({ className = "" }) => (
       <Palm x={610} base={442} height={225} lean={-14} scale={1.35} />
       <Palm x={205} base={432} height={110} lean={16} scale={0.75} />
 
+      {/* Ripples, kept high on the water so they never reach the footer text */}
+      <g style={{ stroke: "var(--scene-ripple)" }} strokeWidth="2.5" strokeLinecap="round">
+        <path data-ripple d="M240 468 H330" />
+        <path data-ripple d="M300 504 H410" />
+        <path data-ripple d="M205 545 H290" />
+      </g>
+
     </g>
 
     <path
