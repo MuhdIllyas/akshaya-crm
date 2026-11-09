@@ -814,6 +814,8 @@
   .dark [stroke="#e2e8f0"], .dark [stroke="#f1f5f9"], .dark [stroke="#e5e7eb"] { stroke: var(--dm-line); }
   .dark [stroke="#1e3a5f"] { stroke: var(--dm-accent); }
   .dark [fill="#1e3a5f"] { fill: var(--dm-accent); }
+  /* Legend dots and bars that take the same navy from a chart palette through inline styles */
+  .dark [style*="background: rgb(30, 58, 95)"], .dark [style*="background-color: rgb(30, 58, 95)"] { background: var(--dm-accent) !important; }
   .dark .recharts-text, .dark .recharts-cartesian-axis-tick-value { fill: var(--dm-muted); }
   .dark .recharts-pie-sector [stroke="#fff"] { stroke: var(--dm-card); }
   .dark .recharts-default-tooltip {
