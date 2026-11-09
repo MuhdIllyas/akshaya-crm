@@ -404,6 +404,35 @@
     --ui-mention-bg: color-mix(in oklab, #3b6ea5 32%, transparent);
     --ui-mention-text: var(--dm-accent);
 
+    /* Calendar events: var(--cal-*, <light value>) in CalendarPage.jsx */
+    --cal-deadline-bg: color-mix(in oklab, #ea8a3a 24%, var(--dm-card));
+    --cal-deadline-border: #ea8a3a;
+    --cal-deadline-text: #fdba74;
+    --cal-start-bg: color-mix(in oklab, #3f9a6a 24%, var(--dm-card));
+    --cal-start-border: #3f9a6a;
+    --cal-start-text: #86efac;
+    --cal-announcement-bg: color-mix(in oklab, #3b6ea5 24%, var(--dm-card));
+    --cal-announcement-border: #5b85b3;
+    --cal-announcement-text: #b8d0ea;
+    --cal-expiry-bg: color-mix(in oklab, #8b7ac7 24%, var(--dm-card));
+    --cal-expiry-border: #8b7ac7;
+    --cal-expiry-text: #c4b5fd;
+    --cal-task-bg: color-mix(in oklab, #64748b 24%, var(--dm-card));
+    --cal-task-border: #64748b;
+    --cal-task-text: #dde4ec;
+    --cal-holiday-bg: color-mix(in oklab, #f2a766 24%, var(--dm-card));
+    --cal-holiday-border: #f2a766;
+    --cal-holiday-text: #fdba74;
+    --cal-working-bg: color-mix(in oklab, #7fbf9a 24%, var(--dm-card));
+    --cal-working-border: #7fbf9a;
+    --cal-working-text: #86efac;
+    --cal-weekend-bg: color-mix(in oklab, #64748b 24%, var(--dm-card));
+    --cal-weekend-border: #4a5869;
+    --cal-weekend-text: #cfd8e2;
+    --cal-default-bg: color-mix(in oklab, #64748b 24%, var(--dm-card));
+    --cal-default-border: #74828f;
+    --cal-default-text: #cfd8e2;
+
     --background-color-white: var(--dm-card);
     --text-color-black: var(--dm-text);
     --border-color-white: var(--dm-card);
@@ -793,6 +822,7 @@
   /* FullCalendar */
   .dark .fc { --fc-border-color: var(--dm-line); --fc-page-bg-color: var(--dm-card); --fc-neutral-bg-color: var(--dm-raised); --fc-neutral-text-color: var(--dm-muted); --fc-list-event-hover-bg-color: var(--dm-raised); --fc-today-bg-color: var(--dm-raised); }
   .dark .fc-navy .fc .fc-toolbar-title { color: var(--dm-text-strong); }
+  .dark .fc-navy .fc .fc-col-header-cell-cushion, .dark .fc-navy .fc .fc-daygrid-day-number { color: var(--dm-text); }
   .dark .fc-navy .fc-theme-standard td, .dark .fc-navy .fc-theme-standard th, .dark .fc-navy .fc-theme-standard .fc-scrollgrid { border-color: var(--dm-line); }
   .dark .fc-navy .fc .fc-day-today { background: var(--dm-raised) !important; }
   .dark .fc-navy .fc .fc-button-primary { background: var(--dm-btn); border-color: var(--dm-btn); }
