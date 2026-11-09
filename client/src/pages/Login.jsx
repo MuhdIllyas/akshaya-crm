@@ -346,15 +346,15 @@ const Login = () => {
   );
 
   return (
-    <div className="login-page flex min-h-screen min-h-dvh items-center justify-center bg-slate-100 dark:bg-slate-50 p-3 sm:p-6">
-      <div className="relative w-full max-w-6xl overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:min-h-[640px]">
+    <div className="login-page flex min-h-screen min-h-dvh items-center justify-center bg-slate-100 dark:bg-slate-50 p-3 sm:p-6 md:p-0">
+      <div className="relative w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:min-h-screen md:min-h-dvh md:rounded-none md:border-0 md:shadow-none">
 
         {/* Backwaters panel (tablets and up) */}
         <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[58%] md:block">
           <BackwatersScene className="h-full w-full" />
         </div>
 
-        <div className="relative z-10 flex flex-col px-6 py-6 sm:px-10 md:min-h-[640px] md:w-[50%] md:py-8 lg:px-14">
+        <div className="relative z-10 flex flex-col px-6 py-6 sm:px-10 md:min-h-screen md:min-h-dvh md:w-[50%] md:py-10 lg:px-16 xl:px-24">
 
           {/* Brand */}
           <div className="flex items-center gap-3">
@@ -371,7 +371,7 @@ const Login = () => {
 
           {/* Form */}
           <form
-            className="my-auto max-w-sm py-8"
+            className="my-auto w-full max-w-sm py-8 md:mx-auto xl:max-w-md"
             onSubmit={(e) => {
               e.preventDefault();
               if (!submitDisabled) handleLogin();
@@ -538,7 +538,7 @@ const Login = () => {
         </div>
 
         {/* Glass card and footer over the backwaters panel */}
-        <div className="absolute bottom-6 right-6 z-10 hidden w-[min(340px,36%)] md:block">
+        <div className="absolute bottom-8 right-8 z-10 hidden w-[min(360px,36%)] md:block">
           <div className="rounded-2xl border border-white/20 bg-[rgba(15,30,51,0.55)] p-5 shadow-lg backdrop-blur-md">
             {brandCard}
           </div>
@@ -580,6 +580,15 @@ const Login = () => {
           box-shadow: 0 0 0 4px rgba(20, 184, 166, 0.15);
         }
         .login-page .login-field:focus-within label { color: #0d9488; }
+        /* Keep the browser's autofill tint from painting a blue box inside the fields */
+        .login-page .login-field input:-webkit-autofill,
+        .login-page .login-field input:-webkit-autofill:hover,
+        .login-page .login-field input:-webkit-autofill:focus {
+          -webkit-text-fill-color: #0f172a;
+          -webkit-box-shadow: 0 0 0 1000px #f1f5f9 inset;
+          caret-color: #0f172a;
+          transition: background-color 9999s ease-out;
+        }
 
         .login-page {
           --scene-sky-top: #9fd8cf;
@@ -590,12 +599,18 @@ const Login = () => {
           --scene-water-top: #3f9a8d;
           --scene-water-bottom: #1f5f57;
           --scene-palm: #163d33;
-          --scene-ripple: rgba(255, 255, 255, 0.5);
           --scene-dash: #cbd5e1;
         }
         @media screen {
           .dark .login-page .login-field { background: #2e3a4a; }
           .dark .login-page .login-field:focus-within label { color: #5eead4; }
+          .dark .login-page .login-field input:-webkit-autofill,
+          .dark .login-page .login-field input:-webkit-autofill:hover,
+          .dark .login-page .login-field input:-webkit-autofill:focus {
+            -webkit-text-fill-color: #e6ebf2;
+            -webkit-box-shadow: 0 0 0 1000px #2e3a4a inset;
+            caret-color: #e6ebf2;
+          }
           .dark .login-page {
             --scene-sky-top: #16283c;
             --scene-sky-bottom: #284656;
@@ -605,7 +620,6 @@ const Login = () => {
             --scene-water-top: #1c434a;
             --scene-water-bottom: #0f2930;
             --scene-palm: #08140f;
-            --scene-ripple: rgba(255, 255, 255, 0.15);
             --scene-dash: #4a5869;
           }
         }

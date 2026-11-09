@@ -42,7 +42,7 @@ const BackwatersScene = ({ className = "" }) => (
 
     <g clipPath="url(#login-wave)">
       <rect width="640" height="720" fill="url(#login-sky)" />
-      <circle cx="500" cy="150" r="42" style={{ fill: "var(--scene-sun)" }} />
+      <circle cx="500" cy="190" r="42" style={{ fill: "var(--scene-sun)" }} />
       <path d="M90 360 C170 320 250 330 330 350 C420 300 520 300 640 330 V420 H90 Z" style={{ fill: "var(--scene-hill-far)" }} />
       <path d="M90 400 C200 370 300 390 400 380 C500 365 570 380 640 372 V440 H90 Z" style={{ fill: "var(--scene-hill-near)" }} />
       <rect x="90" y="430" width="550" height="290" fill="url(#login-water)" />
@@ -57,13 +57,6 @@ const BackwatersScene = ({ className = "" }) => (
       <Palm x={610} base={442} height={225} lean={-14} scale={1.35} />
       <Palm x={205} base={432} height={110} lean={16} scale={0.75} />
 
-      {/* Ripples */}
-      <g style={{ stroke: "var(--scene-ripple)" }} strokeWidth="2.5" strokeLinecap="round">
-        <path d="M150 590 H250" />
-        <path d="M430 570 H560" />
-        <path d="M300 640 H420" />
-        <path d="M480 680 H600" />
-      </g>
     </g>
 
     <path
