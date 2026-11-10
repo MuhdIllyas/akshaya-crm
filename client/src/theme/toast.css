@@ -1,11 +1,11 @@
 /*
- * Frosted toasts, shared by every toast through the ToastContainer in App.jsx.
- * Frosted white in light mode, frosted slate in dark mode, with a small glowing
+ * Solid toasts, shared by every toast through the ToastContainer in App.jsx.
+ * Solid white in light mode, solid slate in dark mode, with a small glowing
  * dot for the type. Dark values sit inside @media screen like the rest of Soft dim.
  */
 :root {
-  --toast-bg: rgb(255 255 255 / 0.9);
-  --toast-border: rgb(15 23 42 / 0.08);
+  --toast-bg: #ffffff;
+  --toast-border: #e2e8f0;
   --toast-shadow: 0 18px 40px rgb(15 23 42 / 0.14);
   --toast-title: #0f172a;
   --toast-text: #64748b;
@@ -20,8 +20,8 @@
 
 @media screen {
   :root.dark {
-    --toast-bg: rgb(46 58 74 / 0.9);
-    --toast-border: rgb(255 255 255 / 0.1);
+    --toast-bg: #2e3a4a;
+    --toast-border: #4a5869;
     --toast-shadow: 0 18px 40px rgb(0 0 0 / 0.4);
     --toast-title: #e6ebf2;
     --toast-text: #a9b5c2;
@@ -46,8 +46,6 @@
   border: 1px solid var(--toast-border);
   border-radius: 18px;
   background: var(--toast-bg);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
   box-shadow: var(--toast-shadow);
   color: var(--toast-text);
   font-family: inherit;
