@@ -5,8 +5,9 @@ import { Chart } from 'chart.js';
 const STORAGE_KEY = 'akshaya-theme';
 const PREFERENCES = ['light', 'dark', 'system'];
 
-// Customer-facing public pages stay light. Keep in sync with the inline script in index.html.
-const THEMED_PATH = /^\/(dashboard|login|customer\/(?!register))/;
+// Dashboards, login and customer pages (including registration) follow the theme;
+// the other public pages stay light. Keep in sync with the inline script in index.html.
+const THEMED_PATH = /^\/(dashboard|login|customer\/)/;
 
 const systemQuery = () => window.matchMedia('(prefers-color-scheme: dark)');
 

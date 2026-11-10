@@ -13,7 +13,7 @@
         try {
           var saved = localStorage.getItem('akshaya-theme');
           var wantsDark = saved === 'dark' || (saved === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
-          if (wantsDark && /^\/(dashboard|login|customer\/(?!register))/.test(location.pathname)) {
+          if (wantsDark && /^\/(dashboard|login|customer\/)/.test(location.pathname)) {
             document.documentElement.classList.add('dark');
           }
         } catch (e) {}

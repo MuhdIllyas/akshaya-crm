@@ -4,12 +4,24 @@ import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import { motion, AnimatePresence } from "framer-motion";
-import { 
-  FiUser, FiMail, FiPhone, FiMapPin, FiLock, FiShield, FiCheckCircle,
-  FiCheck, FiAlertCircle, FiHome, FiHash, FiArrowRight, FiArrowLeft
+import {
+  FiUser, FiMail, FiShield, FiCheckCircle, FiCheck, FiHome, FiHash, FiArrowRight
 } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
+import AuthShell, { Field, OtpInput, Spinner, pillPrimary, pillSecondary } from "../components/login/AuthShell";
+
+// Benefits that rotate in the brand card, like the services list on the login page
+const benefits = [
+  { title: "Fast-track services", text: "Skip the data-entry queue at the centre." },
+  { title: "WhatsApp Integration", text: "Get live status updates directly to your phone." },
+  { title: "Digital Document Vault", text: "Access your finished certificates anytime." },
+];
+
+const steps = [
+  { number: 1, label: "Verification" },
+  { number: 2, label: "Secure OTP" },
+  { number: 3, label: "Profile Details" },
+];
 
 const CustomerRegistration = () => {
   const [formData, setFormData] = useState({
@@ -29,15 +41,22 @@ const CustomerRegistration = () => {
   const [otpTimer, setOtpTimer] = useState(0);
   const [verificationStep, setVerificationStep] = useState(1); // 1: Aadhaar, 2: OTP, 3: Details
   const [aadhaarVerified, setAadhaarVerified] = useState(false);
-  
+  const [benefitIndex, setBenefitIndex] = useState(0);
+
   const [availableDistricts] = useState([
-    "Thiruvananthapuram", "Kollam", "Pathanamthitta", "Alappuzha", 
-    "Kottayam", "Idukki", "Ernakulam", "Thrissur", 
-    "Palakkad", "Malappuram", "Kozhikode", "Wayanad", 
+    "Thiruvananthapuram", "Kollam", "Pathanamthitta", "Alappuzha",
+    "Kottayam", "Idukki", "Ernakulam", "Thrissur",
+    "Palakkad", "Malappuram", "Kozhikode", "Wayanad",
     "Kannur", "Kasaragod"
   ]);
-  
+
   const navigate = useNavigate();
+
+  // Rotate the benefits in the brand card every 3 seconds
+  useEffect(() => {
+    const interval = setInterval(() => setBenefitIndex((i) => (i + 1) % benefits.length), 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   // OTP timer effect
   useEffect(() => {
@@ -80,6 +99,7 @@ const CustomerRegistration = () => {
 
       if (response.data.success) {
         setOtpSent(true);
+        setOtp(""); // the OTP boxes start empty each time a code is sent
         setOtpTimer(120); // 2 minutes
         setVerificationStep(2);
         toast.success("OTP sent to your registered mobile number");
@@ -116,7 +136,7 @@ const CustomerRegistration = () => {
         setAadhaarVerified(true);
         setVerificationStep(3);
         toast.success("Verification successful!");
-        
+
         // Pre-fill data if available from database
         if (response.data.customerData) {
           setFormData(prev => ({
@@ -164,7 +184,7 @@ const CustomerRegistration = () => {
       if (response.data.success) {
         toast.success("Registration successful! Redirecting to dashboard...");
         localStorage.setItem("temp_customer_phone", formData.primary_phone);
-        
+
         setTimeout(() => {
           navigate("/customer/dashboard");
         }, 2000);
@@ -191,7 +211,7 @@ const CustomerRegistration = () => {
   // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     if (name === "aadhaar") {
       setFormData(prev => ({ ...prev, [name]: formatAadhaar(value) }));
     } else if (name === "primary_phone" || name === "pincode") {
@@ -206,363 +226,226 @@ const CustomerRegistration = () => {
     }
   };
 
-  // Progress steps
-  const steps = [
-    { number: 1, label: "Verification" },
-    { number: 2, label: "Secure OTP" },
-    { number: 3, label: "Profile Details" }
-  ];
+  const stepOneReady = validateAadhaar(formData.aadhaar) && formData.primary_phone.length === 10;
 
-  // Animation variants
-  const slideVariants = {
-    initial: { opacity: 0, x: 20 },
-    animate: { opacity: 1, x: 0, transition: { duration: 0.4 } },
-    exit: { opacity: 0, x: -20, transition: { duration: 0.3 } }
+  const titles = {
+    1: ["Identity Verification", "Enter your details to initiate registration."],
+    2: ["Secure Verification", "Please verify your WhatsApp number."],
+    3: ["Personal Details", "Complete your profile to finish setup."],
   };
 
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4 font-sans selection:bg-teal-500 selection:text-white relative overflow-hidden">
-      
-      {/* Background Decorators matching Login/Home */}
-      <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] bg-teal-500/10 blur-[100px] rounded-full pointer-events-none"></div>
-      <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] bg-blue-600/10 blur-[100px] rounded-full pointer-events-none"></div>
+  const brandCard = (
+    <>
+      <h2 className="text-lg font-bold text-white">
+        Create your <span className="text-teal-300">Digital Profile</span>
+      </h2>
+      <p className="mt-1.5 text-sm leading-relaxed text-white/80">
+        Register once to track applications, download certificates, and book services online seamlessly.
+      </p>
 
-      <div className="w-full max-w-5xl z-10 py-6">
-        
-        {/* Navigation / Header */}
-        <div className="mb-6 flex items-center justify-between">
-          <Link to="/" className="flex items-center group">
-            <div className="bg-white p-1.5 rounded-xl shadow-sm border border-gray-100 group-hover:shadow-md transition-all duration-300">
-              <img src="/logo-light.png" alt="Akshaya Sahayi" className="h-8 w-8 object-contain" />
-            </div>
-            <div className="ml-3 hidden sm:block">
-              <h1 className="text-xl font-bold text-navy-900 leading-tight">
-                Akshaya <span className="text-teal-600">Sahayi</span>
-              </h1>
-            </div>
-          </Link>
-
-          <Link to="/login" className="flex items-center text-sm font-bold text-gray-600 hover:text-teal-600 transition-colors bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200">
-            <FiArrowLeft className="mr-2" /> Back to Login
-          </Link>
-        </div>
-
-        <div className="bg-white rounded-3xl shadow-xl overflow-hidden border border-gray-200 flex flex-col md:flex-row">
-          
-          {/* LEFT SIDE - Branding Panel */}
-          <div className="md:w-2/5 bg-gradient-to-b from-navy-900 to-navy-800 p-8 md:p-12 flex flex-col justify-between relative overflow-hidden text-white">
-            {/* Pattern Overlay */}
-            <div className="absolute inset-0 opacity-10 pointer-events-none">
-              <svg className="w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
-                <path d="M0,0 L100,0 L100,100 Z" fill="#fff" />
-                <circle cx="20" cy="80" r="15" fill="#fff" />
-                <circle cx="80" cy="20" r="10" fill="#fff" />
-              </svg>
-            </div>
-
-            <div className="z-10">
-              <div className="inline-flex items-center px-3 py-1 bg-white/10 border border-white/20 rounded-full mb-6 text-xs font-bold tracking-wider text-teal-300">
-                CITIZEN PORTAL
-              </div>
-              <h1 className="text-3xl md:text-4xl font-extrabold mb-4 leading-tight">
-                Create your <br/><span className="text-teal-400">Digital Profile</span>
-              </h1>
-              <p className="text-navy-200 text-sm leading-relaxed mb-8">
-                Register once to track applications, download certificates, and book services online seamlessly.
-              </p>
-              
-              <div className="space-y-4">
-                <div className="flex items-start">
-                  <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center mr-4 border border-teal-500/30 shrink-0">
-                    <FiCheck className="text-teal-400" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm">Fast-track services</h4>
-                    <p className="text-xs text-navy-300 mt-0.5">Skip the data-entry queue at the centre.</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center mr-4 border border-teal-500/30 shrink-0">
-                    <FiCheck className="text-teal-400" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm">WhatsApp Integration</h4>
-                    <p className="text-xs text-navy-300 mt-0.5">Get live status updates directly to your phone.</p>
-                  </div>
-                </div>
-                <div className="flex items-start">
-                  <div className="w-8 h-8 rounded-full bg-teal-500/20 flex items-center justify-center mr-4 border border-teal-500/30 shrink-0">
-                    <FiCheck className="text-teal-400" />
-                  </div>
-                  <div>
-                    <h4 className="font-bold text-sm">Digital Document Vault</h4>
-                    <p className="text-xs text-navy-300 mt-0.5">Access your finished certificates anytime.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="z-10 mt-10 pt-6 border-t border-white/10">
-              <p className="text-navy-300 text-sm">
-                Already registered?{" "}
-                <Link to="/login" className="text-white hover:text-teal-300 font-bold transition-colors">
-                  Sign in here
-                </Link>
-              </p>
-            </div>
-          </div>
-
-          {/* RIGHT SIDE - Interactive Form */}
-          <div className="md:w-3/5 p-8 md:p-12 bg-white flex flex-col justify-center">
-            <div className="max-w-md w-full mx-auto">
-              
-              {/* Dynamic Header */}
-              <div className="mb-8">
-                <h2 className="text-2xl font-bold text-navy-900 mb-2">
-                  {verificationStep === 1 && "Identity Verification"}
-                  {verificationStep === 2 && "Secure Verification"}
-                  {verificationStep === 3 && "Personal Details"}
-                </h2>
-                <p className="text-gray-500 text-sm">
-                  {verificationStep === 1 && "Enter your details to initiate registration."}
-                  {verificationStep === 2 && "Please verify your WhatsApp number."}
-                  {verificationStep === 3 && "Complete your profile to finish setup."}
-                </p>
-              </div>
-
-              {/* Progress Steps Indicator */}
-              <div className="flex justify-between mb-10 relative">
-                <div className="absolute top-1/2 left-0 right-0 h-0.5 bg-gray-100 -translate-y-1/2 z-0"></div>
-                
-                {/* Active Line Fill */}
-                <div 
-                  className="absolute top-1/2 left-0 h-0.5 bg-teal-500 -translate-y-1/2 z-0 transition-all duration-500"
-                  style={{ width: `${((verificationStep - 1) / 2) * 100}%` }}
-                ></div>
-
-                {steps.map((step, index) => {
-                  const isActive = step.number === verificationStep;
-                  const isPassed = step.number < verificationStep;
-                  
-                  return (
-                    <div key={step.number} className="flex flex-col items-center z-10 bg-white px-2">
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold transition-all duration-300 ${
-                        isActive 
-                          ? 'bg-teal-500 text-white shadow-[0_0_15px_rgba(20,184,166,0.4)] scale-110' 
-                          : isPassed 
-                            ? 'bg-navy-900 text-white' 
-                            : 'bg-gray-100 text-gray-400 border border-gray-200'
-                      }`}>
-                        {isPassed ? <FiCheck /> : step.number}
-                      </div>
-                      <span className={`text-[10px] uppercase tracking-wider font-bold mt-2 hidden sm:block ${
-                        isActive ? 'text-teal-600' : isPassed ? 'text-navy-900' : 'text-gray-400'
-                      }`}>
-                        {step.label}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Form Areas with Animation */}
-              <AnimatePresence mode="wait">
-                
-                {/* Step 1: ID & Phone */}
-                {verificationStep === 1 && (
-                  <motion.div key="step1" variants={slideVariants} initial="initial" animate="animate" exit="exit" className="space-y-5">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Government ID (Aadhaar) *</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                          <FiHash className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                          type="text"
-                          name="aadhaar"
-                          placeholder="XXXX XXXX XXXX"
-                          value={formData.aadhaar}
-                          onChange={handleChange}
-                          maxLength={14}
-                          className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all text-gray-900 font-medium"
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2 ml-1 flex items-center">
-                        <FiShield className="mr-1 inline text-teal-600" /> Securely verified via official portals.
-                      </p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">WhatsApp Mobile Number *</label>
-                      <div className="relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                          <FaWhatsapp className="h-5 w-5 text-gray-400" />
-                        </div>
-                        <input
-                          type="tel"
-                          name="primary_phone"
-                          placeholder="10-digit mobile number"
-                          value={formData.primary_phone}
-                          onChange={handleChange}
-                          maxLength={10}
-                          className="w-full pl-11 pr-4 py-3.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent transition-all text-gray-900 font-medium"
-                        />
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={sendAadhaarOTP}
-                      disabled={loading || !validateAadhaar(formData.aadhaar) || formData.primary_phone.length !== 10}
-                      className="w-full mt-4 bg-navy-900 hover:bg-navy-800 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none disabled:cursor-not-allowed flex justify-center items-center"
-                    >
-                      {loading ? (
-                        <span className="flex items-center">
-                          <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                          Requesting OTP...
-                        </span>
-                      ) : (
-                        <>Send Verification OTP <FiArrowRight className="ml-2" /></>
-                      )}
-                    </button>
-                  </motion.div>
-                )}
-
-                {/* Step 2: OTP Verification */}
-                {verificationStep === 2 && (
-                  <motion.div key="step2" variants={slideVariants} initial="initial" animate="animate" exit="exit" className="space-y-6">
-                    <div className="bg-teal-50 border border-teal-100 rounded-xl p-4 flex items-start">
-                      <FiCheckCircle className="text-teal-500 text-xl mr-3 mt-0.5 shrink-0" />
-                      <div>
-                        <h4 className="font-bold text-teal-900 text-sm mb-1">OTP Sent via WhatsApp/SMS</h4>
-                        <p className="text-teal-700 text-xs leading-relaxed">
-                          We sent a 6-digit code to the number linked with ID ending in <span className="font-bold">{formData.aadhaar.slice(-4)}</span>
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2 text-center">Enter 6-digit Security Code</label>
-                      <input
-                        type="text"
-                        placeholder="• • • • • •"
-                        value={otp}
-                        onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        className="w-full px-4 py-4 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-teal-500 text-gray-900 text-center text-3xl tracking-[1em] font-black placeholder-gray-300 transition-all"
-                      />
-                      
-                      <div className="flex justify-between items-center mt-3 px-1">
-                        <button onClick={() => setVerificationStep(1)} className="text-xs font-bold text-gray-500 hover:text-navy-900 transition-colors">
-                          ← Change Details
-                        </button>
-                        <button onClick={resendOTP} disabled={otpTimer > 0} className={`text-xs font-bold transition-colors ${otpTimer > 0 ? 'text-gray-400' : 'text-teal-600 hover:text-teal-800'}`}>
-                          {otpTimer > 0 ? `Resend Code in ${Math.floor(otpTimer / 60)}:${String(otpTimer % 60).padStart(2, '0')}` : 'Resend Code'}
-                        </button>
-                      </div>
-                    </div>
-
-                    <button
-                      onClick={verifyAadhaarOTP}
-                      disabled={loading || otp.length !== 6}
-                      className="w-full bg-navy-900 hover:bg-navy-800 text-white font-bold py-3.5 rounded-xl shadow-lg transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none flex justify-center items-center mt-4"
-                    >
-                      {loading ? (
-                        <span className="flex items-center">
-                          <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                          Verifying...
-                        </span>
-                      ) : (
-                        "Verify & Continue"
-                      )}
-                    </button>
-                  </motion.div>
-                )}
-
-                {/* Step 3: Personal Details */}
-                {verificationStep === 3 && (
-                  <motion.div key="step3" variants={slideVariants} initial="initial" animate="animate" exit="exit" className="space-y-5">
-                    
-                    <div className="bg-green-50 border border-green-100 rounded-xl p-3 flex items-center justify-between mb-2">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center mr-3"><FiCheck /></div>
-                        <div>
-                          <p className="text-xs font-bold text-green-900">ID Verified Successfully</p>
-                          <p className="text-[10px] text-green-700">Ending with {formData.aadhaar.slice(-4)}</p>
-                        </div>
-                      </div>
-                      <button onClick={() => setVerificationStep(1)} className="text-xs font-bold text-gray-500 hover:text-navy-900 underline">Change</button>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Full Name *</label>
-                        <div className="relative">
-                          <FiUser className="absolute top-3 left-3 text-gray-400" />
-                          <input type="text" name="name" placeholder="Legal Name" value={formData.name} onChange={handleChange} className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none text-sm font-medium" />
-                        </div>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Email Address</label>
-                        <div className="relative">
-                          <FiMail className="absolute top-3 left-3 text-gray-400" />
-                          <input type="email" name="email" placeholder="Optional" value={formData.email} onChange={handleChange} className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none text-sm font-medium" />
-                        </div>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1.5">Complete Address *</label>
-                      <div className="relative">
-                        <FiHome className="absolute top-3 left-3 text-gray-400" />
-                        <textarea name="address" placeholder="House name, Street, Landmark..." value={formData.address} onChange={handleChange} rows="2" className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none text-sm font-medium resize-none" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">District *</label>
-                        <select name="district" value={formData.district} onChange={handleChange} className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none text-sm font-medium text-gray-700">
-                          <option value="">Select</option>
-                          {availableDistricts.map(d => <option key={d} value={d}>{d}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-bold text-gray-700 mb-1.5">Pincode *</label>
-                        <input type="text" name="pincode" placeholder="6-digit" value={formData.pincode} onChange={handleChange} maxLength={6} className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-teal-500 focus:outline-none text-sm font-medium" />
-                      </div>
-                    </div>
-
-                    <div className="pt-4 border-t border-gray-100 mt-2">
-                      <div className="flex items-start mb-5 bg-gray-50 p-3 rounded-lg border border-gray-100">
-                        <input type="checkbox" id="consent" defaultChecked className="mt-0.5 mr-3 rounded text-teal-500 focus:ring-teal-500" />
-                        <label htmlFor="consent" className="text-[10px] text-gray-500 leading-relaxed">
-                          I consent to the verification of my ID as per applicable regulations. I agree to receive service updates, documents, and OTPs via WhatsApp and SMS from Akshaya Sahayi.
-                        </label>
-                      </div>
-
-                      <button
-                        onClick={handleSubmit}
-                        disabled={loading}
-                        className="w-full bg-teal-500 hover:bg-teal-600 text-white font-bold py-3.5 rounded-xl shadow-[0_4px_14px_0_rgba(20,184,166,0.39)] transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none flex justify-center items-center"
-                      >
-                        {loading ? (
-                          <span className="flex items-center">
-                            <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                            Creating Profile...
-                          </span>
-                        ) : (
-                          "Complete Registration"
-                        )}
-                      </button>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-
-            </div>
+      {/* Rotating benefits */}
+      <div className="mt-4 flex min-h-[3.75rem] items-center overflow-hidden border-t border-white/15 pt-3">
+        <div key={benefitIndex} className="animate-fade-slide flex items-start gap-2">
+          <FiCheck className="mt-0.5 h-4 w-4 shrink-0 text-teal-300" aria-hidden="true" />
+          <div>
+            <p className="text-sm font-semibold leading-snug text-white">{benefits[benefitIndex].title}</p>
+            <p className="text-xs text-white/70">{benefits[benefitIndex].text}</p>
           </div>
         </div>
       </div>
-    </div>
+    </>
+  );
+
+  const submitStep = (e) => {
+    e.preventDefault();
+    if (loading) return;
+    if (verificationStep === 1 && stepOneReady) sendAadhaarOTP();
+    else if (verificationStep === 2 && otp.length === 6) verifyAadhaarOTP();
+    else if (verificationStep === 3) handleSubmit();
+  };
+
+  return (
+    <AuthShell brandCard={brandCard}>
+      <form className="my-auto w-full max-w-sm py-8 md:mx-auto xl:max-w-md" onSubmit={submitStep}>
+        <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Customer Registration</p>
+        <h1 className="mt-2 text-3xl font-bold text-slate-900 sm:text-4xl">
+          {titles[verificationStep][0]}
+          <span className="text-teal-500">.</span>
+        </h1>
+        <p className="mt-2 text-sm text-slate-500">{titles[verificationStep][1]}</p>
+
+        {/* Step indicator */}
+        <ol className="mt-6 flex items-center gap-2" aria-label="Registration progress">
+          {steps.map((step, index) => {
+            const isActive = step.number === verificationStep;
+            const isPassed = step.number < verificationStep;
+            return (
+              <li key={step.number} className="flex flex-1 items-center gap-2" aria-current={isActive ? "step" : undefined}>
+                <span
+                  className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                    isActive
+                      ? "bg-teal-600 text-white shadow-[0_0_0_4px_rgba(20,184,166,0.18)]"
+                      : isPassed
+                        ? "bg-teal-50 text-teal-700"
+                        : "bg-slate-100 text-slate-400"
+                  }`}
+                >
+                  {isPassed ? <FiCheck aria-hidden="true" /> : step.number}
+                </span>
+                <span className={`hidden text-xs font-semibold sm:inline ${isActive ? "text-slate-900" : "text-slate-400"}`}>
+                  {step.label}
+                </span>
+                {index < steps.length - 1 && (
+                  <span className={`h-0.5 flex-1 rounded-full ${isPassed ? "bg-teal-500" : "bg-slate-200"}`} />
+                )}
+              </li>
+            );
+          })}
+        </ol>
+
+        {/* Step 1: ID & Phone */}
+        {verificationStep === 1 && (
+          <div key="step1" className="animate-otp-in mt-7 space-y-3">
+            <Field
+              id="aadhaar"
+              name="aadhaar"
+              label="Government ID (Aadhaar) *"
+              icon={FiHash}
+              type="text"
+              inputMode="numeric"
+              placeholder="XXXX XXXX XXXX"
+              value={formData.aadhaar}
+              onChange={handleChange}
+              maxLength={14}
+              disabled={loading}
+            />
+            <p className="flex items-center gap-1 px-1 text-xs text-slate-500">
+              <FiShield className="text-teal-600" aria-hidden="true" /> Securely verified via official portals.
+            </p>
+            <Field
+              id="primary_phone"
+              name="primary_phone"
+              label="WhatsApp Mobile Number *"
+              icon={FaWhatsapp}
+              type="tel"
+              inputMode="numeric"
+              autoComplete="tel"
+              placeholder="10-digit mobile number"
+              value={formData.primary_phone}
+              onChange={handleChange}
+              maxLength={10}
+              disabled={loading}
+            />
+
+            <div className="flex gap-3 pt-4">
+              <Link to="/login" className={`${pillSecondary} flex items-center justify-center`}>
+                Back to Login
+              </Link>
+              <button type="submit" disabled={loading || !stepOneReady} className={`${pillPrimary} flex items-center justify-center`}>
+                {loading ? <><Spinner />Requesting OTP...</> : <>Send OTP <FiArrowRight className="ml-2" aria-hidden="true" /></>}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: OTP Verification */}
+        {verificationStep === 2 && (
+          <div key="step2" className="animate-otp-in mt-7 space-y-4">
+            <div className="flex items-start gap-3 rounded-xl border border-teal-100 bg-teal-50 p-4">
+              <FiCheckCircle className="mt-0.5 shrink-0 text-xl text-teal-600" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-bold text-teal-900">OTP Sent via WhatsApp/SMS</p>
+                <p className="text-xs leading-relaxed text-teal-700">
+                  We sent a 6-digit code to the number linked with ID ending in{" "}
+                  <span className="font-bold">{formData.aadhaar.slice(-4)}</span>
+                </p>
+              </div>
+            </div>
+
+            <div>
+              <p className="mb-2 text-xs font-medium text-slate-500">Enter 6-digit Security Code</p>
+              <OtpInput onChange={setOtp} disabled={loading} />
+              <div className="mt-3 flex items-center justify-between px-1">
+                <p className="text-xs font-medium text-slate-500">
+                  {otpTimer > 0 ? <>Code expires in <span className="text-teal-600">{Math.floor(otpTimer / 60)}:{String(otpTimer % 60).padStart(2, '0')}</span></> : "Didn't get the code?"}
+                </p>
+                <button
+                  type="button"
+                  onClick={resendOTP}
+                  disabled={otpTimer > 0 || loading}
+                  className="text-xs font-semibold text-teal-600 transition-colors hover:text-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Resend Code
+                </button>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setVerificationStep(1)} disabled={loading} className={pillSecondary}>
+                Change Details
+              </button>
+              <button type="submit" disabled={loading || otp.length !== 6} className={`${pillPrimary} flex items-center justify-center`}>
+                {loading ? <><Spinner />Verifying...</> : "Verify & Continue"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 3: Personal Details */}
+        {verificationStep === 3 && (
+          <div key="step3" className="animate-otp-in mt-7 space-y-3">
+            <div className="flex items-center justify-between rounded-xl border border-emerald-100 bg-emerald-50 p-3">
+              <div className="flex items-center gap-3">
+                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500 text-white"><FiCheck aria-hidden="true" /></span>
+                <div>
+                  <p className="text-xs font-bold text-emerald-900">ID Verified Successfully</p>
+                  <p className="text-[11px] text-emerald-700">Ending with {formData.aadhaar.slice(-4)}</p>
+                </div>
+              </div>
+              <button type="button" onClick={() => setVerificationStep(1)} className="text-xs font-semibold text-slate-500 underline hover:text-slate-900">
+                Change
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field id="name" name="name" label="Full Name *" icon={FiUser} type="text" autoComplete="name" placeholder="Legal name" value={formData.name} onChange={handleChange} disabled={loading} />
+              <Field id="email" name="email" label="Email Address" icon={FiMail} type="email" autoComplete="email" placeholder="Optional" value={formData.email} onChange={handleChange} disabled={loading} />
+            </div>
+
+            <Field as="textarea" id="address" name="address" label="Complete Address *" icon={FiHome} rows={2} autoComplete="street-address" placeholder="House name, Street, Landmark..." value={formData.address} onChange={handleChange} disabled={loading} />
+
+            <div className="grid grid-cols-2 gap-3">
+              <Field as="select" id="district" name="district" label="District *" value={formData.district} onChange={handleChange} disabled={loading}>
+                <option value="">Select</option>
+                {availableDistricts.map(d => <option key={d} value={d}>{d}</option>)}
+              </Field>
+              <Field id="pincode" name="pincode" label="Pincode *" type="text" inputMode="numeric" autoComplete="postal-code" placeholder="6-digit" value={formData.pincode} onChange={handleChange} maxLength={6} disabled={loading} />
+            </div>
+
+            <label htmlFor="consent" className="flex items-start gap-3 rounded-xl bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-500">
+              <input type="checkbox" id="consent" defaultChecked className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer rounded accent-teal-600" />
+              I consent to the verification of my ID as per applicable regulations. I agree to receive service updates, documents, and OTPs via WhatsApp and SMS from Akshaya Sahayi.
+            </label>
+
+            <div className="flex gap-3 pt-2">
+              <button type="button" onClick={() => setVerificationStep(1)} disabled={loading} className={pillSecondary}>
+                Back
+              </button>
+              <button type="submit" disabled={loading} className={`${pillPrimary} flex items-center justify-center`}>
+                {loading ? <><Spinner />Creating Profile...</> : "Complete Registration"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <p className="mt-6 text-sm font-medium text-slate-600">
+          Already registered?{" "}
+          <Link to="/login" className="ml-1 font-bold text-teal-600 transition-colors hover:text-teal-700">
+            Sign in here
+          </Link>
+        </p>
+      </form>
+    </AuthShell>
   );
 };
 
