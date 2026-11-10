@@ -1,97 +1,70 @@
 /*
- * Clean card toasts, shared by every toast through the ToastContainer in App.jsx.
- * Dark values sit inside @media screen like the rest of the Soft dim theme.
+ * Glass navy toasts, shared by every toast through the ToastContainer in App.jsx.
+ * Same frosted navy as the "Empowering Digital Kerala" card on the login page,
+ * and the same in light and dark mode so it always stands out.
  */
-:root {
-  --toast-bg: #ffffff;
-  --toast-border: #e2e8f0;
-  --toast-text: #0f172a;
-  --toast-close: #64748b;
-  --toast-shadow: 0 8px 24px rgb(15 23 42 / 0.12);
-
-  --toast-success-bg: #ecfdf5;
-  --toast-success-fg: #047857;
-  --toast-success-bar: #10b981;
-  --toast-error-bg: #fff1f2;
-  --toast-error-fg: #be123c;
-  --toast-error-bar: #f43f5e;
-  --toast-warning-bg: #fffbeb;
-  --toast-warning-fg: #b45309;
-  --toast-warning-bar: #f59e0b;
-  --toast-info-bg: #eff6ff;
-  --toast-info-fg: #1e3a5f;
-  --toast-info-bar: #3b6ea5;
-}
-
-@media screen {
-  :root.dark {
-    --toast-bg: #2e3a4a;
-    --toast-border: #4a5869;
-    --toast-text: #e6ebf2;
-    --toast-close: #a9b5c2;
-    --toast-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
-
-    --toast-success-bg: rgb(16 185 129 / 0.18);
-    --toast-success-fg: #6ee7b7;
-    --toast-success-bar: #34d399;
-    --toast-error-bg: rgb(244 63 94 / 0.18);
-    --toast-error-fg: #fda4af;
-    --toast-error-bar: #fb7185;
-    --toast-warning-bg: rgb(245 158 11 / 0.18);
-    --toast-warning-fg: #fcd34d;
-    --toast-warning-bar: #fbbf24;
-    --toast-info-bg: rgb(59 110 165 / 0.32);
-    --toast-info-fg: #8fb8e3;
-    --toast-info-bar: #8fb8e3;
-  }
-}
-
 .Toastify .Toastify__toast {
-  --tone-bg: var(--toast-info-bg);
-  --tone-fg: var(--toast-info-fg);
-  --tone-bar: var(--toast-info-bar);
-  --toastify-spinner-color: var(--tone-fg);
-  --toastify-spinner-color-empty-area: var(--toast-border);
+  --tone-fg: #5eead4;
+  --tone-bg: rgb(45 212 191 / 0.18);
+  --tone-bar: #2dd4bf;
+  --toastify-spinner-color: #5eead4;
+  --toastify-spinner-color-empty-area: rgb(255 255 255 / 0.18);
 
-  min-height: 56px;
-  padding: 12px 32px 14px 12px;
+  min-height: 60px;
+  padding: 12px 34px 14px 12px;
   overflow: hidden;
-  border: 1px solid var(--toast-border);
-  border-radius: 12px;
-  background: var(--toast-bg);
-  box-shadow: var(--toast-shadow);
-  color: var(--toast-text);
+  border: 1px solid rgb(255 255 255 / 0.16);
+  border-radius: 16px;
+  background: rgb(15 30 51 / 0.88);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 16px 34px rgb(15 23 42 / 0.28);
+  color: rgb(255 255 255 / 0.78);
   font-family: inherit;
-  font-size: 14px;
-  line-height: 1.4;
+  font-size: 13px;
+  line-height: 1.45;
+
+  /* Icon on the left, title and message stacked on the right */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 11px;
+  align-items: start;
+  word-break: break-word;
 }
 
 .Toastify .Toastify__toast--success {
-  --tone-bg: var(--toast-success-bg);
-  --tone-fg: var(--toast-success-fg);
-  --tone-bar: var(--toast-success-bar);
+  --tone-fg: #5eead4;
+  --tone-bg: rgb(45 212 191 / 0.18);
+  --tone-bar: #2dd4bf;
 }
 
 .Toastify .Toastify__toast--error {
-  --tone-bg: var(--toast-error-bg);
-  --tone-fg: var(--toast-error-fg);
-  --tone-bar: var(--toast-error-bar);
+  --tone-fg: #fda4af;
+  --tone-bg: rgb(251 113 133 / 0.18);
+  --tone-bar: #fb7185;
 }
 
 .Toastify .Toastify__toast--warning {
-  --tone-bg: var(--toast-warning-bg);
-  --tone-fg: var(--toast-warning-fg);
-  --tone-bar: var(--toast-warning-bar);
+  --tone-fg: #fcd34d;
+  --tone-bg: rgb(251 191 36 / 0.18);
+  --tone-bar: #fbbf24;
+}
+
+.Toastify .Toastify__toast--info {
+  --tone-fg: #8fb8e3;
+  --tone-bg: rgb(143 184 227 / 0.2);
+  --tone-bar: #8fb8e3;
 }
 
 .Toastify .Toastify__toast-icon {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   align-items: center;
-  align-self: flex-start;
+  grid-column: 1;
+  grid-row: 1 / span 2;
   justify-content: center;
-  margin-inline-end: 10px;
-  border-radius: 8px;
+  margin: 0;
+  border-radius: 10px;
   background: var(--tone-bg);
   color: var(--tone-fg);
   font-size: 16px;
@@ -102,16 +75,42 @@
   height: 16px;
 }
 
+/* A bold title line above the message, named after the toast type.
+   The message is a bare text node, so the title is the toast's own ::before,
+   placed in the grid above it. */
+.Toastify .Toastify__toast--success::before,
+.Toastify .Toastify__toast--error::before,
+.Toastify .Toastify__toast--warning::before,
+.Toastify .Toastify__toast--info::before {
+  grid-column: 2;
+  grid-row: 1;
+  color: #ffffff;
+  font-weight: 600;
+}
+.Toastify .Toastify__toast--success::before { content: "Success"; }
+.Toastify .Toastify__toast--error::before { content: "Error"; }
+.Toastify .Toastify__toast--warning::before { content: "Warning"; }
+.Toastify .Toastify__toast--info::before { content: "Info"; }
+
+/* Rich toasts (like the OTP popup) bring their own bold heading,
+   so they skip the automatic title */
+.Toastify .Toastify__toast strong {
+  color: #ffffff;
+}
+.Toastify .Toastify__toast:has(> div:not([class*="Toastify"]) strong)::before {
+  content: none;
+}
+
 .Toastify .Toastify__close-button {
-  top: 8px;
-  right: 8px;
-  color: var(--toast-close);
-  opacity: 0.7;
+  top: 9px;
+  right: 9px;
+  color: rgb(255 255 255 / 0.6);
+  opacity: 1;
 }
 
 .Toastify .Toastify__close-button:hover,
 .Toastify .Toastify__close-button:focus {
-  opacity: 1;
+  color: #ffffff;
 }
 
 .Toastify .Toastify__progress-bar--wrp {
@@ -125,4 +124,10 @@
 
 .Toastify .Toastify__progress-bar {
   background: var(--tone-bar);
+}
+
+@media print {
+  .Toastify {
+    display: none;
+  }
 }
