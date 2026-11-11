@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { Transform } from "node:stream";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import bcrypt from "bcryptjs";
@@ -53,10 +54,58 @@ function pgEnv(url) {
   };
 }
 
-const bin = (name) => (process.env.PG_BIN ? path.join(process.env.PG_BIN, name) : name);
+/*
+ * Which pg_dump/psql to run. On Ubuntu/Debian, /usr/bin/pg_dump is a wrapper
+ * that may pick the NEWEST installed client (e.g. 17) for a localhost
+ * connection, whose output an older server (e.g. 14) rejects. So, unless
+ * PG_BIN is set, use the tools that match the server's major version when
+ * they are installed (/usr/lib/postgresql/<major>/bin), else whatever is on PATH.
+ */
+const toolDirs = new Map(); // server url -> folder or ""
+
+async function pgToolsDir(serverUrl) {
+  if (process.env.PG_BIN) return process.env.PG_BIN;
+  if (toolDirs.has(serverUrl)) return toolDirs.get(serverUrl);
+  let dir = "";
+  try {
+    const num = await withClient(serverUrl, async (c) => Number((await c.query("SHOW server_version_num")).rows[0].server_version_num));
+    const candidate = `/usr/lib/postgresql/${Math.floor(num / 10000)}/bin`;
+    if (fs.existsSync(path.join(candidate, "pg_dump"))) dir = candidate;
+  } catch {
+    /* fall back to PATH */
+  }
+  toolDirs.set(serverUrl, dir);
+  return dir;
+}
+
+/*
+ * Lines a newer pg_dump may write that an older server or psql rejects, and
+ * that don't matter when piping straight into a fresh database:
+ *   SET transaction_timeout = 0;      (pg_dump 17+, unknown to servers before 17)
+ *   \restrict … / \unrestrict …       (pg_dump 17.6+, unknown to older psql)
+ */
+const SKIP_LINE = /^(SET transaction_timeout\b|\\restrict\b|\\unrestrict\b)/;
+
+export function compatFilter() {
+  let rest = "";
+  return new Transform({
+    transform(chunk, _enc, done) {
+      const lines = (rest + chunk.toString("utf8")).split("\n");
+      rest = lines.pop();
+      done(null, lines.filter((l) => !SKIP_LINE.test(l)).map((l) => l + "\n").join(""));
+    },
+    flush(done) {
+      done(null, rest && !SKIP_LINE.test(rest) ? rest : "");
+    },
+  });
+}
+
+const DUMP_TIMEOUT_MS = 5 * 60_000;
 
 /** pg_dump <dumpArgs> from one database | psql into another. */
-export function pipeDump(fromUrl, toUrl, dumpArgs) {
+export async function pipeDump(fromUrl, toUrl, dumpArgs) {
+  const dir = await pgToolsDir(toUrl);
+  const bin = (name) => (dir ? path.join(dir, name) : name);
   return new Promise((resolve, reject) => {
     const dump = spawn(bin("pg_dump"), ["--no-owner", "--no-privileges", ...dumpArgs], {
       env: pgEnv(fromUrl),
@@ -67,15 +116,29 @@ export function pipeDump(fromUrl, toUrl, dumpArgs) {
       stdio: ["pipe", "ignore", "pipe"],
     });
     let errors = "";
+    let failed = false;
+    const fail = (err) => {
+      if (failed) return;
+      failed = true;
+      dump.kill();
+      psql.kill();
+      reject(err);
+    };
+    // Never hang (e.g. waiting on a lock): give up after a few minutes.
+    const timer = setTimeout(() => fail(new Error("Copying the table structure took too long and was stopped")), DUMP_TIMEOUT_MS);
     dump.stderr.on("data", (d) => (errors += d));
     psql.stderr.on("data", (d) => (errors += d));
-    dump.on("error", (e) => reject(new Error(`Could not run pg_dump (${e.message}). Set PG_BIN.`)));
-    psql.on("error", (e) => reject(new Error(`Could not run psql (${e.message}). Set PG_BIN.`)));
-    dump.stdout.pipe(psql.stdin);
+    dump.on("error", (e) => fail(new Error(`Could not run pg_dump (${e.message}). Set PG_BIN.`)));
+    psql.on("error", (e) => fail(new Error(`Could not run psql (${e.message}). Set PG_BIN.`)));
+    psql.stdin.on("error", () => {}); // psql may stop reading after an error
+    dump.stdout.pipe(compatFilter()).pipe(psql.stdin);
     const exited = (proc) => new Promise((res) => proc.on("close", res));
     Promise.all([exited(dump), exited(psql)]).then(([dumpCode, psqlCode]) => {
-      if (dumpCode === 0 && psqlCode === 0) resolve();
-      else reject(new Error(`pg_dump/psql failed (exit ${dumpCode}/${psqlCode}):\n${errors}`));
+      clearTimeout(timer);
+      if (failed) return;
+      if (dumpCode === 0 && psqlCode === 0) return resolve();
+      const firstError = errors.split("\n").find((l) => /ERROR|FATAL|error:/i.test(l)) || errors.trim();
+      fail(new Error(`pg_dump/psql failed (exit ${dumpCode}/${psqlCode}): ${firstError}`));
     });
   });
 }
@@ -152,7 +215,18 @@ export async function createOrganization(
       if (!plan.rowCount) throw new ProvisionError("Plan not found");
     }
   });
-  if (await databaseExists(adminUrl, dbName)) throw new ProvisionError(`Database "${dbName}" already exists`);
+  if (await databaseExists(adminUrl, dbName)) {
+    // Not registered as an organization (checked above). If it's empty, it's
+    // left over from an earlier attempt that failed: remove it and carry on.
+    const tables = await withClient(newUrl, async (c) =>
+      Number((await c.query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'")).rows[0].count)
+    ).catch(() => -1);
+    if (tables !== 0) {
+      throw new ProvisionError(`Database "${dbName}" already exists and is not empty. Remove it or choose another slug.`);
+    }
+    log(`Removing the empty database "${dbName}" left by an earlier failed attempt`);
+    await dropDatabase(adminUrl, dbName);
+  }
 
   log(`Creating database "${dbName}"`);
   await withClient(adminUrl, (c) => c.query(`CREATE DATABASE ${quoteIdent(dbName)}`));
@@ -198,7 +272,18 @@ export async function createOrganization(
     return org;
   } catch (err) {
     log("Setup failed, removing the half-created database");
-    await withClient(adminUrl, (c) => c.query(`DROP DATABASE IF EXISTS ${quoteIdent(dbName)}`)).catch(() => {});
-    throw err;
+    try {
+      await dropDatabase(adminUrl, dbName);
+    } catch (dropErr) {
+      console.error(`[provision] could not remove "${dbName}":`, dropErr.message);
+    }
+    console.error(`[provision] creating "${slug}" failed:`, err.message);
+    if (err instanceof ProvisionError) throw err;
+    throw new ProvisionError(`Couldn't create the organization: ${err.message}`);
   }
+}
+
+/** Drop a database even if something is still connected to it (PostgreSQL 13+). */
+async function dropDatabase(adminUrl, dbName) {
+  await withClient(adminUrl, (c) => c.query(`DROP DATABASE IF EXISTS ${quoteIdent(dbName)} WITH (FORCE)`));
 }
