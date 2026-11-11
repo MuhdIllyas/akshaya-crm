@@ -5,12 +5,13 @@ import fs from "fs";
 import crypto from "crypto";
 import pool from "../db.js";
 import jwt from 'jsonwebtoken';
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 
 /* ================= MULTER ================= */
 const storage = multer.diskStorage({
-  destination: "uploads/customer-documents",
+  destination: (req, file, cb) => cb(null, orgUploadPath("customer-documents").rel),
   filename: (req, file, cb) => {
     const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, unique);
@@ -92,7 +93,7 @@ router.get("/:id/download", authenticateToken,  async (req, res) => {
 
     const fullPath = path.resolve(
       process.cwd(),
-      "uploads/customer-documents",
+      orgUploadPath("customer-documents").rel,
       result.rows[0].file_hash
     );
 
@@ -574,7 +575,7 @@ router.post(
 
       // Clean up uploaded file
       if (req.file?.filename) {
-        const filePath = path.join("uploads/customer-documents", req.file.filename);
+        const filePath = path.join(orgUploadPath("customer-documents").rel, req.file.filename);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }

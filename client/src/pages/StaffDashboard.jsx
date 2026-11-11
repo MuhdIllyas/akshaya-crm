@@ -673,13 +673,23 @@ const StaffDashboard = () => {
     }, {});
   }, [recentServiceEntries]);
 
-  const handleTakeWork = async (bookingId) => {
+  // A booking made for another centre needs a confirmation first (server answers 409 OTHER_CENTRE).
+  const handleTakeWork = async (bookingId, confirmOtherCentre = false) => {
     try {
-      await api.put(`/customer-services/${bookingId}/take`);
+      await api.put(`/customer-services/${bookingId}/take`, { confirm_other_centre: confirmOtherCentre });
       toast.success('Work assigned to you');
       await fetchWorkspaceInit(); // 👈 Just call this to refresh everything!
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Already taken by another staff');
+      const data = err.response?.data;
+      if (err.response?.status === 409 && data?.code === 'OTHER_CENTRE') {
+        const ok = window.confirm(
+          `This booking was made for ${data.requested_centre_name}.\n\n` +
+          `Take it anyway? ${data.requested_centre_name} will be told that your centre took it.`
+        );
+        if (ok) return handleTakeWork(bookingId, true);
+        return;
+      }
+      toast.error(data?.error || 'Already taken by another staff');
     }
   };
 
@@ -1474,6 +1484,17 @@ const StaffDashboard = () => {
                                 <h4 className="font-bold text-slate-900 text-sm truncate">{booking.customer_name}</h4>
                                 <p className="text-xs text-slate-500 mt-0.5 truncate">{getCategoryName(booking.service_id)} • {getSubcategoryName(booking.service_id, booking.subcategory_id)}</p>
                                 <p className="text-xs text-slate-500 mt-1 font-mono">{new Date(booking.applied_at).toLocaleString()}</p>
+                                {booking.requested_centre_id ? (
+                                  <span className={`inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border ${
+                                    String(booking.requested_centre_id) === String(localStorage.getItem('centre_id'))
+                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                      : 'bg-amber-50 text-amber-700 border-amber-200'
+                                  }`}>
+                                    Booked for {booking.requested_centre_name || `Centre #${booking.requested_centre_id}`}
+                                  </span>
+                                ) : (
+                                  <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200">Any centre</span>
+                                )}
                               </div>
                             </div>
                             <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 min-h-[40px] bg-navy-700 text-white text-xs font-bold rounded-xl hover:bg-navy-800 shadow-sm shrink-0 transition-colors">

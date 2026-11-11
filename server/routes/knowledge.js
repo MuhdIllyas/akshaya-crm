@@ -5,6 +5,7 @@ import { requirePermission } from './knowledge/permissions.js';
 import multer from 'multer';
 import fs from 'fs';
 import path from 'path';
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 
@@ -54,7 +55,7 @@ if (!fs.existsSync(uploadDir)) {
 // 2. Configure Multer Storage
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, uploadDir);
+    cb(null, orgUploadPath('knowledge').dir);
   },
   filename: function (req, file, cb) {
     // Generate a unique filename: knowledge-163234234-8234.png
@@ -223,7 +224,7 @@ router.post('/upload', authorizeRoles(ALL_STAFF), handleUpload, (req, res) => {
 
     // Return the relative URLs so the database can store them safely
     const fileUrls = req.files.map(file => ({
-      url: `/uploads/knowledge/${file.filename}`,
+      url: `${orgUploadPath('knowledge').url}/${file.filename}`,
       name: file.originalname
     }));
 

@@ -1,5 +1,6 @@
 import React from 'react';
 import { FiGrid, FiActivity, FiHome, FiFileText, FiPlusCircle, FiUpload } from 'react-icons/fi';
+import CentreChatCard from '../../components/CentreChatCard';
 
 const CustomerDashboard = () => {
   const customerName = localStorage.getItem("customer_name");
@@ -74,6 +75,8 @@ const CustomerDashboard = () => {
           </div>
         </div>
       </div>
+
+      <CentreChatCard />
     </>
   );
 };

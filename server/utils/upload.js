@@ -1,6 +1,7 @@
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 // Ensure the directory exists, or create it
 const staffUploadDir = path.join(process.cwd(), "uploads", "staff");
@@ -10,7 +11,7 @@ if (!fs.existsSync(staffUploadDir)) {
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, staffUploadDir); 
+    cb(null, orgUploadPath('staff').dir);
   },
   filename: function (req, file, cb) {
     // Creates a safe, unique filename: e.g., staff-1698123456789.jpg

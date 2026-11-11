@@ -5,6 +5,9 @@ import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo } from "react-icons/fi"
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
+import PortalEntry from "./pages/PortalEntry";
+import PlatformLogin from "./pages/platform/PlatformLogin";
+import PlatformAdmin from "./pages/platform/PlatformAdmin";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
@@ -283,6 +286,11 @@ const App = () => {
 
         {/* 2. AUTH & PUBLIC SERVICES */}
         <Route path="/login" element={<Login />} />
+        {/* A business's own portal link: /portal/<slug>/login, /portal/<slug>/customer/register … */}
+        <Route path="/portal/:slug/*" element={<PortalEntry />} />
+        {/* Platform admin (software owner): organizations, plans, billing */}
+        <Route path="/platform/login" element={<PlatformLogin />} />
+        <Route path="/platform" element={<PlatformAdmin />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/aadhaar-docufinder" element={<AadhaarDocu />} />
         <Route path="/customer/register" element={<CustomerRegistration />} />

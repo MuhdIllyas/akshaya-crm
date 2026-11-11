@@ -4,6 +4,9 @@ import pool from "../db.js";
 import jwt from "jsonwebtoken";
 import { upload } from "../utils/upload.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { orgUploadPath } from '../tenancy/uploads.js';
+import { checkCountLimit } from '../tenancy/limits.js';
+import fs from 'fs';
 
 const router = express.Router();
 
@@ -95,7 +98,7 @@ router.put("/me", authMiddleware(["staff", "supervisor", "admin", "superadmin"])
   const { name, phone, emergencyContact, emergencyRelationship } = req.body;
 
   // Only change the photo when a new file is uploaded; otherwise keep the existing one
-  const newPhotoUrl = req.file ? `/uploads/staff/${req.file.filename}` : null;
+  const newPhotoUrl = req.file ? `${orgUploadPath('staff').url}/${req.file.filename}` : null;
 
   try {
     const result = await pool.query(
@@ -160,6 +163,14 @@ router.post("/me/change-password", authMiddleware(["staff", "supervisor", "admin
 
 // Add new staff member
 router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('photo'), async (req, res) => {
+  // Plan limit on active staff (superadmins don't count)
+  if (String(req.body?.role || '').toLowerCase() !== 'superadmin') {
+    const over = await checkCountLimit('staff');
+    if (over) {
+      if (req.file?.path) fs.unlink(req.file.path, () => {}); // don't keep the uploaded file
+      return res.status(over.status).json(over.body);
+    }
+  }
   const client = await pool.connect();
   try {
     const {
@@ -193,7 +204,7 @@ router.post("/add", authMiddleware(["admin", "superadmin"]), upload.single('phot
     let photoUrl = req.body.photo || null; 
     if (req.file) {
       // If a file was uploaded, save the public URL to the database
-      photoUrl = `/uploads/staff/${req.file.filename}`;
+      photoUrl = `${orgUploadPath('staff').url}/${req.file.filename}`;
     }
 
     if (!username || !name || !role || !email || !password) {
@@ -621,7 +632,7 @@ router.put("/:id", authMiddleware(["admin", "superadmin"]), upload.single('photo
   // Only accept a stored relative path from the body, never a full URL or base64 preview.
   let photoUrl = null;
   if (req.file) {
-    photoUrl = `/uploads/staff/${req.file.filename}`;
+    photoUrl = `${orgUploadPath('staff').url}/${req.file.filename}`;
   } else if (typeof req.body.photo === "string" && req.body.photo.startsWith("/uploads/")) {
     photoUrl = req.body.photo;
   }

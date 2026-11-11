@@ -1,6 +1,7 @@
 import express from 'express';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
+import { currentTenant } from '../tenancy/context.js';
 import { deviceAuth } from '../middlewares/deviceAuth.js';
 
 export const authMiddleware = (allowedRoles) => async (req, res, next) => {
@@ -43,7 +44,7 @@ router.get("/generate-pairing-token", authMiddleware([ "admin", "superadmin"]), 
         
         // Create a temporary token that expires in 15 minutes
         const pairingToken = jwt.sign(
-            { type: "pairing", centre_id: centreId },
+            { type: "pairing", centre_id: centreId, org: currentTenant().slug },
             process.env.JWT_SECRET,
             { expiresIn: "15m" }
         );
@@ -92,7 +93,8 @@ router.post('/pair', async (req, res) => {
             {
                 device_id: deviceId,
                 centre_id: centreId,
-                type: "device"
+                type: "device",
+                org: currentTenant().slug
             },
             process.env.JWT_SECRET
         );

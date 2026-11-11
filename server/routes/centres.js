@@ -3,11 +3,14 @@ import pool from "../db.js";
 import jwt from "jsonwebtoken";
 import multer from "multer"; 
 import path from "path";
+import { orgUploadPath } from '../tenancy/uploads.js';
+import { checkCountLimit } from '../tenancy/limits.js';
+import fs from 'fs';
 
 const router = express.Router();
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, 'uploads/'),
+  destination: (req, file, cb) => cb(null, orgUploadPath().rel),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
 });
 const upload = multer({ storage });
@@ -39,6 +42,22 @@ const authMiddleware = (allowedRoles) => async (req, res, next) => {
     res.status(401).json({ error: "Invalid or expired token" });
   }
 };
+
+// Each centre needs its own WhatsApp number; returns the centre already using it.
+async function whatsappAccountTakenBy(accountId, exceptCentreId = null) {
+  if (!accountId) return null;
+  const { rows } = await pool.query(
+    `SELECT name FROM centres
+      WHERE communication_account_id = $1 AND ($2::int IS NULL OR id <> $2)
+      LIMIT 1`,
+    [accountId, exceptCentreId]
+  );
+  return rows[0]?.name || null;
+}
+
+const sharedNumberError = (centreName) => ({
+  error: `This WhatsApp number is already used by ${centreName}. Each centre needs its own WhatsApp number (or none).`,
+});
 
 // GET /api/centres
 router.get("/", authMiddleware(["superadmin"]), async (req, res) => {
@@ -146,7 +165,14 @@ router.post("/", authMiddleware(["superadmin"]), upload.single("logo"), async (r
     return res.status(400).json({ error: "Centre name is required" });
   }
 
-  const logoPath = req.file ? `/uploads/${req.file.filename}` : null;
+  // Plan limit on number of centres
+  const over = await checkCountLimit("centres");
+  if (over) {
+  if (req.file?.path) fs.unlink(req.file.path, () => {}); // don't keep the uploaded file
+    return res.status(over.status).json(over.body);
+  }
+
+  const logoPath = req.file ? `${orgUploadPath().url}/${req.file.filename}` : null;
 
   try {
     if (admin_id) {
@@ -155,6 +181,9 @@ router.post("/", authMiddleware(["superadmin"]), upload.single("logo"), async (r
         return res.status(400).json({ error: "Invalid admin ID" });
       }
     }
+
+    const takenBy = await whatsappAccountTakenBy(communication_account_id || null);
+    if (takenBy) return res.status(400).json(sharedNumberError(takenBy));
 
     const result = await pool.query(
       `INSERT INTO centres (
@@ -209,6 +238,9 @@ router.put("/:id", authMiddleware(["superadmin"]), upload.single("logo"), async 
       }
     }
 
+    const takenBy = await whatsappAccountTakenBy(communication_account_id || null, Number(id));
+    if (takenBy) return res.status(400).json(sharedNumberError(takenBy));
+
     // Dynamically build the update query to avoid overwriting the logo if a new one isn't uploaded
     let updateQuery = `
       UPDATE centres 
@@ -235,7 +267,7 @@ router.put("/:id", authMiddleware(["superadmin"]), upload.single("logo"), async 
 
     if (req.file) {
       updateQuery += `, logo = $14`;
-      params.push(`/uploads/${req.file.filename}`);
+      params.push(`${orgUploadPath().url}/${req.file.filename}`);
     }
 
     updateQuery += ` WHERE id = $${params.length + 1} RETURNING *`;

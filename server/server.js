@@ -8,7 +8,18 @@ import cors from "cors";
 import jwt from "jsonwebtoken";
 import { createServer } from "http";
 import { Server } from "socket.io";
-import pkg from "pg";
+import pool from "./db.js";
+import { tenantMiddleware } from "./tenancy/middleware.js";
+import { runWithTenant } from "./tenancy/context.js";
+import { DEFAULT_ORG_SLUG, getOrgBySlug, getDefaultOrg, isMultiTenant, getControlPool } from "./tenancy/registry.js";
+import { applyControlSchema } from "./tenancy/provision.js";
+import { startBillingJobs } from "./tenancy/billing.js";
+import { planMiddleware } from "./tenancy/limits.js";
+import platformRoutes from "./routes/platform.js";
+import { attachSocketServer, roomFor, orgRoom, io } from "./tenancy/io.js";
+import orgRoutes from "./routes/org.js";
+import orgSettingsRoutes from "./routes/orgSettings.js";
+import portalRoutes from "./routes/portal.js";
 
 /* ================================
    ROUTES
@@ -87,8 +98,6 @@ import leadsRoutes from "./routes/leads.js";
 
 import "./routes/scheduler.js";
 
-const { Pool } = pkg;
-
 /* ================================
    EXPRESS + HTTP SERVER
 ================================ */
@@ -107,7 +116,7 @@ app.use(cors({
    SOCKET.IO SETUP
 ================================ */
 
-const io = new Server(httpServer, {
+const socketServer = new Server(httpServer, {
   cors: {
     origin: process.env.FRONTEND_URL || "*",
     methods: ["GET", "POST", "PUT", "DELETE"],
@@ -119,7 +128,7 @@ const io = new Server(httpServer, {
    SOCKET AUTH MIDDLEWARE
 ================================ */
 
-io.use((socket, next) => {
+socketServer.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
 
@@ -128,6 +137,13 @@ io.use((socket, next) => {
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Each socket belongs to the organization its token was issued by.
+    const org = await getOrgBySlug(decoded.org || DEFAULT_ORG_SLUG);
+    if (!org || org.status !== "active") {
+      return next(new Error("Organization not available"));
+    }
+    socket.org = org;
 
     // Fork: Is this a Companion Device or a Web User?
     if (decoded.type === "device") {
@@ -154,8 +170,13 @@ io.use((socket, next) => {
    SOCKET CONNECTION
 ================================ */
 
-io.on("connection", (socket) => {
+socketServer.on("connection", (socket) => {
   console.log("🔌 Client connected:", socket.id);
+
+  // Rooms are kept per organization: "<slug>|user:5" etc.
+  const org = socket.org;
+  const room = (name) => roomFor(org, name);
+  socket.join(orgRoom(org));
 
  /* ==========================
      COMPANION DEVICE LOGIC
@@ -163,11 +184,11 @@ io.on("connection", (socket) => {
   if (socket.device) {
     console.log(`📱 Device Connected: ${socket.device.id}`);
     
-    socket.join(`centre:${socket.device.centre_id}`);
-    socket.join(`device:${socket.device.id}`);
+    socket.join(room(`centre:${socket.device.centre_id}`));
+    socket.join(room(`device:${socket.device.id}`));
 
     // ---> NEW: Listen for incoming SMS and route to Messenger <---
-    socket.on("incoming_sms", async (smsData) => {
+    socket.on("incoming_sms", (smsData) => runWithTenant(org, async () => {
       console.log(`\n📩 SMS Forwarded from Device [${socket.device.id}]:`);
       console.log(`Sender: ${smsData.sender}`);
       console.log(`Message: ${smsData.message}`);
@@ -258,7 +279,7 @@ io.on("connection", (socket) => {
       } catch (error) {
         console.error("❌ Failed to process incoming SMS:", error);
       }
-    });
+    }));
 
     socket.on("disconnect", () => {
       console.log(`🔴 Device Disconnected: ${socket.device.id}`);
@@ -279,7 +300,8 @@ io.on("connection", (socket) => {
      SEND CURRENT ONLINE USERS
   ========================== */
   // Filter out undefined (which would happen if a device is connected without a user object)
-  const onlineUsers = Array.from(io.sockets.sockets.values())
+  const onlineUsers = Array.from(socketServer.sockets.sockets.values())
+    .filter((s) => s.org?.slug === org.slug)
     .map((s) => s.user?.id)
     .filter(Boolean);
 
@@ -290,10 +312,10 @@ io.on("connection", (socket) => {
   ========================== */
 
   // 🔥 CHANGED 'staff:' to 'user:' so it matches your React frontend!
-  socket.join(`user:${user.id}`);
+  socket.join(room(`user:${user.id}`));
 
   if (user.centre_id) {
-    socket.join(`centre:${user.centre_id}`);
+    socket.join(room(`centre:${user.centre_id}`));
   }
 
   console.log(
@@ -305,7 +327,7 @@ io.on("connection", (socket) => {
   ========================== */
 
   if (user.centre_id) {
-    socket.to(`centre:${user.centre_id}`).emit("user_online", {
+    socket.to(room(`centre:${user.centre_id}`)).emit("user_online", {
       userId: user.id
     });
   }
@@ -315,12 +337,12 @@ io.on("connection", (socket) => {
   ========================== */
 
   socket.on("join", ({ staffId, centreId }) => {
-    socket.join(`user:${staffId}`);
-    socket.join(`centre:${centreId}`);
+    socket.join(room(`user:${staffId}`));
+    socket.join(room(`centre:${centreId}`));
   });
 
   socket.on("join_conversation", (conversationId) => {
-    socket.join(`conversation:${conversationId}`);
+    socket.join(room(`conversation:${conversationId}`));
 
     console.log(
       `💬 User ${user.id} joined conversation:${conversationId}`
@@ -328,7 +350,7 @@ io.on("connection", (socket) => {
   });
 
   socket.on("leave_conversation", (conversationId) => {
-    socket.leave(`conversation:${conversationId}`);
+    socket.leave(room(`conversation:${conversationId}`));
 
     console.log(
       `👋 User ${user.id} left conversation:${conversationId}`
@@ -341,7 +363,7 @@ io.on("connection", (socket) => {
 
   socket.on("typing", ({ conversationId, isTyping }) => {
     socket
-      .to(`conversation:${conversationId}`)
+      .to(room(`conversation:${conversationId}`))
       .emit("user_typing", {
         userId: user.id,
         conversationId,
@@ -356,7 +378,7 @@ io.on("connection", (socket) => {
     console.log("❌ Client disconnected:", socket.id);
 
     if (user.centre_id) {
-      socket.to(`centre:${user.centre_id}`).emit("user_offline", {
+      socket.to(room(`centre:${user.centre_id}`)).emit("user_offline", {
         userId: user.id
       });
     }
@@ -371,21 +393,25 @@ app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
 /* ================================
-   POSTGRESQL
+   ORGANIZATIONS (multi-tenancy)
+   Every request runs inside its organization; db.js and io then use
+   that organization's database and socket rooms.
 ================================ */
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || process.env.PG_URI,
-  // Only force SSL if we are in production mode
-  ssl: process.env.NODE_ENV === "production"
-    ? { rejectUnauthorized: false }
-    : false,
-});
+attachSocketServer(socketServer);
 
-pool
-  .connect()
-  .then(() => console.log("✅ Connected to PostgreSQL"))
-  .catch((err) => console.error("❌ PG Connect Error:", err));
+// Public info about an organization (name, status) for the portal pages.
+// Mounted before the tenant middleware: it reads the control database only.
+app.use("/api/org", orgRoutes);
+
+// Platform-admin page (you, the software owner): plans, organizations, billing.
+// Uses only the control database and its own login, so it sits before the tenant middleware.
+app.use("/api/platform", platformRoutes);
+
+app.use(tenantMiddleware());
+
+// Plan limits: customer portal on/off and storage, checked before the routes.
+app.use(planMiddleware());
 
 app.use((req, res, next) => {
   req.db = pool;
@@ -406,6 +432,8 @@ app.use((req, res, next) => {
 ================================ */
 
 app.use("/api/auth", authRoute);
+app.use("/api/org-settings", orgSettingsRoutes);
+app.use("/api/portal", portalRoutes);
 app.use("/api/staff", staffRoute);
 app.use("/api/wallet", walletRoute);
 
@@ -509,8 +537,24 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 5000;
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
+  try {
+    if (isMultiTenant()) {
+      // Keep the control database's tables up to date (plans, billing, …).
+      await applyControlSchema(getControlPool());
+      startBillingJobs();
+    }
+    const org = await getDefaultOrg();
+    await runWithTenant(org, () => pool.query("SELECT 1"));
+    console.log(
+      isMultiTenant()
+        ? `✅ Multi-tenant mode: control DB ready, default organization "${org.slug}" connected`
+        : "✅ Connected to PostgreSQL (single-organization mode)"
+    );
+  } catch (err) {
+    console.error("❌ Database startup check failed:", err.message);
+  }
 });
 
 app.get("/", (req, res) => {

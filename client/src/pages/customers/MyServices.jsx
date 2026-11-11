@@ -578,6 +578,13 @@ const MyServices = () => {
                           <span className="inline-flex items-center bg-navy-500/10 px-2.5 py-1 rounded-lg text-xs text-navy-700 border border-navy-500/10">
                             {service.category || 'Service'}
                           </span>
+                          {(service.handling_centre_name || service.requested_centre_name) && (
+                            <span className="inline-flex items-center bg-emerald-50 px-2.5 py-1 rounded-lg text-xs text-emerald-700 border border-emerald-100">
+                              {service.handling_centre_name
+                                ? `Handled by ${service.handling_centre_name}`
+                                : `Booked with ${service.requested_centre_name}`}
+                            </span>
+                          )}
                           {service.subcategory_name && (
                             <span className="inline-flex items-center bg-navy-500/10 px-2.5 py-1 rounded-lg text-xs text-navy-700 border border-navy-500/10">
                               {service.subcategory_name}

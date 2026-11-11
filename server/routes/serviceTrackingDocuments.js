@@ -7,6 +7,7 @@ import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { triggerNotification } from "../utils/communication/notificationEngine.js";
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 
@@ -23,7 +24,7 @@ const authenticateToken = (req, res, next) => {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = path.join("private_uploads", "tracking_documents", req.params.trackingId);
+    const uploadPath = path.join(orgUploadPath("tracking_documents", "private_uploads").rel, req.params.trackingId);
     if (!fs.existsSync(uploadPath)) fs.mkdirSync(uploadPath, { recursive: true });
     cb(null, uploadPath);
   },

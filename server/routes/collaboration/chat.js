@@ -11,6 +11,7 @@ import notificationService from "../../utils/notificationService.js";
 import { notificationTemplates } from "../../utils/notificationTemplates.js";
 
 import Communication from '../../services/communication/communicationEngine.js';
+import { orgUploadPath } from '../../tenancy/uploads.js';
 
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
@@ -29,7 +30,7 @@ if (!fs.existsSync(fullUploadPath)) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, fullUploadPath);
+    cb(null, orgUploadPath('chat').dir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
@@ -898,7 +899,7 @@ router.delete("/message/:messageId", authenticateToken, async (req, res) => {
     const fileUrl = message.rows[0].file_url;
     if (fileUrl) {
       const fileName = path.basename(fileUrl);
-      const filePath = path.join(fullUploadPath, fileName);
+      const filePath = path.join(orgUploadPath('chat').dir, fileName);
       
       try {
         if (fs.existsSync(filePath)) {

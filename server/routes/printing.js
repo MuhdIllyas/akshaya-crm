@@ -8,6 +8,8 @@ import path from 'path';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
+import { forEachOrg } from '../tenancy/jobs.js';
+import { orgUploadPath } from '../tenancy/uploads.js';
 import {
   countPdfPages, isPdfBuffer, parsePageRange, parseCopies, calculatePrice, toBool, MAX_COPIES,
 } from './printingHelpers.js';
@@ -18,7 +20,7 @@ const uploadDir = path.join(process.cwd(), 'uploads', 'printjobs');
 fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, uploadDir),
+  destination: (req, file, cb) => cb(null, orgUploadPath('printjobs').dir),
   // FIX: never trust the client's extension; random, unguessable file name
   filename: (req, file, cb) => cb(null, `printjob-${Date.now()}-${crypto.randomBytes(8).toString('hex')}.pdf`),
 });
@@ -194,7 +196,7 @@ router.post('/upload', (req, res, next) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'DRAFT',$14)
        RETURNING id, status, price, pages, page_range`,
       [centreId, customer_name || null, phone || null, String(file.originalname || 'document.pdf').slice(0, 200),
-        `uploads/printjobs/${file.filename}`, printer.rows[0].id, totalCopies, paperSize, isColor, isDuplex,
+        `${orgUploadPath('printjobs').rel}/${file.filename}`, printer.rows[0].id, totalCopies, paperSize, isColor, isDuplex,
         range.count, range.normalized, totalPrice, publicToken],
     );
     const job = insert.rows[0];
@@ -511,14 +513,15 @@ async function cleanupPrintFiles() {
     );
     for (const r of rows) {
       const full = path.resolve(process.cwd(), r.filepath || '');
-      if (full.startsWith(uploadDir)) removeFile(full);
+      if (full.startsWith(orgUploadPath('printjobs').dir)) removeFile(full);
     }
     if (rows.length) console.log(`[Print Module] Deleted ${rows.length} old print file(s)`);
   } catch (e) {
     console.error('[Print Module] Cleanup failed:', e.message);
   }
 }
-setInterval(cleanupPrintFiles, 30 * 60 * 1000).unref();
-setTimeout(cleanupPrintFiles, 60 * 1000).unref();
+const cleanupAllOrgs = () => forEachOrg('print cleanup', cleanupPrintFiles);
+setInterval(cleanupAllOrgs, 30 * 60 * 1000).unref();
+setTimeout(cleanupAllOrgs, 60 * 1000).unref();
 
 export default router;

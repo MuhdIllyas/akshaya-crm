@@ -1,6 +1,16 @@
 // utils/whatsapp.js
 import axios from "axios";
 import { whatsappTemplates } from "../config/whatsappTemplates.js";
+import { getPortalWhatsAppAccount } from "./whatsappAccount.js";
+
+// Sends through the current organization's WhatsApp account
+// (Communication Settings), not a token from server/.env.
+const post = async (payload) => {
+  const account = await getPortalWhatsAppAccount();
+  return axios.post(`${account.baseUrl}/messages`, payload, {
+    headers: { Authorization: `Bearer ${account.token}`, "Content-Type": "application/json" },
+  });
+};
 
 export const sendWhatsAppOTP = async ({ phone, otp }) => {
   const tpl = whatsappTemplates.OTP_APP;
@@ -8,12 +18,7 @@ export const sendWhatsAppOTP = async ({ phone, otp }) => {
     to: `91${phone}`,
     ...tpl.build({ otp })
   };
-  const headers = {
-    Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-    "Content-Type": "application/json"
-  };
-  const url = `${process.env.LIBROMI_BASE_URL}/messages`;
-  return axios.post(url, payload, { headers });
+  return post(payload);
 };
 
 // Send plain text message
@@ -23,12 +28,7 @@ export const sendWhatsAppText = async ({ to, message }) => {
     type: "text",
     text: { body: message }
   };
-  const headers = {
-    Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-    "Content-Type": "application/json"
-  };
-  const url = `${process.env.LIBROMI_BASE_URL}/messages`;
-  return axios.post(url, payload, { headers });
+  return post(payload);
 };
 
 // Send template message – matches the exact cURL format
@@ -50,10 +50,5 @@ export const sendWhatsAppTemplate = async ({ to, templateName, params = [] }) =>
       ] : []
     }
   };
-  const headers = {
-    Authorization: `Bearer ${process.env.LIBROMI_ACCESS_TOKEN}`,
-    "Content-Type": "application/json"
-  };
-  const url = `${process.env.LIBROMI_BASE_URL}/messages`;
-  return axios.post(url, payload, { headers });
+  return post(payload);
 };

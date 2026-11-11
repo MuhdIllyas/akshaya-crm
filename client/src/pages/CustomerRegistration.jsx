@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import { FaWhatsapp } from "react-icons/fa";
 import AuthShell, { Field, OtpInput, Spinner, pillPrimary, pillSecondary } from "../components/login/AuthShell";
+import OrgBadge from "../components/OrgBadge";
 
 // Benefits that rotate in the brand card, like the services list on the login page
 const benefits = [
@@ -267,6 +268,7 @@ const CustomerRegistration = () => {
   return (
     <AuthShell brandCard={brandCard}>
       <form className="my-auto w-full max-w-sm py-8 md:mx-auto xl:max-w-md" onSubmit={submitStep}>
+        <OrgBadge className="mb-5" />
         <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Customer Registration</p>
         <h1 className="mt-2 text-3xl font-bold text-slate-900 sm:text-4xl">
           {titles[verificationStep][0]}

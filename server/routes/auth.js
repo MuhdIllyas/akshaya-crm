@@ -2,6 +2,7 @@ import express from "express";
 import pool from "../db.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import { currentTenant } from "../tenancy/context.js";
 
 const router = express.Router();
 
@@ -39,7 +40,8 @@ router.post("/login", async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, centre_id: user.centre_id },
+      // `org` ties the token to this organization's database (see tenancy/middleware.js).
+      { id: user.id, username: user.username, role: user.role, centre_id: user.centre_id, org: currentTenant().slug },
       process.env.JWT_SECRET,
       { expiresIn: "1d" }
     );
@@ -52,7 +54,8 @@ router.post("/login", async (req, res) => {
       role: user.role,
       centre_id: user.centre_id || null,
       centre_name: user.centre_name || null,
-      photo: user.photo || null
+      photo: user.photo || null,
+      org_slug: currentTenant().slug
     });
   } catch (err) {
     console.error("Login error:", err.message, err.stack);

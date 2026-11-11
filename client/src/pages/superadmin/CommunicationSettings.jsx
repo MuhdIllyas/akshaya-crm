@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { FiPlus, FiMessageSquare, FiSettings, FiCopy, FiCheck, FiEdit, FiPower } from "react-icons/fi";
+import { FiPlus, FiMessageSquare, FiSettings, FiCopy, FiCheck, FiEdit, FiPower, FiGlobe } from "react-icons/fi";
+import OnlineBookingSettings from "./OnlineBookingSettings";
 
 const CommunicationSettings = () => {
   const [activeTab, setActiveTab] = useState("accounts");
@@ -15,12 +16,11 @@ const CommunicationSettings = () => {
   // NEW: Track if we are editing an existing account
   const [editingId, setEditingId] = useState(null);
 
-  const [accountForm, setAccountForm] = useState({
-    name: "",
-    phone_number: "",
-    access_token: "",
-    channel_id: "", 
-  });
+  const [accountForm, setAccountForm] = useState({ name: "", phone_number: "", access_token: "", channel_id: "", api_key: "", use_for_portal_otp: false });
+  // Saved developer key for the account being edited (the key itself is never sent back)
+  const [editingHasApiKey, setEditingHasApiKey] = useState(false);
+  // This organization's webhook URL for Libromi (includes ?org=… for other businesses)
+  const [webhookUrl, setWebhookUrl] = useState("");
 
   const [selectedMappingAccount, setSelectedMappingAccount] = useState("");
   const [mappings, setMappings] = useState({});
@@ -38,6 +38,12 @@ const CommunicationSettings = () => {
 
   useEffect(() => {
     fetchAccounts();
+    axios
+      .get(`${import.meta.env.VITE_API_URL}/api/communication/webhook-url`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
+      })
+      .then((res) => setWebhookUrl(res.data.webhook_url))
+      .catch(() => setWebhookUrl(`${import.meta.env.VITE_API_URL}/api/webhook/whatsapp`));
   }, []);
 
   const fetchAccounts = async () => {
@@ -91,7 +97,10 @@ const CommunicationSettings = () => {
       phone_number: acc.phone_number,
       access_token: "", 
       channel_id: acc.channel_id || "",
+      api_key: "",
+      use_for_portal_otp: !!acc.use_for_portal_otp,
     });
+    setEditingHasApiKey(!!acc.has_api_key);
     setShowAddModal(true);
   };
 
@@ -113,11 +122,12 @@ const CommunicationSettings = () => {
   const closeModal = () => {
     setShowAddModal(false);
     setEditingId(null);
-    setAccountForm({ name: "", phone_number: "", access_token: "", channel_id: "" });
+    setAccountForm({ name: "", phone_number: "", access_token: "", channel_id: "", api_key: "", use_for_portal_otp: false });
+    setEditingHasApiKey(false);
   };
 
   const copyWebhook = async (accountId) => {
-    const url = `${import.meta.env.VITE_API_URL}/api/webhook/whatsapp`;
+    const url = webhookUrl || `${import.meta.env.VITE_API_URL}/api/webhook/whatsapp`;
     try {
       await navigator.clipboard.writeText(url);
       setCopiedId(accountId);
@@ -210,6 +220,12 @@ const CommunicationSettings = () => {
     </span>
   );
 
+  const OtpBadge = () => (
+    <span className="inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full bg-sky-50 text-sky-700 border border-sky-200">
+      Customer OTPs
+    </span>
+  );
+
   const inputCls = "w-full px-3.5 py-2.5 border border-slate-300 rounded-xl text-sm bg-white focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500 disabled:bg-slate-100 disabled:text-slate-400";
 
   return (
@@ -222,7 +238,7 @@ const CommunicationSettings = () => {
         </div>
 
         <div className="flex w-full sm:inline-flex sm:w-auto bg-slate-200/70 rounded-xl p-1 mb-6" role="tablist">
-          {[["accounts", FiMessageSquare, "WhatsApp Accounts"], ["templates", FiSettings, "Template Mappings"]].map(([id, Icon, label]) => (
+          {[["accounts", FiMessageSquare, "WhatsApp Accounts"], ["templates", FiSettings, "Template Mappings"], ["bookings", FiGlobe, "Online Bookings"]].map(([id, Icon, label]) => (
             <button
               key={id}
               role="tab"
@@ -271,6 +287,22 @@ const CommunicationSettings = () => {
               </button>
             </div>
 
+            {webhookUrl && (
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-sm px-4 py-3">
+                <p className="text-xs font-medium text-slate-500">Webhook URL to register in Libromi</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="min-w-0 flex-1 truncate text-sm text-slate-800">{webhookUrl}</code>
+                  <button
+                    onClick={() => copyWebhook("banner")}
+                    className="shrink-0 p-2 rounded-lg text-slate-500 hover:text-navy-700 hover:bg-slate-100 transition-colors"
+                    aria-label="Copy webhook URL"
+                  >
+                    {copiedId === "banner" ? <FiCheck className="text-emerald-600" size={16} /> : <FiCopy size={16} />}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
               <table className="min-w-full divide-y divide-slate-200">
@@ -291,6 +323,7 @@ const CommunicationSettings = () => {
                             <FiMessageSquare size={18} />
                           </span>
                           <span className="font-medium text-slate-900">{acc.name}</span>
+                          {acc.use_for_portal_otp && <OtpBadge />}
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-slate-600">{acc.phone_number}</td>
@@ -323,6 +356,7 @@ const CommunicationSettings = () => {
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-900 truncate">{acc.name}</p>
+                      {acc.use_for_portal_otp && <OtpBadge />}
                       <p className="text-sm text-slate-500 truncate">{acc.phone_number}</p>
                     </div>
                     <StatusPill active={acc.is_active} />
@@ -403,6 +437,9 @@ const CommunicationSettings = () => {
           </div>
         )}
 
+        {/* Tab 3: Online Bookings (booking mode, centre links/QR) */}
+        {activeTab === "bookings" && <OnlineBookingSettings accounts={accounts} />}
+
       {/* Add / Edit Account Modal */}
       {showAddModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50" role="dialog" aria-modal="true" aria-label={editingId ? "Edit WhatsApp Account" : "Add New WhatsApp Account"}>
@@ -467,6 +504,33 @@ const CommunicationSettings = () => {
                     <p className="text-xs text-slate-500 mt-1.5">Only fill this if you need to update the token.</p>
                   )}
                 </div>
+                <div>
+                  <label htmlFor="acc-apikey" className="block text-sm font-medium text-slate-700 mb-1.5">
+                    Libromi Developer API Key
+                  </label>
+                  <input
+                    id="acc-apikey"
+                    type="password"
+                    autoComplete="off"
+                    value={accountForm.api_key}
+                    onChange={(e) => setAccountForm({...accountForm, api_key: e.target.value})}
+                    placeholder={editingHasApiKey ? "Saved. Leave blank to keep it" : "Developer portal → Keys"}
+                    className={inputCls}
+                  />
+                  <p className="text-xs text-slate-500 mt-1.5">Different from the access token. Needed to save photos and documents customers send on WhatsApp.</p>
+                </div>
+                <label className="flex items-start gap-3 rounded-xl border border-slate-200 px-3.5 py-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={accountForm.use_for_portal_otp}
+                    onChange={(e) => setAccountForm({...accountForm, use_for_portal_otp: e.target.checked})}
+                    className="mt-0.5 h-4 w-4 accent-navy-700"
+                  />
+                  <span>
+                    <span className="block text-sm font-medium text-slate-800">Send customer portal OTPs from this number</span>
+                    <span className="block text-xs text-slate-500 mt-0.5">Used for customer registration and login. If no account is chosen, OTPs are sent from the Akshaya Sahayi platform number.</span>
+                  </span>
+                </label>
               </div>
               <div className="mt-8 flex justify-end gap-3">
                 <button

@@ -7,6 +7,9 @@ import fs from 'fs';
 import path from 'path';
 import jwt from 'jsonwebtoken';
 import pool from '../db.js';
+import { runWithTenant } from '../tenancy/context.js';
+import { reservePairingCode, orgForPairingCode, withOrgPrefix } from '../tenancy/pairing.js';
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 router.use(express.json({ limit: '256kb' }));
@@ -70,6 +73,7 @@ router.post('/pairing-codes', authenticateToken, requireAdmin, async (req, res, 
     await pool.query(`DELETE FROM print_pairing_codes WHERE expires_at < now() - interval '1 day'`);
     for (let i = 0; i < 5; i++) {
       const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
+      if (!(await reservePairingCode(code))) continue; // code in use by another organization
       const { rowCount } = await pool.query(
         `INSERT INTO print_pairing_codes (code, centre_id, created_by, expires_at)
          VALUES ($1, $2, $3, now() + interval '15 minutes') ON CONFLICT (code) DO NOTHING`,
@@ -127,10 +131,20 @@ router.delete('/stations/:id', authenticateToken, requireAdmin, async (req, res,
 
 /* ============================ AGENT ============================ */
 
+// The agent only sends the 6-digit code, so find which organization issued it
+// and run the pairing in that organization's database.
 router.post('/pair', pairLimiter, async (req, res, next) => {
-  const client = await pool.connect();
   try {
     const code = String(req.body.code || '').replace(/\D/g, '');
+    const org = await orgForPairingCode(code);
+    if (!org || org.status !== 'active') return res.status(400).json({ error: 'Code is wrong or expired. Generate a new one in Sahayi.' });
+    return await runWithTenant(org, () => pairStation(req, res, next, code));
+  } catch (e) { next(e); }
+});
+
+async function pairStation(req, res, next, code) {
+  const client = await pool.connect();
+  try {
     await client.query('BEGIN');
     const { rows } = await client.query(
       `SELECT * FROM print_pairing_codes WHERE code = $1 AND used_at IS NULL AND expires_at > now() FOR UPDATE`,
@@ -144,7 +158,7 @@ router.post('/pair', pairLimiter, async (req, res, next) => {
       `UPDATE print_stations SET revoked_at = now() WHERE centre_id = $1 AND hostname = $2 AND revoked_at IS NULL`,
       [pc.centre_id, hostname],
     );
-    const token = crypto.randomBytes(32).toString('base64url');
+    const token = withOrgPrefix(crypto.randomBytes(32).toString('base64url'));
     const ins = await client.query(
       `INSERT INTO print_stations (centre_id, name, hostname, os, agent_version, token_hash, printers, last_seen_at, created_by)
        VALUES ($1, $2, $2, $3, $4, $5, $6::jsonb, now(), $7) RETURNING id, name`,
@@ -159,7 +173,7 @@ router.post('/pair', pairLimiter, async (req, res, next) => {
     await client.query('ROLLBACK').catch(() => {});
     next(e);
   } finally { client.release(); }
-});
+}
 
 router.post('/heartbeat', agentAuth, async (req, res, next) => {
   try {
@@ -243,7 +257,7 @@ router.get('/jobs/:id/file', agentAuth, async (req, res, next) => {
     const j = rows[0];
     if (!j || j.file_deleted_at) return res.status(404).json({ error: 'File not available' });
     const full = path.resolve(process.cwd(), j.filepath || '');
-    if (!full.startsWith(uploadDir + path.sep) || !fs.existsSync(full)) return res.status(404).json({ error: 'File not found' });
+    if (!full.startsWith(orgUploadPath('printjobs').dir + path.sep) || !fs.existsSync(full)) return res.status(404).json({ error: 'File not found' });
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Cache-Control', 'no-store');
     fs.createReadStream(full).pipe(res);

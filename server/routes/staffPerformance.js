@@ -5,6 +5,7 @@ import pool from '../db.js';
 import { logActivity } from '../utils/activityLogger.js';
 import { ensureTargets, refreshActive } from '../utils/staffTargets.js';
 import { todayIST, addDays } from '../utils/dates.js';
+import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
 
 const router = express.Router();
 
@@ -1559,6 +1560,9 @@ router.get('/workspace-init', async (req, res) => {
       range.all ? '' : `AND (${col})::date BETWEEN $${fromIdx}::date AND $${toIdx}::date`;
     const windowArgs = range.all ? [] : [range.start, range.windowEnd];
 
+    // Strict booking mode: the online queue only shows this centre's bookings and "any centre" ones.
+    const strictBookings = centreId && (await getBookingMode()) === BOOKING_MODES.STRICT;
+
     await ensureTargets(client, { staffId });   // this month's row, no-op once it exists
     await refreshActive(client, { staffId });   // closes any finished month for this staff only
 
@@ -1640,12 +1644,15 @@ router.get('/workspace-init', async (req, res) => {
 
       // 6. Online Bookings (Pending)
       laneC.query(`
-        SELECT cs.*, c.name as customer_name, c.primary_phone as phone
+        SELECT cs.*, c.name as customer_name, c.primary_phone as phone,
+               rc.name as requested_centre_name
         FROM customer_services cs
         LEFT JOIN customers c ON cs.customer_id = c.id
+        LEFT JOIN centres rc ON rc.id = cs.requested_centre_id
         WHERE cs.status = 'under_review'
+          ${strictBookings ? 'AND (cs.requested_centre_id IS NULL OR cs.requested_centre_id = $1)' : ''}
         ORDER BY cs.applied_at DESC
-      `),
+      `, strictBookings ? [centreId] : []),
 
       // 7. Online Bookings (Processing)
       laneC.query(`

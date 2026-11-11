@@ -1,6 +1,7 @@
 import pool from "../db.js";
 import { addStaffToConversation } from './conversationService.js';
 import { triggerNotification } from "./communication/notificationEngine.js";
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 /**
  * 🧮 Centralized Unread Count Calculator
@@ -56,7 +57,7 @@ export async function sendMessage({
     let fileSize = null;
 
     if (file) {
-      fileUrl = `/uploads/chat/${file.filename}`;
+      fileUrl = `${orgUploadPath('chat').url}/${file.filename}`;
       fileName = file.originalname;
       fileSize = file.size;
     }

@@ -1,3 +1,5 @@
+// Must stay first: adds the organization header to every API call.
+import './tenancy/org.js';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';

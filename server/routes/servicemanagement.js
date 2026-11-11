@@ -7,6 +7,7 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
+import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
 import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
@@ -5194,14 +5195,24 @@ router.get('/customer-services', authenticateToken, async (req, res) => {
       SELECT cs.*, 
              c.name AS customer_name, 
              c.primary_phone AS phone,
-             c.email AS email
+             c.email AS email,
+             rc.name AS requested_centre_name,
+             hc.name AS handling_centre_name
       FROM customer_services cs
       JOIN customers c ON cs.customer_id = c.id
+      LEFT JOIN centres rc ON rc.id = cs.requested_centre_id
+      LEFT JOIN centres hc ON hc.id = cs.handling_centre_id
       WHERE 1=1
     `;
 
     const values = [];
     let paramIndex = 1;
+
+    // Strict booking mode: staff only see bookings for their centre or "any centre".
+    if (req.user.role !== 'superadmin' && req.user.centre_id && (await getBookingMode()) === BOOKING_MODES.STRICT) {
+      query += ` AND (cs.requested_centre_id IS NULL OR cs.requested_centre_id = $${paramIndex++})`;
+      values.push(req.user.centre_id);
+    }
 
     if (status) {
       query += ` AND cs.status = $${paramIndex++}`;
@@ -5225,23 +5236,78 @@ router.get('/customer-services', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/servicemanagement/customer-services/:id/take
+// Body: { confirm_other_centre?: boolean }
+// A booking can be made for one centre (requested_centre_id). Depending on the
+// organization's booking mode (superadmin setting):
+//   shared: staff of another centre get 409 OTHER_CENTRE first and must confirm;
+//           the takeover is recorded and the booked centre's admin is notified.
+//   strict: only the booked centre's staff can take it (403 CENTRE_ONLY).
+// "Any centre" bookings (no requested centre) can be taken by anyone.
 router.put('/customer-services/:id/take', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const confirmOtherCentre = req.body?.confirm_other_centre === true;
   const client = await pool.connect();
 
   try {
+    const mode = await getBookingMode();
+    const meRes = await client.query(
+      `SELECT s.name, s.centre_id, c.name AS centre_name
+         FROM staff s LEFT JOIN centres c ON c.id = s.centre_id
+        WHERE s.id = $1`,
+      [req.user.id]
+    );
+    const me = meRes.rows[0] || {};
+    const myCentreId = me.centre_id ?? null;
+
     await client.query('BEGIN');
+
+    const bookingRes = await client.query(
+      `SELECT cs.id, cs.application_number, cs.requested_centre_id,
+              c.name AS requested_centre_name, c.admin_id AS requested_centre_admin_id
+         FROM customer_services cs
+         LEFT JOIN centres c ON c.id = cs.requested_centre_id
+        WHERE cs.id = $1
+        FOR UPDATE OF cs`,
+      [id]
+    );
+    const booking = bookingRes.rows[0];
+    if (!booking) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const otherCentre =
+      booking.requested_centre_id != null && myCentreId != null && Number(booking.requested_centre_id) !== Number(myCentreId);
+
+    if (otherCentre && mode === BOOKING_MODES.STRICT) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        code: 'CENTRE_ONLY',
+        requested_centre_name: booking.requested_centre_name,
+        error: `This booking is for ${booking.requested_centre_name}. Only that centre can take it.`,
+      });
+    }
+    if (otherCentre && !confirmOtherCentre) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        code: 'OTHER_CENTRE',
+        requested_centre_name: booking.requested_centre_name,
+        error: `This booking was made for ${booking.requested_centre_name}.`,
+      });
+    }
 
     const result = await client.query(
       `UPDATE customer_services
        SET status = 'processing',
            assigned_staff_id = $1,
-           taken_at = NOW()
+           taken_at = NOW(),
+           handling_centre_id = $3,
+           taken_from_other_centre = $4
        WHERE id = $2
        AND status = 'under_review'
        AND assigned_staff_id IS NULL
        RETURNING *`,
-      [req.user.id, id]
+      [req.user.id, id, myCentreId, otherCentre]
     );
 
     if (result.rows.length === 0) {
@@ -5251,10 +5317,25 @@ router.put('/customer-services/:id/take', authenticateToken, async (req, res) =>
 
     await client.query('COMMIT');
 
+    if (otherCentre && booking.requested_centre_admin_id) {
+      notificationService.createNotification({
+        recipientStaffId: booking.requested_centre_admin_id,
+        senderStaffId: req.user.id,
+        centreId: booking.requested_centre_id,
+        relatedEntityType: 'customer_service',
+        relatedEntityId: booking.id,
+        type: 'booking_taken_by_other_centre',
+        category: 'service',
+        title: 'Booking taken by another centre',
+        message: `${me.name || 'A staff member'} (${me.centre_name || 'another centre'}) took booking ${booking.application_number || '#' + booking.id}, which was made for ${booking.requested_centre_name}.`,
+        priority: 'normal',
+      }).catch((e) => console.error('Takeover notification failed:', e.message));
+    }
+
     res.json({ message: 'Work assigned successfully', data: result.rows[0] });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Error taking customer service:', err);
     res.status(500).json({ error: 'Failed to take work' });
   } finally {

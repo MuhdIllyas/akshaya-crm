@@ -5,8 +5,10 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import pool from "../db.js";
+import { currentTenant } from "../tenancy/context.js";
 import { sendWhatsAppOTP } from "../utils/whatsapp.js";
 import { authMiddleware } from "./staff.js";
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 
@@ -15,7 +17,7 @@ const router = express.Router();
 ====================================================== */
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadDir = "uploads/customer-photos";
+    const uploadDir = orgUploadPath("customer-photos").rel;
     // Create directory if it doesn't exist
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
@@ -340,7 +342,7 @@ router.post("/verify-otp", async (req, res) => {
     const customer = customerResult.rows[0];
 
     const token = jwt.sign(
-      { customer_id: customer.id },
+      { customer_id: customer.id, org: currentTenant().slug },
       process.env.CUSTOMER_JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -349,7 +351,8 @@ router.post("/verify-otp", async (req, res) => {
       success: true,
       token,
       customerId: customer.id,
-      name: customer.name
+      name: customer.name,
+      org_slug: currentTenant().slug
     });
   } catch (err) {
     console.error("verify-otp error:", err);

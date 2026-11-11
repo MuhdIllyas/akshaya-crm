@@ -149,7 +149,12 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
         st.email as tracking_email,
         st.updated_at as tracking_updated,
         st.notes as tracking_notes,
-        st.priority as tracking_priority
+        st.priority as tracking_priority,
+
+        -- Centre the customer booked with, and the centre handling it
+        cs.requested_centre_id,
+        rc.name as requested_centre_name,
+        hc.name as handling_centre_name
         
       FROM customer_services cs
       LEFT JOIN services s ON cs.service_id = s.id
@@ -158,6 +163,8 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
         st.application_number = cs.application_number 
         OR st.service_entry_id = cs.id
       LEFT JOIN staff ON st.assigned_to = staff.id
+      LEFT JOIN centres rc ON rc.id = cs.requested_centre_id
+      LEFT JOIN centres hc ON hc.id = cs.handling_centre_id
       WHERE cs.customer_id = $1
     `;
     
@@ -247,6 +254,9 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
       
       return {
         id: service.id,
+        requested_centre_id: service.requested_centre_id,
+        requested_centre_name: service.requested_centre_name || null,
+        handling_centre_name: service.handling_centre_name || null,
         service_name: service.service_name || serviceData.service_name || "Unknown Service",
         status: finalStatus,
         status_label: statusLabels[finalStatus] || finalStatus,
@@ -455,7 +465,8 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
     subcategory_id,
     household_id,
     service_data,
-    selected_documents = []
+    selected_documents = [],
+    requested_centre_id = null // centre the customer chose (or its link/QR); null = any centre
   } = req.body;
 
   const client = await pool.connect();
@@ -486,6 +497,14 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
     }
 
     const service = serviceResult.rows[0];
+
+    // Centre the customer booked with (must be one of this organization's centres)
+    let requestedCentreId = null;
+    if (requested_centre_id) {
+      const centreRes = await client.query(`SELECT id FROM centres WHERE id = $1`, [requested_centre_id]);
+      if (centreRes.rows.length === 0) throw new Error("Selected centre not found");
+      requestedCentreId = centreRes.rows[0].id;
+    }
     
     // 2. Get required documents for this service
     let requiredDocs = [];
@@ -577,8 +596,9 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
         last_updated,
         service_data,
         estimated_completion,
-        remarks
-      ) VALUES ($1, $2, $3, $4, $5, 'draft', NOW(), NOW(), $6, $7, $8)
+        remarks,
+        requested_centre_id
+      ) VALUES ($1, $2, $3, $4, $5, 'draft', NOW(), NOW(), $6, $7, $8, $9)
       RETURNING id, application_number
       `,
       [
@@ -603,7 +623,8 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
         service.has_expiry 
           ? addDays(todayIST(), 30)
           : null,
-        "Draft application created by customer"
+        "Draft application created by customer",
+        requestedCentreId
       ]
     );
 
