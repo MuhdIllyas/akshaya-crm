@@ -3,6 +3,9 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
 import ThemeToggle from '../components/ThemeToggle';
+import QuickServiceModal from '@/components/QuickServiceModal';
+import { getWalletsForCentre } from '@/services/walletService';
+import { toast } from 'react-toastify';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -409,11 +412,24 @@ const DashboardLayout = () => {
       ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:image") ? rawPhoto : `${API_BASE_URL}${rawPhoto}`)
       : "";
 
-  // Single-key shortcuts: T = Track Service, S = Service Entry (ignored while typing or with Ctrl/Alt/Cmd held)
+  // Quick Service Entry is a pop-up (not a page): the layout owns it so "Q" works from any page (staff only)
+  const quickEnabled = role === "staff";
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickWallets, setQuickWallets] = useState([]);
+  const quickWalletsLoaded = useRef(false);
+  useEffect(() => {
+    if (!quickOpen || quickWalletsLoaded.current) return;
+    quickWalletsLoaded.current = true;
+    getWalletsForCentre()
+      .then((w) => setQuickWallets(Array.isArray(w) ? w : []))
+      .catch(() => { quickWalletsLoaded.current = false; toast.error("Failed to load wallets"); });
+  }, [quickOpen]);
+
+  // Single-key shortcuts: T = Track Service, S = Service Entry, Q = Quick Service (ignored while typing or with Ctrl/Alt/Cmd held)
   const trackPath = userNavigation.find((item) => item.label === "Track Service")?.path;
   const entryPath = quickEntryItem?.path;
   useEffect(() => {
-    if (!trackPath && !entryPath) return undefined;
+    if (!trackPath && !entryPath && !quickEnabled) return undefined;
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
       const el = e.target;
@@ -423,10 +439,11 @@ const DashboardLayout = () => {
       const k = String(e.key).toLowerCase();
       if (k === "t" && trackPath) { e.preventDefault(); navigate(trackPath); }
       if (k === "s" && entryPath) { e.preventDefault(); navigate(entryPath); }
+      if (k === "q" && quickEnabled) { e.preventDefault(); setQuickOpen(true); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [trackPath, entryPath, navigate]);
+  }, [trackPath, entryPath, quickEnabled, navigate]);
 
   // Unread total in the browser tab title, e.g. "(3) Akshaya Sahayi" (same total as the phone menu dot)
   const unreadTotal = role === "customer" ? 0 : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
@@ -826,6 +843,10 @@ const DashboardLayout = () => {
         </main>
       </div>
       
+      {quickEnabled && (
+        <QuickServiceModal open={quickOpen} onClose={() => setQuickOpen(false)} wallets={quickWallets} />
+      )}
+
       {/* Color definitions and custom scrollbar styles */}
       <style>{`
         .bg-navy-800 { background-color: #172a45; }
