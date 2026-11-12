@@ -60,6 +60,39 @@ async function assertOwnWallets(client, walletIds, centreId) {
 }
 
 // Middleware to verify token and role
+// Saves a service's (or sub-category's) required documents. Each item is a
+// document type picked from the list, { document_type_id, note }, or, from
+// older screens, just a name (found or added in the list by the database).
+// The same type with the same note is kept once.
+async function saveRequiredDocuments(client, serviceId, subId, list) {
+  const saved = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(list) ? list : []) {
+    const item = typeof raw === 'string' ? { name: raw } : (raw || {});
+    const note = String(item.note || '').replace(/\s+/g, ' ').trim().slice(0, 200) || null;
+    let typeId = Number(item.document_type_id) || null;
+    if (typeId) {
+      const { rows } = await client.query('SELECT id FROM document_master WHERE id = $1', [typeId]);
+      if (!rows[0]) throw new Error('A chosen document no longer exists. Please pick it again.');
+    } else {
+      const name = String(item.name || '').replace(/\s+/g, ' ').trim();
+      if (!name.replace(/[^a-zA-Z0-9]/g, '')) continue;
+      typeId = (await client.query('SELECT doc_type_for($1) AS id', [name])).rows[0].id;
+    }
+    const key = `${typeId}|${(note || '').toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // document_name ("<type> (<note>)") is filled in by the database trigger.
+    const { rows } = await client.query(
+      `INSERT INTO required_documents (service_id, sub_category_id, document_type_id, note, document_name)
+       VALUES ($1, $2, $3, $4, '') RETURNING *`,
+      [serviceId, subId, typeId, note]
+    );
+    saved.push(rows[0]);
+  }
+  return saved;
+}
+
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -589,11 +622,7 @@ router.post('/services', authenticateToken, async (req, res) => {
     // 3. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, document_name) VALUES ($1, $2) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [newService.id, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, newService.id, null, requiredDocuments);
     }
 
     const auditDetails = `Created service ${name} by ${req.user.role}`;
@@ -731,11 +760,7 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
     await client.query('DELETE FROM required_documents WHERE service_id = $1 AND sub_category_id IS NULL', [id]);
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, document_name) VALUES ($1, $2) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [id, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, id, null, requiredDocuments);
     }
 
     // record what changed in the shared details, so other centres / the superadmin can see who changed it
@@ -869,11 +894,7 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
     // 4. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, sub_category_id, document_name) VALUES ($1, $2, $3) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [id, newSubcategory.id, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, id, newSubcategory.id, requiredDocuments);
     }
 
     const auditDetails = `Added subcategory ${name} to service ID ${id} by ${req.user.role}`;
@@ -988,11 +1009,7 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
     await client.query('DELETE FROM required_documents WHERE sub_category_id = $1', [subId]);
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, sub_category_id, document_name) VALUES ($1, $2, $3) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [id, subId, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, id, subId, requiredDocuments);
     }
 
     const auditDetails = `Updated subcategory ${name} in service ID ${id} by ${req.user.role}`;

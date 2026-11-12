@@ -28,6 +28,7 @@ import authRoute from "./routes/auth.js";
 import centreRoutes from "./routes/centres.js";
 import staffRoute from "./routes/staff.js";
 import walletRoute from "./routes/wallet.js";
+import documentTypesRoutes from "./routes/documentTypes.js";
 import serviceManagementRoutes from "./routes/servicemanagement.js";
 import serviceTrackingRoute from "./routes/servicetracking.js";
 import salaryRoute from "./routes/salary.js";
@@ -444,6 +445,7 @@ app.use("/api/staff", staffRoute);
 app.use("/api/wallet", walletRoute);
 
 app.use("/api/servicemanagement", serviceManagementRoutes);
+app.use("/api/document-types", documentTypesRoutes);
 app.use("/api/servicetracking", serviceTrackingRoute);
 app.use("/api/salary", salaryRoute);
 

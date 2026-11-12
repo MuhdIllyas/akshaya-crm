@@ -15,6 +15,7 @@ import {
   updateSubcategory,
 } from "@/services/serviceService";
 import { toast } from "react-toastify";
+import DocumentPicker, { toPickedDocuments, toDocumentPayload } from "@/components/DocumentPicker";
 import "react-toastify/dist/ReactToastify.css";
 
 /* ---------------- shared styles ---------------- */
@@ -163,16 +164,16 @@ const ServiceManagementSuperAdmin = () => {
   const [newSubcategory, setNewSubcategory] = useState("");
   const [newSubcategoryDeptCharges, setNewSubcategoryDeptCharges] = useState("");
   const [newSubcategoryServiceCharges, setNewSubcategoryServiceCharges] = useState("");
-  const [newSubcategoryDocuments, setNewSubcategoryDocuments] = useState("");
+  const [newSubcategoryDocuments, setNewSubcategoryDocuments] = useState([]);
 
   // add service
-  const [newServiceDocuments, setNewServiceDocuments] = useState("");
+  const [newServiceDocuments, setNewServiceDocuments] = useState([]);
   const [newServiceRequiresWallet, setNewServiceRequiresWallet] = useState(false);
   const [newServiceRequiresWorkflow, setNewServiceRequiresWorkflow] = useState(true);
   const [newServiceHasExpiry, setNewServiceHasExpiry] = useState(false);
 
   // edit service
-  const [editServiceDocuments, setEditServiceDocuments] = useState("");
+  const [editServiceDocuments, setEditServiceDocuments] = useState([]);
   const [editServiceRequiresWallet, setEditServiceRequiresWallet] = useState(true);
   const [editServiceRequiresWorkflow, setEditServiceRequiresWorkflow] = useState(true);
   const [editServiceHasExpiry, setEditServiceHasExpiry] = useState(false);
@@ -184,7 +185,7 @@ const ServiceManagementSuperAdmin = () => {
   const [editSubcategoryName, setEditSubcategoryName] = useState("");
   const [editSubcategoryDeptCharges, setEditSubcategoryDeptCharges] = useState("");
   const [editSubcategoryServiceCharges, setEditSubcategoryServiceCharges] = useState("");
-  const [editSubcategoryDocuments, setEditSubcategoryDocuments] = useState("");
+  const [editSubcategoryDocuments, setEditSubcategoryDocuments] = useState([]);
 
   const [loading, setLoading] = useState(true); // first load only
   const [refreshing, setRefreshing] = useState(false);
@@ -276,11 +277,6 @@ const ServiceManagementSuperAdmin = () => {
       );
   };
 
-  const splitLines = (text) =>
-    text
-      .split("\n")
-      .map((doc) => doc.trim())
-      .filter((doc) => doc.length > 0);
 
   /* ---------------- actions ---------------- */
 
@@ -288,7 +284,7 @@ const ServiceManagementSuperAdmin = () => {
     setNewSubcategory("");
     setNewSubcategoryDeptCharges("");
     setNewSubcategoryServiceCharges("");
-    setNewSubcategoryDocuments("");
+    setNewSubcategoryDocuments([]);
   };
 
   const toggleServiceDetails = (id) => {
@@ -314,7 +310,7 @@ const ServiceManagementSuperAdmin = () => {
         department_charges: parseInt(newSubcategoryDeptCharges) || 0,
         service_charges: parseInt(newSubcategoryServiceCharges) || 0,
         requires_wallet: services.find((s) => s.id === serviceId)?.requires_wallet || false,
-        requiredDocuments: splitLines(newSubcategoryDocuments),
+        requiredDocuments: toDocumentPayload(newSubcategoryDocuments),
       });
 
       await refetchServices();
@@ -352,7 +348,7 @@ const ServiceManagementSuperAdmin = () => {
   };
 
   const openAddModal = () => {
-    setNewServiceDocuments("");
+    setNewServiceDocuments([]);
     setNewServiceRequiresWallet(false);
     setNewServiceRequiresWorkflow(true);
     setNewServiceHasExpiry(false);
@@ -361,7 +357,7 @@ const ServiceManagementSuperAdmin = () => {
 
   const openEditModal = (service) => {
     setEditingService(service);
-    setEditServiceDocuments(service.required_documents?.map((doc) => doc.document_name).join("\n") || "");
+    setEditServiceDocuments(toPickedDocuments(service.required_documents));
     setEditServiceHasExpiry(service.has_expiry || false);
     setEditServiceRequiresWallet(!!service.requires_wallet);
     // only an explicit false means "quick service"
@@ -375,7 +371,7 @@ const ServiceManagementSuperAdmin = () => {
     setEditSubcategoryName(subcategory.name);
     setEditSubcategoryDeptCharges(subcategory.department_charges);
     setEditSubcategoryServiceCharges(subcategory.service_charges);
-    setEditSubcategoryDocuments(subcategory.required_documents?.map((doc) => doc.document_name).join("\n") || "");
+    setEditSubcategoryDocuments(toPickedDocuments(subcategory.required_documents));
     setShowEditSubcategoryModal(true);
   };
 
@@ -392,7 +388,7 @@ const ServiceManagementSuperAdmin = () => {
         department_charges: parseInt(editSubcategoryDeptCharges) || 0,
         service_charges: parseInt(editSubcategoryServiceCharges) || 0,
         requires_wallet: services.find((s) => s.id === editingSubcategoryServiceId)?.requires_wallet || false,
-        requiredDocuments: splitLines(editSubcategoryDocuments),
+        requiredDocuments: toDocumentPayload(editSubcategoryDocuments),
       });
 
       await refetchServices();
@@ -429,7 +425,7 @@ const ServiceManagementSuperAdmin = () => {
         requiresWallet: newServiceRequiresWallet,
         requiresWorkflow: newServiceRequiresWorkflow,
         hasExpiry: newServiceHasExpiry,
-        documents: splitLines(newServiceDocuments),
+        documents: toDocumentPayload(newServiceDocuments),
       });
 
       const response = await createService(serviceData);
@@ -451,7 +447,7 @@ const ServiceManagementSuperAdmin = () => {
         requiresWallet: editServiceRequiresWallet,
         requiresWorkflow: editServiceRequiresWorkflow,
         hasExpiry: editServiceHasExpiry,
-        documents: splitLines(editServiceDocuments),
+        documents: toDocumentPayload(editServiceDocuments),
       });
 
       const response = await updateService(editingService.id, serviceData);
@@ -853,14 +849,9 @@ const ServiceManagementSuperAdmin = () => {
                                     />
                                   </Field>
                                 </div>
-                                <Field label="Required documents" hint="One per line">
-                                  <textarea
-                                    value={newSubcategoryDocuments}
-                                    onChange={(e) => setNewSubcategoryDocuments(e.target.value)}
-                                    className={inputCls}
-                                    rows={3}
-                                  />
-                                </Field>
+                                <Field label="Required documents" hint="Pick from the document list; add a note if needed">
+<DocumentPicker value={newSubcategoryDocuments} onChange={setNewSubcategoryDocuments} />
+</Field>
                                 <div className="flex justify-end gap-2">
                                   <button
                                     onClick={() => {
@@ -977,14 +968,9 @@ const ServiceManagementSuperAdmin = () => {
                 <option value="inactive">Inactive</option>
               </select>
             </Field>
-            <Field label="Required documents" hint="One per line">
-              <textarea
-                value={newServiceDocuments}
-                onChange={(e) => setNewServiceDocuments(e.target.value)}
-                className={inputCls}
-                rows={3}
-              />
-            </Field>
+            <Field label="Required documents" hint="Pick from the document list; add a note if needed">
+<DocumentPicker value={newServiceDocuments} onChange={setNewServiceDocuments} />
+</Field>
           </Modal>
         )}
       </AnimatePresence>
@@ -1055,14 +1041,9 @@ const ServiceManagementSuperAdmin = () => {
                 <option value="inactive">Inactive</option>
               </select>
             </Field>
-            <Field label="Required documents" hint="One per line">
-              <textarea
-                value={editServiceDocuments}
-                onChange={(e) => setEditServiceDocuments(e.target.value)}
-                className={inputCls}
-                rows={3}
-              />
-            </Field>
+            <Field label="Required documents" hint="Pick from the document list; add a note if needed">
+<DocumentPicker value={editServiceDocuments} onChange={setEditServiceDocuments} />
+</Field>
           </Modal>
         )}
       </AnimatePresence>
@@ -1108,14 +1089,9 @@ const ServiceManagementSuperAdmin = () => {
                 />
               </Field>
             </div>
-            <Field label="Required documents" hint="One per line">
-              <textarea
-                value={editSubcategoryDocuments}
-                onChange={(e) => setEditSubcategoryDocuments(e.target.value)}
-                className={inputCls}
-                rows={3}
-              />
-            </Field>
+            <Field label="Required documents" hint="Pick from the document list; add a note if needed">
+<DocumentPicker value={editSubcategoryDocuments} onChange={setEditSubcategoryDocuments} />
+</Field>
           </Modal>
         )}
       </AnimatePresence>

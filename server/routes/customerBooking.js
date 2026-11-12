@@ -512,12 +512,14 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
       const requiredDocsQuery = `
         SELECT 
           rd.document_name,
+          rd.document_type_id,
+          rd.note,
           dm.scope,
           dm.requires_number,
           dm.requires_expiry,
           dm.creates_household
         FROM required_documents rd
-        LEFT JOIN document_master dm ON rd.document_name = dm.name
+        LEFT JOIN document_master dm ON dm.id = rd.document_type_id
         WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
            OR (rd.sub_category_id = $2)
       `;
@@ -880,12 +882,15 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
     const requiredDocsQuery = `
       SELECT 
         rd.document_name,
+        rd.document_type_id,
+        rd.note,
+        dm.name AS type_name,
         dm.scope,
         dm.requires_number,
         dm.requires_expiry,
         dm.creates_household
       FROM required_documents rd
-      LEFT JOIN document_master dm ON rd.document_name = dm.name
+      LEFT JOIN document_master dm ON dm.id = rd.document_type_id
       WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
          OR (rd.sub_category_id = $2)
       ORDER BY rd.document_name
@@ -902,6 +907,7 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
     const customerDocsQuery = `
       SELECT 
         document_name,
+        document_type_id,
         status,
         version,
         is_latest,
@@ -911,12 +917,12 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
       FROM customer_documents
       WHERE customer_id = $1 
         AND is_latest = true
-        AND document_name IN (
-          SELECT document_name FROM required_documents 
+        AND document_type_id IN (
+          SELECT document_type_id FROM required_documents 
           WHERE (service_id = $2 AND sub_category_id IS NULL)
              OR (sub_category_id = $3)
         )
-      ORDER BY document_name
+      ORDER BY (status = 'approved') DESC, created_at DESC
     `;
     
     const customerDocsResult = await pool.query(
@@ -941,11 +947,15 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
 
     // 5. Combine data
     const documentStatus = requiredDocuments.map(doc => {
-      const customerDoc = customerDocuments.find(cd => cd.document_name === doc.document_name);
+      // Matched by document type, so spelling and notes don't matter.
+      const customerDoc = customerDocuments.find(cd => cd.document_type_id && cd.document_type_id === doc.document_type_id);
       const isSelected = selectedDocuments.includes(doc.document_name);
       
       return {
         document_name: doc.document_name,
+        document_type_id: doc.document_type_id,
+        type_name: doc.type_name,
+        note: doc.note,
         scope: doc.scope,
         requires_number: doc.requires_number,
         requires_expiry: doc.requires_expiry,
@@ -1026,7 +1036,7 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
 
     // 3. Get required documents to validate selection
     const requiredDocsQuery = `
-      SELECT document_name
+      SELECT document_name, document_type_id
       FROM required_documents
       WHERE (service_id = $1 AND sub_category_id IS NULL)
          OR (sub_category_id = $2)
@@ -1046,22 +1056,22 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
     }
 
     // 4. Check if selected documents are available (approved and latest)
-    const availableDocsQuery = `
-      SELECT document_name
+    // Selected documents are the required documents' labels; match by type.
+    const typeOfLabel = new Map(requiredDocsResult.rows.map(row => [row.document_name, row.document_type_id]));
+    const availableDocsResult = await client.query(
+      `
+      SELECT DISTINCT document_type_id
       FROM customer_documents
       WHERE customer_id = $1 
-        AND document_name = ANY($2)
+        AND document_type_id = ANY($2::int[])
         AND is_latest = true
         AND status = 'approved'
-    `;
-    
-    const availableDocsResult = await client.query(
-      availableDocsQuery,
-      [customerId, selected_documents]
+      `,
+      [customerId, selected_documents.map(doc => typeOfLabel.get(doc)).filter(Boolean)]
     );
     
-    const availableDocumentNames = availableDocsResult.rows.map(row => row.document_name);
-    const unavailableDocuments = selected_documents.filter(doc => !availableDocumentNames.includes(doc));
+    const availableTypes = new Set(availableDocsResult.rows.map(row => row.document_type_id));
+    const unavailableDocuments = selected_documents.filter(doc => !availableTypes.has(typeOfLabel.get(doc)));
     
     if (unavailableDocuments.length > 0) {
       // If some documents are not available, we can still save the selection
@@ -1179,9 +1189,21 @@ router.post("/:id/documents", customerAuthMiddleware, async (req, res) => {
 
     const service = serviceResult.rows[0];
 
+    // Required documents of this application, to link each upload to its type.
+    const { rows: requiredRows } = await client.query(
+      `SELECT rd.document_name, rd.document_type_id, dm.name AS type_name
+         FROM required_documents rd
+         LEFT JOIN document_master dm ON dm.id = rd.document_type_id
+        WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL) OR rd.sub_category_id = $2`,
+      [service.service_id, service.subcategory_id]
+    );
+
     // 2. Process each document
     const uploadedDocs = [];
     for (const doc of documents) {
+      // Store uploads under the type's name ("Aadhaar Card", not "Aadhaar Card (Nominee)").
+      const required = requiredRows.find(r => r.document_name === doc.document_name);
+      if (required?.type_name) doc.document_name = required.type_name;
       // Check if document already exists for this service
       const existingDoc = await client.query(
         `

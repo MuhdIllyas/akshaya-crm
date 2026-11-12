@@ -163,7 +163,7 @@ async (req, res) => {
         c.aadhaar_last4 as customer_aadhaar_last4,
         s.name as reviewed_by_staff_name
       FROM customer_documents cd
-      LEFT JOIN document_master dm ON cd.document_name = dm.name
+      LEFT JOIN document_master dm ON dm.id = cd.document_type_id
       LEFT JOIN households h ON cd.household_id = h.id
       LEFT JOIN customers c ON cd.customer_id = c.id
       LEFT JOIN staff s ON cd.reviewed_by = s.id

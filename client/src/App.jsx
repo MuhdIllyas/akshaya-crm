@@ -31,6 +31,7 @@ import SuperadminStaffManagement from './pages/superadmin/SuperadminStaffManagem
 import WalletManagementSuperAdmin from './pages/superadmin/WalletManagementSuperAdmin';
 import ServiceManagementSuperAdmin from './pages/superadmin/ServiceManagementSuperAdmin';
 import SuperadminServiceLogs from './pages/superadmin/SuperadminServiceLogs';
+import DocumentTypes from "./pages/superadmin/DocumentTypes";
 import AttendanceSuperAdmin from './pages/superadmin/AttendanceSuperAdmin';
 import CampaignManagementSuperAdmin from './pages/superadmin/CampaignManagementSuperAdmin';
 import SuperAdminReports from './pages/reports/SuperAdminReports';
@@ -431,6 +432,10 @@ const App = () => {
             <Route
               path="superadmin/servicemanagement"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><ServiceManagementSuperAdmin /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/documenttypes"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><DocumentTypes /></ProtectedRoute>}
             />
             <Route
               path="superadmin/servicelogs"

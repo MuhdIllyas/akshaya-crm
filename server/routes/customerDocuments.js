@@ -251,7 +251,7 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
         h.district,
         h.state
       FROM customer_documents cd
-      LEFT JOIN document_master dm ON cd.document_name = dm.name
+      LEFT JOIN document_master dm ON dm.id = cd.document_type_id
       LEFT JOIN households h ON cd.household_id = h.id
       WHERE cd.id = $1 AND cd.customer_id = $2
       `,
@@ -567,7 +567,7 @@ router.put(
           dm.creates_household,
           dm.scope as doc_scope
         FROM customer_documents d
-        LEFT JOIN document_master dm ON d.document_name = dm.name
+        LEFT JOIN document_master dm ON dm.id = d.document_type_id
         WHERE d.id = $1 AND d.customer_id = $2
         `,
         [id, customerId]
