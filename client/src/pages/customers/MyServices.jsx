@@ -118,9 +118,13 @@ const MyServices = () => {
   };
 
   // Handle service application
-  const handleServiceApplicationSuccess = () => {
+  // A new application opens its documents page, where the customer submits it.
+  const handleServiceApplicationSuccess = (created) => {
     setShowApplyModal(false);
-    toast.success('Service application submitted successfully!');
+    if (created?.service_application_id) {
+      navigate(`/customer/myservices/continue/${created.service_application_id}`);
+      return;
+    }
     fetchServices(); // Refresh the list
   };
 
@@ -157,7 +161,7 @@ const MyServices = () => {
 
   // Handle upload documents
   const handleUploadDocuments = (serviceId) => {
-    navigate(`/customer/myservices/${serviceId}/documents`);
+    navigate(`/customer/myservices/continue/${serviceId}`);
   };
 
   // Handle make payment
@@ -259,7 +263,8 @@ const MyServices = () => {
 
   // Determine primary action based on status
   const getPrimaryAction = (service) => {
-    const amount = service.total_charges || service.service_data?.total_charges || 0;
+    // undefined when fees are hidden from customers (paid at the centre)
+    const amount = service.total_charges ?? service.service_data?.total_charges;
     const hasReview = reviewedServices[service.id];
     
     switch(service.status) {
@@ -279,8 +284,8 @@ const MyServices = () => {
       case 'payment_pending':
         return {
           type: "make_payment",
-          label: `Pay Now (₹${amount})`,
-          onClick: () => handleMakePayment(service.id)
+          label: amount === undefined ? "Pay at the centre" : `Pay Now (₹${amount})`,
+          onClick: () => (amount === undefined ? handleViewDetails(service.id) : handleMakePayment(service.id))
         };
       case 'under_review':
       case 'in_progress':

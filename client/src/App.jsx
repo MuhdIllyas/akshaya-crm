@@ -80,7 +80,6 @@ import CustomerMyServices from './pages/customers/MyServices';
 import CustomerMyDocuments from './pages/customers/MyDocuments';
 import CustomerProfile from './pages/customers/CustomerProfile';
 import ContinueApplication from './components/ContinueApplication';
-import ApplicationDocuments from './components/ApplicationDocuments';
 import ConfirmationPage from './components/ConfirmationPage';
 import ViewServiceDetails from './components/ViewServiceDetails';
 
@@ -611,7 +610,7 @@ const App = () => {
           />
           <Route
             path="/customer/myservices/:id/documents"
-            element={<CustomerProtectedRoute><ApplicationDocuments /></CustomerProtectedRoute>}
+            element={<CustomerProtectedRoute><ContinueApplication /></CustomerProtectedRoute>}
           />
           <Route
             path="/customer/myservices/:id/confirmation"

@@ -130,7 +130,7 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
           toast.info(response.data.next_steps);
         }
         
-        onSuccess(); // Call parent callback
+        onSuccess(response.data); // parent opens the new application
       } else {
         toast.error(response.data.message || 'Failed to create service application');
       }
@@ -164,7 +164,10 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
   ];
 
   // Format currency
+  // Fees are hidden from customers (paid at the centre) unless the
+  // organization shows them; then the server leaves the amounts in.
   const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) return 'Paid at the centre';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',

@@ -1495,6 +1495,14 @@ const StaffDashboard = () => {
                                 ) : (
                                   <span className="inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border bg-slate-50 text-slate-600 border-slate-200">Any centre</span>
                                 )}
+                                {booking.service_data?.missing_documents?.length > 0 && (
+                                  <span
+                                    className="ml-1.5 inline-block mt-1.5 px-2 py-0.5 rounded-full text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200"
+                                    title={booking.service_data.missing_documents.join(', ')}
+                                  >
+                                    {booking.service_data.missing_documents.length} document{booking.service_data.missing_documents.length === 1 ? '' : 's'} to collect
+                                  </span>
+                                )}
                               </div>
                             </div>
                             <button onClick={() => handleTakeWork(booking.id)} className="px-4 py-2 min-h-[40px] bg-navy-700 text-white text-xs font-bold rounded-xl hover:bg-navy-800 shadow-sm shrink-0 transition-colors">

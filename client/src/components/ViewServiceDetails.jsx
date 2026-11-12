@@ -218,7 +218,10 @@ const ViewServiceDetails = () => {
   };
 
   // Format currency
+  // Fees are hidden from customers (paid at the centre) unless the
+  // organization shows them; then the server leaves the amounts in.
   const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) return 'Paid at the centre';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -457,7 +460,7 @@ const ViewServiceDetails = () => {
                     <div>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-500 mb-1">Charges Breakdown</label>
+                          <label className="block text-sm font-medium text-gray-500 mb-1">Fees</label>
                           <div className="space-y-2">
                             {serviceData.department_charges > 0 && (
                               <div className="flex justify-between">
@@ -550,7 +553,7 @@ const ViewServiceDetails = () => {
                   <div>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-1">Charges Breakdown</label>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">Fees</label>
                         <div className="space-y-2">
                           {serviceData.department_charges > 0 && (
                             <div className="flex justify-between">
@@ -638,6 +641,30 @@ const ViewServiceDetails = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Documents the customer still has to bring (submitted without them) */}
+        {Array.isArray(serviceData.missing_documents) && serviceData.missing_documents.length > 0 && (
+          <div className="bg-white rounded-xl border border-amber-200 p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+              <FiInfo className="mr-2 text-amber-600" />
+              Documents to bring to the centre
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">Bring these when you visit, or upload them now.</p>
+            <ul className="space-y-2 mb-4">
+              {serviceData.missing_documents.map((name) => (
+                <li key={name} className="flex items-center gap-2 text-sm text-gray-800">
+                  <FiFileText className="text-gray-400" /> {name}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => navigate('/customer/mydocuments')}
+              className="inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-navy-700 hover:bg-gray-50"
+            >
+              Upload documents
+            </button>
           </div>
         )}
 

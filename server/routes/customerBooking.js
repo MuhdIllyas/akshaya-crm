@@ -2,8 +2,45 @@ import express from "express";
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
 import { todayIST, addDays } from "../utils/dates.js";
+import { getSetting } from "../utils/orgSettings.js";
 
 const router = express.Router();
+
+// Fees aren't shown to customers (they pay at the centre) until the
+// organization turns on "show_customer_fees" (e.g. once online payment exists).
+// Every reply from these routes then has its price fields removed, and
+// "₹123" amounts are taken out of text such as timeline entries.
+const FEE_KEYS = new Set([
+  "department_charges", "service_charges", "total_charges",
+  "sub_department_charges", "sub_service_charges",
+  "department_charge", "service_charge",
+  "charges", "amount", "total_paid", "paid_amount", "pending_amount", "balance_amount",
+]);
+function stripFees(value) {
+  if (Array.isArray(value)) return value.map(stripFees);
+  if (value instanceof Date) return value;
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, v] of Object.entries(value)) {
+      if (!FEE_KEYS.has(key)) out[key] = stripFees(v);
+    }
+    return out;
+  }
+  if (typeof value === "string" && value.includes("₹")) {
+    return value.replace(/\s*(?:of\s+)?₹\s?[\d,]+(?:\.\d+)?/g, "").replace(/\s+([.,])/g, "$1");
+  }
+  return value;
+}
+router.use(async (req, res, next) => {
+  try {
+    if ((await getSetting("show_customer_fees")) === true) return next();
+  } catch {
+    /* setting unavailable: keep fees hidden */
+  }
+  const json = res.json.bind(res);
+  res.json = (body) => json(stripFees(body));
+  next();
+});
 
 // Required-document labels can change (a rename, a merge, the switch to
 // document types), but a booking keeps the names the customer ticked. Find
@@ -879,136 +916,163 @@ router.put("/:id", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET REQUIRED DOCUMENTS FOR SERVICE APPLICATION
 ====================================================== */
-router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) => {
-  const { id } = req.params;
-  const customerId = req.customer.id;
+// The booking (with service name) and each required document with what the
+// customer has uploaded for it, matched by document type.
+//   state: "uploaded"  approved upload
+//          "pending"   uploaded, waiting for the centre to check
+//          "rejected"  uploaded but rejected (needs a new one)
+//          "missing"   not uploaded (bring it to the centre, or upload later)
+async function bookingDocuments(db, bookingId, customerId) {
+  const { rows: [booking] } = await db.query(
+    `SELECT cs.*, s.name AS service_name
+       FROM customer_services cs
+       LEFT JOIN services s ON cs.service_id = s.id
+      WHERE cs.id = $1 AND cs.customer_id = $2`,
+    [bookingId, customerId]
+  );
+  if (!booking) return null;
 
+  const { rows: required } = await db.query(
+    `SELECT rd.document_name, rd.document_type_id, rd.note,
+            dm.name AS type_name, dm.scope, dm.requires_number, dm.requires_expiry, dm.creates_household
+       FROM required_documents rd
+       LEFT JOIN document_master dm ON dm.id = rd.document_type_id
+      WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL) OR rd.sub_category_id = $2
+      ORDER BY rd.id`,
+    [booking.service_id, booking.subcategory_id]
+  );
+
+  const typeIds = [...new Set(required.map((r) => r.document_type_id).filter(Boolean))];
+  const { rows: uploads } = typeIds.length
+    ? await db.query(
+        `SELECT document_name, document_type_id, status, version, is_latest, expiry_date, created_at, review_remarks
+           FROM customer_documents
+          WHERE customer_id = $1 AND is_latest = true AND document_type_id = ANY($2::int[])
+          ORDER BY (status = 'approved') DESC, created_at DESC`,
+        [customerId, typeIds]
+      )
+    : { rows: [] };
+
+  let serviceData = {};
   try {
-    // 1. Get service application
-    const serviceResult = await pool.query(
-      `
-      SELECT cs.*, s.name as service_name
-      FROM customer_services cs
-      LEFT JOIN services s ON cs.service_id = s.id
-      WHERE cs.id = $1 AND cs.customer_id = $2
-      `,
-      [id, customerId]
-    );
+    serviceData = typeof booking.service_data === "string" ? JSON.parse(booking.service_data) : booking.service_data || {};
+  } catch {
+    serviceData = {};
+  }
+  const selected = Array.isArray(serviceData.selected_documents) ? serviceData.selected_documents : [];
 
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ message: "Service application not found" });
-    }
+  const documents = required.map((doc) => {
+    const upload = uploads.find((u) => u.document_type_id === doc.document_type_id);
+    const state = !upload ? "missing" : upload.status === "approved" ? "uploaded" : upload.status === "rejected" ? "rejected" : "pending";
+    return {
+      document_name: doc.document_name,
+      document_type_id: doc.document_type_id,
+      type_name: doc.type_name,
+      note: doc.note,
+      scope: doc.scope,
+      requires_number: doc.requires_number,
+      requires_expiry: doc.requires_expiry,
+      creates_household: doc.creates_household,
+      state,
+      status: upload?.status || "not_uploaded",
+      is_available: upload?.status === "approved",
+      is_latest: upload?.is_latest || false,
+      version: upload?.version || 0,
+      expiry_date: upload?.expiry_date,
+      uploaded_at: upload?.created_at,
+      review_remarks: upload?.review_remarks,
+      is_selected: selected.some((name) => matchRequired(typeof name === "string" ? name : name?.document_name, required) === doc),
+      can_be_selected: upload?.status === "approved",
+    };
+  });
+  return { booking, serviceData, documents };
+}
 
-    const service = serviceResult.rows[0];
-    
-    // 2. Get required documents for this service
-    const requiredDocsQuery = `
-      SELECT 
-        rd.document_name,
-        rd.document_type_id,
-        rd.note,
-        dm.name AS type_name,
-        dm.scope,
-        dm.requires_number,
-        dm.requires_expiry,
-        dm.creates_household
-      FROM required_documents rd
-      LEFT JOIN document_master dm ON dm.id = rd.document_type_id
-      WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
-         OR (rd.sub_category_id = $2)
-      ORDER BY rd.document_name
-    `;
-    
-    const requiredDocsResult = await pool.query(
-      requiredDocsQuery,
-      [service.service_id, service.subcategory_id]
-    );
-
-    const requiredDocuments = requiredDocsResult.rows;
-
-    // 3. Get customer's uploaded documents
-    const customerDocsQuery = `
-      SELECT 
-        document_name,
-        document_type_id,
-        status,
-        version,
-        is_latest,
-        expiry_date,
-        created_at,
-        review_remarks
-      FROM customer_documents
-      WHERE customer_id = $1 
-        AND is_latest = true
-        AND document_type_id IN (
-          SELECT document_type_id FROM required_documents 
-          WHERE (service_id = $2 AND sub_category_id IS NULL)
-             OR (sub_category_id = $3)
-        )
-      ORDER BY (status = 'approved') DESC, created_at DESC
-    `;
-    
-    const customerDocsResult = await pool.query(
-      customerDocsQuery,
-      [customerId, service.service_id, service.subcategory_id]
-    );
-
-    const customerDocuments = customerDocsResult.rows;
-
-    // 4. Parse service_data to get selected documents
-    let serviceData = {};
-    let selectedDocuments = [];
-    try {
-      serviceData = service.service_data ? 
-        (typeof service.service_data === 'string' ? 
-          JSON.parse(service.service_data) : 
-          service.service_data) : {};
-      selectedDocuments = serviceData.selected_documents || [];
-    } catch (e) {
-      console.error("Error parsing service_data:", e);
-    }
-
-    // 5. Combine data
-    const documentStatus = requiredDocuments.map(doc => {
-      // Matched by document type, so spelling and notes don't matter.
-      const customerDoc = customerDocuments.find(cd => cd.document_type_id && cd.document_type_id === doc.document_type_id);
-      const isSelected = selectedDocuments.some(name => matchRequired(name, requiredDocuments) === doc);
-      
-      return {
-        document_name: doc.document_name,
-        document_type_id: doc.document_type_id,
-        type_name: doc.type_name,
-        note: doc.note,
-        scope: doc.scope,
-        requires_number: doc.requires_number,
-        requires_expiry: doc.requires_expiry,
-        creates_household: doc.creates_household,
-        status: customerDoc?.status || 'not_uploaded',
-        is_available: customerDoc?.status === 'approved',
-        is_latest: customerDoc?.is_latest || false,
-        version: customerDoc?.version || 0,
-        expiry_date: customerDoc?.expiry_date,
-        uploaded_at: customerDoc?.created_at,
-        review_remarks: customerDoc?.review_remarks,
-        is_selected: isSelected,
-        can_be_selected: customerDoc?.status === 'approved'
-      };
-    });
-
+router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) => {
+  try {
+    const result = await bookingDocuments(pool, req.params.id, req.customer.id);
+    if (!result) return res.status(404).json({ message: "Service application not found" });
+    const { booking, documents } = result;
     res.json({
-      service_id: service.service_id,
-      service_name: service.service_name,
-      application_number: service.application_number,
-      status: service.status,
-      required_documents: documentStatus,
-      total_required: requiredDocuments.length,
-      available_count: documentStatus.filter(d => d.is_available).length,
-      selected_count: selectedDocuments.length
+      service_id: booking.service_id,
+      service_name: booking.service_name,
+      application_number: booking.application_number,
+      status: booking.status,
+      required_documents: documents,
+      total_required: documents.length,
+      available_count: documents.filter((d) => d.is_available).length,
+      provided_count: documents.filter((d) => d.state === "uploaded" || d.state === "pending").length,
+      selected_count: documents.filter((d) => d.is_selected).length,
     });
-
   } catch (err) {
     console.error("Error fetching required documents:", err);
     res.status(500).json({ message: "Failed to fetch required documents" });
+  }
+});
+
+/* ======================================================
+   SUBMIT A BOOKING
+   Documents are optional: whatever the customer has uploaded is attached,
+   the rest is listed for the centre to collect. Fees are paid at the centre.
+====================================================== */
+const SUBMITTABLE = ["draft", "pending_documents", "action_required"];
+
+router.put("/:id/submit", customerAuthMiddleware, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await bookingDocuments(client, req.params.id, req.customer.id);
+    if (!result) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Service application not found" });
+    }
+    const { booking, serviceData, documents } = result;
+    if (!SUBMITTABLE.includes(booking.status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This application has already been submitted" });
+    }
+
+    const provided = documents.filter((d) => d.state === "uploaded" || d.state === "pending");
+    const missing = documents.filter((d) => d.state === "missing" || d.state === "rejected");
+    const updated = {
+      ...serviceData,
+      selected_documents: provided.map((d) => d.document_name),
+      missing_documents: missing.map((d) => d.document_name),
+      payment: { ...(serviceData.payment || {}), payment_method: "pay_at_centre", payment_status: "pending" },
+      submitted_at: new Date().toISOString(),
+    };
+    const remarks = missing.length
+      ? `Submitted. ${missing.length} document(s) to collect: ${missing.map((d) => d.document_name).join(", ")}. Fees paid at the centre.`
+      : "Submitted with all documents. Fees paid at the centre.";
+
+    await client.query(
+      `UPDATE customer_services
+          SET service_data = $1, status = 'under_review', remarks = $2, last_updated = NOW()
+        WHERE id = $3 AND customer_id = $4`,
+      [JSON.stringify(updated), remarks, booking.id, req.customer.id]
+    );
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ('Application Submitted', $1, $2, $3, NOW())`,
+      [`customer:${req.customer.id}`, `Application ${booking.application_number} submitted. ${remarks}`, booking.requested_centre_id || null]
+    );
+    await client.query("COMMIT");
+
+    res.json({
+      success: true,
+      status: "under_review",
+      application_number: booking.application_number,
+      missing_documents: updated.missing_documents,
+      message: missing.length
+        ? "Application submitted. Please bring the remaining documents to the centre, or upload them later."
+        : "Application submitted. The centre will contact you.",
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Error submitting application:", err);
+    res.status(500).json({ message: "Couldn't submit the application. Please try again." });
+  } finally {
+    client.release();
   }
 });
 

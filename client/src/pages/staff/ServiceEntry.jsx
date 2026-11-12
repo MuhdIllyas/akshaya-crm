@@ -1147,6 +1147,10 @@ const ServiceEntry = () => {
             const departmentCharge = parseFloat(subcategory?.department_charges || 0);
             const totalCharge = serviceCharge + departmentCharge;
 
+            // Documents the customer didn't upload when booking: collect them at the counter.
+            const missingDocs = Array.isArray(booking.service_data?.missing_documents) ? booking.service_data.missing_documents : [];
+            const collectNote = missingDocs.length ? `Documents to collect from the customer: ${missingDocs.join(', ')}` : '';
+
             setFormData(prev => ({
               ...prev,
               tokenId: null,
@@ -1163,14 +1167,14 @@ const ServiceEntry = () => {
                 requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || false,
                 hasExpiry: category?.has_expiry || false,
                 expiryDate: '',
-                initialNote: '', 
+                initialNote: collectNote, 
                 initialNoteMentions: [], 
                 initialNoteVisibility: 'centre', 
                 createTask: false, 
                 taskTitle: '', 
                 taskAssignee: '', 
                 taskDueDate: null,
-                showNoteArea: false,
+                showNoteArea: Boolean(collectNote),
                 activeTab: 'service',
                 applicationNumber: '',
                 estimatedDelivery: '',
