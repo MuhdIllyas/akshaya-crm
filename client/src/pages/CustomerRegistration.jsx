@@ -187,7 +187,9 @@ const CustomerRegistration = () => {
       });
 
       if (response.data.success) {
-        toast.success("Registration successful! Redirecting to dashboard...");
+        toast.success(response.data.existing
+          ? "You are already registered. Signing you in..."
+          : "Registration successful! Redirecting to dashboard...");
         localStorage.setItem("temp_customer_phone", formData.primary_phone);
         // Registering signs the customer in (the phone was just verified).
         if (response.data.token) {

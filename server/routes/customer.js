@@ -270,14 +270,25 @@ router.post("/register", async (req, res) => {
   try {
     // Check if customer already exists
     const existing = await pool.query(
-      `SELECT id FROM customers WHERE aadhaar_hash = $1`,
+      `SELECT id, name, primary_phone FROM customers WHERE aadhaar_hash = $1`,
       [aadhaarHash]
     );
 
     if (existing.rows.length > 0) {
-      return res.status(200).json({
-        success: true,
-        message: "Customer already exists"
+      const found = existing.rows[0];
+      // Same person, same phone (just verified): sign them in.
+      if (String(found.primary_phone || "").replace(/\D/g, "").slice(-10) === proof.phone) {
+        const token = jwt.sign(
+          { customer_id: found.id, org: orgSlug() },
+          process.env.CUSTOMER_JWT_SECRET,
+          { expiresIn: "7d" }
+        );
+        return res.json({ success: true, existing: true, token, customerId: found.id, name: found.name, org_slug: orgSlug() });
+      }
+      // The ID belongs to a customer with another phone. The OTP proves this
+      // phone, not the ID, so the phone on that account is not changed here.
+      return res.status(409).json({
+        message: "This ID is already registered with another phone number. Sign in with that number, or ask the centre to update it."
       });
     }
 
