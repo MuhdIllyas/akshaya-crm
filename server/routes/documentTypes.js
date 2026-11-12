@@ -183,17 +183,34 @@ router.post(
       const { rows } = await client.query("SELECT id, name FROM document_master WHERE id = ANY($1) FOR UPDATE", [[id, into]]);
       if (rows.length !== 2) throw bad("Document type not found", 404);
 
-      // A service shouldn't end up asking for the same document twice.
+      // What made the old type different ("mobile number linked") is kept as a
+      // note on the services that used it, in front of any note they had.
+      const mergeNote = String(req.body?.note || "").replace(/\s+/g, " ").trim().slice(0, 200);
+      const noteSql = `nullif(concat_ws(', ', nullif($3, ''), nullif(a.note, '')), '')`;
+
+      // A service that already asks for the kept type: fold the note into that
+      // row (if it has none) instead of listing the same document twice.
+      await client.query(
+        `UPDATE required_documents b
+            SET note = coalesce(nullif(b.note, ''), ${noteSql})
+           FROM required_documents a
+          WHERE a.document_type_id = $1 AND b.document_type_id = $2
+            AND a.service_id IS NOT DISTINCT FROM b.service_id
+            AND a.sub_category_id IS NOT DISTINCT FROM b.sub_category_id`,
+        [id, into, mergeNote]
+      );
       await client.query(
         `DELETE FROM required_documents a
           USING required_documents b
           WHERE a.document_type_id = $1 AND b.document_type_id = $2
             AND a.service_id IS NOT DISTINCT FROM b.service_id
-            AND a.sub_category_id IS NOT DISTINCT FROM b.sub_category_id
-            AND coalesce(a.note, '') = coalesce(b.note, '')`,
+            AND a.sub_category_id IS NOT DISTINCT FROM b.sub_category_id`,
         [id, into]
       );
-      const moved = await client.query("UPDATE required_documents SET document_type_id = $2 WHERE document_type_id = $1", [id, into]);
+      const moved = await client.query(
+        `UPDATE required_documents a SET document_type_id = $2, note = ${noteSql} WHERE a.document_type_id = $1`,
+        [id, into, mergeNote]
+      );
       const uploads = await client.query(
         "UPDATE customer_documents SET document_type_id = $2, document_name = (SELECT name FROM document_master WHERE id = $2) WHERE document_type_id = $1",
         [id, into]

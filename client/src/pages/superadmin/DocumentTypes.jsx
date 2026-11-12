@@ -27,6 +27,24 @@ const iconBtn =
 const docKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 const errorOf = (err, fallback) => err.response?.data?.error || fallback;
 
+// When merging "Aadhaar Card with Mobile Number Linked" into "Aadhaar Card",
+// suggest "Mobile Number Linked" as the note the services keep.
+function suggestNote(from, into) {
+  const words = String(into || "").trim().split(/[^A-Za-z0-9]+/).filter(Boolean);
+  if (!words.length) return "";
+  // The kept type's words at the start of the old name, ignoring punctuation.
+  // (Words are letters and digits only, so they need no escaping.)
+  const pattern = new RegExp("^\\W*" + words.join("\\W+") + "\\b", "i");
+  if (!pattern.test(from)) return "";
+  const rest = from
+    .replace(pattern, "")
+    .replace(/^[\s\-–(,:/]+|[\s)]+$/g, "")
+    .replace(/^(with|for|of|and)\s+/i, "")
+    .trim();
+  // A leftover that's just a filler word ("Voter ID Card" -> "Voter ID") isn't a note.
+  return /^(card|copy|certificate|document|documents|original|xerox|photocopy)$/i.test(rest) ? "" : rest;
+}
+
 const FILTERS = [
   { id: "all", label: "All" },
   { id: "once", label: "Used by one service" },
@@ -43,6 +61,7 @@ export default function DocumentTypes() {
   const [merging, setMerging] = useState(null); // type being merged away
   const [mergeTarget, setMergeTarget] = useState("");
   const [mergeQuery, setMergeQuery] = useState("");
+  const [mergeNote, setMergeNote] = useState("");
   const [newName, setNewName] = useState("");
   const [similar, setSimilar] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -97,7 +116,7 @@ export default function DocumentTypes() {
     if (!merging || !mergeTarget) return;
     setBusy(true);
     try {
-      const { data } = await api.post(`/${merging.id}/merge`, { into_id: Number(mergeTarget) });
+      const { data } = await api.post(`/${merging.id}/merge`, { into_id: Number(mergeTarget), note: mergeNote });
       const target = types.find((t) => t.id === Number(mergeTarget));
       toast.success(
         `Merged into “${target?.name}”: ${data.services_updated} service document(s) and ${data.uploads_updated} upload(s) moved`
@@ -251,6 +270,7 @@ export default function DocumentTypes() {
                         setMerging(t);
                         setMergeTarget("");
                         setMergeQuery("");
+                        setMergeNote("");
                       }}
                       aria-label={`Merge ${t.name} into another document`}
                       title="Merge into another document"
@@ -288,13 +308,39 @@ export default function DocumentTypes() {
             <div className="mt-2 max-h-56 overflow-auto rounded-xl border border-slate-200">
               {mergeOptions.map((t) => (
                 <label key={t.id} className={`flex cursor-pointer items-center gap-2 px-3 py-2 text-sm hover:bg-slate-50 ${String(t.id) === mergeTarget ? "bg-slate-100" : ""}`}>
-                  <input type="radio" name="merge-target" value={t.id} checked={String(t.id) === mergeTarget} onChange={(e) => setMergeTarget(e.target.value)} />
+                  <input
+                    type="radio"
+                    name="merge-target"
+                    value={t.id}
+                    checked={String(t.id) === mergeTarget}
+                    onChange={(e) => {
+                      setMergeTarget(e.target.value);
+                      setMergeNote(suggestNote(merging.name, t.name));
+                    }}
+                  />
                   <span className="flex-1">{t.name}</span>
                   <span className="text-xs text-slate-400">{t.used_by} services</span>
                 </label>
               ))}
               {mergeOptions.length === 0 && <p className="p-3 text-sm text-slate-500">No match.</p>}
             </div>
+            {mergeTarget && (
+              <div className="mt-3">
+                <label className="mb-1 block text-sm font-medium text-slate-700">Note to keep on those services (optional)</label>
+                <input
+                  value={mergeNote}
+                  onChange={(e) => setMergeNote(e.target.value)}
+                  maxLength={200}
+                  placeholder="e.g. mobile number linked"
+                  className={inputCls}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Services that asked for “{merging.name}” will ask for “
+                  {types.find((t) => String(t.id) === mergeTarget)?.name}
+                  {mergeNote.trim() ? ` (${mergeNote.trim()})` : ""}”.
+                </p>
+              </div>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button type="button" className={btnGhost} disabled={busy} onClick={() => setMerging(null)}>
                 Cancel
