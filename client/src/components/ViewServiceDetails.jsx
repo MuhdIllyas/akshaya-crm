@@ -397,25 +397,27 @@ const ViewServiceDetails = () => {
                     </p>
                   </div>
                 )}
-                {serviceApplication.tracking?.assigned_staff_name && (
+                {(serviceApplication.handled_by?.name || serviceApplication.tracking?.assigned_staff_name) && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
                     <div className="flex items-center">
                       <FiUser className="text-blue-600 mr-3" />
                       <div>
                         <p className="text-sm text-blue-700">
-                          <span className="font-medium">Assigned Staff:</span> {serviceApplication.tracking.assigned_staff_name}
+                          <span className="font-medium">Assigned Staff:</span> {serviceApplication.tracking?.assigned_staff_name || serviceApplication.handled_by?.name}
                         </p>
                         <p className="text-xs text-blue-600 mt-1">
                           Last updated: {serviceApplication.tracking.updated_at ? new Date(serviceApplication.tracking.updated_at).toLocaleString() : 'N/A'}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/customer/messages?booking=${serviceApplication.id}`)}
-                        className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-navy-700 border border-blue-200 hover:bg-blue-100"
-                      >
-                        <FiMessageSquare className="h-3.5 w-3.5" /> Message {serviceApplication.tracking.assigned_staff_name.split(' ')[0]}
-                      </button>
+                      {serviceApplication.handled_by?.name && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/customer/messages?booking=${serviceApplication.id}`)}
+                          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-navy-700 border border-blue-200 hover:bg-blue-100"
+                        >
+                          <FiMessageSquare className="h-3.5 w-3.5" /> Message {serviceApplication.handled_by.name.split(' ')[0]}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}

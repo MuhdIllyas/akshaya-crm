@@ -79,7 +79,8 @@ export const getConversationDisplayName = (conv, currentUserId) => {
 };
 
 export const getConversationPhoto = (conv, currentUserId) => {
-  if (!conv || conv.channel === "whatsapp") return null;
+  // customer chats: no staff photo (it would be the other staff member's)
+  if (!conv || conv.channel === "whatsapp" || conv.channel === "portal") return null;
   if (isGroupConversation(conv, currentUserId)) return null;
   const others = getOtherParticipants(conv, currentUserId);
   return others.length === 1 ? getAvatarUrl(others[0]?.photo) : null;

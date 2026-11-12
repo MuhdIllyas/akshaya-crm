@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import {
+import { FiGlobe,
   FiX,
   FiUsers,
   FiBriefcase,
@@ -109,10 +109,13 @@ const ConversationDetails = ({
   const others = getOtherParticipants(conversation, currentUser.id);
   const isGroup = isGroupConversation(conversation, currentUser.id);
   const isWhatsApp = conversation.channel === "whatsapp";
+  const isPortal = conversation.channel === "portal";
+  // customer chats (WhatsApp, portal): no staff "online" status or photo
+  const isExternal = isWhatsApp || isPortal;
   const isService = conversation.context_type === "service_entry";
   const isTeam = conversation.context_type === "team";
   const onlineOthers = others.filter((p) => onlineUsers.has(String(p.staff_id)));
-  const singleOnline = !isGroup && !isWhatsApp ? onlineOthers.length > 0 : undefined;
+  const singleOnline = !isGroup && !isExternal ? onlineOthers.length > 0 : undefined;
 
   const sharedFiles = messages.filter((m) => m.isFile && !m.isOptimistic && !m.isDeleted).slice(-6).reverse();
 
@@ -137,6 +140,8 @@ const ConversationDetails = ({
 
   const subtitle = isWhatsApp
     ? conversation.context_identifier || "WhatsApp"
+    : isPortal
+    ? "Customer portal"
     : isGroup
     ? `${conversation.participants?.length || 0} members${onlineOthers.length ? ` · ${onlineOthers.length} online` : ""}`
     : others[0]?.centre_name || (singleOnline ? "Online" : "Offline");
@@ -170,14 +175,14 @@ const ConversationDetails = ({
             name={name}
             photo={getConversationPhoto(conversation, currentUser.id)}
             size="xl"
-            color={isWhatsApp ? "bg-emerald-600" : isTeam ? "bg-navy-700" : conversation.avatarColor || getAvatarColor(conversation.id)}
+            color={isWhatsApp ? "bg-emerald-600" : isPortal ? "bg-sky-600" : isTeam ? "bg-navy-700" : conversation.avatarColor || getAvatarColor(conversation.id)}
             isGroup={isGroup && !isTeam}
-            icon={isWhatsApp ? FiSmartphone : isTeam ? FiUsers : undefined}
+            icon={isWhatsApp ? FiSmartphone : isPortal ? FiGlobe : isTeam ? FiUsers : undefined}
             online={singleOnline}
           />
           <h3 className="mt-3 text-base font-semibold text-slate-900 break-words">{name}</h3>
           <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
-            {!isGroup && !isWhatsApp && others[0]?.centre_name && <FiMapPin size={11} />}
+            {!isGroup && !isExternal && others[0]?.centre_name && <FiMapPin size={11} />}
             {subtitle}
           </p>
 
@@ -197,7 +202,7 @@ const ConversationDetails = ({
                 <FiBriefcase size={10} /> Service
               </span>
             )}
-            {!isGroup && !isWhatsApp && (
+            {!isGroup && !isExternal && (
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${
                   singleOnline

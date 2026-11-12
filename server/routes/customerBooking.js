@@ -384,14 +384,20 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
         st.aadhaar as tracking_aadhaar,
         st.email as tracking_email,
         st.notes as tracking_notes,
-        st.application_number as tracking_application_number
+        st.application_number as tracking_application_number,
+        handler.id as handled_by_id,
+        handler.name as handled_by_name
       FROM customer_services cs
       LEFT JOIN services s ON cs.service_id = s.id
       LEFT JOIN subcategories sc ON cs.subcategory_id = sc.id
+      -- the tracking of the service entry made from this booking (service_tracking.service_entry_id
+      -- is a service entry id, not a booking id), or one with the same application number
+      LEFT JOIN service_entries se ON se.customer_service_id = cs.id
       LEFT JOIN service_tracking st ON 
         st.application_number = cs.application_number 
-        OR st.service_entry_id = cs.id
+        OR st.service_entry_id = se.id
       LEFT JOIN staff ON st.assigned_to = staff.id
+      LEFT JOIN staff handler ON handler.id = cs.assigned_staff_id
       WHERE cs.id = $1 AND cs.customer_id = $2
       ORDER BY st.updated_at DESC NULLS LAST
       LIMIT 1
@@ -494,6 +500,8 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
     
     res.json({
       ...serviceWithoutData,
+      // the staff member who took this booking (the customer can message them)
+      handled_by: service.handled_by_id ? { id: service.handled_by_id, name: service.handled_by_name } : null,
       service_data: mergedServiceData,
       payments: paymentsResult.rows,
       documents: documentsResult.rows,
