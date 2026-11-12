@@ -3,8 +3,44 @@ import pool from "../db.js";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { currentTenant } from "../tenancy/context.js";
+import { authMiddleware } from "./staff.js";
+import { LOCK_MINUTES, isLocked, previousSignIn, recordSignIn } from "../utils/staffLogins.js";
 
 const router = express.Router();
+
+/*
+ * GET /api/auth/sign-ins  (superadmin: everyone; admin: their centre's staff)
+ *   ?staff_id=<id>  one person    ?failed=1  wrong passwords only
+ *   ?limit=<1–200>  ?before=<id>  older entries (paging)
+ */
+router.get("/sign-ins", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+  const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
+  const staffId = req.query.staff_id ? Number(req.query.staff_id) : null;
+  const before = req.query.before ? Number(req.query.before) : null;
+  const failedOnly = req.query.failed === "1";
+  const isAdmin = req.user.role === "admin";
+  try {
+    const { rows } = await pool.query(
+      `SELECT l.id, l.staff_id, l.username, l.success, l.ip, l.user_agent, l.created_at,
+              s.name AS staff_name, s.role AS staff_role, c.name AS centre_name
+         FROM staff_logins l
+         LEFT JOIN staff s ON s.id = l.staff_id
+         LEFT JOIN centres c ON c.id = s.centre_id
+        WHERE ($1::int IS NULL OR l.staff_id = $1)
+          AND ($2::boolean = false OR l.success = false)
+          AND ($3::int IS NULL OR l.id < $3)
+          AND ($4::int IS NULL OR s.centre_id = $4)
+        ORDER BY l.id DESC
+        LIMIT $5`,
+      [staffId, failedOnly, before, isAdmin ? req.user.centre_id : null, limit]
+    );
+    res.json(rows);
+  } catch (err) {
+    if (err.code === "42P01") return res.json([]); // migration not applied yet
+    console.error("sign-ins error:", err.message);
+    res.status(500).json({ error: "Couldn't load the sign-in history" });
+  }
+});
 
 // POST /api/auth/login
 router.post("/login", async (req, res) => {
@@ -16,6 +52,13 @@ router.post("/login", async (req, res) => {
   }
 
   try {
+    // Too many wrong passwords for this username recently: refuse for a while.
+    if (await isLocked(username)) {
+      return res.status(429).json({
+        error: `Too many wrong passwords. This account is locked for ${LOCK_MINUTES} minutes. Ask your admin if you've forgotten your password.`,
+      });
+    }
+
     // LEFT JOIN so superadmin (no centre) still logs in
     const result = await pool.query(
       `SELECT s.id, s.name, s.username, s.password, s.role, s.centre_id, s.photo,
@@ -27,6 +70,7 @@ router.post("/login", async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      await recordSignIn(req, { username, success: false });
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
@@ -35,8 +79,10 @@ router.post("/login", async (req, res) => {
     // Verify password
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
+      await recordSignIn(req, { staffId: user.id, username, success: false });
       return res.status(401).json({ error: "Invalid username or password" });
     }
+    await recordSignIn(req, { staffId: user.id, username, success: true });
 
     // Generate JWT
     const token = jwt.sign(
@@ -55,7 +101,9 @@ router.post("/login", async (req, res) => {
       centre_id: user.centre_id || null,
       centre_name: user.centre_name || null,
       photo: user.photo || null,
-      org_slug: currentTenant().slug
+      org_slug: currentTenant().slug,
+      // Shown as "Last sign-in" so staff notice if someone else used their account.
+      previous_sign_in: await previousSignIn(user.id),
     });
   } catch (err) {
     console.error("Login error:", err.message, err.stack);

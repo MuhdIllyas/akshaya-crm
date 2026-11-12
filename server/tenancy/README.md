@@ -42,6 +42,7 @@ organization throws instead of guessing.
    node scripts/orgs.js migrate migrations/2026-11-10-whatsapp-per-org.sql
    node scripts/orgs.js migrate migrations/2026-11-11-centre-bookings.sql
    node scripts/orgs.js migrate migrations/2026-11-11-one-whatsapp-per-centre.sql
+   node scripts/orgs.js migrate migrations/2026-11-12-staff-logins.sql
    ```
    The last one stops and names the centres if two centres share one
    WhatsApp account. Give each its own account (or none), then run it again.
@@ -72,17 +73,44 @@ organizations show ₹0 there).
 Sign in at `https://<site>/platform/login` (separate from organization logins;
 a platform token never works on organization routes, and the other way round).
 
+Sections (sidebar):
+
+- **Overview:** active organizations, monthly revenue, collected this month,
+  trials; **Needs attention** (suspended, overdue, grace period, due within
+  7 days, trial ending within 7 days, storage over 90%); collections for the
+  last 6 months.
+- **Organizations:** list with plan, billing state and usage, and **New
+  organization** (same as `orgs.js create`, with plan, billing cycle,
+  free-trial days and grace days). Opening one: edit details, plan and billing
+  dates, **record a payment** (by default it adds one billing cycle after the
+  paid period), payment history, portal links, suspend or switch back on.
+- **Subscriptions:** every organization's plan, cycle, next due date and
+  state, with filters (due soon, overdue, trial, no billing dates).
+- **Payments:** every payment by month, who recorded it, and **Download for
+  Excel** (CSV).
 - **Plans:** price per month and per year; limits on centres, active staff
   (superadmins don't count) and storage (MB). An empty limit means unlimited,
   so a flat-fee plan is a plan with no limits. Customer portal and WhatsApp
   can be switched on or off per plan.
-- **Organizations:** summary (trials, due within 7 days, grace/overdue,
-  suspended, monthly revenue, collected this month), list with plan, billing
-  state and usage, and **New organization** (same as `orgs.js create`, with
-  plan, billing cycle, free-trial days and grace days).
-- **One organization:** edit details, plan and billing dates, **record a
-  payment** (by default it adds one billing cycle after the paid period),
-  payment history, portal links, suspend or switch back on.
+- **Platform admins** (owners): add people to the control panel with a role,
+  reset passwords, switch accounts off.
+- **Activity log** (owners): who did what, when and from which IP.
+- **Settings:** change your password; your recent sign-ins (successful and
+  failed).
+
+**Roles** (checked on the server):
+
+| Role | Can |
+|---|---|
+| Owner | Everything, including plans, admins and the activity log |
+| Billing | Organizations, subscriptions and payments |
+| Viewer | Read only |
+
+Safety rules: you can't change your own role or switch yourself off, and there
+must always be one active owner. Five wrong passwords lock that username for
+15 minutes. If every owner is locked out, `node scripts/orgs.js add-admin
+--username … --password '…'` on the server resets that account as an active
+owner.
 
 **Billing rules.** An organization is covered until the later of its trial
 end and paid-until date. After that it keeps working for its grace days,
@@ -173,6 +201,19 @@ access token; needed to save photos/documents customers send).
     bookings still go to everyone.
   The rule is enforced by the server (`PUT …/customer-services/:id/take`),
   not only on screen.
+
+## Staff sign-in history
+
+Every staff sign-in and wrong password is recorded in that organization's
+`staff_logins` table (migration `2026-11-12-staff-logins.sql`).
+
+- Five wrong passwords for one username lock it for 15 minutes.
+- After signing in, the sidebar shows "Last sign-in: …" (the one before).
+- Superadmin → Settings → **Sign-in History**: everyone, with a "wrong
+  passwords only" filter. Admin → Settings → **Security**: their own centre's
+  staff only. Each staff profile has a **Sign-in History** card.
+- Before the migration is applied, logins work as before and the history
+  is simply empty.
 
 ## Uploaded files
 

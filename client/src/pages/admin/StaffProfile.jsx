@@ -5,6 +5,7 @@ import {
   FiTrash2, FiGift, FiClock, FiActivity, FiX,
 } from "react-icons/fi";
 import ChangePassword from "../../components/ChangePassword";
+import SignInHistory from "../../components/security/SignInHistory";
 
 // ---------- helpers ----------
 const API = import.meta.env.VITE_API_URL;
@@ -297,6 +298,10 @@ const StaffProfile = () => {
               <Detail label="Username" value={`@${staff.username}`} />
               <Detail label="Account Created" value={createdAt ? formatDate(createdAt) : null} />
             </div>
+          </Card>
+
+          <Card title="Sign-in History">
+            <SignInHistory staffId={id} limit={10} compact />
           </Card>
 
           <Card title="Recent Activity">

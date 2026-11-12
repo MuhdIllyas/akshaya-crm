@@ -4,6 +4,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import AdminPrintSettings from '../printing/AdminPrintSettings';
+import SignInHistory from '../../components/security/SignInHistory';
 
 const AdminSettings = () => {
     const [activeTab, setActiveTab] = useState('companion'); // 'companion', 'print', 'security'
@@ -35,7 +36,7 @@ const AdminSettings = () => {
                         className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'security' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
                     >
                         <FiShield className="text-lg" />
-                        Security (Soon)
+                        Security
                     </button>
                 </nav>
             </div>
@@ -44,9 +45,7 @@ const AdminSettings = () => {
             <div className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto">
                 {activeTab === 'companion' && <CompanionSetupTab />}
                 {activeTab === 'print' && <AdminPrintSettings />}
-                {activeTab === 'security' && (
-                    <div className="text-slate-500 text-center py-20">Security settings coming soon...</div>
-                )}
+                {activeTab === 'security' && <SignInHistory />}
             </div>
         </div>
     );

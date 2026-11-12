@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
-import { FiPlus, FiMessageSquare, FiSettings, FiCopy, FiCheck, FiEdit, FiPower, FiGlobe } from "react-icons/fi";
+import { FiPlus, FiMessageSquare, FiSettings, FiCopy, FiCheck, FiEdit, FiPower, FiGlobe, FiShield } from "react-icons/fi";
 import OnlineBookingSettings from "./OnlineBookingSettings";
+import SignInHistory from "../../components/security/SignInHistory";
 
 const CommunicationSettings = () => {
   const [activeTab, setActiveTab] = useState("accounts");
@@ -237,8 +238,8 @@ const CommunicationSettings = () => {
           <p className="text-slate-500 mt-1">Manage WhatsApp numbers, providers, and message templates.</p>
         </div>
 
-        <div className="flex w-full sm:inline-flex sm:w-auto bg-slate-200/70 rounded-xl p-1 mb-6" role="tablist">
-          {[["accounts", FiMessageSquare, "WhatsApp Accounts"], ["templates", FiSettings, "Template Mappings"], ["bookings", FiGlobe, "Online Bookings"]].map(([id, Icon, label]) => (
+        <div className="flex w-full overflow-x-auto sm:inline-flex sm:w-auto bg-slate-200/70 rounded-xl p-1 mb-6" role="tablist">
+          {[["accounts", FiMessageSquare, "WhatsApp Accounts"], ["templates", FiSettings, "Template Mappings"], ["bookings", FiGlobe, "Online Bookings"], ["security", FiShield, "Sign-in History"]].map(([id, Icon, label]) => (
             <button
               key={id}
               role="tab"
@@ -439,6 +440,9 @@ const CommunicationSettings = () => {
 
         {/* Tab 3: Online Bookings (booking mode, centre links/QR) */}
         {activeTab === "bookings" && <OnlineBookingSettings accounts={accounts} />}
+
+        {/* Tab 4: Staff sign-in history */}
+        {activeTab === "security" && <SignInHistory />}
 
       {/* Add / Edit Account Modal */}
       {showAddModal && (

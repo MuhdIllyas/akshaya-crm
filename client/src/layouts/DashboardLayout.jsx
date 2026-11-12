@@ -41,6 +41,17 @@ const DashboardLayout = () => {
   // Centre name shown under the admin's name. Read from localStorage ("centre_name", saved at login);
   // no API call here because /api/centres is superadmin-only.
   const centreName = localStorage.getItem("centre_name") || "";
+  // Previous sign-in (saved at login), shown under the name: "Last sign-in: 11 Nov, 9:42 pm"
+  const previousSignIn = (() => {
+    try {
+      const p = JSON.parse(localStorage.getItem("previous_sign_in") || "null");
+      return p?.created_at
+        ? new Date(p.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+        : null;
+    } catch {
+      return null;
+    }
+  })();
   
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
@@ -538,6 +549,9 @@ const DashboardLayout = () => {
                 </p>
                 {role === "admin" && centreName && (
                   <p className="truncate text-[11px] text-slate-500" title={centreName}>{centreName}</p>
+                )}
+                {role !== "customer" && previousSignIn && (
+                  <p className="truncate text-[11px] text-slate-400" title="Your sign-in before this one">Last sign-in: {previousSignIn}</p>
                 )}
               </div>
             </div>

@@ -113,6 +113,12 @@ const Login = () => {
         localStorage.setItem("centre_id", res.data.centre_id || "");
         // Shown under the admin's name in the sidebar (needs centre_name in the login response)
         localStorage.setItem("centre_name", res.data.centre_name || "");
+        // "Last sign-in" in the sidebar, so staff notice if someone else used their account
+        if (res.data.previous_sign_in) {
+          localStorage.setItem("previous_sign_in", JSON.stringify(res.data.previous_sign_in));
+        } else {
+          localStorage.removeItem("previous_sign_in");
+        }
 
         // Save the profile photo if it exists, otherwise clear any old ones
         if (res.data.photo) {
