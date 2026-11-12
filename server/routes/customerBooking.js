@@ -5,6 +5,29 @@ import { todayIST, addDays } from "../utils/dates.js";
 
 const router = express.Router();
 
+// Required-document labels can change (a rename, a merge, the switch to
+// document types), but a booking keeps the names the customer ticked. Find
+// the required document a ticked name means: the same label, the same name
+// ignoring case/spaces, the document type's name, or the name before its note.
+const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function matchRequired(name, requiredRows) {
+  const k = nameKey(name);
+  const base = nameKey(String(name || "").split(/\s*\(|\s+-\s+/)[0]);
+  return (
+    requiredRows.find((r) => r.document_name === name) ||
+    requiredRows.find((r) => nameKey(r.document_name) === k) ||
+    requiredRows.find((r) => r.type_name && nameKey(r.type_name) === k) ||
+    requiredRows.find((r) => r.type_name && nameKey(r.type_name) === base) ||
+    // "Aadhaar Card with Mobile Number Linked" after a merge: the type's name
+    // first, then the line whose note is in the old name.
+    requiredRows.find(
+      (r) => r.type_name && r.note && k.startsWith(nameKey(r.type_name)) && k.includes(nameKey(r.note))
+    ) ||
+    requiredRows.find((r) => r.type_name && !r.note && k.startsWith(nameKey(r.type_name))) ||
+    null
+  );
+}
+
 /* ======================================================
    GET ALL AVAILABLE SERVICES (for customer to apply)
 ====================================================== */
@@ -949,7 +972,7 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
     const documentStatus = requiredDocuments.map(doc => {
       // Matched by document type, so spelling and notes don't matter.
       const customerDoc = customerDocuments.find(cd => cd.document_type_id && cd.document_type_id === doc.document_type_id);
-      const isSelected = selectedDocuments.includes(doc.document_name);
+      const isSelected = selectedDocuments.some(name => matchRequired(name, requiredDocuments) === doc);
       
       return {
         document_name: doc.document_name,
@@ -1036,10 +1059,11 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
 
     // 3. Get required documents to validate selection
     const requiredDocsQuery = `
-      SELECT document_name, document_type_id
-      FROM required_documents
-      WHERE (service_id = $1 AND sub_category_id IS NULL)
-         OR (sub_category_id = $2)
+      SELECT rd.document_name, rd.document_type_id, rd.note, dm.name AS type_name
+      FROM required_documents rd
+      LEFT JOIN document_master dm ON dm.id = rd.document_type_id
+      WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
+         OR (rd.sub_category_id = $2)
     `;
     
     const requiredDocsResult = await client.query(
@@ -1050,14 +1074,14 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
     const requiredDocumentNames = requiredDocsResult.rows.map(row => row.document_name);
     
     // Validate that all selected documents are in required documents
-    const invalidDocuments = selected_documents.filter(doc => !requiredDocumentNames.includes(doc));
+    const invalidDocuments = selected_documents.filter(doc => !matchRequired(doc, requiredDocsResult.rows));
     if (invalidDocuments.length > 0) {
       throw new Error(`Invalid document selection: ${invalidDocuments.join(', ')}`);
     }
 
     // 4. Check if selected documents are available (approved and latest)
     // Selected documents are the required documents' labels; match by type.
-    const typeOfLabel = new Map(requiredDocsResult.rows.map(row => [row.document_name, row.document_type_id]));
+    const typeOfLabel = new Map(selected_documents.map(doc => [doc, matchRequired(doc, requiredDocsResult.rows)?.document_type_id]));
     const availableDocsResult = await client.query(
       `
       SELECT DISTINCT document_type_id
@@ -1082,7 +1106,8 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
     // 5. Update service_data with selected documents
     const updatedServiceData = {
       ...currentServiceData,
-      selected_documents: selected_documents
+      // saved under the current labels
+      selected_documents: selected_documents.map(doc => matchRequired(doc, requiredDocsResult.rows)?.document_name || doc)
     };
 
     // 6. Determine new status based on document availability
