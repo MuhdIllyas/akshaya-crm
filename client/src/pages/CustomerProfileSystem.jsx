@@ -14,6 +14,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { getAllCustomers, getCustomerById } from "@/services/customerService";
 import { getCustomerHistory } from "@/services/serviceService";
 import StaffCustomerDocuments from './staff/StaffCustomerDocuments';
+import CustomerMessages from '@/components/CustomerMessages';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -703,7 +704,7 @@ const CustomerProfileSystem = () => {
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="border-b border-slate-200">
                       <nav className="flex -mb-px overflow-x-auto">
-                        {['profile', 'applications', 'documents', 'history'].map((tab) => (
+                        {['profile', 'applications', 'documents', 'messages', 'history'].map((tab) => (
                           <button
                             key={tab}
                             className={`flex-1 whitespace-nowrap py-3.5 px-4 sm:px-6 text-center font-medium text-sm border-b-2 transition-colors ${
@@ -716,6 +717,7 @@ const CustomerProfileSystem = () => {
                             {tab === 'profile' && 'Profile'}
                             {tab === 'applications' && 'Applications'}
                             {tab === 'documents' && 'Documents'}
+                            {tab === 'messages' && 'Messages'}
                             {tab === 'history' && 'History'}
                           </button>
                         ))}
@@ -946,6 +948,10 @@ const CustomerProfileSystem = () => {
                           
                           {activeTab === "documents" && selectedCustomer && (
                             <StaffCustomerDocuments customerId={selectedCustomer.id} />
+                          )}
+
+                          {activeTab === "messages" && selectedCustomer && (
+                            <CustomerMessages customer={selectedCustomer} />
                           )}
 
                           {activeTab === 'history' && (

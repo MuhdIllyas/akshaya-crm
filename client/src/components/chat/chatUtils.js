@@ -1,5 +1,5 @@
 // Shared helpers for the Messenger UI (Chat, ConversationList, ConversationDetails)
-import { FiUsers, FiSmartphone, FiBriefcase, FiUser } from "react-icons/fi";
+import { FiUsers, FiSmartphone, FiBriefcase, FiUser, FiGlobe } from "react-icons/fi";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -42,14 +42,16 @@ export const CHAT_TABS = [
   { id: "internal", label: "Internal", icon: FiUsers },
   { id: "whatsapp", label: "WhatsApp", icon: FiSmartphone },
   { id: "service", label: "Service", icon: FiBriefcase },
+  { id: "portal", label: "Portal", icon: FiGlobe },
   { id: "customer", label: "Customer", icon: FiUser },
 ];
 
-// Shown even when empty; "Customer" only appears once it has chats
+// Shown even when empty; "Portal" and "Customer" only appear once they have chats
 export const ALWAYS_VISIBLE_TABS = ["all", "internal", "whatsapp", "service"];
 
 export const getConversationCategory = (c) => {
   if (c?.channel === "whatsapp") return "whatsapp";
+  if (c?.channel === "portal") return "portal";
   if (c?.context_type === "service_entry") return "service";
   if (c?.context_type === "customer") return "customer";
   return "internal";

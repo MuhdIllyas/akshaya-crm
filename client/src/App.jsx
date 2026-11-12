@@ -77,6 +77,7 @@ import ReportsSection from './pages/ReportsSection';
 import CustomerRegistration from './pages/CustomerRegistration';
 import CustomerDashboard from './pages/customers/CustomerDashboard';
 import CustomerMyServices from './pages/customers/MyServices';
+import CustomerChat from './pages/customers/CustomerChat';
 import CustomerMyDocuments from './pages/customers/MyDocuments';
 import CustomerProfile from './pages/customers/CustomerProfile';
 import ContinueApplication from './components/ContinueApplication';
@@ -627,6 +628,10 @@ const App = () => {
           <Route
             path="/customer/myprofile"
             element={<CustomerProtectedRoute><CustomerProfile /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/messages"
+            element={<CustomerProtectedRoute><CustomerChat /></CustomerProtectedRoute>}
           />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

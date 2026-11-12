@@ -29,6 +29,7 @@ import centreRoutes from "./routes/centres.js";
 import staffRoute from "./routes/staff.js";
 import walletRoute from "./routes/wallet.js";
 import documentTypesRoutes from "./routes/documentTypes.js";
+import customerChatRoutes from "./routes/customerChat.js";
 import serviceManagementRoutes from "./routes/servicemanagement.js";
 import serviceTrackingRoute from "./routes/servicetracking.js";
 import salaryRoute from "./routes/salary.js";
@@ -463,6 +464,7 @@ app.use('/api/reports/schedules', reportSchedulesRoute);
 app.use("/api/reports", reportsRoute);
 app.use("/api/customer/documents", customerDocumentsRoutes);
 app.use("/api/customer/bookings", customerBookingRoutes);
+app.use("/api/customer/chat", customerChatRoutes);
 app.use("/api/customer", customerRoute);
 app.use("/api/staffcustomerdocuments", staffCustomerDocumentsRoutes);
 

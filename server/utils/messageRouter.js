@@ -17,10 +17,7 @@ export async function getUnreadCount(staffId, conversationId) {
      AND r.staff_id = $1
     WHERE
       m.conversation_id = $2
-      AND (
-        m.sender_id IS NULL
-        OR m.sender_id <> $1
-      )
+      AND NOT (m.sender_type = 'staff' AND m.sender_id = $1) -- a customer's id can equal a staff id
       AND r.id IS NULL
       AND m.is_deleted = false
     `,

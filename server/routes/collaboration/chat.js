@@ -163,6 +163,8 @@ router.get("/conversations", authenticateToken, async (req, res) => {
         c.name AS context_name,
         c.status,
         c.assigned_staff_id,
+        c.customer_id,
+        c.centre_id,
         c.last_message_at,
         (
           SELECT m.message
@@ -171,9 +173,10 @@ router.get("/conversations", authenticateToken, async (req, res) => {
           ORDER BY m.created_at DESC LIMIT 1
         ) as last_message,
         (
-          SELECT s.name
+          SELECT COALESCE(s.name, cu.name)
           FROM chat_messages m
-          LEFT JOIN staff s ON m.sender_id = s.id
+          LEFT JOIN staff s ON m.sender_type = 'staff' AND m.sender_id = s.id
+          LEFT JOIN customers cu ON m.sender_type = 'customer' AND m.sender_id = cu.id
           WHERE m.conversation_id = c.id AND m.is_deleted = false
           ORDER BY m.created_at DESC LIMIT 1
         ) as last_message_sender,
@@ -270,8 +273,13 @@ router.post("/conversation", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "No WhatsApp account is linked to your centre." });
       }
 
-      // ⭐ Do NOT create a customer record. Just store the phone number and name in the conversation.
-      finalCustomerId = null;          // No link to customers table
+      // ⭐ Do NOT create a customer record. Link an existing one when the chat is
+      // started from that customer's profile.
+      finalCustomerId = null;
+      if (customerId) {
+        const cust = await pool.query(`SELECT id FROM customers WHERE id = $1`, [customerId]);
+        finalCustomerId = cust.rows[0]?.id || null;
+      }
       finalPhoneNumber = phone;
       finalName = finalName || `WhatsApp ${phone}`;
 
@@ -398,7 +406,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
           m.file_size,
           m.created_at,
           m.is_deleted,
-          COALESCE(s.name, 'Unknown User') as sender_name,
+          COALESCE(s.name, cu.name, CASE WHEN m.sender_type = 'customer' THEN 'Customer' ELSE 'Unknown User' END) as sender_name,
           CASE 
             WHEN m.message_type = 'task' THEN (
               SELECT row_to_json(t) FROM tasks t WHERE t.id::text = m.message
@@ -432,7 +440,8 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
             WHERE r.message_id = m.id AND r.staff_id = $2
           ) as is_read_by_me
         FROM chat_messages m
-        LEFT JOIN staff s ON m.sender_id = s.id
+        LEFT JOIN staff s ON m.sender_type = 'staff' AND m.sender_id = s.id
+        LEFT JOIN customers cu ON m.sender_type = 'customer' AND m.sender_id = cu.id
         WHERE m.conversation_id = $1 AND m.is_deleted = false
         ORDER BY m.created_at ASC
       `;
@@ -449,7 +458,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
           0 as file_size,
           m.created_at,
           m.is_deleted,
-          COALESCE(s.name, 'Unknown User') as sender_name,
+          COALESCE(s.name, cu.name, CASE WHEN m.sender_type = 'customer' THEN 'Customer' ELSE 'Unknown User' END) as sender_name,
           CASE 
             WHEN m.message_type = 'task' THEN (
               SELECT row_to_json(t) FROM tasks t WHERE t.id::text = m.message
@@ -483,7 +492,8 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
             WHERE r.message_id = m.id AND r.staff_id = $2
           ) as is_read_by_me
         FROM chat_messages m
-        LEFT JOIN staff s ON m.sender_id = s.id
+        LEFT JOIN staff s ON m.sender_type = 'staff' AND m.sender_id = s.id
+        LEFT JOIN customers cu ON m.sender_type = 'customer' AND m.sender_id = cu.id
         WHERE m.conversation_id = $1 AND m.is_deleted = false
         ORDER BY m.created_at ASC
       `;
@@ -493,7 +503,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
 
     // Mark messages as read
     const unreadMessages = result.rows
-      .filter(msg => msg.sender_id !== userId && !msg.is_read_by_me)
+      .filter(msg => !(msg.sender_type === 'staff' && msg.sender_id === userId) && !msg.is_read_by_me)
       .map(msg => msg.id);
 
     if (unreadMessages.length > 0) {
@@ -518,12 +528,12 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
         const io = req.io;
         if (io) {
           const messageSenders = await pool.query(
-            `SELECT DISTINCT sender_id FROM chat_messages WHERE id = ANY($1::int[])`,
+            `SELECT DISTINCT sender_id, sender_type FROM chat_messages WHERE id = ANY($1::int[])`,
             [newUnreadMessages]
           );
 
           for (const row of messageSenders.rows) {
-            if (row.sender_id !== userId) {
+            if (row.sender_type === 'staff' && row.sender_id !== userId) {
               io.to(`user:${row.sender_id}`).emit("messages_read", {
                 conversationId: parseInt(conversationId),
                 readerId: userId,
@@ -537,7 +547,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
              FROM chat_messages m
              LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
              WHERE m.conversation_id = $2 
-               AND m.sender_id != $1
+               AND NOT (m.sender_type = 'staff' AND m.sender_id = $1)
                AND r.id IS NULL
                AND m.is_deleted = false`,
             [userId, conversationId]
@@ -561,7 +571,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
         hour: "2-digit",
         minute: "2-digit"
       }),
-      isCurrentUser: m.sender_id === userId,
+      isCurrentUser: m.sender_type === 'staff' && m.sender_id === userId,
       messageType: m.type,
       isFile: m.type !== "text"
       // Note: 'mentions' is automatically carried over via the spread operator (...m)
@@ -589,7 +599,7 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
 
     // 1. Get the conversation details
     const convRes = await client.query(
-      `SELECT centre_id, channel, name FROM chat_conversations WHERE id = $1`,
+      `SELECT centre_id, channel, name, context_type FROM chat_conversations WHERE id = $1`,
       [conversation_id]
     );
 
@@ -606,6 +616,13 @@ router.post("/message", authenticateToken, upload.single("file"), async (req, re
       isAuthorized = true;
     } else if (conversation.centre_id === null) {
       // Participant-Owned (Internal Chat)
+      const participantCheck = await client.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+        [conversation_id, userId]
+      );
+      isAuthorized = participantCheck.rows.length > 0;
+    } else if (isPrivateBookingChat(conversation) && userRole !== 'admin') {
+      // A customer's chat about a booking: only the staff in it (and admins)
       const participantCheck = await client.query(
         `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
         [conversation_id, userId]
@@ -782,14 +799,14 @@ router.post("/read", authenticateToken, async (req, res) => {
         const conversationId = convInfo.rows[0].conversation_id;
 
         const messageSenders = await pool.query(
-          `SELECT DISTINCT sender_id FROM chat_messages WHERE id = ANY($1::int[])`,
+          `SELECT DISTINCT sender_id, sender_type FROM chat_messages WHERE id = ANY($1::int[])`,
           [newMessages]
         );
 
         const io = req.io;
         if (io) {
           for (const row of messageSenders.rows) {
-            if (row.sender_id !== userId) {
+            if (row.sender_type === 'staff' && row.sender_id !== userId) {
               io.to(`user:${row.sender_id}`).emit("messages_read", {
                 conversationId,
                 readerId: userId,
@@ -803,7 +820,7 @@ router.post("/read", authenticateToken, async (req, res) => {
              FROM chat_messages m
              LEFT JOIN chat_message_reads r ON m.id = r.message_id AND r.staff_id = $1
              WHERE m.conversation_id = $2 
-               AND m.sender_id != $1
+               AND NOT (m.sender_type = 'staff' AND m.sender_id = $1)
                AND r.id IS NULL
                AND m.is_deleted = false`,
             [userId, conversationId]
@@ -882,7 +899,7 @@ router.delete("/message/:messageId", authenticateToken, async (req, res) => {
     const userId = req.user.id;
 
     const message = await pool.query(
-      `SELECT sender_id, file_url, conversation_id FROM chat_messages WHERE id = $1`,
+      `SELECT sender_id, sender_type, file_url, conversation_id FROM chat_messages WHERE id = $1`,
       [messageId]
     );
 
@@ -890,7 +907,7 @@ router.delete("/message/:messageId", authenticateToken, async (req, res) => {
       return res.status(404).json({ error: "Message not found" });
     }
 
-    if (message.rows[0].sender_id !== userId) {
+    if (!(message.rows[0].sender_type === 'staff' && message.rows[0].sender_id === userId)) {
       return res.status(403).json({ error: "Can only delete your own messages" });
     }
 
@@ -998,7 +1015,7 @@ router.get("/unread/all", authenticateToken, async (req, res) => {
       FROM chat_conversations c
       JOIN chat_participants p ON c.id = p.conversation_id
       JOIN chat_messages m ON c.id = m.conversation_id
-        AND (m.sender_id IS NULL OR m.sender_id <> $1) -- 🔥 PERFECT LOGIC SYNC
+        AND NOT (m.sender_type = 'staff' AND m.sender_id = $1) -- a customer's id can equal a staff id
         AND m.is_deleted = false
         AND NOT EXISTS (
           SELECT 1 FROM chat_message_reads r
@@ -1290,6 +1307,101 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
     res.status(500).json({ error: err.message });
   } finally {
     client.release();
+  }
+});
+
+
+/* ================================
+   CUSTOMER CONVERSATIONS (customer profile → Messages)
+================================ */
+
+// A customer's chat about one booking with the staff member handling it is
+// private to that staff member (and admins); every other customer chat is
+// shared by the staff of its centre.
+const isPrivateBookingChat = (c) => c.channel === "portal" && c.context_type === "customer_service";
+
+function canOpenCustomerConversation(user, c, isParticipant) {
+  if (user.role === "superadmin") return true;
+  if (isParticipant) return true;
+  if (String(c.centre_id) !== String(user.centre_id)) return false;
+  if (isPrivateBookingChat(c)) return user.role === "admin";
+  return true;
+}
+
+const phoneVariants = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return [];
+  const last10 = digits.slice(-10);
+  return [...new Set([digits, last10, `91${last10}`, `+91${last10}`])];
+};
+
+// WhatsApp and portal conversations for one customer, newest first, limited to
+// what this staff member may open.
+router.get("/customer/:customerId/conversations", authenticateToken, async (req, res) => {
+  try {
+    const customerId = Number(req.params.customerId);
+    if (!Number.isInteger(customerId)) return res.status(400).json({ error: "Invalid customer" });
+
+    const { rows: cust } = await pool.query(`SELECT id, name, primary_phone FROM customers WHERE id = $1`, [customerId]);
+    if (!cust[0]) return res.status(404).json({ error: "Customer not found" });
+
+    const { rows } = await pool.query(
+      `SELECT c.id, c.name, c.channel, c.context_type, c.context_id, c.centre_id, c.customer_id,
+              c.phone_number, c.status, c.last_message_at,
+              ce.name AS centre_name,
+              cs.application_number,
+              sv.name AS service_name,
+              st.name AS assigned_staff_name,
+              EXISTS (SELECT 1 FROM chat_participants p WHERE p.conversation_id = c.id AND p.staff_id = $2) AS is_participant,
+              (SELECT m.message FROM chat_messages m WHERE m.conversation_id = c.id AND m.is_deleted = false
+                ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+              (SELECT m.sender_type FROM chat_messages m WHERE m.conversation_id = c.id AND m.is_deleted = false
+                ORDER BY m.created_at DESC LIMIT 1) AS last_sender_type
+         FROM chat_conversations c
+         LEFT JOIN centres ce ON ce.id = c.centre_id
+         LEFT JOIN customer_services cs ON c.context_type = 'customer_service' AND cs.id = c.context_id
+         LEFT JOIN services sv ON sv.id = cs.service_id
+         LEFT JOIN staff st ON st.id = cs.assigned_staff_id
+        WHERE c.status <> 'deleted'
+          AND c.channel IN ('whatsapp', 'portal')
+          AND (c.customer_id = $1 OR (c.channel = 'whatsapp' AND c.phone_number = ANY($3::text[])))
+        ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`,
+      [customerId, req.user.id, phoneVariants(cust[0].primary_phone)]
+    );
+
+    res.json(rows.filter((c) => canOpenCustomerConversation(req.user, c, c.is_participant)));
+  } catch (err) {
+    console.error("Error fetching customer conversations:", err);
+    res.status(500).json({ error: "Couldn't load this customer's conversations" });
+  }
+});
+
+// Join a customer conversation (so it shows in Messenger), if allowed.
+router.post("/conversation/:id/join", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows } = await pool.query(`SELECT * FROM chat_conversations WHERE id = $1 AND status <> 'deleted'`, [id]);
+    const c = rows[0];
+    if (!c) return res.status(404).json({ error: "Conversation not found" });
+
+    const isParticipant = await checkConversationAccess(id, req.user.id);
+    if (!canOpenCustomerConversation(req.user, c, isParticipant)) {
+      return res.status(403).json({ error: "You can't open this conversation" });
+    }
+    if (!isParticipant) {
+      await pool.query(
+        `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+         VALUES ($1, $2, 'staff', 'member', NOW()) ON CONFLICT DO NOTHING`,
+        [id, req.user.id]
+      );
+    }
+    if (c.status === "archived") {
+      await pool.query(`UPDATE chat_conversations SET status = 'active', archived_at = NULL WHERE id = $1`, [id]);
+    }
+    res.json({ success: true, conversation_id: id });
+  } catch (err) {
+    console.error("Error joining conversation:", err);
+    res.status(500).json({ error: "Couldn't open this conversation" });
   }
 });
 

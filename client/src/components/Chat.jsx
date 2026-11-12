@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import {
   FiSend,
   FiPaperclip,
@@ -25,6 +26,7 @@ import {
   FiChevronRight,
   FiAlertCircle,
   FiUsers,
+  FiGlobe,
 } from "react-icons/fi";
 import { FaRegSmile } from "react-icons/fa";
 import { IoCheckmark, IoCheckmarkDone } from "react-icons/io5";
@@ -347,6 +349,7 @@ const Chat = ({
   initialDraft = null,
   onDraftConsumed = null,
 }) => {
+  const navigate = useNavigate();
   const [newMessage, setNewMessage] = useState("");
   const [fileToUpload, setFileToUpload] = useState(null);
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
@@ -829,13 +832,14 @@ const Chat = ({
   const others = getOtherParticipants(activeConversation, currentUser.id);
   const isFunctionallyGroup = isGroupConversation(activeConversation, currentUser.id);
   const isWhatsApp = activeConversation.channel === "whatsapp";
+  const isPortal = activeConversation.channel === "portal";
   const isTeamChat = activeConversation.context_type === "team";
   const avatarPhoto = getConversationPhoto(activeConversation, currentUser.id);
-  const singleOther = !isFunctionallyGroup && !isWhatsApp ? others[0] : null;
+  const singleOther = !isFunctionallyGroup && !isWhatsApp && !isPortal ? others[0] : null;
   const isParticipantOnline = singleOther ? isUserOnline(singleOther.staff_id) : false;
   const onlineParticipants = others.filter((p) => isUserOnline(p.staff_id));
   const hasTasks = serviceInfo && serviceInfo.tasks && serviceInfo.tasks.length > 0;
-  const showSenderNames = isFunctionallyGroup && !isWhatsApp;
+  const showSenderNames = (isFunctionallyGroup && !isWhatsApp) || isPortal;
   const typingList = typingUsers[activeConversation.id] || [];
   const windowClosed = isWhatsApp && !isWithinWindow;
   const inputDisabled = isUploading || windowClosed;
@@ -857,6 +861,13 @@ const Chat = ({
     );
   } else if (isWhatsApp) {
     subtitle = <span className="flex items-center gap-1"><FiSmartphone size={11} /> {activeConversation.context_identifier || "WhatsApp"}</span>;
+  } else if (isPortal) {
+    subtitle = (
+      <span className="flex items-center gap-1 truncate">
+        <FiGlobe size={11} className="shrink-0" />
+        {activeConversation.context_type === "customer_service" ? "Customer portal · about an application" : "Customer portal"}
+      </span>
+    );
   } else if (isFunctionallyGroup) {
     subtitle = (
       <span className="truncate">
@@ -901,9 +912,9 @@ const Chat = ({
             name={displayName}
             photo={avatarPhoto}
             size="md"
-            color={isWhatsApp ? "bg-emerald-600" : isTeamChat ? "bg-navy-700" : activeConversation.avatarColor || getAvatarColor(activeConversation.id)}
+            color={isWhatsApp ? "bg-emerald-600" : isPortal ? "bg-sky-600" : isTeamChat ? "bg-navy-700" : activeConversation.avatarColor || getAvatarColor(activeConversation.id)}
             isGroup={isFunctionallyGroup && !isTeamChat}
-            icon={isWhatsApp ? FiSmartphone : isTeamChat ? FiUsers : undefined}
+            icon={isWhatsApp ? FiSmartphone : isPortal ? FiGlobe : isTeamChat ? FiUsers : undefined}
             online={singleOther ? isParticipantOnline : undefined}
           />
           <div className="min-w-0">
@@ -928,6 +939,14 @@ const Chat = ({
         </button>
 
         <div className="flex items-center gap-0.5 relative">
+          {activeConversation.customer_id && (
+            <HeaderButton
+              onClick={() => navigate(`/dashboard/staff/customers/${activeConversation.customer_id}`)}
+              title="View customer profile"
+            >
+              <FiUser size={17} />
+            </HeaderButton>
+          )}
           {windowClosed && (
             <HeaderButton onClick={() => setShowTemplateModal(true)} title="Send template" className="bg-emerald-50 !text-emerald-700 hover:!bg-emerald-100">
               <FiMessageSquare size={17} />

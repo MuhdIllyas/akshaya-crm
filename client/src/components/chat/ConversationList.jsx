@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers } from "react-icons/fi";
+import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers } from "react-icons/fi";
 import ChatAvatar from "./ChatAvatar";
 import {
   CHAT_TABS,
@@ -160,6 +160,7 @@ const ConversationList = ({
             const name = getConversationDisplayName(c, currentUser.id);
             const isGroup = isGroupConversation(c, currentUser.id);
             const isWhatsApp = c.channel === "whatsapp";
+            const isPortal = c.channel === "portal";
             const isService = c.context_type === "service_entry";
             const isTeam = c.context_type === "team";
             const others = getOtherParticipants(c, currentUser.id);
@@ -181,9 +182,9 @@ const ConversationList = ({
                   name={name}
                   photo={getConversationPhoto(c, currentUser.id)}
                   size="lg"
-                  color={isWhatsApp ? "bg-emerald-600" : isTeam ? "bg-navy-700" : c.avatarColor || getAvatarColor(c.id)}
+                  color={isWhatsApp ? "bg-emerald-600" : isPortal ? "bg-sky-600" : isTeam ? "bg-navy-700" : c.avatarColor || getAvatarColor(c.id)}
                   isGroup={isGroup && !isTeam}
-                  icon={isWhatsApp ? FiSmartphone : isTeam ? FiUsers : undefined}
+                  icon={isWhatsApp ? FiSmartphone : isPortal ? FiGlobe : isTeam ? FiUsers : undefined}
                   online={isOnline === true ? true : undefined}
                 />
 
@@ -197,6 +198,7 @@ const ConversationList = ({
                       {name}
                     </span>
                     {isWhatsApp && <FiSmartphone className="shrink-0 text-emerald-600" size={12} title="WhatsApp" />}
+                    {isPortal && <FiGlobe className="shrink-0 text-sky-600" size={12} title="Customer portal" />}
                     {isService && <FiBriefcase className="shrink-0 text-violet-600" size={12} title="Service" />}
                     {isTeam && <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-navy-700">Team</span>}
                     <span
