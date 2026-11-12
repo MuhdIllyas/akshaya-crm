@@ -38,6 +38,8 @@ const CustomerRegistration = () => {
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState("");
+  // Bumped on every code sent, so the OTP boxes start empty for a new code.
+  const [otpRound, setOtpRound] = useState(0);
   const [otpTimer, setOtpTimer] = useState(0);
   const [verificationStep, setVerificationStep] = useState(1); // 1: Aadhaar, 2: OTP, 3: Details
   const [aadhaarVerified, setAadhaarVerified] = useState(false);
@@ -101,6 +103,7 @@ const CustomerRegistration = () => {
 
       if (response.data.success) {
         setOtpSent(true);
+        setOtpRound((n) => n + 1);
         setOtp(""); // the OTP boxes start empty each time a code is sent
         setOtpTimer(120); // 2 minutes
         setVerificationStep(2);
@@ -378,7 +381,7 @@ const CustomerRegistration = () => {
 
             <div>
               <p className="mb-2 text-xs font-medium text-slate-500">Enter 6-digit Security Code</p>
-              <OtpInput onChange={setOtp} disabled={loading} />
+              <OtpInput key={otpRound} onChange={setOtp} disabled={loading} />
               <div className="mt-3 flex items-center justify-between px-1">
                 <p className="text-xs font-medium text-slate-500">
                   {otpTimer > 0 ? <>Code expires in <span className="text-teal-600">{Math.floor(otpTimer / 60)}:{String(otpTimer % 60).padStart(2, '0')}</span></> : "Didn't get the code?"}

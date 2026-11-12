@@ -27,6 +27,8 @@ const Login = () => {
   const [isCustomerLogin, setIsCustomerLogin] = useState(false);
   const [customerPhone, setCustomerPhone] = useState("");
   const [customerOtp, setCustomerOtp] = useState("");
+  // Bumped on every code sent, so the OTP boxes start empty for a new code.
+  const [otpRound, setOtpRound] = useState(0);
   const [otpSent, setOtpSent] = useState(false);
   const [otpTimer, setOtpTimer] = useState(0);
 
@@ -178,6 +180,8 @@ const Login = () => {
 
       if (response.data.success) {
         setOtpSent(true);
+        setOtpRound((n) => n + 1);
+        setCustomerOtp("");
         setOtpTimer(60);
         toast.success("OTP sent to your WhatsApp");
       }
@@ -308,7 +312,7 @@ const Login = () => {
                   {otpSent && (
                     <div className="animate-otp-in">
                       <p className="mb-2 mt-1 text-xs font-medium text-slate-500">Enter OTP</p>
-                      <OtpInput onChange={setCustomerOtp} disabled={loading} />
+                      <OtpInput key={otpRound} onChange={setCustomerOtp} disabled={loading} />
                       {otpTimer > 0 && (
                         <p className="mt-2 text-xs font-medium text-slate-500">
                           OTP expires in <span className="text-teal-600">{otpTimer} seconds</span>

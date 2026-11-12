@@ -582,9 +582,13 @@ const ViewServiceDetails = () => {
                           <div className="flex items-center">
                             <FiClock className="text-amber-600 mr-3 text-xl" />
                             <div>
-                              <p className="text-sm font-medium text-amber-800">Payment Pending</p>
+                              <p className="text-sm font-medium text-amber-800">
+                                {serviceData.payment.payment_method === 'pay_at_centre' ? 'Pay at the centre' : 'Payment Pending'}
+                              </p>
                               <p className="text-xs text-amber-600 mt-1">
-                                Your payment is being processed
+                                {serviceData.payment.payment_method === 'pay_at_centre'
+                                  ? 'Pay when you visit the centre'
+                                  : 'Your payment is being processed'}
                               </p>
                             </div>
                           </div>

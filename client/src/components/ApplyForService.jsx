@@ -365,9 +365,11 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
                 <div className="text-lg font-semibold text-slate-900">
                   {formatCurrency(selectedService.total_charges)}
                 </div>
-                <div className="text-sm text-slate-500">
-                  Base service fee
-                </div>
+                {selectedService.total_charges != null && (
+                  <div className="text-sm text-slate-500">
+                    Base service fee
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -401,7 +403,7 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
                     <div className="text-xl font-bold text-navy-700">
                       {formatCurrency(subcategory.total_charges)}
                     </div>
-                    <div className="text-sm text-slate-500">Total fee</div>
+                    {subcategory.total_charges != null && <div className="text-sm text-slate-500">Total fee</div>}
                   </div>
                 </div>
               </button>
