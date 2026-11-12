@@ -110,13 +110,15 @@ export const Spinner = () => (
   </svg>
 );
 
-const AuthShell = ({ brandCard, children }) => (
+// `scene`: the illustration on the right (default: the backwaters). The platform-admin
+// login passes LighthouseScene so the master panel looks related but distinct.
+const AuthShell = ({ brandCard, children, scene: Scene = BackwatersScene }) => (
   <div className="login-page flex min-h-screen min-h-dvh items-center justify-center bg-slate-100 dark:bg-slate-50 p-3 sm:p-6 md:p-0">
     <div className="relative w-full overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl md:min-h-screen md:min-h-dvh md:rounded-none md:border-0 md:shadow-none">
 
-      {/* Backwaters panel (tablets and up) */}
+      {/* Illustration panel (tablets and up) */}
       <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[58%] md:block">
-        <BackwatersScene className="h-full w-full" />
+        <Scene className="h-full w-full" />
       </div>
 
       <div className="relative z-10 flex flex-col px-6 py-6 sm:px-10 md:min-h-screen md:min-h-dvh md:w-[50%] md:py-10 lg:px-16 xl:px-24">
@@ -207,6 +209,24 @@ const AuthShell = ({ brandCard, children }) => (
         --scene-palm: #163d33;
         --scene-ripple: rgba(255, 255, 255, 0.5);
         --scene-dash: #cbd5e1;
+
+        /* Lighthouse scene (platform-admin login): coast at sunset */
+        --lh-sky-top: #6b7fb8;
+        --lh-sky-mid: #f4b183;
+        --lh-sky-bottom: #fde3c4;
+        --lh-sun: #fbbf77;
+        --lh-star: rgba(255, 255, 255, 0.7);
+        --lh-sea-top: #3d6f8e;
+        --lh-sea-bottom: #1f3f5c;
+        --lh-land: #2f4a3f;
+        --lh-land-near: #22372f;
+        --lh-tower: #f8fafc;
+        --lh-band: #c2410c;
+        --lh-iron: #1f2937;
+        --lh-lamp: #fde68a;
+        --lh-beam: #fff7cc;
+        --lh-foam: rgba(255, 255, 255, 0.6);
+        --lh-palm: #142a22;
       }
       @media screen {
         .dark .login-page .login-field { background: #2e3a4a; }
@@ -229,6 +249,23 @@ const AuthShell = ({ brandCard, children }) => (
           --scene-palm: #08140f;
           --scene-ripple: rgba(255, 255, 255, 0.15);
           --scene-dash: #4a5869;
+
+          --lh-sky-top: #0b1830;
+          --lh-sky-mid: #1e2f52;
+          --lh-sky-bottom: #3b3f63;
+          --lh-sun: #f59e6b;
+          --lh-star: #e2e8f0;
+          --lh-sea-top: #12304a;
+          --lh-sea-bottom: #081a2b;
+          --lh-land: #16261f;
+          --lh-land-near: #0f1c17;
+          --lh-tower: #cbd5e1;
+          --lh-band: #9a3412;
+          --lh-iron: #0b1220;
+          --lh-lamp: #fde68a;
+          --lh-beam: #fff3b0;
+          --lh-foam: rgba(255, 255, 255, 0.3);
+          --lh-palm: #07110c;
         }
       }
     `}</style>
