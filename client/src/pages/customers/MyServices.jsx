@@ -8,7 +8,7 @@ import {
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import axios from 'axios';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import ApplyForService from '@/components/ApplyForService';
 import ReviewModal from '@/components/ReviewModal';
 import { getBookingReview } from '@/services/reviewService';
@@ -20,6 +20,15 @@ const MyServices = () => {
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Opened from the dashboard's "Apply for a Service": show the form straight away.
+  useEffect(() => {
+    if (location.state?.apply) {
+      setShowApplyModal(true);
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [location.state, location.pathname, navigate]);
 
   // Review states
   const [reviewModalOpen, setReviewModalOpen] = useState(false);

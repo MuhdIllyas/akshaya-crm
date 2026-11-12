@@ -1,8 +1,45 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import axios from 'axios';
 import { FiGrid, FiActivity, FiHome, FiFileText, FiPlusCircle, FiUpload } from 'react-icons/fi';
+import { useNavigate } from 'react-router-dom';
 import CentreChatCard from '../../components/CentreChatCard';
 
+// Booking statuses, as grouped on My Services.
+const ACTIVE_STATUSES = ['draft', 'pending_documents', 'action_required', 'under_review', 'in_progress', 'payment_pending'];
+const NEEDS_CUSTOMER = ['draft', 'pending_documents', 'action_required', 'payment_pending'];
+
+const customerApi = () =>
+  axios.create({
+    baseURL: import.meta.env.VITE_API_URL,
+    headers: { Authorization: `Bearer ${localStorage.getItem("customer_token") || ""}` },
+  });
+
 const CustomerDashboard = () => {
+  const navigate = useNavigate();
+  // null while loading; the cards show "—" until the numbers arrive.
+  const [stats, setStats] = useState({ active: null, pending: null, documents: null });
+
+  useEffect(() => {
+    let cancelled = false;
+    const api = customerApi();
+    Promise.allSettled([api.get('/api/customer/bookings'), api.get('/api/customer/documents')]).then(
+      ([bookings, documents]) => {
+        if (cancelled) return;
+        const list = bookings.status === 'fulfilled' && Array.isArray(bookings.value.data) ? bookings.value.data : null;
+        const docs = documents.status === 'fulfilled' && Array.isArray(documents.value.data) ? documents.value.data : null;
+        setStats({
+          active: list ? list.filter((b) => ACTIVE_STATUSES.includes(b.status)).length : null,
+          pending: list ? list.filter((b) => NEEDS_CUSTOMER.includes(b.status)).length : null,
+          documents: docs ? docs.filter((d) => d.is_latest !== false).length : null,
+        });
+      }
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const show = (n, zero) => (n === null ? '—' : n === 0 ? zero : n);
   const customerName = localStorage.getItem("customer_name");
   const customerId = localStorage.getItem("customer_id");
   const role = localStorage.getItem("role");
@@ -27,15 +64,15 @@ const CustomerDashboard = () => {
 
           {/* Quick Actions */}
           <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
-            <button className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white px-4 text-sm font-medium text-navy-700 transition-colors hover:bg-slate-100">
+            <button type="button" onClick={() => navigate("/customer/myservices", { state: { apply: true } })} className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white px-4 text-sm font-medium text-navy-700 transition-colors hover:bg-slate-100">
               <FiPlusCircle className="h-4 w-4" />
               Apply for a Service
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20">
+            <button type="button" onClick={() => navigate("/customer/mydocuments")} className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20">
               <FiUpload className="h-4 w-4" />
               Upload Document
             </button>
-            <button className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20">
+            <button type="button" onClick={() => navigate("/customer/myservices")} className="inline-flex h-11 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-white/10 px-4 text-sm font-medium text-white transition-colors hover:bg-white/20">
               <FiGrid className="h-4 w-4" />
               View My Services
             </button>
@@ -51,7 +88,7 @@ const CustomerDashboard = () => {
           </span>
           <div className="min-w-0">
             <p className="text-sm text-slate-500">Active Services</p>
-            <p className="text-xl font-semibold text-slate-900">None</p>
+            <p className="text-xl font-semibold text-slate-900">{show(stats.active, "None")}</p>
           </div>
         </div>
 
@@ -61,7 +98,7 @@ const CustomerDashboard = () => {
           </span>
           <div className="min-w-0">
             <p className="text-sm text-slate-500">Pending Actions</p>
-            <p className="text-xl font-semibold text-slate-900">—</p>
+            <p className="text-xl font-semibold text-slate-900">{show(stats.pending, "None")}</p>
           </div>
         </div>
 
@@ -71,7 +108,7 @@ const CustomerDashboard = () => {
           </span>
           <div className="min-w-0">
             <p className="text-sm text-slate-500">Documents Uploaded</p>
-            <p className="text-xl font-semibold text-slate-900">2</p>
+            <p className="text-xl font-semibold text-slate-900">{show(stats.documents, 0)}</p>
           </div>
         </div>
       </div>

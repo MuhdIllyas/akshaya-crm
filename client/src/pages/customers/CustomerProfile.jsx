@@ -82,8 +82,13 @@ const CustomerProfile = () => {
   // Fetch verified documents
   const fetchVerifiedDocuments = async () => {
     try {
-      const res = await API.get("/api/customer/documents/verified");
-      setVerifiedDocuments(res.data);
+      // Documents the centre has approved (latest version of each).
+      const res = await API.get("/api/customer/documents");
+      setVerifiedDocuments(
+        (Array.isArray(res.data) ? res.data : []).filter(
+          (doc) => doc.status === "approved" && doc.is_latest !== false
+        )
+      );
     } catch (err) {
       console.error("Failed to fetch documents", err);
     }
