@@ -1,10 +1,10 @@
-// Platform admin → Organizations: summary, list with plan/billing/usage,
+// Platform admin → Organizations: list with plan/billing/usage,
 // create a new organization, open one for billing and payments.
 
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FiPlus, FiRefreshCw } from "react-icons/fi";
-import platformApi, { errorText, formatBytes, formatDate, rupees } from "./platformApi";
+import platformApi, { errorText, formatBytes, formatDate, permissions, rupees } from "./platformApi";
 import { BillingBadge, StatusBadge } from "./billingBadge";
 import OrgDetail from "./OrgDetail";
 
@@ -142,10 +142,12 @@ function NewOrgForm({ plans, onClose, onCreated }) {
 
 const usage = (used, max) => (used === null || used === undefined ? "—" : max === null || max === undefined ? used : `${used}/${max}`);
 
-export default function OrgsPanel() {
+// `createRequest` changes when the header's "New organization" button is
+// pressed, which opens the form here.
+export default function OrgsPanel({ role, createRequest = 0 }) {
+  const can = permissions(role);
   const [orgs, setOrgs] = useState([]);
   const [plans, setPlans] = useState([]);
-  const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [openSlug, setOpenSlug] = useState(null);
@@ -154,10 +156,9 @@ export default function OrgsPanel() {
   const load = async () => {
     setLoading(true);
     try {
-      const [o, p, s] = await Promise.all([platformApi.get("/orgs"), platformApi.get("/plans"), platformApi.get("/summary")]);
+      const [o, p] = await Promise.all([platformApi.get("/orgs"), platformApi.get("/plans")]);
       setOrgs(o.data);
       setPlans(p.data);
-      setSummary(s.data);
     } catch (err) {
       toast.error(errorText(err, "Couldn't load organizations"));
     } finally {
@@ -169,6 +170,10 @@ export default function OrgsPanel() {
     load();
   }, []);
 
+  useEffect(() => {
+    if (createRequest > 0) setCreating(true);
+  }, [createRequest]);
+
   const FILTERS = {
     all: () => true,
     attention: (o) => ["grace", "overdue"].includes(o.billing.state) || (["active", "trial"].includes(o.billing.state) && o.billing.days_left <= 7),
@@ -177,33 +182,10 @@ export default function OrgsPanel() {
   };
   const shown = orgs.filter(FILTERS[filter]);
 
-  const cards = summary
-    ? [
-        ["Organizations", summary.organizations, "text-slate-900"],
-        ["In trial", summary.in_trial, "text-sky-700"],
-        ["Due within 7 days", summary.due_soon, "text-amber-600"],
-        ["Grace / overdue", summary.in_grace + summary.overdue, "text-rose-600"],
-        ["Suspended", summary.suspended, "text-rose-600"],
-        ["Monthly revenue", rupees(summary.monthly_revenue), "text-emerald-700"],
-        ["Collected this month", rupees(summary.collected_this_month), "text-emerald-700"],
-      ]
-    : [];
-
   return (
-    <div className="space-y-5">
-      {summary && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-7">
-          {cards.map(([k, v, tone]) => (
-            <div key={k} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-              <p className="text-xs font-medium text-slate-500">{k}</p>
-              <p className={`text-xl font-bold ${tone}`}>{v}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex rounded-xl bg-slate-200/70 p-1" role="tablist" aria-label="Filter organizations">
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex rounded-xl bg-slate-100 p-1" role="tablist" aria-label="Filter organizations">
           {[["all", "All"], ["attention", "Needs attention"], ["trial", "Trial"], ["suspended", "Suspended"]].map(([k, t]) => (
             <button
               key={k}
@@ -220,9 +202,11 @@ export default function OrgsPanel() {
           <button onClick={load} className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50" aria-label="Refresh">
             <FiRefreshCw className={loading ? "animate-spin" : ""} />
           </button>
-          <button onClick={() => setCreating(true)} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-navy-800">
-            <FiPlus /> New organization
-          </button>
+          {can.manageBilling && (
+            <button onClick={() => setCreating(true)} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-navy-800">
+              <FiPlus /> New organization
+            </button>
+          )}
         </div>
       </div>
 
@@ -288,7 +272,7 @@ export default function OrgsPanel() {
           }}
         />
       )}
-      {openSlug && <OrgDetail slug={openSlug} plans={plans} onClose={() => setOpenSlug(null)} onChanged={load} />}
+      {openSlug && <OrgDetail slug={openSlug} plans={plans} role={role} onClose={() => setOpenSlug(null)} onChanged={load} />}
     </div>
   );
 }

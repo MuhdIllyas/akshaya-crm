@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FiEdit2, FiPlus } from "react-icons/fi";
-import platformApi, { errorText, rupees } from "./platformApi";
+import platformApi, { errorText, permissions, rupees } from "./platformApi";
 
 const EMPTY = {
   name: "",
@@ -130,7 +130,8 @@ function PlanForm({ initial, onClose, onSaved }) {
   );
 }
 
-export default function PlansPanel() {
+export default function PlansPanel({ role }) {
+  const canEdit = permissions(role).manageOwnerOnly;
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // plan, {} for new, null closed
@@ -150,9 +151,11 @@ export default function PlansPanel() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-slate-500">Plans set the price and what each organization can use.</p>
-        <button onClick={() => setEditing({})} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-navy-800">
-          <FiPlus /> New plan
-        </button>
+        {canEdit && (
+          <button onClick={() => setEditing({})} className="inline-flex items-center gap-2 rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-navy-800">
+            <FiPlus /> New plan
+          </button>
+        )}
       </div>
 
       {!loading && plans.length === 0 && (
@@ -169,9 +172,11 @@ export default function PlansPanel() {
                 <h3 className="truncate text-lg font-semibold text-slate-900">{p.name}</h3>
                 {p.description && <p className="mt-0.5 text-sm text-slate-500">{p.description}</p>}
               </div>
-              <button onClick={() => setEditing(p)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-navy-700" aria-label={`Edit ${p.name}`}>
-                <FiEdit2 />
-              </button>
+              {canEdit && (
+                <button onClick={() => setEditing(p)} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-navy-700" aria-label={`Edit ${p.name}`}>
+                  <FiEdit2 />
+                </button>
+              )}
             </div>
             <p className="mt-3 text-2xl font-bold text-slate-900">
               {rupees(p.price_monthly)}<span className="text-sm font-normal text-slate-500"> / month</span>

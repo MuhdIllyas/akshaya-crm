@@ -89,3 +89,41 @@ CREATE TABLE IF NOT EXISTS platform_admins (
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
   last_login_at  TIMESTAMPTZ
 );
+
+-- ---------------------------------------------------------------------------
+-- Control panel: admin roles, activity log, sign-in history (added 2026-11-12).
+-- ---------------------------------------------------------------------------
+
+-- Roles: owner = everything; billing = organizations, subscriptions, payments;
+-- viewer = read only. Admins created before roles existed are owners.
+ALTER TABLE platform_admins ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'owner';
+ALTER TABLE platform_admins ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE platform_admins ADD COLUMN IF NOT EXISTS created_by INTEGER;
+DO $$ BEGIN
+  ALTER TABLE platform_admins ADD CONSTRAINT platform_admins_role_check CHECK (role IN ('owner', 'billing', 'viewer'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Who did what in the control panel.
+CREATE TABLE IF NOT EXISTS platform_activity (
+  id          SERIAL PRIMARY KEY,
+  admin_id    INTEGER,
+  admin_name  TEXT,
+  action      TEXT NOT NULL,
+  target      TEXT,
+  details     JSONB,
+  ip          TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS platform_activity_created_idx ON platform_activity (created_at DESC);
+
+-- Every sign-in attempt to the control panel, successful or not.
+CREATE TABLE IF NOT EXISTS platform_logins (
+  id          SERIAL PRIMARY KEY,
+  admin_id    INTEGER,
+  username    TEXT,
+  success     BOOLEAN NOT NULL,
+  ip          TEXT,
+  user_agent  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS platform_logins_admin_idx ON platform_logins (admin_id, created_at DESC);

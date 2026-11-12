@@ -119,13 +119,16 @@ async function addAdmin(args) {
   const hash = await bcrypt.hash(password, 12);
   await withClient(requireEnv("CONTROL_DATABASE_URL"), async (c) => {
     await applyControlSchema(c);
+    // Always an owner. Running it for an existing username resets the password
+    // and switches the account back on: the emergency way back in.
     await c.query(
-      `INSERT INTO platform_admins (username, name, password_hash) VALUES ($1, $2, $3)
-       ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash, name = COALESCE(EXCLUDED.name, platform_admins.name)`,
+      `INSERT INTO platform_admins (username, name, password_hash, role) VALUES ($1, $2, $3, 'owner')
+       ON CONFLICT (username) DO UPDATE SET password_hash = EXCLUDED.password_hash,
+         name = COALESCE(EXCLUDED.name, platform_admins.name), role = 'owner', is_active = true`,
       [username, str(args.name) || null, hash]
     );
   });
-  console.log(`✔ Platform admin "${username}" saved. Sign in at /platform/login`);
+  console.log(`✔ Platform admin "${username}" saved as an owner. Sign in at /platform/login`);
   if (!process.env.PLATFORM_JWT_SECRET) console.log("  Also set PLATFORM_JWT_SECRET in server/.env (a long random string).");
 }
 

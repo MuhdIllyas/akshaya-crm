@@ -57,4 +57,17 @@ export const formatBytes = (b) => {
 export const formatDate = (ymd) =>
   ymd ? new Date(`${ymd}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "—";
 
+export const formatDateTime = (iso) =>
+  iso
+    ? new Date(iso).toLocaleString("en-IN", { day: "numeric", month: "short", year: "numeric", hour: "numeric", minute: "2-digit" })
+    : "—";
+
+/** What a platform role may do. The server checks the same rules. */
+export const permissions = (role) => ({
+  manageBilling: role === "owner" || role === "billing", // organizations, subscriptions, payments
+  manageOwnerOnly: role === "owner", // plans, admins, activity log
+});
+
+export const ROLE_LABELS = { owner: "Owner", billing: "Billing", viewer: "Viewer" };
+
 export default platformApi;

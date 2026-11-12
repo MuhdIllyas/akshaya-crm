@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import { FiCopy, FiX } from "react-icons/fi";
-import platformApi, { errorText, formatBytes, formatDate, rupees } from "./platformApi";
+import platformApi, { errorText, formatBytes, formatDate, permissions, rupees } from "./platformApi";
 import { BillingBadge, StatusBadge } from "./billingBadge";
 
 const input = "w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30 disabled:bg-slate-100";
@@ -90,7 +90,9 @@ function PaymentForm({ org, onSaved }) {
   );
 }
 
-export default function OrgDetail({ slug, plans, onClose, onChanged }) {
+// Viewers (role) see everything but can't change anything.
+export default function OrgDetail({ slug, plans, role, onClose, onChanged }) {
+  const canEdit = permissions(role).manageBilling;
   const [org, setOrg] = useState(null);
   const [form, setForm] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -197,6 +199,7 @@ export default function OrgDetail({ slug, plans, onClose, onChanged }) {
 
             <form onSubmit={save} className={`${section} space-y-4`}>
               <h3 className="font-semibold text-slate-900">Details{org.is_default ? "" : " and billing"}</h3>
+              <fieldset disabled={!canEdit} className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="sm:col-span-2">
                   <label className={label} htmlFor="o-name">Name</label>
@@ -254,14 +257,19 @@ export default function OrgDetail({ slug, plans, onClose, onChanged }) {
                 <label className={label} htmlFor="o-notes">Notes</label>
                 <textarea id="o-notes" className={input} rows={2} value={form.notes} onChange={set("notes")} />
               </div>
-              <div className="flex justify-end">
-                <button type="submit" disabled={busy} className="rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60">
-                  {busy ? "Saving…" : "Save"}
-                </button>
-              </div>
+              </fieldset>
+              {canEdit ? (
+                <div className="flex justify-end">
+                  <button type="submit" disabled={busy} className="rounded-xl bg-navy-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-navy-800 disabled:opacity-60">
+                    {busy ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-500">Your role is read-only.</p>
+              )}
             </form>
 
-            {!org.is_default && (
+            {!org.is_default && canEdit && (
               <div className={section}>
                 <h3 className="mb-3 font-semibold text-slate-900">Record a payment</h3>
                 <PaymentForm org={org} onSaved={refresh} />
@@ -315,7 +323,7 @@ export default function OrgDetail({ slug, plans, onClose, onChanged }) {
               </ul>
             </div>
 
-            {!org.is_default && (
+            {!org.is_default && canEdit && (
               <div className={`${section} flex flex-wrap items-center justify-between gap-3`}>
                 <div>
                   <h3 className="font-semibold text-slate-900">{org.status === "active" ? "Suspend organization" : "Switch organization back on"}</h3>
