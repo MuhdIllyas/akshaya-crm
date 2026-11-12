@@ -5,7 +5,6 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FiUser, FiLock, FiEye, FiEyeOff, FiPhone, FiCheck } from "react-icons/fi";
 import AuthShell, { Field, OtpInput, Spinner, pillPrimary, pillSecondary } from "../components/login/AuthShell";
-import OrgBadge from "../components/OrgBadge";
 
 // Array of services for the animation
 const servicesList = [
@@ -271,7 +270,6 @@ const Login = () => {
               if (!submitDisabled) handleLogin();
             }}
           >
-            <OrgBadge className="mb-5" />
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
               {isCustomerLogin ? "Public Login" : "Admin / Staff Login"}
             </p>
