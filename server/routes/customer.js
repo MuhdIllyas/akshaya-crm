@@ -281,7 +281,7 @@ router.post("/register", async (req, res) => {
       });
     }
 
-    await pool.query(
+    const inserted = await pool.query(
       `
       INSERT INTO customers (
         aadhaar_hash,
@@ -297,6 +297,7 @@ router.post("/register", async (req, res) => {
         verified_at
       )
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,true,NOW())
+      RETURNING id, name
       `,
       [
         aadhaarHash,
@@ -311,7 +312,15 @@ router.post("/register", async (req, res) => {
       ]
     );
 
-    return res.json({ success: true });
+    // The phone was just verified by OTP, so sign the new customer in
+    // straight away instead of asking for another code.
+    const customer = inserted.rows[0];
+    const token = jwt.sign(
+      { customer_id: customer.id, org: orgSlug() },
+      process.env.CUSTOMER_JWT_SECRET,
+      { expiresIn: "7d" }
+    );
+    return res.json({ success: true, token, customerId: customer.id, name: customer.name, org_slug: orgSlug() });
   } catch (err) {
     console.error("register error:", err);
     return res.status(500).json({ message: "Registration failed" });

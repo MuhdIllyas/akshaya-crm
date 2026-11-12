@@ -189,6 +189,13 @@ const CustomerRegistration = () => {
       if (response.data.success) {
         toast.success("Registration successful! Redirecting to dashboard...");
         localStorage.setItem("temp_customer_phone", formData.primary_phone);
+        // Registering signs the customer in (the phone was just verified).
+        if (response.data.token) {
+          localStorage.setItem("role", "customer");
+          localStorage.setItem("customer_token", response.data.token);
+          localStorage.setItem("customer_id", response.data.customerId);
+          localStorage.setItem("customer_name", response.data.name || formData.name);
+        }
 
         setTimeout(() => {
           navigate("/customer/dashboard");

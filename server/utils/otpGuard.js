@@ -14,7 +14,7 @@ import crypto from "crypto";
 
 const MIN = 60_000;
 export const SEND_WINDOW = 15 * MIN;
-const SEND_PER_PHONE = 3;
+const SEND_PER_PHONE = 5;
 const SEND_GAP = 30_000;
 const SEND_PER_IP = 10;
 export const MAX_WRONG = 5;
