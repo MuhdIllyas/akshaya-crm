@@ -103,6 +103,12 @@ import "./routes/scheduler.js";
 ================================ */
 
 const app = express();
+
+// The app runs behind nginx on the same server. Trust only that local proxy's
+// X-Forwarded-For, so req.ip is the visitor's real address (used for sign-in
+// history, the activity log and per-IP login limits) and can't be faked by
+// someone sending their own X-Forwarded-For header.
+app.set("trust proxy", "loopback");
 const httpServer = createServer(app);
 
 app.use(cors({

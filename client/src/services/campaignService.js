@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { loginPath } from '../tenancy/org';
 
 const api = axios.create({
   baseURL: `${import.meta.env.VITE_API_URL}/api/servicemanagement`,
@@ -34,7 +35,7 @@ api.interceptors.response.use(
       localStorage.removeItem('role');
       localStorage.removeItem('centre_id');
       localStorage.removeItem('id');
-      window.location.href = '/login';
+      window.location.href = loginPath();
     }
     return Promise.reject(error);
   }

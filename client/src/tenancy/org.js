@@ -31,6 +31,31 @@ export function setOrgSlug(slug) {
   }
 }
 
+/** Forget the old business's logins (staff and customer) when switching business. */
+export function clearOrgSession() {
+  try {
+    for (const key of ["token", "id", "role", "username", "name", "centre_id", "centre_name", "photo", "previous_sign_in",
+      "customer_token", "customer_id", "customer_name", "preferred_centre_id"]) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    /* storage blocked */
+  }
+}
+
+/**
+ * A page address for the remembered business: "/portal/<slug>/<path>" for
+ * another business, or just "/<path>" for your own. Use it wherever the app
+ * sends someone to the login or registration page.
+ */
+export function portalPath(path) {
+  const slug = getOrgSlug();
+  const clean = String(path).replace(/^\//, "");
+  return slug ? `/portal/${slug}/${clean}` : `/${clean}`;
+}
+
+export const loginPath = () => portalPath("login");
+
 const isApiUrl = (url) => {
   const u = String(url || "");
   if (API_URL) return u.startsWith(API_URL) || u.startsWith("/api");

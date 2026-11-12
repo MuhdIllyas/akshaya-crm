@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
+import { loginPath } from "../../tenancy/org";
 import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -452,7 +453,7 @@ const WalletManagementSuperAdmin = () => {
     if (transfer.from === transfer.to) return toast.error("Source and destination must be different.");
     if (!staffId) {
       toast.error("Session expired. Please log in again.");
-      window.location.href = "/login";
+      window.location.href = loginPath();
       return;
     }
     const fromWallet = walletById[transfer.from];

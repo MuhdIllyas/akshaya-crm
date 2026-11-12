@@ -1,4 +1,5 @@
 import axios from "axios";
+import { loginPath } from "../tenancy/org";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -285,7 +286,7 @@ export const transferWallet = async (transferData) => {
     });
     if (error.response?.status === 401) {
       alert("Session expired. Please log in again.");
-      window.location.href = "/login";
+      window.location.href = loginPath();
     }
     throw error;
   }

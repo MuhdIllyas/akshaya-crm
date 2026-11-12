@@ -70,7 +70,8 @@ const allow = (...roles) => (req, res, next) =>
 const OWNER = allow("owner");
 const BILLING = allow("owner", "billing");
 
-const clientIp = (req) => String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim().slice(0, 64);
+// req.ip is the visitor's address (server.js trusts only the local nginx).
+const clientIp = (req) => String(req.ip || "").replace(/^::ffff:/, "").slice(0, 64);
 
 /** Record an action in the activity log (never fails the request). */
 async function logActivity(req, action, target = null, details = null) {

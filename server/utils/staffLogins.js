@@ -9,8 +9,8 @@ export const LOCK_MINUTES = 15; // … within this many minutes locks it for tha
 
 const missingTable = (err) => err?.code === "42P01";
 
-export const clientIp = (req) =>
-  String(req.headers["x-forwarded-for"] || req.ip || "").split(",")[0].trim().slice(0, 64);
+// req.ip is the visitor's address (server.js trusts only the local nginx).
+export const clientIp = (req) => String(req.ip || "").replace(/^::ffff:/, "").slice(0, 64);
 
 /** True when this username has too many recent wrong passwords. */
 export async function isLocked(username) {

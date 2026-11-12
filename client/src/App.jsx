@@ -6,6 +6,8 @@ import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
 import PortalEntry from "./pages/PortalEntry";
+import Logout from "./pages/Logout";
+import DefaultOrgRoute from "./tenancy/DefaultOrgRoute";
 import PlatformLogin from "./pages/platform/PlatformLogin";
 import PlatformAdmin from "./pages/platform/PlatformAdmin";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -285,7 +287,9 @@ const App = () => {
         <Route path="/home" element={<Navigate to="/" replace />} />
 
         {/* 2. AUTH & PUBLIC SERVICES */}
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<DefaultOrgRoute path="login"><Login /></DefaultOrgRoute>} />
+        {/* Signs out and opens the organization's own login */}
+        <Route path="/logout" element={<Logout />} />
         {/* A business's own portal link: /portal/<slug>/login, /portal/<slug>/customer/register … */}
         <Route path="/portal/:slug/*" element={<PortalEntry />} />
         {/* Platform admin (software owner): organizations, plans, billing */}
@@ -293,7 +297,7 @@ const App = () => {
         <Route path="/platform" element={<PlatformAdmin />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/aadhaar-docufinder" element={<AadhaarDocu />} />
-        <Route path="/customer/register" element={<CustomerRegistration />} />
+        <Route path="/customer/register" element={<DefaultOrgRoute path="customer/register"><CustomerRegistration /></DefaultOrgRoute>} />
         
         {/* 3. DYNAMIC PUBLIC PAGES */}
         <Route path="/review/:token" element={<PublicReview />} />

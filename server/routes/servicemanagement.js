@@ -1039,6 +1039,38 @@ router.get('/categories', authenticateToken, async (req, res) => {
     // 🔥 Handle Superadmin impersonating a centre, fallback to user's centre
     const targetCentreId = req.query.centre_id ? parseInt(req.query.centre_id) : parseInt(req.user.centre_id);
 
+    // A superadmin has no centre: without ?centre_id, list the whole catalogue
+    // (used by the all-centres Service Logs filter) instead of failing on NaN.
+    if (!Number.isInteger(targetCentreId)) {
+      const { rows } = await client.query(`
+        SELECT s.id, s.name, s.description, s.website, s.status,
+               s.wallet_id, s.requires_wallet, s.requires_workflow, s.has_expiry,
+               COALESCE(s.department_charges, 0) AS department_charges,
+               COALESCE(s.service_charges, 0) AS service_charges,
+               (SELECT COALESCE(json_agg(json_build_object(
+                         'id', sub.id, 'name', sub.name, 'service_id', sub.service_id,
+                         'department_charges', COALESCE(sub.department_charges, 0),
+                         'service_charges', COALESCE(sub.service_charges, 0)) ORDER BY sub.name), '[]'::json)
+                  FROM subcategories sub WHERE sub.service_id = s.id) AS subcategories
+          FROM services s
+         WHERE s.status = 'active'
+         ORDER BY s.name ASC`);
+      return res.json(rows.map((c) => ({
+        ...c,
+        department_charges: parseFloat(c.department_charges),
+        service_charges: parseFloat(c.service_charges),
+        required_documents: [],
+        subcategories: (c.subcategories || []).map((sub) => ({
+          ...sub,
+          wallet_id: null,
+          requires_wallet: false,
+          department_charges: parseFloat(sub.department_charges),
+          service_charges: parseFloat(sub.service_charges),
+          required_documents: [],
+        })),
+      })));
+    }
+
     const query = `
       SELECT 
         s.id, s.name, s.description, s.website, s.status,
