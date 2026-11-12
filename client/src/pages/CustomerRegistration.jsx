@@ -41,6 +41,8 @@ const CustomerRegistration = () => {
   const [otpTimer, setOtpTimer] = useState(0);
   const [verificationStep, setVerificationStep] = useState(1); // 1: Aadhaar, 2: OTP, 3: Details
   const [aadhaarVerified, setAadhaarVerified] = useState(false);
+  // Proof from the server that the phone and ID were verified; /register needs it.
+  const [registrationToken, setRegistrationToken] = useState("");
   const [benefitIndex, setBenefitIndex] = useState(0);
 
   const [availableDistricts] = useState([
@@ -129,10 +131,12 @@ const CustomerRegistration = () => {
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/verify-aadhaar-otp`, {
         aadhaar: formData.aadhaar.replace(/\s/g, ''),
+        phone: formData.primary_phone,
         otp: otp
       });
 
       if (response.data.success) {
+        setRegistrationToken(response.data.registration_token || "");
         setAadhaarVerified(true);
         setVerificationStep(3);
         toast.success("Verification successful!");
@@ -178,7 +182,8 @@ const CustomerRegistration = () => {
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/register`, {
         ...formData,
-        aadhaar: formData.aadhaar.replace(/\s/g, '')
+        aadhaar: formData.aadhaar.replace(/\s/g, ''),
+        registration_token: registrationToken
       });
 
       if (response.data.success) {

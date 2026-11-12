@@ -7,6 +7,7 @@ import fs from "fs";
 import pool from "../db.js";
 import { currentTenant } from "../tenancy/context.js";
 import { sendWhatsAppOTP } from "../utils/whatsapp.js";
+import { generateOtp, checkSend, checkVerifyIp, recordWrong, clearWrong } from "../utils/otpGuard.js";
 import { authMiddleware } from "./staff.js";
 import { orgUploadPath } from '../tenancy/uploads.js';
 
@@ -67,11 +68,6 @@ const hashValue = (value) => {
     .digest("hex");
 };
 
-// Generate 6-digit OTP
-const generateOTP = () => {
-  return Math.floor(100000 + Math.random() * 900000).toString();
-};
-
 // OTP expiry (minutes)
 const OTP_EXPIRY_MINUTES = 5;
 
@@ -113,37 +109,89 @@ const deleteOldProfilePhoto = async (customerId) => {
 };
 
 /* ======================================================
+   OTP HELPERS
+   Codes are tied to one phone, used once, thrown away after
+   MAX_WRONG wrong tries, and sending is rate limited (utils/otpGuard.js).
+====================================================== */
+const clientIp = (req) => String(req.ip || "").replace(/^::ffff:/, "");
+const orgSlug = () => currentTenant()?.slug || "default";
+const validPhone = (phone) => /^\d{10}$/.test(String(phone || ""));
+
+// Store a fresh code for this phone and send it on WhatsApp.
+async function issueOtp(req, res, phone) {
+  const blocked = checkSend(orgSlug(), phone, clientIp(req));
+  if (blocked) {
+    res.status(429).json({ message: blocked });
+    return false;
+  }
+  const otp = generateOtp();
+  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60000);
+  await pool.query(`DELETE FROM customer_otps WHERE phone = $1`, [phone]);
+  await pool.query(
+    `INSERT INTO customer_otps (phone, otp, expires_at) VALUES ($1, $2, $3)`,
+    [phone, otp, expiresAt]
+  );
+  await sendWhatsAppOTP({ phone, otp });
+  return true;
+}
+
+// Check a code for this phone. Returns an error { status, message } or null.
+// A correct code is deleted, so it works only once.
+async function consumeOtp(req, phone, otp) {
+  const ipBlocked = checkVerifyIp(orgSlug(), clientIp(req));
+  if (ipBlocked) return { status: 429, message: ipBlocked };
+
+  const { rows } = await pool.query(
+    `SELECT otp, expires_at FROM customer_otps
+      WHERE phone = $1 ORDER BY created_at DESC LIMIT 1`,
+    [phone]
+  );
+  const record = rows[0];
+  if (!record) return { status: 400, message: "Invalid OTP" };
+  if (new Date(record.expires_at) < new Date()) {
+    await pool.query(`DELETE FROM customer_otps WHERE phone = $1`, [phone]);
+    return { status: 400, message: "OTP expired" };
+  }
+
+  const given = Buffer.from(String(otp || ""));
+  const stored = Buffer.from(String(record.otp));
+  const matches = given.length === stored.length && crypto.timingSafeEqual(given, stored);
+  if (!matches) {
+    if (recordWrong(orgSlug(), phone)) {
+      await pool.query(`DELETE FROM customer_otps WHERE phone = $1`, [phone]);
+      return { status: 400, message: "Too many wrong codes. Please ask for a new OTP." };
+    }
+    return { status: 400, message: "Invalid OTP" };
+  }
+
+  clearWrong(orgSlug(), phone);
+  await pool.query(`DELETE FROM customer_otps WHERE phone = $1`, [phone]);
+  return null;
+}
+
+// Proof (valid 30 minutes) that this phone and ID were verified by OTP;
+// /register only accepts details that come with it.
+const REGISTRATION_TOKEN_MINUTES = 30;
+const signRegistrationToken = (phone, aadhaarHash) =>
+  jwt.sign(
+    { purpose: "customer-register", phone, aadhaar_hash: aadhaarHash, org: orgSlug() },
+    process.env.CUSTOMER_JWT_SECRET,
+    { expiresIn: `${REGISTRATION_TOKEN_MINUTES}m` }
+  );
+
+/* ======================================================
    1. SEND AADHAAR OTP
    POST /api/customer/send-aadhaar-otp
 ====================================================== */
 router.post("/send-aadhaar-otp", async (req, res) => {
   const { aadhaar, phone } = req.body;
 
-  if (!aadhaar || aadhaar.length !== 12 || !phone) {
+  if (!aadhaar || String(aadhaar).length !== 12 || !validPhone(phone)) {
     return res.status(400).json({ message: "Invalid Aadhaar or phone number" });
   }
 
-  const otp = generateOTP();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60000);
-
   try {
-    // Remove old OTPs for this Aadhaar
-    await pool.query(
-      `DELETE FROM customer_otps WHERE phone = $1`,
-      [phone]
-    );
-
-    await pool.query(
-      `
-      INSERT INTO customer_otps (phone, otp, expires_at)
-      VALUES ($1, $2, $3)
-      `,
-      [phone, otp, expiresAt]
-    );
-
-    // TODO: Integrate WhatsApp / SMS gateway here
-    await sendWhatsAppOTP({ phone, otp });
-
+    if (!(await issueOtp(req, res, phone))) return;
     return res.json({ success: true });
   } catch (err) {
     console.error("send-aadhaar-otp error:", err);
@@ -154,38 +202,23 @@ router.post("/send-aadhaar-otp", async (req, res) => {
 /* ======================================================
    2. VERIFY AADHAAR OTP
    POST /api/customer/verify-aadhaar-otp
+   Returns registration_token, which /register requires.
 ====================================================== */
 router.post("/verify-aadhaar-otp", async (req, res) => {
-  const { aadhaar, otp } = req.body;
+  const { aadhaar, phone, otp } = req.body;
 
-  if (!aadhaar || !otp) {
-    return res.status(400).json({ message: "Missing Aadhaar or OTP" });
+  if (!aadhaar || String(aadhaar).length !== 12 || !validPhone(phone) || !otp) {
+    return res.status(400).json({ message: "Missing Aadhaar, phone or OTP" });
   }
 
   try {
-    const otpResult = await pool.query(
-      `
-      SELECT * FROM customer_otps
-      WHERE otp = $1
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
-      [otp]
-    );
+    const failed = await consumeOtp(req, phone, otp);
+    if (failed) return res.status(failed.status).json({ message: failed.message });
 
-    if (otpResult.rows.length === 0) {
-      return res.status(400).json({ message: "Invalid OTP" });
-    }
-
-    const record = otpResult.rows[0];
-
-    if (new Date(record.expires_at) < new Date()) {
-      return res.status(400).json({ message: "OTP expired" });
-    }
-
-    // OTP valid → Aadhaar verified
+    // OTP valid → this phone and ID can be registered
     return res.json({
       success: true,
+      registration_token: signRegistrationToken(phone, hashValue(String(aadhaar))),
       customerData: null // Placeholder for future UIDAI prefill
     });
   } catch (err) {
@@ -197,6 +230,7 @@ router.post("/verify-aadhaar-otp", async (req, res) => {
 /* ======================================================
    3. REGISTER CUSTOMER
    POST /api/customer/register
+   Needs the registration_token from verify-aadhaar-otp.
 ====================================================== */
 router.post("/register", async (req, res) => {
   const {
@@ -207,15 +241,31 @@ router.post("/register", async (req, res) => {
     address,
     pincode,
     district,
-    state
+    state,
+    registration_token
   } = req.body;
 
-  if (!aadhaar || aadhaar.length !== 12) {
+  if (!aadhaar || String(aadhaar).length !== 12) {
     return res.status(400).json({ message: "Invalid Aadhaar" });
   }
 
-  const aadhaarHash = hashValue(aadhaar);
-  const aadhaarLast4 = aadhaar.slice(-4);
+  const aadhaarHash = hashValue(String(aadhaar));
+  const aadhaarLast4 = String(aadhaar).slice(-4);
+
+  let proof;
+  try {
+    proof = jwt.verify(String(registration_token || ""), process.env.CUSTOMER_JWT_SECRET);
+  } catch {
+    return res.status(401).json({ message: "Please verify your phone number with the OTP first" });
+  }
+  if (proof.purpose !== "customer-register" || proof.org !== orgSlug()) {
+    return res.status(401).json({ message: "Please verify your phone number with the OTP first" });
+  }
+  if (proof.phone !== String(primary_phone) || proof.aadhaar_hash !== aadhaarHash) {
+    return res.status(400).json({
+      message: "The phone number or ID was changed after verification. Please verify again."
+    });
+  }
 
   try {
     // Check if customer already exists
@@ -275,26 +325,12 @@ router.post("/register", async (req, res) => {
 router.post("/send-otp", async (req, res) => {
   const { phone } = req.body;
 
-  if (!phone || phone.length !== 10) {
+  if (!validPhone(phone)) {
     return res.status(400).json({ message: "Invalid phone number" });
   }
 
-  const otp = generateOTP();
-  const expiresAt = new Date(Date.now() + OTP_EXPIRY_MINUTES * 60000);
-
   try {
-    await pool.query(`DELETE FROM customer_otps WHERE phone = $1`, [phone]);
-
-    await pool.query(
-      `
-      INSERT INTO customer_otps (phone, otp, expires_at)
-      VALUES ($1, $2, $3)
-      `,
-      [phone, otp, expiresAt]
-    );
-
-    await sendWhatsAppOTP({ phone, otp });
-
+    if (!(await issueOtp(req, res, phone))) return;
     return res.json({ success: true });
   } catch (err) {
     console.error("send-otp error:", err);
@@ -309,26 +345,13 @@ router.post("/send-otp", async (req, res) => {
 router.post("/verify-otp", async (req, res) => {
   const { phone, otp } = req.body;
 
+  if (!validPhone(phone) || !otp) {
+    return res.status(400).json({ message: "Invalid phone number or OTP" });
+  }
+
   try {
-    const otpResult = await pool.query(
-      `
-      SELECT * FROM customer_otps
-      WHERE phone = $1 AND otp = $2
-      ORDER BY created_at DESC
-      LIMIT 1
-      `,
-      [phone, otp]
-    );
-
-    if (otpResult.rows.length === 0) {
-      return res.status(400).json({ message: "Invalid OTP" });
-    }
-
-    const record = otpResult.rows[0];
-
-    if (new Date(record.expires_at) < new Date()) {
-      return res.status(400).json({ message: "OTP expired" });
-    }
+    const failed = await consumeOtp(req, phone, otp);
+    if (failed) return res.status(failed.status).json({ message: failed.message });
 
     const customerResult = await pool.query(
       `SELECT id, name FROM customers WHERE primary_phone = $1`,
