@@ -1335,7 +1335,7 @@ const ServiceEntry = () => {
         assignedTo: adminEntry.assignedTo || '',
         currentStep: adminEntry.currentStep || 'Submitted',
         trackingStatus: adminEntry.trackingStatus || adminEntry.tracking_status || 'pending',
-        aadhaar: adminEntry.aadhaar || '',
+        aadhaar: adminEntry.aadhaar && adminEntry.aadhaar !== 'N/A' ? adminEntry.aadhaar : '', // 'N/A' is a display label
         email: adminEntry.email || '',
         customerRemarks: adminEntry.customerRemarks || adminEntry.notes || ''
       };
@@ -1510,6 +1510,9 @@ const ServiceEntry = () => {
       if (svc.departmentCharge === '' || parseFloat(svc.departmentCharge) < 0) errors.push(`${prefix}Valid department charge required`);
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
+      // Tracking, notes and reminders tabs are hidden while editing and the
+      // edit doesn't send them, so only check them for a new entry.
+      if (isEditMode) return;
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
       if (svc.createTask && !svc.initialNote?.trim()) errors.push(`${prefix}Write a note before converting it to a task`);
       if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
@@ -1521,9 +1524,14 @@ const ServiceEntry = () => {
       });
     });
 
-    if (formData.payments.length === 0) errors.push('At least one payment is required');
-    if (balanceAmount > 0 && formData.status === 'completed') errors.push(`Balance amount of ₹${balanceAmount} remains. Add payments or keep status as pending.`);
-    if (paidAmount > grandTotal) errors.push('Collected amount exceeds total charge');
+    // Payments are locked while editing: the edit sends none, the server
+    // refuses any, and it re-works the entry's status from the payments it
+    // holds. So the payment checks only apply to a new entry.
+    if (!isEditMode) {
+      if (formData.payments.length === 0) errors.push('At least one payment is required');
+      if (balanceAmount > 0 && formData.status === 'completed') errors.push(`Balance amount of ₹${balanceAmount} remains. Add payments or keep status as pending.`);
+      if (paidAmount > grandTotal) errors.push('Collected amount exceeds total charge');
+    }
 
     const staffId = localStorage.getItem('id')?.trim();
     if (!staffId) errors.push('Staff ID missing. Please log in again.');
