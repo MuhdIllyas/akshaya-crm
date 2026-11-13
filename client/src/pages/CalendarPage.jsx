@@ -44,6 +44,19 @@ const canDeleteItem = (e) => isCalendarRow(e) || isTaskItem(e);
 //  Tooltip Card
 // ----------------------------------------------------------------------
 function TooltipCard({ event, position }) {
+  const adjustedStyle = useMemo(() => {
+    const tw = 280,
+      th = 200,
+      pad = 16;
+    let left = position.x + 10,
+      top = position.y + 10;
+    if (typeof window !== "undefined") {
+      if (left + tw > window.innerWidth - pad) left = position.x - tw - 10;
+      if (top + th > window.innerHeight - pad) top = position.y - th - 10;
+    }
+    return { left: `${left}px`, top: `${top}px` };
+  }, [position.x, position.y]);
+
   if (!event) return null;
 
   const typeColors = {
@@ -59,18 +72,6 @@ function TooltipCard({ event, position }) {
   };
   const typeStyle = typeColors[event.event_type] || typeColors[event.type] || typeColors.default;
 
-  const adjustedStyle = useMemo(() => {
-    const tw = 280,
-      th = 200,
-      pad = 16;
-    let left = position.x + 10,
-      top = position.y + 10;
-    if (typeof window !== "undefined") {
-      if (left + tw > window.innerWidth - pad) left = position.x - tw - 10;
-      if (top + th > window.innerHeight - pad) top = position.y - th - 10;
-    }
-    return { left: `${left}px`, top: `${top}px` };
-  }, [position]);
 
   // 🔥 FIX 1 – helper to format a date string nicely
   const formatDate = (rawDate) => {
