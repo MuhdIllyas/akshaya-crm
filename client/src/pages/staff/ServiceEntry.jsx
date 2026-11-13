@@ -38,7 +38,7 @@ import ScheduledActionsPanel from '@/components/automations/ScheduledActionsPane
 import { validateDraft, toApiAction } from '@/utils/automations/automationUtils';
 import { getPresets , createAutomations } from '@/services/automationService';
 import { todayIST, addDays } from "@/utils/dates";
-import { printServiceChecklist } from '@/utils/pdf/requiredDocumentsPdf';
+import { printServiceChecklist, collectRequiredDocuments } from '@/utils/pdf/requiredDocumentsPdf';
 import ServiceFilesPopover from '@/components/files/ServiceFilesPopover';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
@@ -416,13 +416,28 @@ const ServiceEntry = () => {
   // Lead being converted (opened from the Leads page with "Create service entry")
   const [fromLead, setFromLead] = useState(null);
 
-  // Refresh today's table without blocking whatever the user is doing.
+  // This centre's wallets, split the way the payment rows use them.
+  const splitWallets = (list, centreId) => ({
+    offline: list.filter(w => w.wallet_type === 'cash' && w.centre_id === centreId),
+    online: list.filter(w => ['digital', 'bank', 'card'].includes(w.wallet_type) && w.status === 'online' && w.centre_id === centreId),
+  });
+
+  // Refresh today's table and the wallet balances shown in the payment
+  // dropdowns (a saved entry moves money) without blocking the user. Only the
+  // displayed balances change; chosen wallets and amounts are left alone.
   const refreshEntries = async () => {
     try {
       const res = await getServiceEntries(true, null, 500);
       setServiceEntries(res.data || []);
     } catch (err) {
       console.warn('ServiceEntry.jsx: could not refresh today\'s entries', err.response?.data || err.message);
+    }
+    try {
+      const centreId = parseInt(localStorage.getItem('centre_id'));
+      const walletsRes = await getWallets();
+      if (Array.isArray(walletsRes.data) && !isNaN(centreId)) setWallets(splitWallets(walletsRes.data, centreId));
+    } catch (err) {
+      console.warn('ServiceEntry.jsx: could not refresh wallet balances', err.response?.data || err.message);
     }
   };
 
@@ -1008,8 +1023,7 @@ const ServiceEntry = () => {
         try {
           const walletsRes = await getWallets();
           console.log('ServiceEntry.jsx: Wallets response:', JSON.stringify(walletsRes.data, null, 2));
-          const offlineWallets = walletsRes.data.filter(w => w.wallet_type === 'cash' && w.centre_id === parseInt(centreId));
-          const onlineWallets = walletsRes.data.filter(w => ['digital', 'bank', 'card'].includes(w.wallet_type) && w.status === 'online' && w.centre_id === parseInt(centreId));
+          const { offline: offlineWallets, online: onlineWallets } = splitWallets(walletsRes.data, parseInt(centreId));
           setWallets({ offline: offlineWallets, online: onlineWallets });
           if (offlineWallets.length === 0) toast.warn('No offline wallets available for your centre.');
           if (onlineWallets.length === 0) toast.warn('No online wallets available for your centre.');
@@ -1793,9 +1807,7 @@ const ServiceEntry = () => {
   const getSuggestedDocs = (categoryId, subcategoryId) => {
     const cat = categories.find(c => c.id === parseInt(categoryId));
     if (!cat) return [];
-    const catDocs = cat.required_documents?.filter(d => !d.sub_category_id) || [];
-    const subDocs = cat.subcategories?.find(s => s.id === parseInt(subcategoryId))?.required_documents || [];
-    return [...new Set([...catDocs, ...subDocs].map(d => d.document_name).filter(Boolean))];
+    return collectRequiredDocuments(cat, cat.subcategories?.find(s => s.id === parseInt(subcategoryId)));
   };
 
   const getServiceLabel = (categoryId, subcategoryId) => {
@@ -1894,10 +1906,12 @@ const ServiceEntry = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {tokenId ? 'Token-Based Service Entry' : 'New Service Entry'}
+              {isEditMode ? 'Edit Service Entry' : tokenId ? 'Token-Based Service Entry' : 'New Service Entry'}
             </h1>
             <p className="text-slate-600 mt-1">
-              {tokenId ? `Processing token #${tokenId}` : 'Create a new service entry'}
+              {isEditMode
+                ? `Editing entry #${editingEntryId} · payments can't be changed here`
+                : tokenId ? `Processing token #${tokenId}` : 'Create a new service entry'}
             </p>
           </div>
           
@@ -2011,8 +2025,11 @@ const ServiceEntry = () => {
                 <AnimatePresence>
                   {(formData.services || []).map((svc, index) => {
                     const subcategories = categories.find(c => c.id === parseInt(svc.category))?.subcategories || [];
-                    const categoryDocs = categories.find(c => c.id === parseInt(svc.category))?.required_documents?.filter(doc => !doc.sub_category_id) || [];
-                    const subcategoryDocs = categories.find(c => c.id === parseInt(svc.category))?.subcategories?.find(s => s.id === parseInt(svc.subcategory))?.required_documents || [];
+                    // Service-level + sub-category docs, each listed once (a doc can be on both).
+                    const requiredDocs = collectRequiredDocuments(
+                      categories.find(c => c.id === parseInt(svc.category)),
+                      subcategories.find(s => s.id === parseInt(svc.subcategory))
+                    );
                     const website = categories.find(c => c.id === parseInt(svc.category))?.website || null;
 
                     // ===== Tab state & counters =====
@@ -2128,7 +2145,7 @@ const ServiceEntry = () => {
                               </div>
 
                               {/* Docs & Web */}
-                              {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                              {(website || requiredDocs.length > 0) && (
                                 <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
                                   <button
                                     type="button"
@@ -2152,14 +2169,14 @@ const ServiceEntry = () => {
                                       <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
                                     </div>
                                   )}
-                                  {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                  {requiredDocs.length > 0 && (
                                     <div className="flex items-start gap-1.5">
                                       <FiFileText className="text-navy-500 shrink-0 mt-0.5" />
                                       <div className="flex flex-wrap gap-2">
                                         <span className="font-semibold text-slate-700 mr-1">Required Docs:</span>
-                                        {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
-                                          <span key={i} className="inline-flex items-center gap-1 text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                            <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
+                                        {requiredDocs.map((name) => (
+                                          <span key={name} className="inline-flex items-center gap-1 text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                            <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {name}
                                           </span>
                                         ))}
                                       </div>

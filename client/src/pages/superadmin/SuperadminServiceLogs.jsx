@@ -52,6 +52,10 @@ const statusMap = {
   paid: 'Paid',
 };
 const reverseStatusMap = Object.fromEntries(Object.entries(statusMap).map(([k, v]) => [v, k]));
+// Completed/paid work is 100%; otherwise the row's own progress or its step's.
+const STEP_PROGRESS = { Submitted: 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
+const progressOf = (statusKey, step, ownProgress) =>
+  ['completed', 'paid'].includes(statusKey) ? 100 : ownProgress || STEP_PROGRESS[step] || 25;
 
 const statusConfig = {
   Pending: { chip: 'bg-amber-50 text-amber-700 ring-amber-200', dot: 'bg-amber-400' },
@@ -816,8 +820,7 @@ const SuperAdminServiceLogs = () => {
 
       const updatedAt = t.updated_at || t.created_at || new Date().toISOString();
       const status = statusMap[t.status] || 'Pending';
-      const stepProgress = { Submitted: 25, 'Initial Review': 50, 'Document Verification': 75, 'Final Approval': 100 };
-      const progress = ['completed', 'paid'].includes(t.status) ? 100 : t.progress || stepProgress[t.current_step] || 25;
+      const progress = progressOf(t.status, t.current_step, t.progress);
       const centre = centresData.find((c) => String(c.id) === String(t.centre_id));
       const estimated = t.estimated_delivery && !isNaN(new Date(t.estimated_delivery)) ? new Date(t.estimated_delivery).toISOString() : 'Not set';
 
@@ -838,9 +841,11 @@ const SuperAdminServiceLogs = () => {
         status,
         currentStep: t.current_step || 'Submitted',
         progress,
+        ownProgress: t.progress || null,
         priority: t.priority || 'medium',
-        date: istYmd(updatedAt),
-        time: istTime(updatedAt),
+        // "Logged" = when the service was entered (the date filters use the same date)
+        date: istYmd(t.created_at || updatedAt),
+        time: istTime(t.created_at || updatedAt),
         createdAt: t.created_at || null,
         updatedAt,
         estimatedDelivery: estimated,
@@ -1015,9 +1020,10 @@ const SuperAdminServiceLogs = () => {
   const handleStatusUpdate = async (serviceId, newStatus) => {
     try {
       await updateTrackingStatus(serviceId, reverseStatusMap[newStatus]);
-      setServices((prev) => prev.map((s) => (s.id === serviceId ? { ...s, status: newStatus } : s)));
-      setAllRows((prev) => (prev ? prev.map((s) => (s.id === serviceId ? { ...s, status: newStatus } : s)) : prev));
-      setSelectedService((prev) => (prev && prev.id === serviceId ? { ...prev, status: newStatus } : prev));
+      const withStatus = (s) => ({ ...s, status: newStatus, progress: progressOf(reverseStatusMap[newStatus], s.currentStep, s.ownProgress) });
+      setServices((prev) => prev.map((s) => (s.id === serviceId ? withStatus(s) : s)));
+      setAllRows((prev) => (prev ? prev.map((s) => (s.id === serviceId ? withStatus(s) : s)) : prev));
+      setSelectedService((prev) => (prev && prev.id === serviceId ? withStatus(prev) : prev));
       toast.success(`Status updated to ${newStatus}`);
     } catch (error) {
       console.error('Failed to update status:', error);
