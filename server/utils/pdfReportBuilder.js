@@ -320,6 +320,7 @@ const getPeriodTotals = (financials) => {
   if (trend.length > 0) {
     const sum = (k) => trend.reduce((a, r) => a + num(r[k]), 0);
     return {
+      amountReceived: num(financials.today?.amountReceived), // already a whole-period figure
       revenueCollected: sum('revenueCollected'),
       grossProfit: sum('grossProfit'),
       operatingExpenses: sum('operatingExpenses'),
@@ -328,6 +329,7 @@ const getPeriodTotals = (financials) => {
   }
   const t = financials.today || {};
   return {
+    amountReceived: num(t.amountReceived),
     revenueCollected: num(t.revenueCollected),
     grossProfit: num(t.grossProfit),
     operatingExpenses: num(t.operatingExpenses),
@@ -389,7 +391,8 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
       const totals = (ids.includes(1) || ids.includes(2)) ? getPeriodTotals(data.financials) : null;
       if (totals) {
         const cards = [
-          { label: 'Revenue Collected', value: money(totals.revenueCollected), color: C.text },
+          { label: 'Collected', value: money(totals.amountReceived), color: C.text },
+          { label: 'Billed', value: money(totals.revenueCollected), color: C.text },
           { label: 'Gross Profit', value: money(totals.grossProfit), color: C.text },
           { label: 'Operating Expenses', value: money(totals.operatingExpenses), color: C.text },
           { label: 'Net Profit', value: money(totals.netProfit), color: totals.netProfit >= 0 ? C.green : C.red },
@@ -403,7 +406,7 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
           doc.roundedRect(x, y0, cardW, cardH, 6).fillAndStroke(C.indigoLight, C.line);
           doc.fillColor(C.muted).font('Helvetica').fontSize(9)
             .text(c.label.toUpperCase(), x + 12, y0 + 12, { width: cardW - 24, lineBreak: false });
-          doc.fillColor(c.color).font('Helvetica-Bold').fontSize(16)
+          doc.fillColor(c.color).font('Helvetica-Bold').fontSize(cards.length > 4 ? 13 : 16)
             .text(c.value, x + 12, y0 + 30, { width: cardW - 24, lineBreak: false });
         });
         doc.y = y0 + cardH + 18;
@@ -416,7 +419,7 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
             'Financial Trend',
             [
               { h: 'Date', k: 'label', w: 2 },
-              { h: 'Revenue Collected', k: 'revenueCollected', w: 2, f: money, r: true },
+              { h: 'Billed', k: 'revenueCollected', w: 2, f: money, r: true },
               { h: 'Gross Profit', k: 'grossProfit', w: 2, f: money, r: true },
               { h: 'Operating Expenses', k: 'operatingExpenses', w: 2, f: money, r: true },
               { h: 'Net Profit', k: 'netProfit', w: 2, f: money, r: true },
@@ -547,7 +550,7 @@ export const buildEmailHTML = (reportData, reportIds, scheduleName = 'Report') =
   const totals = (ids.includes(1) || ids.includes(2)) ? getPeriodTotals(data.financials) : null;
 
   const card = (label, value, color = '#111827') => `
-    <td style="width:25%;padding:6px;">
+    <td style="width:20%;padding:6px;">
       <div style="background:#EEF2FF;border:1px solid #E5E7EB;border-radius:8px;padding:12px;">
         <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;">${label}</div>
         <div style="font-size:18px;font-weight:bold;color:${color};margin-top:4px;">${value}</div>
@@ -556,7 +559,8 @@ export const buildEmailHTML = (reportData, reportIds, scheduleName = 'Report') =
 
   const cards = totals ? `
     <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;"><tr>
-      ${card('Revenue Collected', money(totals.revenueCollected))}
+      ${card('Collected', money(totals.amountReceived))}
+      ${card('Billed', money(totals.revenueCollected))}
       ${card('Gross Profit', money(totals.grossProfit))}
       ${card('Expenses', money(totals.operatingExpenses))}
       ${card('Net Profit', money(totals.netProfit), totals.netProfit >= 0 ? '#059669' : '#DC2626')}

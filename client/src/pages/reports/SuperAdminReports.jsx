@@ -95,13 +95,14 @@ const SuperAdminReports = () => {
 
     const fmt = (v) => `₹${(v || 0).toLocaleString()}`;
     return {
-      totalRevenue: fmt(data.stats.todayRevenueCollected),
+      totalRevenue: fmt(data.stats.todayRevenueCollected), // today's billed total
+      collectedToday: fmt(data.stats.todayAmountReceived), // money received today, as on Accounting
       totalProfit: fmt(data.stats.todayNetProfit),
       totalWalletBalance: fmt(data.stats.totalWalletBalance),
       totalCashInHand: fmt(data.stats.cashInHand),
       netCashFlowToday: fmt(data.stats.todayNetProfit),
       todayProfit: fmt(data.stats.todayNetProfit),
-      totalCashInToday: fmt(data.stats.todayRevenueCollected),
+      totalCashInToday: fmt(data.stats.todayAmountReceived), // money in, not billed
       todayServiceCharge: fmt(data.stats.todayGrossProfit),
       averageTransaction: fmt(data.stats.averageOrderValue),
       pendingTransactions: (data.stats.pendingPayments || 0).toString(),

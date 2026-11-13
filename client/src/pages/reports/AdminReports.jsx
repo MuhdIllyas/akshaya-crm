@@ -178,7 +178,8 @@ const AdminReports = () => {
 
     return {
       // YTD / Core Metrics
-      totalRevenue: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`, // Update to YTD later if needed
+      totalRevenue: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`, // today's billed total
+      collectedToday: `₹${(data.stats.todayAmountReceived || 0).toLocaleString()}`, // money received today, as on Accounting
       totalExpenses: `₹${(data.stats.todayOperatingExpenses || 0).toLocaleString()}`, // Update to YTD later if needed
       totalProfit: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
       
@@ -195,7 +196,7 @@ const AdminReports = () => {
       totalDigitalBalance: `₹${(data.stats.digitalBalance || 0).toLocaleString()}`,
       
       // Today's Flow
-      totalCashInToday: `₹${(data.stats.todayRevenueCollected || 0).toLocaleString()}`,
+      totalCashInToday: `₹${(data.stats.todayAmountReceived || 0).toLocaleString()}`, // money in, not billed
       totalCashOutToday: `₹${(data.stats.todayOperatingExpenses || 0).toLocaleString()}`,
       netCashFlowToday: `₹${(data.stats.todayNetProfit || 0).toLocaleString()}`,
       

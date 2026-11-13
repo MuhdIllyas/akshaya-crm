@@ -86,7 +86,7 @@ const RevenueTrendChart = ({ data }) => {
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     datasets: [
       {
-        label: 'Revenue',
+        label: 'Billed',
         data: data?.charts?.financialTrend?.revenueCollected || [],
         borderColor: 'rgb(16, 185, 129)',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -161,7 +161,7 @@ const StaffPerformanceChart = ({ staffData }) => {
     labels: safeStaffData.map(s => s.staff_name || s.name),
     datasets: [
       {
-        label: 'Revenue Collected',
+        label: 'Billed',
         data: safeStaffData.map(s => Number(s.total_revenue || s.revenue || 0)),
         backgroundColor: 'rgba(30, 58, 95, 0.85)',
         borderColor: 'rgb(30, 58, 95)',
@@ -282,8 +282,8 @@ const OverviewSection = ({
 
       {/* Stats Overview */}
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard title="Total Revenue" value={stats.totalRevenue} subtitle="YTD" change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
-        <StatCard title="Net Profit" value={stats.totalProfit} subtitle="YTD" change={stats.profitChange} icon={FiDollarSign} color="bg-green-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Collected Today" value={stats.collectedToday} subtitle={`Billed: ${stats.totalRevenue}`} change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Net Profit" value={stats.totalProfit} subtitle="Today" change={stats.profitChange} icon={FiDollarSign} color="bg-green-600" onClick={() => setActiveSection('transactions')} />
         <StatCard title="Wallet Balance" value={stats.totalWalletBalance} subtitle="Total" icon={FiSmartphone} color="bg-navy-700" onClick={() => setActiveSection('wallets')} />
         <StatCard title="Cash in Hand" value={stats.totalCashInHand} subtitle="Physical" icon={FiHome} color="bg-amber-600" onClick={() => setActiveSection('wallets')} />
         <StatCard title="Today's Flow" value={stats.netCashFlowToday} subtitle={`In: ${stats.totalCashInToday}`} icon={FiActivity} color="bg-violet-600" onClick={() => setActiveSection('accounting')} />
