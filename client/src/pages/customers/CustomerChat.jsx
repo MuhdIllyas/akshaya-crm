@@ -91,6 +91,7 @@ export default function CustomerChat() {
     let cancelled = false;
     lastIdRef.current = 0;
     setMessages([]);
+    let timer;
 
     const fetchNew = async () => {
       try {
@@ -101,12 +102,18 @@ export default function CustomerChat() {
           const seen = new Set(prev.map((m) => m.id));
           return [...prev, ...data.messages.filter((m) => !seen.has(m.id))];
         });
-      } catch {
-        /* try again next round */
+      } catch (err) {
+        // Signed out (e.g. logged out in another tab): stop polling and go to login.
+        if (err.response?.status === 401) {
+          cancelled = true;
+          clearInterval(timer);
+          navigate("/login");
+        }
+        /* otherwise try again next round */
       }
     };
     fetchNew();
-    const timer = setInterval(() => {
+    timer = setInterval(() => {
       if (!document.hidden) fetchNew();
     }, POLL_MS);
     return () => {

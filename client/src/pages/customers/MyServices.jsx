@@ -60,7 +60,7 @@ const MyServices = () => {
         // Redirect to login after a delay
         setTimeout(() => {
           localStorage.removeItem("customer_token");
-          window.location.href = '/customer/login';
+          window.location.href = '/login';
         }, 2000);
       }
       return Promise.reject(error);
