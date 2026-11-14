@@ -282,7 +282,7 @@ const OverviewSection = ({
 
       {/* Stats Overview */}
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard title="Collected Today" value={stats.collectedToday} subtitle={`Billed: ${stats.totalRevenue}`} change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Revenue Today" value={stats.collectedToday} subtitle={`Billed: ${stats.totalRevenue}`} change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
         <StatCard title="Net Profit" value={stats.totalProfit} subtitle="Today" change={stats.profitChange} icon={FiDollarSign} color="bg-green-600" onClick={() => setActiveSection('transactions')} />
         <StatCard title="Wallet Balance" value={stats.totalWalletBalance} subtitle="Total" icon={FiSmartphone} color="bg-navy-700" onClick={() => setActiveSection('wallets')} />
         <StatCard title="Cash in Hand" value={stats.totalCashInHand} subtitle="Physical" icon={FiHome} color="bg-amber-600" onClick={() => setActiveSection('wallets')} />

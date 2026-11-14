@@ -1200,8 +1200,8 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                             {/* V3 Financial Summary Cards (Now Guaranteed to Render) */}
                             {Object.keys(financials).length > 0 && (
                                 <div className="grid grid-cols-4 gap-3">
-                                    <StatCard title="Collected" value={`₹${(financials.amountReceived || 0).toLocaleString()}`} subtitle="Money received · same as Accounting" icon={FiTrendingUp} color="bg-emerald-600" />
-                                    <StatCard title="Billed" value={`₹${(financials.revenueCollected || 0).toLocaleString()}`} subtitle="Charges for entries in the period" icon={FiFileText} color="bg-slate-600" />
+                                    <StatCard title="Revenue" value={`₹${(financials.amountReceived || 0).toLocaleString()}`} subtitle="Money received · same as Accounting" icon={FiTrendingUp} color="bg-emerald-600" />
+                                    <StatCard title="Billed" value={`₹${(financials.revenueCollected || 0).toLocaleString()}`} subtitle="Total billed for entries in the period, paid or not" icon={FiFileText} color="bg-slate-600" />
                                     <StatCard title="Operating Expenses" value={`₹${(financials.operatingExpenses || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiFileText} color="bg-rose-600" />
                                     <StatCard title="Net Profit" value={`₹${(financials.netProfit || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiDollarSign} color="bg-navy-700" />
                                 </div>

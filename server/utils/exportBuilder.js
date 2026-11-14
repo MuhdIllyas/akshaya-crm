@@ -33,8 +33,8 @@ const buildWorkbook = (reportData, reportIds) => {
       sheet.getCell('A6').value = "Today's Overview";
       sheet.getCell('A6').font = { bold: true };
       
-      sheet.addRow(['Collected (received)', data.financials.today.amountReceived ?? 0]);
-      sheet.addRow(['Billed', data.financials.today.revenueCollected]);
+      sheet.addRow(['Revenue (received)', data.financials.today.amountReceived ?? 0]);
+      sheet.addRow(['Billed (paid or not)', data.financials.today.revenueCollected]);
       sheet.addRow(['Operating Expenses', data.financials.today.operatingExpenses]);
       sheet.addRow(['Net Profit', data.financials.today.netProfit]);
       
@@ -915,8 +915,8 @@ export const buildPDF = (reportData, reportIds) => {
         doc.moveDown(0.5);
         
         doc.fontSize(12);
-        doc.text(`Collected (received): Rs. ${data.financials.today.amountReceived ?? 0}`);
-        doc.text(`Billed: Rs. ${data.financials.today.revenueCollected}`);
+        doc.text(`Revenue (received): Rs. ${data.financials.today.amountReceived ?? 0}`);
+        doc.text(`Billed (paid or not): Rs. ${data.financials.today.revenueCollected}`);
         doc.text(`Operating Expenses: Rs. ${data.financials.today.operatingExpenses}`);
         doc.text(`Net Profit: Rs. ${data.financials.today.netProfit}`);
         doc.moveDown(2);

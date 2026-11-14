@@ -391,7 +391,7 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
       const totals = (ids.includes(1) || ids.includes(2)) ? getPeriodTotals(data.financials) : null;
       if (totals) {
         const cards = [
-          { label: 'Collected', value: money(totals.amountReceived), color: C.text },
+          { label: 'Revenue', value: money(totals.amountReceived), color: C.text },
           { label: 'Billed', value: money(totals.revenueCollected), color: C.text },
           { label: 'Gross Profit', value: money(totals.grossProfit), color: C.text },
           { label: 'Operating Expenses', value: money(totals.operatingExpenses), color: C.text },
@@ -559,7 +559,7 @@ export const buildEmailHTML = (reportData, reportIds, scheduleName = 'Report') =
 
   const cards = totals ? `
     <table role="presentation" style="width:100%;border-collapse:collapse;margin:16px 0;"><tr>
-      ${card('Collected', money(totals.amountReceived))}
+      ${card('Revenue', money(totals.amountReceived))}
       ${card('Billed', money(totals.revenueCollected))}
       ${card('Gross Profit', money(totals.grossProfit))}
       ${card('Expenses', money(totals.operatingExpenses))}
