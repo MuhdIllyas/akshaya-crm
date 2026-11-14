@@ -58,14 +58,15 @@ router.get("/booking-poster", authMiddleware(["admin", "superadmin"]), async (re
       centre = rows[0] || null;
     }
     if (centre) {
-      // The centre's most-used services in the last 6 months, then other active services.
+      // The centre's most-used services in the last 6 months, then other services
+      // customers can book online.
       const { rows: top } = await pool.query(
         `SELECT s.name, count(*) AS n
            FROM service_entries se
            JOIN staff st ON st.id = se.staff_id
            JOIN services s ON s.id = se.category_id
           WHERE st.centre_id = $1 AND se.created_at > now() - interval '180 days'
-            AND COALESCE(s.status, 'active') = 'active'
+            AND s.status = 'active' AND s.requires_workflow = true -- bookable online (same as the portal)
           GROUP BY s.name
           ORDER BY n DESC, s.name
           LIMIT 8`,
@@ -74,7 +75,7 @@ router.get("/booking-poster", authMiddleware(["admin", "superadmin"]), async (re
       services = top.map((r) => r.name);
       if (services.length < 8) {
         const { rows: more } = await pool.query(
-          `SELECT name FROM services WHERE COALESCE(status, 'active') = 'active' AND NOT (name = ANY($1::text[]))
+          `SELECT name FROM services WHERE status = 'active' AND requires_workflow = true AND NOT (name = ANY($1::text[]))
             ORDER BY name LIMIT $2`,
           [services, 8 - services.length]
         );
