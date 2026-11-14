@@ -61,6 +61,52 @@ export async function getPortalWhatsAppAccount() {
   throw new Error("No WhatsApp number is set up to send OTPs (platform number missing in server/.env)");
 }
 
+/** A centre's own WhatsApp number (Centre Management), or null if it has none. */
+export async function getCentreWhatsAppAccount(centreId) {
+  if (!centreId) return null;
+  try {
+    const { rows } = await pool.query(
+      `SELECT ca.id, ca.access_token, ca.base_url
+         FROM centres c
+         JOIN communication_accounts ca ON ca.id = c.communication_account_id
+        WHERE c.id = $1 AND ca.is_active = true`,
+      [centreId]
+    );
+    const a = rows[0];
+    if (!a?.access_token) return null;
+    return {
+      id: a.id,
+      platform: false,
+      centreId: Number(centreId),
+      token: a.access_token,
+      baseUrl: (a.base_url || process.env.LIBROMI_BASE_URL || DEFAULT_LIBROMI_BASE_URL).replace(/\/$/, ""),
+    };
+  } catch (err) {
+    if (missingColumn(err) || err?.code === "42P01") return null;
+    throw err;
+  }
+}
+
+/**
+ * Numbers to try for a customer portal OTP, in order:
+ *   1. the customer's centre's own number (each centre has its own customers),
+ *   2. the organization's "send portal OTPs from this number" account,
+ *   3. the platform number.
+ * The next one is used only if sending from the one before fails.
+ */
+export async function getPortalOtpAccounts(centreId = null) {
+  const list = [];
+  const centre = await getCentreWhatsAppAccount(centreId);
+  if (centre) list.push(centre);
+  try {
+    const fallback = await getPortalWhatsAppAccount();
+    if (!list.some((a) => a.id && a.id === fallback.id)) list.push(fallback);
+  } catch (err) {
+    if (!list.length) throw err;
+  }
+  return list;
+}
+
 /** Libromi developer API key for an account (used to download customer media). */
 export async function getLibromiApiKey(accountId) {
   if (accountId) {

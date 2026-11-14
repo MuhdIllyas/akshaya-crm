@@ -121,6 +121,29 @@ const clientIp = (req) => String(req.ip || "").replace(/^::ffff:/, "");
 const orgSlug = () => currentTenant()?.slug || "default";
 const validPhone = (phone) => /^\d{10}$/.test(String(phone || ""));
 
+// Which centre's WhatsApp number sends the code: the centre link/QR they came
+// through (centre_id), or, for a returning customer, the one centre they belong
+// to. null → the organization's OTP number / the platform number.
+async function otpCentreId(req, phone) {
+  const asked = Number(req.body?.centre_id) || null;
+  try {
+    if (asked) {
+      const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [asked]);
+      if (rows[0]) return rows[0].id;
+    }
+    const { rows } = await pool.query(
+      `SELECT DISTINCT cc.centre_id
+         FROM customers c JOIN customer_centres cc ON cc.customer_id = c.id
+        WHERE right(regexp_replace(coalesce(c.primary_phone, ''), '\\D', '', 'g'), 10) = $1`,
+      [phone]
+    );
+    return rows.length === 1 ? rows[0].centre_id : null;
+  } catch (err) {
+    if (err.code === "42P01") return null; // customer_centres migration not applied yet
+    throw err;
+  }
+}
+
 // Store a fresh code for this phone and send it on WhatsApp.
 async function issueOtp(req, res, phone) {
   const blocked = checkSend(orgSlug(), phone, clientIp(req));
@@ -135,7 +158,7 @@ async function issueOtp(req, res, phone) {
     `INSERT INTO customer_otps (phone, otp, expires_at) VALUES ($1, $2, $3)`,
     [phone, otp, expiresAt]
   );
-  await sendWhatsAppOTP({ phone, otp });
+  await sendWhatsAppOTP({ phone, otp, centreId: await otpCentreId(req, phone) });
   return true;
 }
 

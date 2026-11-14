@@ -176,7 +176,8 @@ const Login = () => {
     setLoading(true);
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/send-otp`, {
-        phone: customerPhone
+        phone: customerPhone,
+        centre_id: getPreferredCentreId() || undefined // the code comes from this centre's WhatsApp number
       });
 
       if (response.data.success) {

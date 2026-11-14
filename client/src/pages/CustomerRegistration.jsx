@@ -99,7 +99,8 @@ const CustomerRegistration = () => {
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/send-aadhaar-otp`, {
         aadhaar: formData.aadhaar.replace(/\s/g, ''),
-        phone: formData.primary_phone
+        phone: formData.primary_phone,
+        centre_id: getPreferredCentreId() || undefined // the code comes from this centre's WhatsApp number
       });
 
       if (response.data.success) {
