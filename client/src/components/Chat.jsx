@@ -1,3 +1,4 @@
+import { customersPath } from '@/utils/customersPath';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
@@ -941,7 +942,7 @@ const Chat = ({
         <div className="flex items-center gap-0.5 relative">
           {activeConversation.customer_id && (
             <HeaderButton
-              onClick={() => navigate(`/dashboard/staff/customers/${activeConversation.customer_id}`)}
+              onClick={() => navigate(customersPath(activeConversation.customer_id))}
               title="View customer profile"
             >
               <FiUser size={17} />

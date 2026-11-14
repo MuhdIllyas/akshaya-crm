@@ -16,6 +16,7 @@ import { getCustomerHistory } from "@/services/serviceService";
 import StaffCustomerDocuments from './staff/StaffCustomerDocuments';
 import CustomerMessages from '@/components/CustomerMessages';
 import CustomerCentres from '@/components/CustomerCentres';
+import { customersPath } from '@/utils/customersPath';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -594,7 +595,7 @@ const CustomerProfileSystem = () => {
                       <li key={customer.id}>
                         <button
                           type="button"
-                          onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
+                          onClick={() => navigate(customersPath(customer.id))}
                           aria-current={active ? 'true' : undefined}
                           className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${active ? 'bg-navy-500/10' : 'hover:bg-slate-50'}`}
                         >
@@ -634,7 +635,7 @@ const CustomerProfileSystem = () => {
           {/* ===== Selected customer ===== */}
           <section className={`${showProfileOnPhone ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-col`}>
             <button
-              onClick={() => navigate('/dashboard/staff/customers')}
+              onClick={() => navigate(customersPath())}
               className="mb-3 inline-flex min-h-[40px] items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-800 lg:hidden"
             >
               <FiArrowLeft className="h-4 w-4" />

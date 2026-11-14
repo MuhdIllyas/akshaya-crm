@@ -609,6 +609,23 @@ const App = () => {
               path="staff/customers/:customerId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
             />
+            {/* Same customers page under each role's own path (see utils/customersPath) */}
+            <Route
+              path="admin/customers"
+              element={<ProtectedRoute allowedRoles={["admin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/customers/:customerId"
+              element={<ProtectedRoute allowedRoles={["admin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/customers"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/customers/:customerId"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
           </Route>
         </Route>
 
