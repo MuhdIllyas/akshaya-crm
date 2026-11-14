@@ -239,9 +239,12 @@ router.get("/", customerAuth, async (req, res) => {
       FROM customer_services cs
       LEFT JOIN services s ON cs.service_id = s.id
       LEFT JOIN subcategories sc ON cs.subcategory_id = sc.id
+      -- tracking of the service entry made from this booking (service_tracking.service_entry_id
+      -- is a service entry id, not a booking id), or one with the same application number
+      LEFT JOIN service_entries se ON se.customer_service_id = cs.id
       LEFT JOIN service_tracking st ON 
         st.application_number = cs.application_number 
-        OR st.service_entry_id = cs.id
+        OR st.service_entry_id = se.id
       LEFT JOIN staff ON st.assigned_to = staff.id
       LEFT JOIN centres rc ON rc.id = cs.requested_centre_id
       LEFT JOIN centres hc ON hc.id = cs.handling_centre_id

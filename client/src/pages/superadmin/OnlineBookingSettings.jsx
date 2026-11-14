@@ -211,7 +211,7 @@ export default function OnlineBookingSettings({ accounts = [] }) {
         <h3 className="mb-1 text-lg font-semibold text-slate-900">Centre links and QR codes</h3>
         <p className="mb-4 text-sm text-slate-500">
           Put a centre's QR code at its counter or share its link. Bookings made through it are for that centre.
-          {perCentre && " With a portal per centre, the link is also how customers join that centre."}
+          {perCentre && " With a portal per centre, the link is also how customers join that centre."}{" "}
           Each centre needs its own WhatsApp number; set it in Centre Management.
         </p>
         {orgSlug && centres.length > 0 ? (

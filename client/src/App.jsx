@@ -166,7 +166,9 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
 // ---------------------------------------------------------------------
 const CustomerProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
-  const [needsCentre, setNeedsCentre] = useState(false);
+  // The token that still has to choose a centre (per-centre portal). Tied to the
+  // token so a new session (after choosing) isn't sent back by the old answer.
+  const [needsCentreFor, setNeedsCentreFor] = useState(null);
   const customerToken = localStorage.getItem("customer_token");
   const location = useLocation();
 
@@ -186,9 +188,9 @@ const CustomerProtectedRoute = ({ children }) => {
         // Per-centre portal: they must be working at one of their centres.
         try {
           const ctx = await fetchCustomerPortalContext();
-          setNeedsCentre(Boolean(ctx.needs_centre));
+          setNeedsCentreFor(ctx.needs_centre ? customerToken : null);
         } catch {
-          setNeedsCentre(false); // older server: no centres to choose
+          setNeedsCentreFor(null); // older server: no centres to choose
         }
         setIsAuthenticated(true);
       } catch (err) {
@@ -224,7 +226,7 @@ const CustomerProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace state={{ reason: "customer_session_expired" }} />;
   }
 
-  if (needsCentre && location.pathname !== "/customer/choose-centre") {
+  if (needsCentreFor && needsCentreFor === customerToken && location.pathname !== "/customer/choose-centre") {
     return <Navigate to="/customer/choose-centre" replace />;
   }
 
