@@ -4,6 +4,7 @@ import { customerAuthMiddleware, requireCustomerCentre } from "../middlewares/cu
 import { bookingInCentreSql, linkCustomerToCentre } from "../utils/customerCentres.js";
 import { todayIST, addDays } from "../utils/dates.js";
 import { getSetting } from "../utils/orgSettings.js";
+import { notifyNewBooking } from "../utils/bookingNotifications.js";
 
 const router = express.Router();
 
@@ -1154,6 +1155,18 @@ router.put("/:id/submit", customerAuth, async (req, res) => {
       [`customer:${req.customer.id}`, `Application ${booking.application_number} submitted. ${remarks}`, booking.requested_centre_id || null]
     );
     await client.query("COMMIT");
+
+    // First submit of a new booking: tell the centre (or every centre if booked for any)
+    if (booking.status === "draft") {
+      notifyNewBooking({
+        bookingId: booking.id,
+        customerId: req.customer.id,
+        centreId: booking.requested_centre_id || null,
+        serviceName: booking.service_name || serviceData.service_name,
+        applicationNumber: booking.application_number,
+        missingDocuments: updated.missing_documents,
+      });
+    }
 
     res.json({
       success: true,

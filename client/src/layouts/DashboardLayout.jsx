@@ -6,6 +6,7 @@ import ThemeToggle from '../components/ThemeToggle';
 import QuickServiceModal from '@/components/QuickServiceModal';
 import { getWalletsForCentre } from '@/services/walletService';
 import { toast } from 'react-toastify';
+import { customerAuthHeaders } from '@/tenancy/centres';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -139,6 +140,33 @@ const DashboardLayout = () => {
       console.error('Error fetching leads count:', err);
     }
   };
+
+  // Customer portal: unread replies from the centre (badge on "Messages")
+  const [customerUnread, setCustomerUnread] = useState(0);
+  useEffect(() => {
+    if (role !== "customer") return undefined;
+    let stopped = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/customer/chat/unread`, { headers: customerAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!stopped) setCustomerUnread(Number(data.total) || 0);
+      } catch {
+        /* try again next round */
+      }
+    };
+    load();
+    const timer = setInterval(() => { if (!document.hidden) load(); }, 20000);
+    window.addEventListener("customer-chat-read", load); // the Messages page read a chat
+    window.addEventListener("focus", load);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      window.removeEventListener("customer-chat-read", load);
+      window.removeEventListener("focus", load);
+    };
+  }, [role, location.pathname]);
 
   // Initial fetch on component mount
   useEffect(() => {
@@ -359,7 +387,7 @@ const DashboardLayout = () => {
       { path: "/customer/dashboard", label: "Home", icon: DashboardIcon },
       { path: "/customer/myservices", label: "My Services", icon: ServicesIcon },
       { path: "/customer/mydocuments", label: "My Documents", icon: ServiceLogsIcon },
-      { path: "/customer/messages", label: "Messages", icon: MessengerIcon },
+      { path: "/customer/messages", label: "Messages", icon: MessengerIconWithBadge },
       { path: "/customer/myprofile", label: "Profile", icon: ProfileIcon }
     ]
   };
@@ -465,7 +493,7 @@ const DashboardLayout = () => {
   }, [trackPath, entryPath, quickEnabled, navigate]);
 
   // Unread total in the browser tab title, e.g. "(3) Akshaya Sahayi" (same total as the phone menu dot)
-  const unreadTotal = role === "customer" ? 0 : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
+  const unreadTotal = role === "customer" ? customerUnread : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
   const baseTitleRef = useRef(null);
   useEffect(() => {
     if (baseTitleRef.current === null) baseTitleRef.current = document.title.replace(/^\(\d+\+?\)\s*/, "");
@@ -475,7 +503,7 @@ const DashboardLayout = () => {
   useEffect(() => () => { if (baseTitleRef.current !== null) document.title = baseTitleRef.current; }, []);
 
   return (
-    <div className="flex min-h-screen min-h-dvh bg-slate-50">
+    <div className="flex min-h-[100dvh] bg-slate-50">
       {/* Phone: dimmed backdrop behind the open drawer */}
       {isMobileOpen && (
         <div
@@ -488,7 +516,7 @@ const DashboardLayout = () => {
       {/* Sidebar with original navy blue colors (off-canvas drawer on phones) */}
       <aside 
         id="app-sidebar"
-        className={`bg-slate-50 text-slate-700 p-2 gap-2 fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
+        className={`bg-slate-50 text-slate-700 p-2 gap-2 fixed top-0 left-0 bottom-0 flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] max-md:overflow-y-auto max-md:overscroll-contain ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:max-w-none ${
           isCollapsed ? "md:w-20" : "md:w-64"
@@ -591,6 +619,7 @@ const DashboardLayout = () => {
               const isActive = activePath === item.path;
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
+              const isCustomerMessages = role === "customer" && item.label === "Messages";
               const isNotes = item.label === "Notes";
               const isNotifications = item.label === "Notifications";
               const isLeads = item.label === "Leads";
@@ -616,7 +645,8 @@ const DashboardLayout = () => {
                       isActive={isActive} 
                       isCollapsed={isCollapsed} 
                       unreadCount={
-                        isMessenger ? unreadCount : 
+                        isMessenger ? unreadCount :
+                        isCustomerMessages ? customerUnread : 
                         isNotes ? unreadNotesCount : 
                         isNotifications ? notificationsCount :
                         isLeads ? newLeadsCount : 0 
@@ -636,6 +666,12 @@ const DashboardLayout = () => {
                     <div className="absolute left-full ml-3 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
                       {item.label}
                       
+                      {isCustomerMessages && customerUnread > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {customerUnread > 99 ? '99+' : customerUnread}
+                        </span>
+                      )}
+
                       {/* Messenger Badge */}
                       {isMessenger && unreadCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
@@ -772,7 +808,7 @@ const DashboardLayout = () => {
             aria-controls="app-sidebar"
           >
             <MenuIcon />
-            {(unreadCount + unreadNotesCount + (notificationsCount || 0) + newLeadsCount) > 0 && (
+            {(role === "customer" ? customerUnread : unreadCount + unreadNotesCount + (notificationsCount || 0) + newLeadsCount) > 0 && (
               <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white"></span>
             )}
           </button>

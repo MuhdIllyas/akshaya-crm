@@ -96,7 +96,11 @@ export default function CustomerChat() {
     const fetchNew = async () => {
       try {
         const { data } = await api.get(`/conversations/${activeId}/messages`, { params: { after: lastIdRef.current } });
-        if (cancelled || !data.messages?.length) return;
+        if (cancelled) return;
+        // this chat is now read: clear its count here and the badge in the menu
+        setConversations((list) => (list || []).map((c) => (c.id === activeId && c.unread ? { ...c, unread: 0 } : c)));
+        if (!data.messages?.length) return;
+        window.dispatchEvent(new Event("customer-chat-read"));
         lastIdRef.current = data.messages[data.messages.length - 1].id;
         setMessages((prev) => {
           const seen = new Set(prev.map((m) => m.id));
@@ -121,6 +125,12 @@ export default function CustomerChat() {
       clearInterval(timer);
     };
   }, [activeId]);
+
+  // New replies in the other chats show up in the list
+  useEffect(() => {
+    const timer = setInterval(() => { if (!document.hidden) loadList(); }, 20000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -148,7 +158,7 @@ export default function CustomerChat() {
   const centreChoices = [...centres].sort((a, b) => (String(b.id) === preferred) - (String(a.id) === preferred));
 
   return (
-    <div className="mx-auto flex h-[calc(100vh-9rem)] max-w-5xl min-h-[480px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="mx-auto flex h-[calc(100dvh-9rem)] max-w-5xl min-h-[480px] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       {/* Chat list */}
       <aside className={`${activeId ? "hidden md:flex" : "flex"} w-full flex-col border-r border-slate-200 md:w-72`}>
         <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
@@ -206,9 +216,14 @@ export default function CustomerChat() {
                     <Icon className="h-4 w-4" />
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-slate-900">{titleOf(c)}</span>
+                    <span className={`block truncate text-sm text-slate-900 ${c.unread > 0 && c.id !== activeId ? "font-semibold" : "font-medium"}`}>{titleOf(c)}</span>
                     <span className="block truncate text-xs text-slate-500">{c.last_message || subtitleOf(c)}</span>
                   </span>
+                  {c.unread > 0 && c.id !== activeId && (
+                    <span className="grid h-5 min-w-[20px] shrink-0 place-items-center rounded-full bg-red-500 px-1.5 text-[11px] font-semibold text-white">
+                      {c.unread > 99 ? "99+" : c.unread}
+                    </span>
+                  )}
                 </button>
               );
             })

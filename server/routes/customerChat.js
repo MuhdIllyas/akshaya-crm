@@ -6,6 +6,10 @@
 //                                                          member handling a booking
 //   GET  /api/customer/chat/conversations/:id/messages   ?after=<message id> for new ones
 //   POST /api/customer/chat/conversations/:id/messages   { text }
+//   GET  /api/customer/chat/unread                       { total } replies not read yet
+//
+// Reading a chat (fetching its messages) marks it read up to the newest
+// message (chat_conversations.customer_last_read_id).
 //
 // A centre chat goes to that centre's admin (and anyone they bring in); a
 // booking chat goes to the assigned staff member and the centre admin only.
@@ -33,8 +37,15 @@ const wrap = (fn) => (req, res) =>
   });
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
 
-const LIST_SQL = `
+// Replies (from the centre) the customer hasn't read yet.
+const UNREAD_SQL = `(SELECT count(*)::int FROM chat_messages m
+    WHERE m.conversation_id = c.id AND m.is_deleted = false AND m.sender_type <> 'customer'
+      AND m.message_type IN ('text', 'image', 'file', 'document')
+      AND m.id > COALESCE(c.customer_last_read_id, 0))`;
+
+const listSql = (withUnread = true) => `
   SELECT c.id, c.channel, c.context_type, c.context_id, c.centre_id, c.last_message_at,
+         ${withUnread ? UNREAD_SQL : "0"} AS unread,
          ce.name AS centre_name,
          cs.application_number, sv.name AS service_name,
          st.id AS staff_id, st.name AS staff_name,
@@ -49,11 +60,18 @@ const LIST_SQL = `
     LEFT JOIN staff st ON st.id = cs.assigned_staff_id
    WHERE c.channel = 'portal' AND c.customer_id = $1 AND c.status <> 'deleted'`;
 
+// Before the 2026-11-14-portal-chat-read migration there is no read marker: no counts.
+async function listQuery(extra, params) {
+  try {
+    return await pool.query(`${listSql(true)} ${extra}`, params);
+  } catch (err) {
+    if (err.code !== "42703") throw err;
+    return pool.query(`${listSql(false)} ${extra}`, params);
+  }
+}
+
 async function ownConversation(customerId, id, req = null) {
-  const { rows } = await pool.query(
-    `${LIST_SQL} AND c.id = $2`,
-    [customerId, Number(id)]
-  );
+  const { rows } = await listQuery(`AND c.id = $2`, [customerId, Number(id)]);
   if (!rows[0] || (req && !inScope(req, rows[0]))) throw bad("Conversation not found", 404);
   return rows[0];
 }
@@ -61,8 +79,17 @@ async function ownConversation(customerId, id, req = null) {
 router.get(
   "/conversations",
   wrap(async (req, res) => {
-    const { rows } = await pool.query(`${LIST_SQL} ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`, [req.customer.id]);
+    const { rows } = await listQuery(`ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`, [req.customer.id]);
     res.json(rows.filter((row) => inScope(req, row)));
+  })
+);
+
+router.get(
+  "/unread",
+  wrap(async (req, res) => {
+    const { rows } = await listQuery("", [req.customer.id]);
+    const total = rows.filter((row) => inScope(req, row)).reduce((sum, row) => sum + (Number(row.unread) || 0), 0);
+    res.json({ total });
   })
 );
 
@@ -171,7 +198,17 @@ router.get(
         LIMIT 200`,
       [conversation.id, req.customer.id, after]
     );
-    res.json({ conversation, messages: rows });
+    // They're looking at it: everything up to the newest message is read.
+    await pool
+      .query(
+        `UPDATE chat_conversations
+            SET customer_last_read_id = GREATEST(COALESCE(customer_last_read_id, 0),
+                  COALESCE((SELECT max(id) FROM chat_messages WHERE conversation_id = $1), 0))
+          WHERE id = $1`,
+        [conversation.id]
+      )
+      .catch((err) => { if (err.code !== "42703") throw err; });
+    res.json({ conversation: { ...conversation, unread: 0 }, messages: rows });
   })
 );
 

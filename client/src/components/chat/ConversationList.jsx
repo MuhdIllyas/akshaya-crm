@@ -123,7 +123,7 @@ const ConversationList = ({
           )}
         </div>
 
-        <div className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-0.5" style={{ scrollbarWidth: "none" }}>
+        <div className="flex flex-wrap gap-1">
           {visibleTabs.map((t) => {
             const s = tabStats[t.id] || { count: 0, unread: 0 };
             const active = tab === t.id;
