@@ -550,7 +550,7 @@ const CustomerProfileSystem = () => {
           </button>
         </div>
 
-        <div className="grid gap-4 lg:h-[calc(100vh-10rem)] lg:min-h-[480px] lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:h-[calc(100vh-17.5rem)] lg:min-h-[460px] lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
           {/* ===== Customer list ===== */}
           <aside className={`${showProfileOnPhone ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm`}>
             <div className="space-y-2 border-b border-slate-200 p-3">
