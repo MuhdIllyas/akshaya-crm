@@ -48,4 +48,9 @@ export const getAllCustomers = () => {
   return customerApi.get("/"); // Assuming GET /api/customer returns all
 };
 
+/** Staff registers a customer at the counter → { id, name, existing } */
+export const createCustomer = (data) => {
+  return customerApi.post("/", data);
+};
+
 export default customerApi;

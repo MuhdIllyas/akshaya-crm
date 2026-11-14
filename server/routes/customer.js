@@ -13,7 +13,7 @@ import { orgUploadPath } from '../tenancy/uploads.js';
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
 import { startCustomerSession, customerCentreList, linkCustomerToCentre, staffCustomerCentre, isCustomerAtCentre } from "../utils/customerCentres.js";
 import { getCustomerPortalMode } from "../utils/orgSettings.js";
-import { linkWalkInsToCustomer } from "../utils/aadhaar.js";
+import { linkWalkInsToCustomer, digitsOnly, hashAadhaar } from "../utils/aadhaar.js";
 
 const router = express.Router();
 
@@ -844,6 +844,87 @@ router.get("/", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), 
   } catch (err) {
     console.error("Error fetching all customers:", err);
     res.status(500).json({ message: "Failed to fetch customers" });
+  }
+});
+
+/* ======================================================
+   STAFF CREATES A CUSTOMER (walk-in at the counter)
+   POST /api/customer { name, phone, aadhaar, email?, address?, pincode?, district?, state? }
+   → 201 { id, name, existing: false }
+   → 200 { id, name, existing: true }  same Aadhaar already registered (added to this centre)
+   → 409 phone already used by another customer
+   The account is not verified (no OTP). The customer signs in later with
+   their phone (OTP), or registers in the portal with the same Aadhaar + phone.
+====================================================== */
+router.post("/", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  const b = req.body || {};
+  const name = String(b.name || "").trim();
+  const phone = digitsOnly(b.phone).slice(-10);
+  const aadhaar = digitsOnly(b.aadhaar);
+  const email = String(b.email || "").trim() || null;
+  const pincode = digitsOnly(b.pincode) || null;
+
+  if (name.length < 2) return res.status(400).json({ message: "Enter the customer's name" });
+  if (!validPhone(phone)) return res.status(400).json({ message: "Enter a 10-digit phone number" });
+  if (!/^\d{12}$/.test(aadhaar)) return res.status(400).json({ message: "Enter the 12-digit Aadhaar number" });
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ message: "Enter a valid email or leave it empty" });
+  if (pincode && !/^\d{6}$/.test(pincode)) return res.status(400).json({ message: "Pincode must be 6 digits" });
+
+  const aadhaarHash = hashAadhaar(aadhaar);
+  const centreId = req.user?.centre_id ? Number(req.user.centre_id) : null;
+
+  // Already registered with this Aadhaar: add them to this centre and open them.
+  const useExisting = async () => {
+    const { rows } = await pool.query(`SELECT id, name FROM customers WHERE aadhaar_hash = $1`, [aadhaarHash]);
+    if (!rows[0]) return false;
+    await linkCustomerToCentre(rows[0].id, centreId, "staff");
+    res.json({ id: rows[0].id, name: rows[0].name, existing: true });
+    return true;
+  };
+
+  try {
+    if (await useExisting()) return;
+
+    // Sign-in is by phone, so one phone can't belong to two customers.
+    const { rows: samePhone } = await pool.query(
+      `SELECT id FROM customers WHERE right(regexp_replace(coalesce(primary_phone, ''), '\\D', '', 'g'), 10) = $1 LIMIT 1`,
+      [phone]
+    );
+    if (samePhone[0]) {
+      const onlyCentre = await staffCustomerCentre(req.user);
+      const visible = !onlyCentre || (await isCustomerAtCentre(samePhone[0].id, onlyCentre));
+      return res.status(409).json({
+        message: "This phone number is already registered to another customer.",
+        ...(visible ? { id: samePhone[0].id } : {}),
+      });
+    }
+
+    const { rows } = await pool.query(
+      `INSERT INTO customers (aadhaar_hash, aadhaar_last4, primary_phone, email, name, address, pincode, district, state, is_verified)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, false)
+       RETURNING id, name`,
+      [
+        aadhaarHash,
+        aadhaar.slice(-4),
+        phone,
+        email,
+        name,
+        String(b.address || "").trim() || null,
+        pincode,
+        String(b.district || "").trim() || null,
+        String(b.state || "").trim() || "Kerala",
+      ]
+    );
+    const customer = rows[0];
+    await linkCustomerToCentre(customer.id, centreId, "staff");
+    // walk-in entries made earlier with this Aadhaar now belong to them
+    await linkWalkInsToCustomer(pool, customer.id, aadhaarHash).catch((e) => console.error("link walk-ins:", e.message));
+    return res.status(201).json({ id: customer.id, name: customer.name, existing: false });
+  } catch (err) {
+    // two staff saving the same Aadhaar at once
+    if (err.code === "23505" && (await useExisting().catch(() => false))) return;
+    console.error("staff create customer error:", err);
+    return res.status(500).json({ message: "Failed to create the customer" });
   }
 });
 

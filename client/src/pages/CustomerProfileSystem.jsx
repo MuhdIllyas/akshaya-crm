@@ -17,6 +17,7 @@ import StaffCustomerDocuments from './staff/StaffCustomerDocuments';
 import CustomerMessages from '@/components/CustomerMessages';
 import CustomerCentres from '@/components/CustomerCentres';
 import { customersPath } from '@/utils/customersPath';
+import NewCustomerModal from '@/components/NewCustomerModal';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -77,6 +78,7 @@ const CustomerProfileSystem = () => {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [appFilter, setAppFilter] = useState('active'); // active | completed | all
   const [appSearch, setAppSearch] = useState('');
+  const [showNewCustomer, setShowNewCustomer] = useState(false);
 
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -438,6 +440,14 @@ const CustomerProfileSystem = () => {
   const initials = (name) => (name || '?').split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 
   // New service entry for this customer (name and phone filled in)
+  // Saved from the New customer form (or the Aadhaar was already registered)
+  const handleCustomerCreated = ({ id, existing } = {}) => {
+    setShowNewCustomer(false);
+    toast.success(existing ? 'This Aadhaar is already registered. Opening that customer.' : 'Customer saved');
+    loadCustomers();
+    if (id) navigate(customersPath(id));
+  };
+
   const handleNewEntry = () => {
     if (!selectedCustomer) return;
     navigate('/dashboard/staff/service_entry', {
@@ -541,15 +551,32 @@ const CustomerProfileSystem = () => {
               </p>
             </div>
           </div>
-          <button
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
-            onClick={() => { loadCustomers(); if (selectedCustomer) fetchCustomerApplications(selectedCustomer); }}
-            aria-label="Refresh"
-          >
-            <FiRefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Refresh</span>
-          </button>
+          <div className="flex shrink-0 gap-2">
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+              onClick={() => { loadCustomers(); if (selectedCustomer) fetchCustomerApplications(selectedCustomer); }}
+              aria-label="Refresh"
+            >
+              <FiRefreshCw className="h-4 w-4" />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+            <button
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white transition-colors hover:bg-navy-800 sm:px-4"
+              onClick={() => setShowNewCustomer(true)}
+              aria-label="New customer"
+            >
+              <FiPlus className="h-4 w-4" />
+              <span className="hidden sm:inline">New customer</span>
+            </button>
+          </div>
         </div>
+
+        <NewCustomerModal
+          open={showNewCustomer}
+          onClose={() => setShowNewCustomer(false)}
+          onCreated={handleCustomerCreated}
+          onOpenCustomer={(id) => { setShowNewCustomer(false); navigate(customersPath(id)); }}
+        />
 
         <div className="grid gap-4 lg:h-[calc(100vh-17.5rem)] lg:min-h-[460px] lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
           {/* ===== Customer list ===== */}
