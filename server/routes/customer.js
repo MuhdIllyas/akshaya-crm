@@ -173,6 +173,16 @@ async function consumeOtp(req, phone, otp) {
   return null;
 }
 
+// The customer just proved they have this phone (OTP): a customer staff
+// registered at the counter (unverified) becomes verified.
+async function markPhoneVerified(customerId) {
+  await pool.query(
+    `UPDATE customers SET is_verified = true, verified_at = NOW(), updated_at = NOW()
+      WHERE id = $1 AND is_verified IS NOT TRUE`,
+    [customerId]
+  ).catch((e) => console.error("mark verified:", e.message));
+}
+
 // Proof (valid 30 minutes) that this phone and ID were verified by OTP;
 // /register only accepts details that come with it.
 const REGISTRATION_TOKEN_MINUTES = 30;
@@ -284,6 +294,7 @@ router.post("/register", async (req, res) => {
       // Same person, same phone (just verified): sign them in.
       if (String(found.primary_phone || "").replace(/\D/g, "").slice(-10) === proof.phone) {
         await linkWalkInsToCustomer(pool, found.id, aadhaarHash).catch((e) => console.error("link walk-ins:", e.message));
+        await markPhoneVerified(found.id);
         const session = await startCustomerSession(found.id, centre_id);
         return res.json({ success: true, existing: true, ...session, customerId: found.id, name: found.name, org_slug: orgSlug() });
       }
@@ -383,6 +394,7 @@ router.post("/verify-otp", async (req, res) => {
     }
 
     const customer = customerResult.rows[0];
+    await markPhoneVerified(customer.id);
 
     const session = await startCustomerSession(customer.id, centre_id);
 
