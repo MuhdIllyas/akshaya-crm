@@ -70,10 +70,10 @@ const CustomerProfileSystem = () => {
   const [services, setServices] = useState([]);
   const [staffMembers, setStaffMembers] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [viewMode, setViewMode] = useState('list');
-  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);          // the customer list
+  const [detailLoading, setDetailLoading] = useState(false); // the selected customer's profile
+  const [statusFilter, setStatusFilter] = useState('all');   // all | pending | verified
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -213,8 +213,7 @@ const CustomerProfileSystem = () => {
       status: data.status || "Active",
       profile_photo: data.profile_photo,
       aadhaar_status: data.aadhaar_status,
-      ration_status: data.ration_card_status,
-      satisfaction: 92
+      ration_status: data.ration_card_status
     };
   };
 
@@ -358,35 +357,48 @@ const CustomerProfileSystem = () => {
     }
   };
 
+  const loadCustomers = async () => {
+    try {
+      setLoading(true);
+      const allRes = await getAllCustomers();
+      setCustomers(Array.isArray(allRes) ? allRes : allRes.data || []);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load customers");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // The list loads once; picking a customer only reloads the profile panel.
   useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true);
+    loadCustomers();
+  }, []);
 
-        const allRes = await getAllCustomers();
-        const customersData = Array.isArray(allRes) ? allRes : allRes.data || [];
-        setCustomers(customersData);
-
-        if (customerId) {
-          const customerRes = await getCustomerById(customerId);
-          const customerData = customerRes.data || customerRes;
-          const customer = normalizeCustomer(customerData);
-          setSelectedCustomer(customer);
-          await fetchCustomerApplications(customer);
-        } else {
-          setSelectedCustomer(null);
-          setCustomerApplications([]);
-        }
-
-      } catch (err) {
+  useEffect(() => {
+    if (!customerId) {
+      setSelectedCustomer(null);
+      setCustomerApplications([]);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    setActiveTab('applications');
+    getCustomerById(customerId)
+      .then((res) => {
+        if (!cancelled) setSelectedCustomer(normalizeCustomer(res.data || res));
+      })
+      .catch((err) => {
         console.error(err);
-        toast.error("Failed to load customer data");
-      } finally {
-        setLoading(false);
-      }
+        if (!cancelled) {
+          setSelectedCustomer(null);
+          toast.error(err.response?.status === 404 ? "Customer not found" : "Failed to load the customer");
+        }
+      })
+      .finally(() => !cancelled && setDetailLoading(false));
+    return () => {
+      cancelled = true;
     };
-
-    load();
   }, [customerId]);
 
   useEffect(() => {
@@ -402,6 +414,8 @@ const CustomerProfileSystem = () => {
     const email = customer.email?.toLowerCase() || "";
 
     const term = searchTerm.toLowerCase();
+    if (statusFilter === 'verified' && customer.is_verified !== true) return false;
+    if (statusFilter === 'pending' && customer.is_verified === true) return false;
 
     return (
       name.includes(term) ||
@@ -411,33 +425,17 @@ const CustomerProfileSystem = () => {
     );
   }).map(c => normalizeCustomer(c));
 
-  // List page helpers (display only)
-  const totalPages = Math.max(1, Math.ceil(filteredCustomers.length / PAGE_SIZE));
-  const currentPage = Math.min(page, totalPages);
-  const pagedCustomers = filteredCustomers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // List helpers (display only)
+  const visibleCustomers = filteredCustomers.slice(0, visibleCount);
   const verifiedCount = customers.filter(c => c.is_verified === true).length;
   const initials = (name) => (name || '?').split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
 
-  const handleAddApplication = () => {
-    toast.info("This would open a form to add a new application in a real implementation");
-  };
-
-  const handleNotifyCustomer = () => {
+  // New service entry for this customer (name and phone filled in)
+  const handleNewEntry = () => {
     if (!selectedCustomer) return;
-    toast.success(`Notification sent to ${selectedCustomer.name}`);
-  };
-
-  const handleEditCustomer = () => {
-    toast.info("Edit customer profile form would open");
-  };
-
-  const handleExportData = () => {
-    toast.success("Customer data exported successfully");
-  };
-
-  const handlePrintReport = () => {
-    toast.info("Generating print report...");
-    window.print();
+    navigate('/dashboard/staff/service_entry', {
+      state: { prefillCustomer: { name: selectedCustomer.name, phone: selectedCustomer.phone } },
+    });
   };
 
   const handleViewApplication = (app) => {
@@ -446,68 +444,6 @@ const CustomerProfileSystem = () => {
     } else {
       navigate(`/dashboard/staff/track_service/${app.id}`);
     }
-  };
-
-  // UPDATED: CustomerCard without "0 Active"
-  const CustomerCard = ({ customer, isSelected, onClick }) => {
-    return (
-      <motion.div
-        whileHover={{ y: -2 }}
-        className={`p-3 rounded-xl border-2 cursor-pointer transition-all duration-300 ${
-          isSelected 
-            ? 'border-navy-700 bg-navy-500/10 shadow-md' 
-            : 'border-slate-200 bg-white hover:border-slate-300 hover:shadow-sm'
-        }`}
-        onClick={onClick}
-      >
-        <div className="flex items-start justify-between mb-2">
-          <div className="flex items-center space-x-2 min-w-0 flex-1">
-            <div className="relative flex-shrink-0">
-              <div className="w-8 h-8 bg-navy-700 rounded-lg flex items-center justify-center">
-                <FiUser className="h-4 w-4 text-white" />
-              </div>
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-semibold text-slate-900 text-sm truncate" title={customer.name}>
-                {customer.name}
-              </h3>
-              <p className="text-xs text-slate-500 truncate" title={customer.phone}>
-                {customer.phone}
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="mb-2">
-          <p className="text-xs text-slate-600 truncate" title={customer.email}>
-            {customer.email}
-          </p>
-          <p className="text-xs text-slate-600 truncate" title={`${customer.district}, ${customer.state}`}>
-            {customer.district}, {customer.state}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 mb-2">
-          {customer.is_verified === "Verified" ? (
-            <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 flex items-center">
-              <FiCheck className="h-3 w-3 mr-1" />
-              Verified
-            </span>
-          ) : (
-            <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 flex items-center">
-              <FiClock className="h-3 w-3 mr-1" />
-              Pending
-            </span>
-          )}
-        </div>
-        <div className="flex items-center justify-between mt-2 pt-2 border-t border-slate-100">
-          <div className="text-xs text-slate-500 truncate flex-1 min-w-0 mr-2">
-            Aadhaar: {customer.aadhaarDisplay || 'Not Uploaded'}
-          </div>
-          <div className="text-xs font-medium text-navy-700 whitespace-nowrap flex-shrink-0">
-            {customer.satisfaction}% Sat
-          </div>
-        </div>
-      </motion.div>
-    );
   };
 
   const StatItem = ({ label, value }) => (
@@ -580,72 +516,138 @@ const CustomerProfileSystem = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-[400px] flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-navy-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-slate-600 font-medium">Loading customer dashboard...</p>
-        </div>
-      </div>
-    );
-  }
-  
+  const pendingCount = customers.length - verifiedCount;
+  const showProfileOnPhone = Boolean(customerId); // phones: list, or profile with a back link
+
   return (
     <ErrorBoundary>
       <div className="p-4 sm:p-6">
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-700 text-white">
               <FiUser className="h-5 w-5" />
             </span>
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Customer Profile Management</h1>
-              <p className="text-sm text-slate-500">Manage and track customer profiles and applications</p>
+              <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">Customers</h1>
+              <p className="truncate text-sm text-slate-500">
+                {loading ? 'Loading…' : `${customers.length} customers · ${pendingCount} to verify`}
+              </p>
             </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {!selectedCustomer && (
-              <>
-                <button className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-navy-700 px-4 text-sm font-medium text-white transition-colors hover:bg-navy-800 sm:h-10">
-                  <FiPlus className="h-4 w-4" />
-                  <span>New Customer</span>
-                </button>
-                <button
-                  onClick={handleExportData}
-                  className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:h-10"
-                >
-                  <FiDownload className="h-4 w-4" />
-                  <span>Export</span>
-                </button>
-                <button
-                  onClick={handlePrintReport}
-                  className="hidden h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:inline-flex"
-                >
-                  <FiPrinter className="h-4 w-4" />
-                  <span>Print</span>
-                </button>
-              </>
-            )}
-            <button
-              className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 sm:h-10"
-              onClick={() => window.location.reload()}
-            >
-              <FiRefreshCw className="h-4 w-4" />
-              <span>Refresh</span>
-            </button>
-          </div>
+          <button
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            onClick={() => { loadCustomers(); if (selectedCustomer) fetchCustomerApplications(selectedCustomer); }}
+            aria-label="Refresh"
+          >
+            <FiRefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Refresh</span>
+          </button>
         </div>
 
-        {selectedCustomer ? (
-          <div>
+        <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+          {/* ===== Customer list ===== */}
+          <aside className={`${showProfileOnPhone ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)]`}>
+            <div className="space-y-2 border-b border-slate-200 p-3">
+              <div className="relative">
+                <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Name, phone or last 4 of Aadhaar"
+                  className="min-h-[40px] w-full rounded-xl border border-slate-300 bg-white py-2 pl-9 pr-3 text-base focus:border-navy-500/40 focus:ring-2 focus:ring-navy-500/30 sm:text-sm"
+                  value={searchTerm}
+                  onChange={(e) => { setSearchTerm(e.target.value); setVisibleCount(PAGE_SIZE); }}
+                />
+              </div>
+              <div className="flex gap-1.5" role="group" aria-label="Filter customers">
+                {[['all', 'All'], ['pending', `To verify${pendingCount ? ` (${pendingCount})` : ''}`], ['verified', 'Verified']].map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => { setStatusFilter(value); setVisibleCount(PAGE_SIZE); }}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${statusFilter === value ? 'bg-navy-700 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {loading ? (
+                <p className="p-6 text-center text-sm text-slate-500">Loading customers…</p>
+              ) : filteredCustomers.length === 0 ? (
+                <div className="p-8 text-center text-slate-500">
+                  <FiSearch className="mx-auto mb-2 h-6 w-6 opacity-50" />
+                  <p className="text-sm">No customers found</p>
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {visibleCustomers.map((customer) => {
+                    const active = String(customer.id) === String(customerId);
+                    return (
+                      <li key={customer.id}>
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
+                          aria-current={active ? 'true' : undefined}
+                          className={`flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors ${active ? 'bg-navy-500/10' : 'hover:bg-slate-50'}`}
+                        >
+                          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-full text-xs font-semibold ${active ? 'bg-navy-700 text-white' : 'bg-navy-500/10 text-navy-700'}`}>
+                            {initials(customer.name)}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center justify-between gap-2">
+                              <span className={`truncate text-sm ${active ? 'font-semibold text-navy-800' : 'font-medium text-slate-900'}`}>{customer.name}</span>
+                              {customer.is_verified === 'Verified'
+                                ? <FiCheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-600" aria-label="Verified" />
+                                : <span className="shrink-0 text-[11px] font-medium text-amber-700">To verify</span>}
+                            </span>
+                            <span className="block truncate text-xs text-slate-500">
+                              {customer.phone}{customer.district && customer.district !== '—' ? ` · ${customer.district}` : ''}
+                            </span>
+                          </span>
+                          <FiChevronRight className="h-4 w-4 shrink-0 text-slate-300 lg:hidden" />
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {filteredCustomers.length > visibleCount && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleCount((n) => n + PAGE_SIZE * 2)}
+                  className="w-full border-t border-slate-100 py-3 text-sm font-medium text-navy-700 hover:bg-slate-50"
+                >
+                  Show more ({filteredCustomers.length - visibleCount} left)
+                </button>
+              )}
+            </div>
+          </aside>
+
+          {/* ===== Selected customer ===== */}
+          <section className={`${showProfileOnPhone ? 'block' : 'hidden lg:block'} min-w-0`}>
             <button
               onClick={() => navigate('/dashboard/staff/customers')}
-              className="mb-3 inline-flex min-h-[40px] items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-800"
+              className="mb-3 inline-flex min-h-[40px] items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-800 lg:hidden"
             >
               <FiArrowLeft className="h-4 w-4" />
               All customers
             </button>
+
+            {detailLoading ? (
+              <div className="grid min-h-[320px] place-items-center rounded-2xl border border-slate-200 bg-white">
+                <div className="h-10 w-10 animate-spin rounded-full border-4 border-navy-700 border-t-transparent" />
+              </div>
+            ) : !selectedCustomer ? (
+              <div className="grid min-h-[320px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+                <div>
+                  <FiUser className="mx-auto mb-2 h-8 w-8 text-slate-300" />
+                  <p className="font-medium text-slate-700">Select a customer</p>
+                  <p className="mt-1 text-sm text-slate-500">Their applications, documents and messages open here.</p>
+                </div>
+              </div>
+            ) : (
                 <div className="space-y-6">
                   <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
                     <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
@@ -676,21 +678,18 @@ const CustomerProfileSystem = () => {
                       </div>
                       <div className="flex flex-wrap gap-2 mt-4 lg:mt-0">
                         <button
-                          className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center space-x-2 transition-all duration-200"
-                          onClick={handleNotifyCustomer}
+                          className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center gap-2 transition-colors"
+                          onClick={handleNewEntry}
+                        >
+                          <FiPlus className="h-4 w-4" />
+                          <span>New entry</span>
+                        </button>
+                        <button
+                          onClick={() => setActiveTab('messages')}
+                          className="h-10 px-4 border border-slate-300 bg-white text-slate-700 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-colors"
                         >
                           <FiMessageSquare className="h-4 w-4" />
-                          <span>Notify</span>
-                        </button>
-                        <button 
-                          onClick={handleEditCustomer}
-                          className="h-10 px-4 border border-slate-300 bg-white text-slate-700 rounded-xl hover:bg-slate-50 flex items-center space-x-2 transition-all duration-200"
-                        >
-                          <FiEdit className="h-4 w-4" />
-                          <span>Edit</span>
-                        </button>
-                        <button className="grid h-10 w-10 place-items-center border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors">
-                          <FiMoreHorizontal className="h-4 w-4 text-slate-600" />
+                          <span>Message</span>
                         </button>
                       </div>
                     </div>
@@ -698,7 +697,7 @@ const CustomerProfileSystem = () => {
                       <StatItem label="District" value={selectedCustomer.district || 'N/A'} />
                       <StatItem label="Active Apps" value={selectedCustomer.activeApplications || 0} />
                       <StatItem label="Total Apps" value={selectedCustomer.totalApplications || 0} />
-                      <StatItem label="Satisfaction" value={`${selectedCustomer.satisfaction}%`} />
+                      <StatItem label="Customer since" value={formatDate(selectedCustomer.createdAt)} />
                     </div>
                   </div>
                   
@@ -825,9 +824,9 @@ const CustomerProfileSystem = () => {
                                 <h3 className="font-semibold text-slate-900">Applications</h3>
                                 <button 
                                   className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center"
-                                  onClick={handleAddApplication}
+                                  onClick={handleNewEntry}
                                 >
-                                  <FiPlus className="mr-2" /> New Application
+                                  <FiPlus className="mr-2" /> New entry
                                 </button>
                               </div>
                               
@@ -1025,154 +1024,9 @@ const CustomerProfileSystem = () => {
                     </div>
                   </div>
                 </div>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {[
-                ['Total customers', customers.length],
-                ['Verified', verifiedCount],
-                ['Pending verification', customers.length - verifiedCount],
-                ['Matching search', filteredCustomers.length]
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-4">
-                  <p className="text-xs text-slate-500">{label}</p>
-                  <p className="text-xl font-semibold text-slate-900">{value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-center">
-              <div className="relative flex-1">
-                <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-400 h-4 w-4" />
-                <input
-                  type="text"
-                  placeholder="Search name, phone, email"
-                  title="Search by name, phone, Aadhaar last 4 or email"
-                  className="w-full pl-10 pr-4 min-h-[44px] py-2 text-base sm:text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500/40 transition-all"
-                  value={searchTerm}
-                  onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-                />
-              </div>
-              <div className="flex gap-2">
-                <div className="relative flex-1 lg:w-48 lg:flex-none">
-                  <select
-                    className="w-full min-h-[44px] px-3 py-2 text-base sm:text-sm bg-white border border-slate-300 rounded-xl focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500/40 appearance-none"
-                    value={statusFilter}
-                    onChange={(e) => setStatusFilter(e.target.value)}
-                  >
-                    <option value="all">All Statuses</option>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                    <option value="High Priority">High Priority</option>
-                  </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-700">
-                    <FiChevronDown className="h-5 w-5" />
-                  </div>
-                </div>
-                <div className="flex rounded-xl bg-slate-100 p-1">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`grid h-10 w-10 place-items-center rounded-lg ${viewMode === 'grid' ? 'bg-white text-navy-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    <FiGrid className="h-4 w-4" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`grid h-10 w-10 place-items-center rounded-lg ${viewMode === 'list' ? 'bg-white text-navy-700 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
-                  >
-                    <FiList className="h-4 w-4" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {filteredCustomers.length === 0 ? (
-              <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-slate-500 shadow-sm sm:p-12">
-                <FiSearch className="mx-auto h-8 w-8 mb-2 opacity-50" />
-                <p className="text-sm">No customers found</p>
-                <p className="text-xs text-slate-400 mt-1">Try adjusting your search</p>
-              </div>
-            ) : viewMode === 'grid' ? (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {pagedCustomers.map(customer => (
-                  <CustomerCard
-                    key={customer.id}
-                    customer={customer}
-                    isSelected={false}
-                    onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-                <div className="hidden grid-cols-12 gap-3 border-b border-slate-200 bg-slate-50 px-5 py-2.5 text-xs font-medium uppercase tracking-wide text-slate-500 md:grid">
-                  <span className="col-span-4">Customer</span>
-                  <span className="col-span-2">Phone</span>
-                  <span className="col-span-2">District</span>
-                  <span className="col-span-2">Aadhaar</span>
-                  <span className="col-span-2">Status</span>
-                </div>
-                <ul className="divide-y divide-slate-100">
-                  {pagedCustomers.map(customer => (
-                    <li key={customer.id}>
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/dashboard/staff/customers/${customer.id}`)}
-                        className="grid w-full grid-cols-2 items-center gap-x-3 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-slate-50 md:grid-cols-12 md:px-5"
-                      >
-                        <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-4">
-                          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-navy-500/10 text-xs font-semibold text-navy-700">
-                            {initials(customer.name)}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-medium text-slate-900">{customer.name}</p>
-                            <p className="truncate text-xs text-slate-400">
-                              <span className="md:hidden">{customer.phone} · {customer.district} · </span>
-                              {customer.email}
-                            </p>
-                          </div>
-                        </div>
-                        <p className="hidden truncate text-sm text-slate-600 md:col-span-2 md:block">{customer.phone}</p>
-                        <p className="hidden truncate text-sm text-slate-600 md:col-span-2 md:block">{customer.district}</p>
-                        <p className="hidden truncate text-sm text-slate-600 md:col-span-2 md:block">{customer.aadhaarDisplay || 'Not Uploaded'}</p>
-                        <div className="col-span-2 flex items-center justify-between md:col-span-2">
-                          <VerificationBadge isVerified={customer.is_verified} />
-                          <FiChevronRight className="h-4 w-4 text-slate-300 md:hidden" />
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
             )}
-
-            {filteredCustomers.length > 0 && (
-              <div className="mt-3 flex flex-col items-center justify-between gap-3 text-sm text-slate-500 sm:flex-row">
-                <span>
-                  {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredCustomers.length)} of {filteredCustomers.length}
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setPage(currentPage - 1)}
-                    disabled={currentPage <= 1}
-                    className="h-10 rounded-xl border border-slate-300 bg-white px-4 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Previous
-                  </button>
-                  <span className="px-2">Page {currentPage} of {totalPages}</span>
-                  <button
-                    onClick={() => setPage(currentPage + 1)}
-                    disabled={currentPage >= totalPages}
-                    className="h-10 rounded-xl border border-slate-300 bg-white px-4 font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    Next
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
+          </section>
+        </div>
 
         <style>{`
           .scrollbar-hide {

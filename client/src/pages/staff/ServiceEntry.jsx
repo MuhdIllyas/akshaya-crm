@@ -1252,6 +1252,19 @@ const ServiceEntry = () => {
     setDaysRemaining(days);
   };
 
+  // ===== Customers page → "New entry": fill the customer's name and phone =====
+  useEffect(() => {
+    const prefill = location.state?.prefillCustomer;
+    if (!prefill) return;
+    setEditingEntryId(null);
+    setFormData(prev => ({
+      ...prev,
+      customerName: prefill.name || prev.customerName || '',
+      phone: String(prefill.phone || '').replace(/\D/g, '').slice(-10) || prev.phone || '',
+    }));
+    window.history.replaceState({}, document.title); // don't refill on refresh
+  }, [location.state]);
+
   // ===== Lead → Service Entry: fill name, phone and service from the lead =====
   useEffect(() => {
     const lead = location.state?.fromLead;
