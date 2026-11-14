@@ -166,7 +166,9 @@ const CustomerProfileSystem = () => {
     if (data.aadhaar_number) {
       // Full Aadhaar number from documents (detail view)
       aadhaarValue = data.aadhaar_number;
-      aadhaarDisplay = data.aadhaar_number;
+      // shown masked; the full number is only used to look up their applications
+      const last4 = String(data.aadhaar_number).replace(/\D/g, '').slice(-4);
+      aadhaarDisplay = last4 ? `XXXX-XXXX-${last4}` : 'Not Uploaded';
     } else if (data.aadhaar_last4) {
       // Last 4 digits only (list view)
       aadhaarValue = data.aadhaar_last4;
@@ -671,7 +673,7 @@ const CustomerProfileSystem = () => {
                             </div>
                             <div className="flex items-center space-x-1 text-slate-600">
                               <FiCreditCard className="h-4 w-4" />
-                              <span className="text-sm">{selectedCustomer.aadhaarDisplay || selectedCustomer.aadhaar}</span>
+                              <span className="text-sm">{selectedCustomer.aadhaarDisplay}</span>
                             </div>
                           </div>
                         </div>
@@ -741,7 +743,7 @@ const CustomerProfileSystem = () => {
                                     <DetailRow label="Full Name" value={selectedCustomer.name} />
                                     <DetailRow label="Phone Number" value={selectedCustomer.phone} />
                                     <DetailRow label="Email Address" value={selectedCustomer.email} />
-                                    <DetailRow label="Aadhaar Number" value={selectedCustomer.aadhaar_number || selectedCustomer.aadhaar} />
+                                    <DetailRow label="Aadhaar Number" value={selectedCustomer.aadhaarDisplay} />
                                     <DetailRow label="Ration Card" value={selectedCustomer.rationCard} />
                                     <DetailRow label="Date of Birth" value={selectedCustomer.dateOfBirth} />
                                     <DetailRow label="Gender" value={selectedCustomer.gender} />
