@@ -184,11 +184,11 @@ const GenerateBookingPoster = ({ poster }) => {
                     to register and book services with your centre, in English and Malayalam.
                 </p>
 
-                <div className="flex items-center gap-4 mb-6">
+                <div className="flex flex-wrap items-center gap-4 mb-6">
                     <div ref={qrRef} className="p-2 bg-white border border-slate-200 rounded-xl shrink-0">
                         <QRCodeCanvas value={bookingUrl} size={600} level={"H"} includeMargin={true} fgColor="#0f2742" style={{ width: 120, height: 120 }} />
                     </div>
-                    <p className="text-xs text-navy-700 font-mono bg-slate-100 px-3 py-2 rounded-lg break-all border border-slate-200">
+                    <p className="min-w-[12rem] flex-1 text-xs text-navy-700 font-mono bg-slate-100 px-3 py-2 rounded-lg break-all border border-slate-200">
                         {bookingUrl}
                     </p>
                 </div>
