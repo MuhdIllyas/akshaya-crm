@@ -856,35 +856,51 @@ const CustomerProfileSystem = () => {
                                     </p>
                                   </div>
                                 ) : (
-                                  <ul className="divide-y divide-slate-100">
-                                    {shown.map((app) => (
-                                      <li key={app.id}>
-                                        <button
-                                          type="button"
-                                          onClick={() => handleViewApplication(app)}
-                                          className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-slate-50"
-                                        >
-                                          <span className="min-w-0">
-                                            <span className="block truncate text-sm font-medium text-slate-900">
-                                              {app.type}{app.subType && app.subType !== 'N/A' ? ` — ${app.subType}` : ''}
-                                            </span>
-                                            <span className="block truncate text-xs text-slate-500">
-                                              {app.appNumber}
-                                              {' · '}
-                                              {app.source === 'Pending Online'
-                                                ? <span className="font-medium text-navy-700">Online, not taken yet</span>
-                                                : 'At the centre'}
-                                              {app.createdDate && app.createdDate !== 'N/A' ? ` · ${app.createdDate}` : ''}
-                                            </span>
-                                          </span>
-                                          <span className="flex shrink-0 items-center gap-2">
-                                            <StatusBadge status={app.status} />
-                                            <FiChevronRight className="h-4 w-4 text-slate-300" />
-                                          </span>
-                                        </button>
-                                      </li>
+                                  <div className="space-y-4 pt-1">
+                                    {[
+                                      { key: 'online', label: 'Online — waiting to be taken', dot: 'bg-navy-500', rows: shown.filter((a) => !isDone(a.status) && a.source === 'Pending Online') },
+                                      { key: 'centre', label: 'At the centre — in progress', dot: 'bg-navy-700', rows: shown.filter((a) => !isDone(a.status) && a.source !== 'Pending Online') },
+                                      { key: 'done', label: 'Completed', dot: 'bg-emerald-500', rows: shown.filter((a) => isDone(a.status)) },
+                                    ].filter((g) => g.rows.length > 0).map((group) => (
+                                      <section key={group.key}>
+                                        <h4 className="mb-1 flex items-center gap-2 px-1 text-xs font-semibold text-slate-600">
+                                          <span className={`h-1.5 w-1.5 rounded-full ${group.dot}`} />
+                                          {group.label}
+                                          <span className="font-normal text-slate-400">{group.rows.length}</span>
+                                        </h4>
+                                        <ul className="divide-y divide-slate-100">
+                                          {group.rows.map((app) => (
+                                            <li key={app.id}>
+                                              <button
+                                                type="button"
+                                                onClick={() => handleViewApplication(app)}
+                                                className="grid w-full grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-1 py-2 text-left transition-colors hover:bg-slate-50 sm:grid-cols-[2rem_minmax(0,1fr)_10rem_4.5rem_auto]"
+                                              >
+                                                <span className={`grid h-8 w-8 place-items-center rounded-lg ${app.source === 'Pending Online' ? 'bg-navy-500/10 text-navy-700' : 'bg-slate-100 text-slate-600'}`}>
+                                                  {app.source === 'Pending Online' ? <FiLink className="h-4 w-4" /> : <FiFolder className="h-4 w-4" />}
+                                                </span>
+                                                <span className="min-w-0">
+                                                  <span className="block truncate text-sm font-medium text-slate-900">{app.type}</span>
+                                                  <span className="block truncate text-xs text-slate-500">
+                                                    {app.subType && app.subType !== 'N/A' ? app.subType : app.source === 'Pending Online' ? 'Online booking' : 'Service entry'}
+                                                    <span className="sm:hidden"> · {app.appNumber}</span>
+                                                  </span>
+                                                </span>
+                                                <span className="hidden truncate font-mono text-xs text-slate-600 sm:block" title={app.appNumber}>{app.appNumber}</span>
+                                                <span className="hidden text-xs text-slate-500 sm:block">
+                                                  {app.submissionDate ? new Date(app.submissionDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : ''}
+                                                </span>
+                                                <span className="flex items-center gap-1.5 justify-self-end">
+                                                  <StatusBadge status={app.status} />
+                                                  <FiChevronRight className="h-4 w-4 text-slate-300" />
+                                                </span>
+                                              </button>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </section>
                                     ))}
-                                  </ul>
+                                  </div>
                                 )}
                               </div>
                             );
