@@ -10,6 +10,7 @@ import { loginPath } from "@/tenancy/org";
 const SESSION_KEYS = [
   "token", "id", "role", "username", "name", "centre_id", "centre_name", "photo", "previous_sign_in",
   "customer_token", "customer_id", "customer_name",
+  "customer_centre_id", "customer_centre_name", "customer_portal_mode",
 ];
 
 export default function Logout() {

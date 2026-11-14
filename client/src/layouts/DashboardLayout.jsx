@@ -41,6 +41,10 @@ const DashboardLayout = () => {
   // Centre name shown under the admin's name. Read from localStorage ("centre_name", saved at login);
   // no API call here because /api/centres is superadmin-only.
   const centreName = localStorage.getItem("centre_name") || "";
+  // Customer in a per-centre portal: the centre they're signed in at (saved by tenancy/centres).
+  const customerCentreName = role === "customer" && localStorage.getItem("customer_portal_mode") === "per_centre"
+    ? localStorage.getItem("customer_centre_name") || ""
+    : "";
   // Previous sign-in (saved at login), shown under the name: "Last sign-in: 11 Nov, 9:42 pm"
   const previousSignIn = (() => {
     try {
@@ -551,6 +555,14 @@ const DashboardLayout = () => {
                 </p>
                 {role === "admin" && centreName && (
                   <p className="truncate text-[11px] text-slate-500" title={centreName}>{centreName}</p>
+                )}
+                {customerCentreName && (
+                  <p className="truncate text-[11px] text-slate-500" title={customerCentreName}>
+                    {customerCentreName} ·{" "}
+                    <button type="button" onClick={() => navigate("/customer/choose-centre")} className="font-medium text-navy-700 hover:underline">
+                      Switch
+                    </button>
+                  </p>
                 )}
                 {role !== "customer" && previousSignIn && (
                   <p className="truncate text-[11px] text-slate-400" title="Your sign-in before this one">Last sign-in: {previousSignIn}</p>

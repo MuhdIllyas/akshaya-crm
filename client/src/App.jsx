@@ -78,6 +78,8 @@ import CustomerRegistration from './pages/CustomerRegistration';
 import CustomerDashboard from './pages/customers/CustomerDashboard';
 import CustomerMyServices from './pages/customers/MyServices';
 import CustomerChat from './pages/customers/CustomerChat';
+import ChooseCentre from './pages/customers/ChooseCentre';
+import { fetchCustomerPortalContext } from './tenancy/centres';
 import CustomerMyDocuments from './pages/customers/MyDocuments';
 import CustomerProfile from './pages/customers/CustomerProfile';
 import ContinueApplication from './components/ContinueApplication';
@@ -164,7 +166,9 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
 // ---------------------------------------------------------------------
 const CustomerProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
+  const [needsCentre, setNeedsCentre] = useState(false);
   const customerToken = localStorage.getItem("customer_token");
+  const location = useLocation();
 
   useEffect(() => {
     const verifyCustomerToken = async () => {
@@ -179,6 +183,13 @@ const CustomerProtectedRoute = ({ children }) => {
           headers: { Authorization: `Bearer ${customerToken}` },
         });
         console.log("CustomerProtectedRoute: Token verification successful");
+        // Per-centre portal: they must be working at one of their centres.
+        try {
+          const ctx = await fetchCustomerPortalContext();
+          setNeedsCentre(Boolean(ctx.needs_centre));
+        } catch {
+          setNeedsCentre(false); // older server: no centres to choose
+        }
         setIsAuthenticated(true);
       } catch (err) {
         console.warn("CustomerProtectedRoute: Token verification failed - Session expired");
@@ -211,6 +222,10 @@ const CustomerProtectedRoute = ({ children }) => {
   // Redirect with state for Login page to handle toast
   if (!isAuthenticated || !customerToken) {
     return <Navigate to="/login" replace state={{ reason: "customer_session_expired" }} />;
+  }
+
+  if (needsCentre && location.pathname !== "/customer/choose-centre") {
+    return <Navigate to="/customer/choose-centre" replace />;
   }
 
   return children;
@@ -632,6 +647,10 @@ const App = () => {
           <Route
             path="/customer/messages"
             element={<CustomerProtectedRoute><CustomerChat /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/choose-centre"
+            element={<CustomerProtectedRoute><ChooseCentre /></CustomerProtectedRoute>}
           />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -15,6 +15,7 @@ import { getAllCustomers, getCustomerById } from "@/services/customerService";
 import { getCustomerHistory } from "@/services/serviceService";
 import StaffCustomerDocuments from './staff/StaffCustomerDocuments';
 import CustomerMessages from '@/components/CustomerMessages';
+import CustomerCentres from '@/components/CustomerCentres';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -785,6 +786,10 @@ const CustomerProfileSystem = () => {
                                     </div>
                                   </div>
                                 </div>
+                              </div>
+
+                              <div className="border-t border-slate-200 pt-6">
+                                <CustomerCentres customerId={selectedCustomer.id} />
                               </div>
                               
                               {selectedCustomer.profile_photo && (

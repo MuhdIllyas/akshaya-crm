@@ -14,12 +14,15 @@
 
 import express from "express";
 import pool from "../db.js";
-import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import { customerAuthMiddleware, requireCustomerCentre } from "../middlewares/customerAuthMiddleware.js";
 import Communication from "../services/communication/communicationEngine.js";
 import { addStaffToConversation } from "../utils/conversationService.js";
 
 const router = express.Router();
-router.use(customerAuthMiddleware);
+router.use(customerAuthMiddleware, requireCustomerCentre);
+
+// Per-centre portal: only chats with the centre the customer signed in at.
+const inScope = (req, row) => !req.customer.centreId || Number(row.centre_id) === req.customer.centreId;
 
 const MAX_LENGTH = 2000;
 
@@ -46,12 +49,12 @@ const LIST_SQL = `
     LEFT JOIN staff st ON st.id = cs.assigned_staff_id
    WHERE c.channel = 'portal' AND c.customer_id = $1 AND c.status <> 'deleted'`;
 
-async function ownConversation(customerId, id) {
+async function ownConversation(customerId, id, req = null) {
   const { rows } = await pool.query(
     `${LIST_SQL} AND c.id = $2`,
     [customerId, Number(id)]
   );
-  if (!rows[0]) throw bad("Conversation not found", 404);
+  if (!rows[0] || (req && !inScope(req, rows[0]))) throw bad("Conversation not found", 404);
   return rows[0];
 }
 
@@ -59,7 +62,7 @@ router.get(
   "/conversations",
   wrap(async (req, res) => {
     const { rows } = await pool.query(`${LIST_SQL} ORDER BY c.last_message_at DESC NULLS LAST, c.id DESC`, [req.customer.id]);
-    res.json(rows);
+    res.json(rows.filter((row) => inScope(req, row)));
   })
 );
 
@@ -87,7 +90,7 @@ router.post(
         [bookingId, customerId]
       );
       const booking = rows[0];
-      if (!booking) throw bad("Application not found", 404);
+      if (!booking || !inScope(req, booking)) throw bad("Application not found", 404);
       if (!booking.assigned_staff_id) throw bad("No one has taken this application yet. Chat with the centre instead.");
       centreId = booking.centre_id;
       contextType = "customer_service";
@@ -95,6 +98,7 @@ router.post(
       staffId = booking.assigned_staff_id;
       name = `${req.customer.name} — ${booking.service_name || "Application"} (${booking.application_number || `#${booking.id}`})`;
     } else {
+      if (req.customer.centreId) centreId = req.customer.centreId; // per-centre portal: their own centre
       if (!centreId) throw bad("Choose a centre");
       const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [centreId]);
       if (!rows[0]) throw bad("Centre not found", 404);
@@ -150,7 +154,7 @@ router.post(
 router.get(
   "/conversations/:id/messages",
   wrap(async (req, res) => {
-    const conversation = await ownConversation(req.customer.id, req.params.id);
+    const conversation = await ownConversation(req.customer.id, req.params.id, req);
     const after = Number(req.query.after) || 0;
     const { rows } = await pool.query(
       `SELECT m.id, m.message AS text, m.sender_type, m.message_type AS type, m.file_url, m.file_name, m.created_at,
@@ -174,7 +178,7 @@ router.get(
 router.post(
   "/conversations/:id/messages",
   wrap(async (req, res) => {
-    const conversation = await ownConversation(req.customer.id, req.params.id);
+    const conversation = await ownConversation(req.customer.id, req.params.id, req);
     const text = String(req.body?.text || "").trim();
     if (!text) throw bad("Type a message");
     if (text.length > MAX_LENGTH) throw bad(`Keep messages under ${MAX_LENGTH} characters`);

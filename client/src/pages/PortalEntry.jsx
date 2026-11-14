@@ -53,7 +53,8 @@ export default function PortalEntry() {
     if (centreLink) {
       setPreferredCentreId(centreLink[1]);
       const loggedIn = Boolean(localStorage.getItem("customer_token"));
-      return <Navigate to={loggedIn ? "/customer/dashboard" : `${state.base}/customer/register`} replace />;
+      // Signed in already: open (or join) that centre — matters when each centre has its own portal.
+      return <Navigate to={loggedIn ? `/customer/choose-centre?centre=${centreLink[1]}` : `${state.base}/customer/register`} replace />;
     }
     return <Navigate to={`/${page}${window.location.search}`} replace />;
   }

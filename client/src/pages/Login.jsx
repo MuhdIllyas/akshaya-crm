@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { FiUser, FiLock, FiEye, FiEyeOff, FiPhone, FiCheck } from "react-icons/fi";
 import AuthShell, { Field, OtpInput, Spinner, pillPrimary, pillSecondary } from "../components/login/AuthShell";
+import { getPreferredCentreId, saveCustomerSession } from "@/tenancy/centres";
 
 // Array of services for the animation
 const servicesList = [
@@ -202,21 +203,19 @@ const Login = () => {
     try {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/verify-otp`, {
         phone: customerPhone,
-        otp: customerOtp
+        otp: customerOtp,
+        centre_id: getPreferredCentreId() || undefined // the centre link/QR they came through
       });
 
       if (response.data.success) {
-        localStorage.setItem("role", "customer");
-        localStorage.setItem("customer_token", response.data.token);
-        localStorage.setItem("customer_id", response.data.customerId);
-        localStorage.setItem("customer_name", response.data.name);
+        const next = saveCustomerSession(response.data);
 
         toast.success(`Welcome ${response.data.name}`, {
           position: "top-right",
           autoClose: 3000,
         });
 
-        navigate("/customer/dashboard");
+        navigate(next);
       }
     } catch (error) {
       toast.error(error.response?.data?.message || "Invalid OTP");

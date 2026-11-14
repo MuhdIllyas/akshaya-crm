@@ -6,13 +6,16 @@ import {
 } from 'react-icons/fi';
 import axios from 'axios';
 import { toast } from 'react-toastify';
-import { getPreferredCentreId, setPreferredCentreId, usePortalCentres } from '@/tenancy/centres';
+import { getCustomerCentre, getPreferredCentreId, setPreferredCentreId, usePortalCentres } from '@/tenancy/centres';
 
 const ApplyForService = ({ onSuccess, onCancel }) => {
   const [step, setStep] = useState(1);
   // Centre the customer books with ("" = any centre). Pre-selected from the centre's link/QR.
   const { centres } = usePortalCentres();
-  const [centreId, setCentreId] = useState(getPreferredCentreId());
+  // Each centre has its own portal: the booking goes to the centre they're signed in at.
+  const ownCentre = getCustomerCentre();
+  const perCentre = ownCentre.mode === 'per_centre';
+  const [centreId, setCentreId] = useState(perCentre && ownCentre.id ? ownCentre.id : getPreferredCentreId());
   const centreChoice = centres.some((c) => String(c.id) === String(centreId)) ? String(centreId) : '';
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
@@ -568,7 +571,15 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
           </div>
 
           {/* Centre to book with */}
-          {centres.length > 0 && (
+          {perCentre && (ownCentre.name || centres[0]) && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+              <p className="font-semibold text-slate-800">Centre</p>
+              <p className="mt-1 text-sm text-slate-600">
+                This application goes to <span className="font-medium text-slate-900">{ownCentre.name || centres[0]?.name}</span>.
+              </p>
+            </div>
+          )}
+          {!perCentre && centres.length > 0 && (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
               <label htmlFor="booking-centre" className="block font-semibold text-slate-800 mb-1">Centre</label>
               <p className="text-sm text-slate-500 mb-3">Choose the centre that should handle this service.</p>

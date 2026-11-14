@@ -8,8 +8,15 @@ export const BOOKING_MODES = {
   STRICT: "strict", // only the booked centre sees/takes it ("any centre" bookings go to everyone)
 };
 
+// How customers relate to centres.
+export const CUSTOMER_PORTAL = {
+  SHARED: "shared", // one portal: customers see every centre and pick one (or any)
+  PER_CENTRE: "per_centre", // each centre has its own portal: a customer sees only the centre they came through
+};
+
 const DEFAULTS = {
   booking_mode: BOOKING_MODES.SHARED,
+  customer_portal: CUSTOMER_PORTAL.SHARED,
 };
 
 export async function getSetting(key, client = pool) {
@@ -31,7 +38,15 @@ export async function setSetting(key, value, staffId = null) {
   );
 }
 
+export async function getCustomerPortalMode(client = pool) {
+  const mode = await getSetting("customer_portal", client);
+  return mode === CUSTOMER_PORTAL.PER_CENTRE ? CUSTOMER_PORTAL.PER_CENTRE : CUSTOMER_PORTAL.SHARED;
+}
+
+// A per-centre portal means a booking belongs to its centre only, so the
+// booking mode is strict whatever is saved for it.
 export async function getBookingMode(client = pool) {
+  if ((await getCustomerPortalMode(client)) === CUSTOMER_PORTAL.PER_CENTRE) return BOOKING_MODES.STRICT;
   const mode = await getSetting("booking_mode", client);
   return mode === BOOKING_MODES.STRICT ? BOOKING_MODES.STRICT : BOOKING_MODES.SHARED;
 }

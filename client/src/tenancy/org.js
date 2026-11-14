@@ -35,7 +35,8 @@ export function setOrgSlug(slug) {
 export function clearOrgSession() {
   try {
     for (const key of ["token", "id", "role", "username", "name", "centre_id", "centre_name", "photo", "previous_sign_in",
-      "customer_token", "customer_id", "customer_name", "preferred_centre_id"]) {
+      "customer_token", "customer_id", "customer_name", "preferred_centre_id",
+      "customer_centre_id", "customer_centre_name", "customer_portal_mode"]) {
       localStorage.removeItem(key);
     }
   } catch {

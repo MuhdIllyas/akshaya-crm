@@ -1,6 +1,7 @@
 // src/pages/CustomerRegistration.jsx
 import { useState, useEffect } from "react";
 import axios from "axios";
+import { getPreferredCentreId, saveCustomerSession } from "@/tenancy/centres";
 import { useNavigate, Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
@@ -186,7 +187,8 @@ const CustomerRegistration = () => {
       const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/customer/register`, {
         ...formData,
         aadhaar: formData.aadhaar.replace(/\s/g, ''),
-        registration_token: registrationToken
+        registration_token: registrationToken,
+        centre_id: getPreferredCentreId() || undefined // the centre link/QR they came through
       });
 
       if (response.data.success) {
@@ -195,15 +197,11 @@ const CustomerRegistration = () => {
           : "Registration successful! Redirecting to dashboard...");
         localStorage.setItem("temp_customer_phone", formData.primary_phone);
         // Registering signs the customer in (the phone was just verified).
-        if (response.data.token) {
-          localStorage.setItem("role", "customer");
-          localStorage.setItem("customer_token", response.data.token);
-          localStorage.setItem("customer_id", response.data.customerId);
-          localStorage.setItem("customer_name", response.data.name || formData.name);
-        }
+        let next = "/customer/dashboard";
+        if (response.data.token) next = saveCustomerSession(response.data, formData.name);
 
         setTimeout(() => {
-          navigate("/customer/dashboard");
+          navigate(next);
         }, 2000);
       }
     } catch (error) {

@@ -8,6 +8,7 @@ import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
 import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
+import { linkCustomerToCentre } from '../utils/customerCentres.js';
 import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
@@ -5365,6 +5366,8 @@ router.put('/customer-services/:id/take', authenticateToken, async (req, res) =>
     }
 
     await client.query('COMMIT');
+    // the customer now has business with this centre (used when the portal is per-centre)
+    await linkCustomerToCentre(result.rows[0].customer_id, myCentreId, 'booking').catch((e) => console.error('link customer to centre:', e.message));
 
     if (otherCentre && booking.requested_centre_admin_id) {
       notificationService.createNotification({

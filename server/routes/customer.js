@@ -10,6 +10,9 @@ import { sendWhatsAppOTP } from "../utils/whatsapp.js";
 import { generateOtp, checkSend, checkVerifyIp, recordWrong, clearWrong } from "../utils/otpGuard.js";
 import { authMiddleware } from "./staff.js";
 import { orgUploadPath } from '../tenancy/uploads.js';
+import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import { startCustomerSession, customerCentreList, linkCustomerToCentre, staffCustomerCentre, isCustomerAtCentre } from "../utils/customerCentres.js";
+import { getCustomerPortalMode } from "../utils/orgSettings.js";
 
 const router = express.Router();
 
@@ -242,7 +245,8 @@ router.post("/register", async (req, res) => {
     pincode,
     district,
     state,
-    registration_token
+    registration_token,
+    centre_id // centre whose link/QR they came through (per-centre portal)
   } = req.body;
 
   if (!aadhaar || String(aadhaar).length !== 12) {
@@ -278,12 +282,8 @@ router.post("/register", async (req, res) => {
       const found = existing.rows[0];
       // Same person, same phone (just verified): sign them in.
       if (String(found.primary_phone || "").replace(/\D/g, "").slice(-10) === proof.phone) {
-        const token = jwt.sign(
-          { customer_id: found.id, org: orgSlug() },
-          process.env.CUSTOMER_JWT_SECRET,
-          { expiresIn: "7d" }
-        );
-        return res.json({ success: true, existing: true, token, customerId: found.id, name: found.name, org_slug: orgSlug() });
+        const session = await startCustomerSession(found.id, centre_id);
+        return res.json({ success: true, existing: true, ...session, customerId: found.id, name: found.name, org_slug: orgSlug() });
       }
       // The ID belongs to a customer with another phone. The OTP proves this
       // phone, not the ID, so the phone on that account is not changed here.
@@ -326,12 +326,8 @@ router.post("/register", async (req, res) => {
     // The phone was just verified by OTP, so sign the new customer in
     // straight away instead of asking for another code.
     const customer = inserted.rows[0];
-    const token = jwt.sign(
-      { customer_id: customer.id, org: orgSlug() },
-      process.env.CUSTOMER_JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-    return res.json({ success: true, token, customerId: customer.id, name: customer.name, org_slug: orgSlug() });
+    const session = await startCustomerSession(customer.id, centre_id);
+    return res.json({ success: true, ...session, customerId: customer.id, name: customer.name, org_slug: orgSlug() });
   } catch (err) {
     console.error("register error:", err);
     return res.status(500).json({ message: "Registration failed" });
@@ -363,7 +359,7 @@ router.post("/send-otp", async (req, res) => {
    POST /api/customer/verify-otp
 ====================================================== */
 router.post("/verify-otp", async (req, res) => {
-  const { phone, otp } = req.body;
+  const { phone, otp, centre_id } = req.body; // centre_id: the centre link/QR they came through, if any
 
   if (!validPhone(phone) || !otp) {
     return res.status(400).json({ message: "Invalid phone number or OTP" });
@@ -384,15 +380,11 @@ router.post("/verify-otp", async (req, res) => {
 
     const customer = customerResult.rows[0];
 
-    const token = jwt.sign(
-      { customer_id: customer.id, org: currentTenant().slug },
-      process.env.CUSTOMER_JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+    const session = await startCustomerSession(customer.id, centre_id);
 
     return res.json({
       success: true,
-      token,
+      ...session,
       customerId: customer.id,
       name: customer.name,
       org_slug: currentTenant().slug
@@ -747,8 +739,47 @@ router.delete("/profile-photo", async (req, res) => {
    11. GET ALL CUSTOMERS (STAFF / ADMIN / SUPERADMIN)
    GET /api/customer/
 ====================================================== */
+/* ======================================================
+   CENTRES (customer portal)
+   GET  /api/customer/portal-context   { portal_mode, centre, centres, needs_centre }
+   POST /api/customer/select-centre    { centre_id } → a token for that centre
+   In the per-centre portal a customer works "at" one of their centres; picking
+   (or coming through a centre's link) joins them to it.
+====================================================== */
+router.get("/portal-context", customerAuthMiddleware, async (req, res) => {
+  try {
+    const centres = await customerCentreList(req.customer.id);
+    res.json({
+      portal_mode: req.customer.portalMode,
+      centre: centres.find((c) => c.id === req.customer.centreId) || null,
+      centres,
+      needs_centre: req.customer.needsCentre,
+    });
+  } catch (err) {
+    console.error("portal-context error:", err);
+    res.status(500).json({ message: "Failed to load your centre" });
+  }
+});
+
+router.post("/select-centre", customerAuthMiddleware, async (req, res) => {
+  const centreId = Number(req.body?.centre_id) || null;
+  if (!centreId) return res.status(400).json({ message: "Choose a centre" });
+  try {
+    const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [centreId]);
+    if (!rows[0]) return res.status(404).json({ message: "Centre not found" });
+    const already = await isCustomerAtCentre(req.customer.id, centreId);
+    const session = await startCustomerSession(req.customer.id, centreId, already ? "link" : "picker");
+    res.json({ success: true, ...session, org_slug: orgSlug() });
+  } catch (err) {
+    console.error("select-centre error:", err);
+    res.status(500).json({ message: "Could not switch centre" });
+  }
+});
+
 router.get("/", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
   try {
+    // Per-centre portal: staff see only their centre's customers.
+    const onlyCentre = await staffCustomerCentre(req.user);
     const result = await pool.query(
       `
       SELECT 
@@ -774,8 +805,10 @@ router.get("/", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), 
         created_at,
         updated_at
       FROM customers 
+      ${onlyCentre ? "WHERE EXISTS (SELECT 1 FROM customer_centres cc WHERE cc.customer_id = customers.id AND cc.centre_id = $1)" : ""}
       ORDER BY created_at DESC
-      `
+      `,
+      onlyCentre ? [onlyCentre] : []
     );
     
     // Transform the response to ensure consistent field names
@@ -821,6 +854,10 @@ router.get(
     const { id } = req.params;
 
     try {
+      const onlyCentre = await staffCustomerCentre(req.user);
+      if (onlyCentre && !(await isCustomerAtCentre(Number(id), onlyCentre))) {
+        return res.status(404).json({ message: "Customer not found" });
+      }
       const result = await pool.query(
         `
         SELECT
@@ -879,5 +916,52 @@ router.get(
     }
   }
 );
+
+/* ======================================================
+   CUSTOMER'S CENTRES (staff view; superadmin changes them)
+   GET /api/customer/:id/centres → { portal_mode, centres, can_edit }
+   PUT /api/customer/:id/centres { centre_ids: [..] } (superadmin)
+====================================================== */
+router.get("/:id/centres", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  const id = Number(req.params.id);
+  try {
+    const onlyCentre = await staffCustomerCentre(req.user);
+    if (onlyCentre && !(await isCustomerAtCentre(id, onlyCentre))) {
+      return res.status(404).json({ message: "Customer not found" });
+    }
+    res.json({
+      portal_mode: await getCustomerPortalMode(),
+      centres: await customerCentreList(id),
+      can_edit: req.user.role === "superadmin",
+    });
+  } catch (err) {
+    console.error("customer centres error:", err);
+    res.status(500).json({ message: "Failed to load the customer's centres" });
+  }
+});
+
+router.put("/:id/centres", authMiddleware(["superadmin"]), async (req, res) => {
+  const id = Number(req.params.id);
+  const wanted = [...new Set((Array.isArray(req.body?.centre_ids) ? req.body.centre_ids : []).map(Number).filter(Boolean))];
+  const client = await pool.connect();
+  try {
+    const { rows: cust } = await client.query(`SELECT id FROM customers WHERE id = $1`, [id]);
+    if (!cust[0]) return res.status(404).json({ message: "Customer not found" });
+    await client.query("BEGIN");
+    await client.query(
+      `DELETE FROM customer_centres WHERE customer_id = $1 AND NOT (centre_id = ANY($2::int[]))`,
+      [id, wanted]
+    );
+    for (const centreId of wanted) await linkCustomerToCentre(id, centreId, "superadmin", client);
+    await client.query("COMMIT");
+    res.json({ centres: await customerCentreList(id) });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("save customer centres error:", err);
+    res.status(500).json({ message: "Failed to save the customer's centres" });
+  } finally {
+    client.release();
+  }
+});
 
 export default router;

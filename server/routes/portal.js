@@ -1,10 +1,28 @@
 // Public data for the customer portal of the current organization.
 //   GET /api/portal/centres  centres customers can book with, and the WhatsApp
 //                            number to chat with each (null = WhatsApp off).
+//                            Per-centre portal: a signed-in customer (Bearer
+//                            customer token) gets only the centre they are at;
+//                            visitors still get every centre to choose from.
 
 import express from "express";
 import pool from "../db.js";
+import jwt from "jsonwebtoken";
 import { featureEnabled } from "../tenancy/limits.js";
+import { customerCentreScope } from "../utils/customerCentres.js";
+
+// Centre a signed-in customer is limited to, or null (shared portal / visitor).
+async function customerOnlyCentre(req) {
+  const bearer = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || "")?.[1];
+  if (!bearer) return null;
+  try {
+    const decoded = jwt.verify(bearer, process.env.CUSTOMER_JWT_SECRET);
+    if (!decoded?.customer_id) return null;
+    return (await customerCentreScope(decoded.customer_id, decoded.centre_id)).centreId;
+  } catch {
+    return null;
+  }
+}
 
 const router = express.Router();
 
@@ -23,6 +41,8 @@ router.get("/centres", async (req, res) => {
       // Older database without WhatsApp columns: list centres only.
       ({ rows } = await pool.query(`SELECT id, name, district, address, phone, NULL AS whatsapp_number FROM centres ORDER BY name`));
     }
+    const onlyCentre = await customerOnlyCentre(req);
+    if (onlyCentre) rows = rows.filter((r) => r.id === onlyCentre);
     // WhatsApp not in the plan: no chat buttons.
     res.json(featureEnabled("whatsapp") ? rows : rows.map((r) => ({ ...r, whatsapp_number: null })));
   } catch (err) {

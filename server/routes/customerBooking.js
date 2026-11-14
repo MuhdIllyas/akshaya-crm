@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../db.js";
-import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import { customerAuthMiddleware, requireCustomerCentre } from "../middlewares/customerAuthMiddleware.js";
+import { bookingInCentreSql, linkCustomerToCentre } from "../utils/customerCentres.js";
 import { todayIST, addDays } from "../utils/dates.js";
 import { getSetting } from "../utils/orgSettings.js";
 
@@ -31,6 +32,25 @@ function stripFees(value) {
   }
   return value;
 }
+// Signed-in customer; in the per-centre portal they must have chosen their
+// centre, and a booking (/:id) must belong to it.
+const bookingInScope = async (req, res, next) => {
+  const centreId = req.customer?.centreId;
+  const id = Number(req.params?.id);
+  if (!centreId || !id) return next();
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM customer_services cs WHERE cs.id = $1 AND cs.customer_id = $2 AND ${bookingInCentreSql("cs", 3)}`,
+      [id, req.customer.id, centreId]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Application not found" });
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+const customerAuth = [customerAuthMiddleware, requireCustomerCentre, bookingInScope];
+
 router.use(async (req, res, next) => {
   try {
     if ((await getSetting("show_customer_fees")) === true) return next();
@@ -68,7 +88,7 @@ function matchRequired(name, requiredRows) {
 /* ======================================================
    GET ALL AVAILABLE SERVICES (for customer to apply)
 ====================================================== */
-router.get("/available", customerAuthMiddleware, async (req, res) => {
+router.get("/available", customerAuth, async (req, res) => {
   try {
     // 1. Fetch services
     const servicesResult = await pool.query(`
@@ -168,7 +188,7 @@ router.get("/available", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET CUSTOMER'S APPLIED SERVICES
 ====================================================== */
-router.get("/", customerAuthMiddleware, async (req, res) => {
+router.get("/", customerAuth, async (req, res) => {
   const customerId = req.customer.id;
   const { status } = req.query;
 
@@ -229,6 +249,12 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
     `;
     
     const params = [customerId];
+
+    // Per-centre portal: only this centre's applications.
+    if (req.customer.centreId) {
+      params.push(req.customer.centreId);
+      query += ` AND ${bookingInCentreSql("cs", params.length)}`;
+    }
     
     // Add status filter if provided
     if (status && status !== 'all') {
@@ -360,7 +386,7 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET SINGLE SERVICE APPLICATION
 ====================================================== */
-router.get("/:id", customerAuthMiddleware, async (req, res) => {
+router.get("/:id", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
 
@@ -526,7 +552,7 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    CREATE NEW SERVICE APPLICATION (DRAFT)
 ====================================================== */
-router.post("/apply", customerAuthMiddleware, async (req, res) => {
+router.post("/apply", customerAuth, async (req, res) => {
   const customerId = req.customer.id;
   const {
     service_id,
@@ -566,9 +592,12 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
 
     const service = serviceResult.rows[0];
 
-    // Centre the customer booked with (must be one of this organization's centres)
+    // Centre the customer booked with (must be one of this organization's centres).
+    // Per-centre portal: always the centre they signed in at.
     let requestedCentreId = null;
-    if (requested_centre_id) {
+    if (req.customer.centreId) {
+      requestedCentreId = req.customer.centreId;
+    } else if (requested_centre_id) {
       const centreRes = await client.query(`SELECT id FROM centres WHERE id = $1`, [requested_centre_id]);
       if (centreRes.rows.length === 0) throw new Error("Selected centre not found");
       requestedCentreId = centreRes.rows[0].id;
@@ -721,6 +750,8 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
     );
 
     await client.query("COMMIT");
+    // remember the centre for this customer (used when the portal is per-centre)
+    await linkCustomerToCentre(customerId, requestedCentreId, "booking").catch((e) => console.error("link customer to centre:", e.message));
 
     res.status(201).json({
       success: true,
@@ -776,7 +807,7 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    UPDATE SERVICE APPLICATION (Submit documents, make payment, etc.)
 ====================================================== */
-router.put("/:id", customerAuthMiddleware, async (req, res) => {
+router.put("/:id", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const {
@@ -996,7 +1027,7 @@ async function bookingDocuments(db, bookingId, customerId) {
   return { booking, serviceData, documents };
 }
 
-router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) => {
+router.get("/:id/required-documents", customerAuth, async (req, res) => {
   try {
     const result = await bookingDocuments(pool, req.params.id, req.customer.id);
     if (!result) return res.status(404).json({ message: "Service application not found" });
@@ -1025,7 +1056,7 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
 ====================================================== */
 const SUBMITTABLE = ["draft", "pending_documents", "action_required"];
 
-router.put("/:id/submit", customerAuthMiddleware, async (req, res) => {
+router.put("/:id/submit", customerAuth, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -1087,7 +1118,7 @@ router.put("/:id/submit", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    UPDATE SELECTED DOCUMENTS FOR SERVICE APPLICATION
 ====================================================== */
-router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => {
+router.put("/:id/select-documents", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const { selected_documents } = req.body;
@@ -1255,7 +1286,7 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
 /* ======================================================
    UPLOAD DOCUMENTS FOR SERVICE APPLICATION
 ====================================================== */
-router.post("/:id/documents", customerAuthMiddleware, async (req, res) => {
+router.post("/:id/documents", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const { documents } = req.body; // Array of {document_name, document_type, file_hash, etc.}
@@ -1441,7 +1472,7 @@ router.post("/:id/documents", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET SERVICE APPLICATION TIMELINE
 ====================================================== */
-router.get("/:id/timeline", customerAuthMiddleware, async (req, res) => {
+router.get("/:id/timeline", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
 
@@ -1704,7 +1735,7 @@ router.get("/:id/timeline", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    CANCEL SERVICE APPLICATION
 ====================================================== */
-router.delete("/:id", customerAuthMiddleware, async (req, res) => {
+router.delete("/:id", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
 
@@ -1799,7 +1830,7 @@ router.delete("/:id", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    SUBMIT SERVICE APPLICATION (PAYMENT PENDING)
 ====================================================== */
-router.put("/:id/payment", customerAuthMiddleware, async (req, res) => {
+router.put("/:id/payment", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const {
