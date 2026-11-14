@@ -74,6 +74,8 @@ const CustomerProfileSystem = () => {
   const [detailLoading, setDetailLoading] = useState(false); // the selected customer's profile
   const [statusFilter, setStatusFilter] = useState('all');   // all | pending | verified
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [appFilter, setAppFilter] = useState('active'); // active | completed | all
+  const [appSearch, setAppSearch] = useState('');
 
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -386,6 +388,8 @@ const CustomerProfileSystem = () => {
     let cancelled = false;
     setDetailLoading(true);
     setActiveTab('applications');
+    setAppFilter('active');
+    setAppSearch('');
     getCustomerById(customerId)
       .then((res) => {
         if (!cancelled) setSelectedCustomer(normalizeCustomer(res.data || res));
@@ -546,9 +550,9 @@ const CustomerProfileSystem = () => {
           </button>
         </div>
 
-        <div className="grid gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        <div className="grid gap-4 lg:h-[calc(100vh-10rem)] lg:min-h-[480px] lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
           {/* ===== Customer list ===== */}
-          <aside className={`${showProfileOnPhone ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col rounded-2xl border border-slate-200 bg-white shadow-sm lg:sticky lg:top-4 lg:max-h-[calc(100vh-7rem)]`}>
+          <aside className={`${showProfileOnPhone ? 'hidden lg:flex' : 'flex'} min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm`}>
             <div className="space-y-2 border-b border-slate-200 p-3">
               <div className="relative">
                 <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -628,7 +632,7 @@ const CustomerProfileSystem = () => {
           </aside>
 
           {/* ===== Selected customer ===== */}
-          <section className={`${showProfileOnPhone ? 'block' : 'hidden lg:block'} min-w-0`}>
+          <section className={`${showProfileOnPhone ? 'flex' : 'hidden lg:flex'} min-h-0 min-w-0 flex-col`}>
             <button
               onClick={() => navigate('/dashboard/staff/customers')}
               className="mb-3 inline-flex min-h-[40px] items-center gap-2 text-sm font-medium text-navy-700 hover:text-navy-800 lg:hidden"
@@ -638,11 +642,11 @@ const CustomerProfileSystem = () => {
             </button>
 
             {detailLoading ? (
-              <div className="grid min-h-[320px] place-items-center rounded-2xl border border-slate-200 bg-white">
+              <div className="grid min-h-[320px] flex-1 place-items-center rounded-2xl border border-slate-200 bg-white">
                 <div className="h-10 w-10 animate-spin rounded-full border-4 border-navy-700 border-t-transparent" />
               </div>
             ) : !selectedCustomer ? (
-              <div className="grid min-h-[320px] place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
+              <div className="grid min-h-[320px] flex-1 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center">
                 <div>
                   <FiUser className="mx-auto mb-2 h-8 w-8 text-slate-300" />
                   <p className="font-medium text-slate-700">Select a customer</p>
@@ -650,82 +654,62 @@ const CustomerProfileSystem = () => {
                 </div>
               </div>
             ) : (
-                <div className="space-y-6">
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6">
-                      <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-                        <div className="w-14 h-14 sm:w-16 sm:h-16 shrink-0 bg-navy-700 rounded-xl flex items-center justify-center">
-                          <FiUser className="h-8 w-8 text-white" />
-                        </div>
-                        <div>
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mb-1">
-                            <h2 className="text-xl sm:text-2xl font-semibold text-slate-900">{selectedCustomer.name}</h2>
-                            <VerificationBadge isVerified={selectedCustomer.is_verified} />
-                          </div>
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                            <div className="flex items-center space-x-1 text-slate-600">
-                              <FiPhone className="h-4 w-4" />
-                              <span className="text-sm">{selectedCustomer.phone}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-slate-600">
-                              <FiMail className="h-4 w-4" />
-                              <span className="text-sm break-all">{selectedCustomer.email}</span>
-                            </div>
-                            <div className="flex items-center space-x-1 text-slate-600">
-                              <FiCreditCard className="h-4 w-4" />
-                              <span className="text-sm">{selectedCustomer.aadhaarDisplay}</span>
-                            </div>
-                          </div>
-                        </div>
+                <div className="flex min-h-[480px] flex-1 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:min-h-0">
+                  {/* Customer strip: always in view */}
+                  <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-slate-200 p-3 sm:px-4">
+                    <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-700 text-white">
+                      <FiUser className="h-5 w-5" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="truncate text-base font-semibold text-slate-900 sm:text-lg">{selectedCustomer.name}</h2>
+                        <VerificationBadge isVerified={selectedCustomer.is_verified} />
                       </div>
-                      <div className="flex flex-wrap gap-2 mt-4 lg:mt-0">
-                        <button
-                          className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center gap-2 transition-colors"
-                          onClick={handleNewEntry}
-                        >
-                          <FiPlus className="h-4 w-4" />
-                          <span>New entry</span>
-                        </button>
-                        <button
-                          onClick={() => setActiveTab('messages')}
-                          className="h-10 px-4 border border-slate-300 bg-white text-slate-700 rounded-xl hover:bg-slate-50 flex items-center gap-2 transition-colors"
-                        >
-                          <FiMessageSquare className="h-4 w-4" />
-                          <span>Message</span>
-                        </button>
-                      </div>
+                      <p className="truncate text-xs text-slate-500 sm:text-sm">
+                        {[
+                          selectedCustomer.phone,
+                          selectedCustomer.aadhaarDisplay !== 'Not Uploaded' ? selectedCustomer.aadhaarDisplay : null,
+                          `${selectedCustomer.activeApplications || 0} active of ${selectedCustomer.totalApplications || 0}`,
+                          selectedCustomer.createdAt ? `since ${formatDate(selectedCustomer.createdAt)}` : null,
+                        ].filter(Boolean).join(' · ')}
+                      </p>
                     </div>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                      <StatItem label="District" value={selectedCustomer.district || 'N/A'} />
-                      <StatItem label="Active Apps" value={selectedCustomer.activeApplications || 0} />
-                      <StatItem label="Total Apps" value={selectedCustomer.totalApplications || 0} />
-                      <StatItem label="Customer since" value={formatDate(selectedCustomer.createdAt)} />
+                    <div className="flex gap-2">
+                      <button
+                        className="inline-flex h-10 items-center gap-2 rounded-xl bg-navy-700 px-4 text-sm font-medium text-white transition-colors hover:bg-navy-800"
+                        onClick={handleNewEntry}
+                      >
+                        <FiPlus className="h-4 w-4" />
+                        <span>New entry</span>
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('messages')}
+                        className="inline-flex h-10 items-center gap-2 rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                      >
+                        <FiMessageSquare className="h-4 w-4" />
+                        <span>Message</span>
+                      </button>
                     </div>
                   </div>
-                  
-                  <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                    <div className="border-b border-slate-200">
-                      <nav className="flex -mb-px overflow-x-auto">
-                        {['profile', 'applications', 'documents', 'messages', 'history'].map((tab) => (
-                          <button
-                            key={tab}
-                            className={`flex-1 whitespace-nowrap py-3.5 px-4 sm:px-6 text-center font-medium text-sm border-b-2 transition-colors ${
-                              activeTab === tab
-                                ? 'border-navy-700 text-navy-700'
-                                : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
-                            }`}
-                            onClick={() => setActiveTab(tab)}
-                          >
-                            {tab === 'profile' && 'Profile'}
-                            {tab === 'applications' && 'Applications'}
-                            {tab === 'documents' && 'Documents'}
-                            {tab === 'messages' && 'Messages'}
-                            {tab === 'history' && 'History'}
-                          </button>
-                        ))}
-                      </nav>
-                    </div>
-                    <div className="p-4 sm:p-6">
+
+                  <nav className="flex shrink-0 overflow-x-auto border-b border-slate-200 px-2">
+                    {['applications', 'documents', 'messages', 'profile', 'history'].map((tab) => (
+                      <button
+                        key={tab}
+                        className={`-mb-px whitespace-nowrap border-b-2 px-3 py-3 text-sm font-medium transition-colors sm:px-4 ${
+                          activeTab === tab
+                            ? 'border-navy-700 text-navy-700'
+                            : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+                        }`}
+                        onClick={() => setActiveTab(tab)}
+                      >
+                        {{ profile: 'Profile', applications: 'Applications', documents: 'Documents', messages: 'Messages', history: 'History' }[tab]}
+                      </button>
+                    ))}
+                  </nav>
+
+                  {/* Only this part scrolls */}
+                  <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
                       <AnimatePresence mode="wait">
                         <motion.div
                           key={activeTab}
@@ -820,138 +804,92 @@ const CustomerProfileSystem = () => {
                             </div>
                           )}
                           
-                          {activeTab === 'applications' && (
-                            <div className="space-y-6">
-                              <div className="flex flex-wrap gap-3 justify-between items-center">
-                                <h3 className="font-semibold text-slate-900">Applications</h3>
-                                <button 
-                                  className="h-10 px-4 bg-navy-700 text-white rounded-xl hover:bg-navy-800 flex items-center"
-                                  onClick={handleNewEntry}
-                                >
-                                  <FiPlus className="mr-2" /> New entry
-                                </button>
-                              </div>
-                              
-                              {applicationsLoading ? (
-                                <div className="text-center py-8">
-                                  <div className="w-12 h-12 border-4 border-navy-700 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                                  <p className="text-slate-600">Loading applications...</p>
-                                </div>
-                              ) : customerApplications.length > 0 ? (
-                                <>
-                                  <div className="overflow-x-auto">
-                                    <table className="min-w-full divide-y divide-slate-200">
-                                      <thead className="bg-slate-50">
-                                        <tr>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">App Number</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Service</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Status</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Priority</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Date</th>
-                                          <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Actions</th>
-                                        </tr>
-                                      </thead>
-                                      <tbody className="bg-white divide-y divide-slate-200">
-                                        {customerApplications.map(app => {
-                                          const priority = priorityConfig[app.priority || 'medium'];
-                                          return (
-                                            <tr 
-                                              key={app.id} 
-                                              className="hover:bg-slate-50 cursor-pointer transition-colors" 
-                                              onClick={() => handleViewApplication(app)}
-                                            >
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm font-medium text-slate-900">{app.appNumber}</div>
-                                                {app.source === 'Pending Online' && (
-                                                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
-                                                    Online Booking
-                                                  </span>
-                                                )}
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                <div className="text-sm text-slate-900">{app.type}</div>
-                                                <div className="text-xs text-slate-500">{app.subType}</div>
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                <StatusBadge status={app.status} />
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${priority.bg} ${priority.border} ${priority.color}`}>
-                                                  {priority.label}
-                                                </span>
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                                {app.createdDate}
-                                              </td>
-                                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <button 
-                                                  className="inline-grid h-10 w-10 place-items-center text-navy-700 hover:text-navy-800 transition-colors"
-                                                  onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    handleViewApplication(app);
-                                                  }}
-                                                  title="View Application"
-                                                >
-                                                  <FiEye className="h-4 w-4" />
-                                                </button>
-                                              </td>
-                                            </tr>
-                                          );
-                                        })}
-                                      </tbody>
-                                    </table>
+                          {activeTab === 'applications' && (() => {
+                            const isDone = (status) => status === 'Completed' || status === 'Paid';
+                            const counts = {
+                              active: customerApplications.filter((a) => !isDone(a.status)).length,
+                              completed: customerApplications.filter((a) => isDone(a.status)).length,
+                              all: customerApplications.length,
+                            };
+                            const q = appSearch.trim().toLowerCase();
+                            const shown = customerApplications
+                              .filter((a) => appFilter === 'all' || (appFilter === 'completed') === isDone(a.status))
+                              .filter((a) => !q || [a.appNumber, a.type, a.subType].join(' ').toLowerCase().includes(q));
+                            return (
+                              <div>
+                                {/* stays at the top while the list scrolls */}
+                                <div className="sticky -top-4 z-10 -mx-4 -mt-4 flex flex-wrap items-center gap-2 border-b border-slate-100 bg-white px-4 py-3 sm:-top-5 sm:-mx-5 sm:-mt-5 sm:px-5">
+                                  {[['active', 'Active'], ['completed', 'Completed'], ['all', 'All']].map(([value, label]) => (
+                                    <button
+                                      key={value}
+                                      type="button"
+                                      onClick={() => setAppFilter(value)}
+                                      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${appFilter === value ? 'bg-navy-700 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+                                    >
+                                      {label} {counts[value]}
+                                    </button>
+                                  ))}
+                                  <div className="relative ml-auto w-full sm:w-56">
+                                    <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                      type="text"
+                                      value={appSearch}
+                                      onChange={(e) => setAppSearch(e.target.value)}
+                                      placeholder="Search applications"
+                                      className="min-h-[36px] w-full rounded-xl border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-base focus:border-navy-500/40 focus:ring-2 focus:ring-navy-500/30 sm:text-sm"
+                                    />
                                   </div>
-                                  
-                                  {customerApplications.filter(app => app.source !== 'Pending Online').length > 0 && (
-                                    <div className="mt-6">
-                                      <h4 className="font-semibold text-slate-900 mb-4">Recent Application Progress</h4>
-                                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {customerApplications.filter(app => app.source !== 'Pending Online').slice(0, 4).map(app => {
-                                          return (
-                                            <div 
-                                              key={app.id} 
-                                              className="border border-slate-200 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer" 
-                                              onClick={() => handleViewApplication(app)}
-                                            >
-                                              <div className="flex justify-between items-start mb-3">
-                                                <div>
-                                                  <h5 className="font-medium text-slate-900">{app.appNumber}</h5>
-                                                  <p className="text-sm text-slate-600">{app.type} - {app.subType}</p>
-                                                </div>
-                                                <StatusBadge status={app.status} />
-                                              </div>
-                                              <div className="mb-2">
-                                                <div className="flex justify-between text-sm mb-1">
-                                                  <span className="text-slate-600">Progress</span>
-                                                  <span className="font-medium">{app.progress}%</span>
-                                                </div>
-                                                <div className="w-full bg-slate-200 rounded-full h-2">
-                                                  <div 
-                                                    className="bg-navy-500 h-2 rounded-full transition-all duration-500"
-                                                    style={{ width: `${app.progress}%` }}
-                                                  ></div>
-                                                </div>
-                                              </div>
-                                              <div className="text-sm text-slate-600">
-                                                Applied: {app.createdDate}
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    </div>
-                                  )}
-                                </>
-                              ) : (
-                                <div className="text-center py-12 text-slate-500">
-                                  <FiFolder className="mx-auto h-16 w-16 mb-4 opacity-30" />
-                                  <p className="text-lg font-medium mb-2">No applications found</p>
-                                  <p className="text-sm text-slate-400">This customer hasn't submitted any applications yet</p>
                                 </div>
-                              )}
-                            </div>
-                          )}
-                          
+
+                                {applicationsLoading ? (
+                                  <div className="py-10 text-center">
+                                    <div className="mx-auto mb-3 h-10 w-10 animate-spin rounded-full border-4 border-navy-700 border-t-transparent" />
+                                    <p className="text-sm text-slate-500">Loading applications…</p>
+                                  </div>
+                                ) : shown.length === 0 ? (
+                                  <div className="py-10 text-center text-slate-500">
+                                    <FiFolder className="mx-auto mb-2 h-10 w-10 opacity-30" />
+                                    <p className="text-sm font-medium">
+                                      {customerApplications.length === 0
+                                        ? 'No applications yet'
+                                        : q ? 'No applications match your search' : appFilter === 'active' ? 'Nothing active right now' : 'No completed applications'}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <ul className="divide-y divide-slate-100">
+                                    {shown.map((app) => (
+                                      <li key={app.id}>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleViewApplication(app)}
+                                          className="flex w-full items-center justify-between gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-slate-50"
+                                        >
+                                          <span className="min-w-0">
+                                            <span className="block truncate text-sm font-medium text-slate-900">
+                                              {app.type}{app.subType && app.subType !== 'N/A' ? ` — ${app.subType}` : ''}
+                                            </span>
+                                            <span className="block truncate text-xs text-slate-500">
+                                              {app.appNumber}
+                                              {' · '}
+                                              {app.source === 'Pending Online'
+                                                ? <span className="font-medium text-navy-700">Online, not taken yet</span>
+                                                : 'At the centre'}
+                                              {app.createdDate && app.createdDate !== 'N/A' ? ` · ${app.createdDate}` : ''}
+                                            </span>
+                                          </span>
+                                          <span className="flex shrink-0 items-center gap-2">
+                                            <StatusBadge status={app.status} />
+                                            <FiChevronRight className="h-4 w-4 text-slate-300" />
+                                          </span>
+                                        </button>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                )}
+                              </div>
+                            );
+                          })()}
+
                           {activeTab === "documents" && selectedCustomer && (
                             <StaffCustomerDocuments customerId={selectedCustomer.id} />
                           )}
@@ -1023,7 +961,6 @@ const CustomerProfileSystem = () => {
                           )}
                         </motion.div>
                       </AnimatePresence>
-                    </div>
                   </div>
                 </div>
             )}
