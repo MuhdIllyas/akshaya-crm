@@ -4,6 +4,7 @@
 //  - Each centre's own portal link and QR code: bookings made through it are
 //    automatically for that centre
 //  - Which centres have WhatsApp connected (one number per centre)
+//  - Whether centre admins can print a booking poster (Print Settings → Booking Poster)
 
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
@@ -97,6 +98,7 @@ export default function OnlineBookingSettings({ accounts = [] }) {
   const [orgSlug, setOrgSlug] = useState("");
   const [centres, setCentres] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [poster, setPoster] = useState(false); // centre admins can print a booking poster
 
   useEffect(() => {
     axios
@@ -105,6 +107,7 @@ export default function OnlineBookingSettings({ accounts = [] }) {
         setMode(data.saved_booking_mode || data.booking_mode || "shared");
         setPortal(data.customer_portal || "shared");
         setOrgSlug(data.org_slug || "");
+        setPoster(data.booking_poster === true);
       })
       .catch(() => toast.error("Couldn't load booking settings"));
     axios
@@ -142,6 +145,21 @@ export default function OnlineBookingSettings({ accounts = [] }) {
       setSaving(false);
     }
   };
+  const savePoster = async (value) => {
+    const previous = poster;
+    setPoster(value);
+    setSaving(true);
+    try {
+      await axios.put(`${API_URL}/api/org-settings/booking-poster`, { enabled: value }, auth());
+      toast.success(value ? "Centre admins can now print a booking poster" : "Booking poster turned off");
+    } catch (err) {
+      setPoster(previous);
+      toast.error(err.response?.data?.error || "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const perCentre = portal === "per_centre";
 
   const activeAccountIds = new Set(accounts.filter((a) => a.is_active).map((a) => a.id));
@@ -174,6 +192,26 @@ export default function OnlineBookingSettings({ accounts = [] }) {
             </label>
           ))}
         </div>
+      </div>
+
+      <div className="flex items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6">
+        <div>
+          <h3 className="mb-1 text-lg font-semibold text-slate-900">Booking poster for centres</h3>
+          <p className="text-sm text-slate-500">
+            Centre admins get an A4 poster with their centre's booking QR code (Print Settings → Booking Poster) to print and put up at the centre.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={poster}
+          aria-label="Booking poster for centres"
+          disabled={saving}
+          onClick={() => savePoster(!poster)}
+          className={`relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 ${poster ? "bg-navy-700" : "bg-slate-300"}`}
+        >
+          <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${poster ? "left-[22px]" : "left-0.5"}`} />
+        </button>
       </div>
 
       <div className={`rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:p-6 ${perCentre ? "opacity-60" : ""}`}>
