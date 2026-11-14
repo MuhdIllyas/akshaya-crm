@@ -16,6 +16,7 @@ import { getBookingReview } from '@/services/reviewService';
 const MyServices = () => {
   const [activeFilter, setActiveFilter] = useState('active');
   const [services, setServices] = useState([]);
+  const [walkIns, setWalkIns] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showApplyModal, setShowApplyModal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -91,7 +92,11 @@ const MyServices = () => {
       setIsLoading(true);
       const response = await API.get('/api/customer/bookings');
       setServices(response.data);
-      
+      // Applications made for them at the centre (walk-in, matched by Aadhaar)
+      API.get('/api/customer/bookings/walk-ins')
+        .then((r) => setWalkIns(Array.isArray(r.data?.data) ? r.data.data : []))
+        .catch(() => setWalkIns([]));
+
       // Check review status for completed services
       const completedServices = response.data.filter(s => s.status === 'completed');
       for (const service of completedServices) {
@@ -842,6 +847,47 @@ const MyServices = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* At the centre: applications staff entered for this customer (matched by Aadhaar) */}
+      {walkIns.length > 0 && (
+        <section className="mb-8">
+          <h2 className="text-lg font-semibold text-slate-900">At the centre</h2>
+          <p className="mb-3 text-sm text-slate-500">Applications the centre made for you in person.</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+            {walkIns.map((w) => {
+              const tone = {
+                completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                paid: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+                in_progress: 'bg-sky-50 text-sky-700 border-sky-200',
+                rejected: 'bg-rose-50 text-rose-700 border-rose-200',
+                resubmit: 'bg-amber-50 text-amber-700 border-amber-200',
+              }[w.status] || 'bg-slate-50 text-slate-700 border-slate-200';
+              const label = {
+                pending: 'Pending', in_progress: 'In progress', completed: 'Completed',
+                paid: 'Completed', rejected: 'Delayed', resubmit: 'Resubmit needed',
+              }[w.status] || w.status;
+              return (
+                <div key={w.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-slate-900">
+                        {w.service_name}{w.subcategory_name ? ` — ${w.subcategory_name}` : ''}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {w.application_number}
+                        {w.centre?.name ? ` · ${w.centre.name}` : ''}
+                        {w.created_at ? ` · ${new Date(w.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+                      </p>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium ${tone}`}>{label}</span>
+                  </div>
+                  {w.current_step && <p className="mt-2 text-sm text-slate-600">Current step: {w.current_step}</p>}
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Help Section */}

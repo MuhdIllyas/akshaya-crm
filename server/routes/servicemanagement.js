@@ -9,6 +9,7 @@ import axios from "axios";
 import notificationService from '../utils/notificationService.js';
 import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
 import { linkCustomerToCentre } from '../utils/customerCentres.js';
+import { aadhaarColumns } from '../utils/aadhaar.js';
 import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
@@ -1730,10 +1731,12 @@ router.post('/entry', authenticateToken, async (req, res) => {
     }
 
     if (!isQuickEntry) {
+      const aadhaarFor = (() => { const a = aadhaarColumns(customerAadhaar); return a && !a.invalid ? a : null; })();
       await client.query(
-        `INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, aadhaar, email, updated_at)
-         VALUES ($1, $2, 'pending', 'Application Received', 0, $3, $4, NOW())`,
-        [serviceEntryId, req.user.id, customerAadhaar || null, customerEmail || null]
+        `INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, aadhaar, email, updated_at, aadhaar_hash, aadhaar_last4)
+         VALUES ($1, $2, 'pending', 'Application Received', 0, $3, $4, NOW(), $5, $6)`,
+        // masked Aadhaar + fingerprint, never the full number
+        [serviceEntryId, req.user.id, aadhaarFor?.aadhaar ?? null, customerEmail || null, aadhaarFor?.aadhaar_hash ?? null, aadhaarFor?.aadhaar_last4 ?? null]
       );
     }
 

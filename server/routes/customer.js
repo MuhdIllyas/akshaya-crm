@@ -13,6 +13,7 @@ import { orgUploadPath } from '../tenancy/uploads.js';
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
 import { startCustomerSession, customerCentreList, linkCustomerToCentre, staffCustomerCentre, isCustomerAtCentre } from "../utils/customerCentres.js";
 import { getCustomerPortalMode } from "../utils/orgSettings.js";
+import { linkWalkInsToCustomer } from "../utils/aadhaar.js";
 
 const router = express.Router();
 
@@ -282,6 +283,7 @@ router.post("/register", async (req, res) => {
       const found = existing.rows[0];
       // Same person, same phone (just verified): sign them in.
       if (String(found.primary_phone || "").replace(/\D/g, "").slice(-10) === proof.phone) {
+        await linkWalkInsToCustomer(pool, found.id, aadhaarHash).catch((e) => console.error("link walk-ins:", e.message));
         const session = await startCustomerSession(found.id, centre_id);
         return res.json({ success: true, existing: true, ...session, customerId: found.id, name: found.name, org_slug: orgSlug() });
       }
@@ -326,6 +328,8 @@ router.post("/register", async (req, res) => {
     // The phone was just verified by OTP, so sign the new customer in
     // straight away instead of asking for another code.
     const customer = inserted.rows[0];
+    // walk-in entries made earlier with this Aadhaar now show in their portal
+    await linkWalkInsToCustomer(pool, customer.id, aadhaarHash).catch((e) => console.error("link walk-ins:", e.message));
     const session = await startCustomerSession(customer.id, centre_id);
     return res.json({ success: true, ...session, customerId: customer.id, name: customer.name, org_slug: orgSlug() });
   } catch (err) {

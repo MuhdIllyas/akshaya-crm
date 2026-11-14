@@ -387,6 +387,61 @@ router.get("/", customerAuth, async (req, res) => {
 });
 
 /* ======================================================
+   WALK-IN APPLICATIONS ("At the centre")
+   GET /api/customer/bookings/walk-ins
+   Service entries staff made at a centre for this customer (matched by the
+   Aadhaar on the entry). Per-centre portal: only the centre they're at.
+   Entries made from an online booking are left out (they show as bookings).
+====================================================== */
+router.get("/walk-ins", customerAuth, async (req, res) => {
+  try {
+    const params = [req.customer.id];
+    let centreFilter = "";
+    if (req.customer.centreId) {
+      params.push(req.customer.centreId);
+      centreFilter = `AND sf.centre_id = $${params.length}`;
+    }
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (se.id)
+              se.id, se.created_at,
+              s.name AS service_name, sc.name AS subcategory_name,
+              st.application_number, st.status AS tracking_status, st.current_step, st.updated_at,
+              c.id AS centre_id, c.name AS centre_name
+         FROM service_entries se
+         JOIN staff sf ON sf.id = se.staff_id
+         LEFT JOIN centres c ON c.id = sf.centre_id
+         LEFT JOIN services s ON s.id = se.category_id
+         LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+         LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+        WHERE se.customer_id = $1
+          AND se.customer_service_id IS NULL
+          ${centreFilter}
+        ORDER BY se.id DESC, st.id DESC`,
+      params
+    );
+    rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        service_name: r.service_name || "Service",
+        subcategory_name: r.subcategory_name,
+        application_number: r.application_number || `APP${r.id}`,
+        status: r.tracking_status || "pending",
+        current_step: r.current_step,
+        centre: r.centre_id ? { id: r.centre_id, name: r.centre_name } : null,
+        created_at: r.created_at,
+        updated_at: r.updated_at || r.created_at,
+      })),
+    });
+  } catch (err) {
+    if (err.code === "42703") return res.json({ success: true, data: [] }); // migration not applied yet
+    console.error("walk-ins error:", err);
+    res.status(500).json({ success: false, message: "Failed to load your applications at the centre" });
+  }
+});
+
+/* ======================================================
    GET SINGLE SERVICE APPLICATION
 ====================================================== */
 router.get("/:id", customerAuth, async (req, res) => {

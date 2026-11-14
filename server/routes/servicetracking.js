@@ -8,6 +8,7 @@ import axios from 'axios';
 import { logActivity } from "../utils/activityLogger.js"; 
 
 import { createReviewRequest } from './reviews.js';
+import { aadhaarColumns, hashAadhaar, digitsOnly, linkEntryToCustomerByAadhaar } from '../utils/aadhaar.js';
 import { triggerNotification } from '../utils/communication/notificationEngine.js';
 
 const router = express.Router();
@@ -488,8 +489,10 @@ router.get('/customer/history', authenticateToken, async (req, res) => {
       const aadhaarResult = await client.query(
         `SELECT DISTINCT customer_id 
          FROM customer_documents 
-         WHERE document_name ILIKE '%aadhaar%' AND document_number = $1`,
-        [aadhaar]
+         WHERE document_name ILIKE '%aadhaar%' AND document_number = $1
+         UNION
+         SELECT id FROM customers WHERE aadhaar_hash = $2`,
+        [aadhaar, hashAadhaar(aadhaar)]
       );
       customerIds.push(...aadhaarResult.rows.map(r => r.customer_id));
     }
@@ -546,8 +549,8 @@ router.get('/customer/history', authenticateToken, async (req, res) => {
     let paramIndex = 1;
     
     if (aadhaar) {
-      query += ` AND st.aadhaar = $${paramIndex++}`;
-      values.push(aadhaar);
+      query += ` AND st.aadhaar_hash = $${paramIndex++}`;
+      values.push(hashAadhaar(aadhaar));
     }
     
     if (email) {
@@ -640,7 +643,7 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
     
     // Get all service_tracking entries that have aadhaar/email but no customer_service_id
     const result = await client.query(`
-      SELECT st.id, st.service_entry_id, st.aadhaar, st.email, se.phone,
+      SELECT st.id, st.service_entry_id, st.aadhaar, st.aadhaar_hash, st.email, se.phone,
              se.customer_service_id
       FROM service_tracking st
       JOIN service_entries se ON st.service_entry_id = se.id
@@ -656,12 +659,10 @@ router.post('/sync-customer-services', authenticateToken, async (req, res) => {
         // Try to find matching customer by aadhaar/email/phone
         let customerIds = [];
         
-        if (tracking.aadhaar) {
+        if (tracking.aadhaar_hash) {
           const aadhaarResult = await client.query(
-            `SELECT DISTINCT customer_id 
-             FROM customer_documents 
-             WHERE document_name ILIKE '%aadhaar%' AND document_number = $1`,
-            [tracking.aadhaar]
+            `SELECT id AS customer_id FROM customers WHERE aadhaar_hash = $1`,
+            [tracking.aadhaar_hash]
           );
           customerIds.push(...aadhaarResult.rows.map(r => r.customer_id));
         }
@@ -806,7 +807,11 @@ function buildTrackingFilters(query, user) {
   if (search && String(search).trim()) {
     add(`(se.customer_name ILIKE ? OR se.phone ILIKE ? OR st.application_number ILIKE ?)`, `%${String(search).trim()}%`);
   }
-  if (aadhaar && String(aadhaar).trim()) add(`st.aadhaar ILIKE ?`, `%${String(aadhaar).trim()}%`);
+  if (aadhaar && String(aadhaar).trim()) {
+    // full number → fingerprint; otherwise match the last digits shown (XXXX-XXXX-1234)
+    if (/^\d{12}$/.test(digitsOnly(aadhaar))) add(`st.aadhaar_hash = ?`, hashAadhaar(aadhaar));
+    else add(`st.aadhaar ILIKE ?`, `%${digitsOnly(aadhaar) || String(aadhaar).trim()}%`);
+  }
 
   if (expiry === 'upcoming') {
     conditions.push(`se.expiry_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days' AND st.status NOT IN ('completed', 'paid')`);
@@ -1448,7 +1453,7 @@ router.post('/', authenticateToken, async (req, res) => {
     if (estimatedDelivery && isNaN(Date.parse(estimatedDelivery))) {
       errors.push('estimatedDelivery must be a valid date');
     }
-    if (aadhaar && !/^\d{12}$/.test(aadhaar)) {
+    if (aadhaarColumns(aadhaar)?.invalid) {
       errors.push('aadhaar must be a 12-digit number');
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -1544,8 +1549,9 @@ router.post('/', authenticateToken, async (req, res) => {
     const result = await client.query(
       `INSERT INTO service_tracking (
         application_number, service_entry_id, assigned_to, status, current_step, 
-        estimated_delivery, average_time, notes, progress, aadhaar, email, priority, updated_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP)
+        estimated_delivery, average_time, notes, progress, aadhaar, email, priority, updated_at,
+        aadhaar_hash, aadhaar_last4
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, CURRENT_TIMESTAMP, $13, $14)
       RETURNING *`,
       [
         applicationNumber ? applicationNumber.trim() : (serviceEntry.token_id ? `T${serviceEntry.token_id}` : `APP${serviceEntryId}`),
@@ -1557,12 +1563,16 @@ router.post('/', authenticateToken, async (req, res) => {
         averageTime || null,
         notes || null,
         progress,
-        aadhaar || null,
+        aadhaarColumns(aadhaar)?.aadhaar ?? null, // masked "XXXX-XXXX-1234", never the full number
         email || null,
-        priority || 'medium'
+        priority || 'medium',
+        aadhaarColumns(aadhaar)?.aadhaar_hash ?? null,
+        aadhaarColumns(aadhaar)?.aadhaar_last4 ?? null
       ]
     );
     const newEntry = result.rows[0];
+    // the customer with this Aadhaar sees this entry in their portal
+    if (newEntry.aadhaar_hash) await linkEntryToCustomerByAadhaar(client, newEntry.service_entry_id, newEntry.aadhaar_hash);
 
     const defaultSteps = [
       { name: 'Submitted', completed: true, step_order: 1, estimated_days: 1, date: serviceEntry.created_at || new Date() },
@@ -1597,7 +1607,7 @@ router.post('/', authenticateToken, async (req, res) => {
       [
         'Service Tracking Created',
         req.user.username,
-        `Created service tracking entry ${newEntry.application_number || 'N/A'} for service entry ${serviceEntryId} by ${req.user.role} with aadhaar ${aadhaar || 'N/A'}, priority ${priority || 'Medium'}`,
+        `Created service tracking entry ${newEntry.application_number || 'N/A'} for service entry ${serviceEntryId} by ${req.user.role} with aadhaar ${newEntry.aadhaar || 'N/A'}, priority ${priority || 'Medium'}`,
         centreId
       ]
     );
@@ -1802,7 +1812,7 @@ const syncWithCustomerServices = async (client, trackingEntry, customerServiceId
   console.log(`servicetracking.js: Synced customer_service ${customerServiceId} with progress ${progress}%`);
 
   // If we have aadhaar, update the customer_documents table
-  if (trackingEntry.aadhaar) {
+  if (trackingEntry.aadhaar && /^\d{12}$/.test(trackingEntry.aadhaar)) {
     // First get the customer_id
     const customerResult = await client.query(
       `SELECT customer_id FROM customer_services WHERE id = $1`,
@@ -1921,7 +1931,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     if (applicationNumber && applicationNumber.length > 50) {
       errors.push('applicationNumber is too long (max 50 characters)');
     }
-    if (aadhaar && !/^\d{12}$/.test(aadhaar)) {
+    if (aadhaarColumns(aadhaar)?.invalid) {
       errors.push('aadhaar must be a 12-digit number');
     }
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -2080,8 +2090,16 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateValues.push(notes || null);
     }
     if (aadhaar !== undefined) {
-      updateFields.push(`aadhaar = $${paramIndex++}`);
-      updateValues.push(aadhaar || null);
+      // masked value sent back unchanged → leave it; otherwise masked + fingerprint, never the full number
+      const aad = aadhaarColumns(aadhaar);
+      if (aad !== undefined) {
+        updateFields.push(`aadhaar = $${paramIndex++}`);
+        updateValues.push(aad?.aadhaar ?? null);
+        updateFields.push(`aadhaar_hash = $${paramIndex++}`);
+        updateValues.push(aad?.aadhaar_hash ?? null);
+        updateFields.push(`aadhaar_last4 = $${paramIndex++}`);
+        updateValues.push(aad?.aadhaar_last4 ?? null);
+      }
     }
     if (email !== undefined) {
       updateFields.push(`email = $${paramIndex++}`);
@@ -2109,6 +2127,9 @@ router.put('/:id', authenticateToken, async (req, res) => {
     `;
     const result = await client.query(updateQuery, updateValues);
     const updatedEntry = result.rows[0];
+    if (aadhaarColumns(aadhaar) !== undefined) {
+      await linkEntryToCustomerByAadhaar(client, updatedEntry.service_entry_id, updatedEntry.aadhaar_hash);
+    }
 
     // Update steps for currentStep
     if (currentStep) {
