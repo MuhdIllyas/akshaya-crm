@@ -1,6 +1,6 @@
 // Builds the A4 online-booking poster (HTML) — used for the preview and for printing.
 // Design 1 "Phone in hand": navy header with a phone showing the booking screen,
-// the centre's booking QR, four steps, the centre's popular services.
+// the centre's booking QR, four steps, the services customers can book.
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 const ICONS = {
@@ -21,17 +21,18 @@ const STEPS = [
 ];
 
 const TILE_COLOURS = ["#dbeafe", "#fef3c7", "#dcfce7", "#fce7f3", "#e0e7ff"];
-const FALLBACK_SERVICES = ["Aadhaar", "Voter ID", "Passport", "Income certificate", "Ration card", "PAN card"];
+// Services shown on the poster (the first five also appear on the phone screen)
+export const POSTER_SERVICES = ["PVC Card", "Land Tax", "Building Tax", "Utility Payments", "Admissions Related Applications", "Scholarships"];
 
 /**
  * @param {object} o
  * @param {string} o.qrDataUrl    PNG data URL of the centre's booking QR
  * @param {string} o.centreName   e.g. "Akshaya e Centre Pukayur"
- * @param {string[]} [o.services] the centre's popular services (up to 8 shown)
+ * @param {string[]} [o.services] services to show (default POSTER_SERVICES; up to 8)
  * @param {boolean} [o.autoPrint] open the print dialog once fonts are loaded
  */
 export function buildBookingPosterHTML({ qrDataUrl, centreName, services = [], autoPrint = false }) {
-  const list = (services.length ? services : FALLBACK_SERVICES).slice(0, 8);
+  const list = (services.length ? services : POSTER_SERVICES).slice(0, 8);
   const phoneRows = list.slice(0, 5).map((name, i) =>
     `<div class="svc"><b style="background:${TILE_COLOURS[i % TILE_COLOURS.length]}"></b><span>${esc(name)}</span><u>Book</u></div>`).join("");
   const chips = list.map((name) => `<span>${esc(name)}</span>`).join("") + "<span>+ many more</span>";
@@ -146,7 +147,7 @@ export function buildBookingPosterHTML({ qrDataUrl, centreName, services = [], a
   <div class="foot">
     <div class="perks">
       <span class="perk"><i>${tick}</i>No waiting in line</span>
-      <span class="perk"><i>${tick}</i>Pay at the centre</span>
+      <span class="perk"><i>${tick}</i>Pay online</span>
       <span class="perk"><i>${tick}</i>Help from our staff</span>
     </div>
     <div class="brand">AKSHAYA SAHAYI</div>

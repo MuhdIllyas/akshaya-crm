@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { QRCodeCanvas } from 'qrcode.react';
-import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2 } from 'react-icons/fi';
+import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2, FiImage } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import AdminPrintSettings from '../printing/AdminPrintSettings';
+import PostersSettings from '../printing/PostersSettings';
 import SignInHistory from '../../components/security/SignInHistory';
 
 const AdminSettings = () => {
-    const [activeTab, setActiveTab] = useState('companion'); // 'companion', 'print', 'security'
+    const [activeTab, setActiveTab] = useState('companion'); // 'companion', 'print', 'posters', 'security'
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
@@ -31,6 +32,13 @@ const AdminSettings = () => {
                         <FiPrinter className="text-lg" />
                         Print Routing
                     </button>
+                    <button
+                        onClick={() => setActiveTab('posters')}
+                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'posters' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                    >
+                        <FiImage className="text-lg" />
+                        Posters
+                    </button>
                     <button 
                         onClick={() => setActiveTab('security')}
                         className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'security' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
@@ -45,6 +53,7 @@ const AdminSettings = () => {
             <div className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto">
                 {activeTab === 'companion' && <CompanionSetupTab />}
                 {activeTab === 'print' && <AdminPrintSettings />}
+                {activeTab === 'posters' && <PostersSettings />}
                 {activeTab === 'security' && <SignInHistory />}
             </div>
         </div>

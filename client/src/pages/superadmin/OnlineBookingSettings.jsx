@@ -4,7 +4,7 @@
 //  - Each centre's own portal link and QR code: bookings made through it are
 //    automatically for that centre
 //  - Which centres have WhatsApp connected (one number per centre)
-//  - Whether centre admins can print a booking poster (Print Settings → Booking Poster)
+//  - Whether centre admins can print a booking poster (Settings → Posters)
 
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
@@ -198,7 +198,7 @@ export default function OnlineBookingSettings({ accounts = [] }) {
         <div>
           <h3 className="mb-1 text-lg font-semibold text-slate-900">Booking poster for centres</h3>
           <p className="text-sm text-slate-500">
-            Centre admins get an A4 poster with their centre's booking QR code (Print Settings → Booking Poster) to print and put up at the centre.
+            Centre admins get an A4 poster with their centre's booking QR code (Settings → Posters) to print and put up at the centre.
           </p>
         </div>
         <button

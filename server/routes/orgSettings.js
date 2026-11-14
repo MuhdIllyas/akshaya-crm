@@ -41,10 +41,10 @@ router.put("/booking-mode", authMiddleware(["superadmin"]), async (req, res) => 
 
 /* ------------------------------------------------------------------
    Booking poster: an A4 poster with a centre's booking QR, printed by
-   the centre admin (Print Settings → Booking Poster). The superadmin
+   the centre admin (Settings → Posters). The superadmin
    decides whether admins get it.
    GET /api/org-settings/booking-poster   (admin, superadmin; superadmin may pass ?centre_id)
-     → { enabled, org_slug, centre: { id, name }, services: [names] }
+     → { enabled, org_slug, centre: { id, name } }
    PUT /api/org-settings/booking-poster   (superadmin) { enabled: true|false }
 ------------------------------------------------------------------- */
 router.get("/booking-poster", authMiddleware(["admin", "superadmin"]), async (req, res) => {
@@ -52,37 +52,11 @@ router.get("/booking-poster", authMiddleware(["admin", "superadmin"]), async (re
     const enabled = (await getSetting("booking_poster")) === true;
     const centreId = Number(req.user.role === "superadmin" ? req.query.centre_id || req.user.centre_id : req.user.centre_id) || null;
     let centre = null;
-    let services = [];
     if (centreId) {
       const { rows } = await pool.query(`SELECT id, name FROM centres WHERE id = $1`, [centreId]);
       centre = rows[0] || null;
     }
-    if (centre) {
-      // The centre's most-used services in the last 6 months, then other services
-      // customers can book online.
-      const { rows: top } = await pool.query(
-        `SELECT s.name, count(*) AS n
-           FROM service_entries se
-           JOIN staff st ON st.id = se.staff_id
-           JOIN services s ON s.id = se.category_id
-          WHERE st.centre_id = $1 AND se.created_at > now() - interval '180 days'
-            AND s.status = 'active' AND s.requires_workflow = true -- bookable online (same as the portal)
-          GROUP BY s.name
-          ORDER BY n DESC, s.name
-          LIMIT 8`,
-        [centre.id]
-      );
-      services = top.map((r) => r.name);
-      if (services.length < 8) {
-        const { rows: more } = await pool.query(
-          `SELECT name FROM services WHERE status = 'active' AND requires_workflow = true AND NOT (name = ANY($1::text[]))
-            ORDER BY name LIMIT $2`,
-          [services, 8 - services.length]
-        );
-        services.push(...more.map((r) => r.name));
-      }
-    }
-    res.json({ enabled, org_slug: req.tenant.slug, centre, services });
+    res.json({ enabled, org_slug: req.tenant.slug, centre });
   } catch (err) {
     console.error("booking poster error:", err.message);
     res.status(500).json({ error: "Failed to load the booking poster" });
