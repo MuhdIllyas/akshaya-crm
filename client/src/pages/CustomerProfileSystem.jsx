@@ -79,6 +79,7 @@ const CustomerProfileSystem = () => {
   const [appFilter, setAppFilter] = useState('active'); // active | completed | all
   const [appSearch, setAppSearch] = useState('');
   const [showNewCustomer, setShowNewCustomer] = useState(false);
+  const [unlinkedSamePhone, setUnlinkedSamePhone] = useState(0); // walk-ins with their phone but no Aadhaar
 
   const { customerId } = useParams();
   const navigate = useNavigate();
@@ -259,39 +260,21 @@ const CustomerProfileSystem = () => {
     }
   };
 
-  // Fetch customer applications by Aadhaar/email/phone
+  // Fetch the customer's own applications (see the server's customer_id history)
   const fetchCustomerApplications = async (customer) => {
     if (!customer) return;
     
     setApplicationsLoading(true);
     try {
-      const params = {};
-      
-      if (customer.aadhaar && customer.aadhaar !== 'Not Uploaded' && customer.aadhaar !== '—') {
-        const aadhaarNumbers = customer.aadhaar.replace(/\D/g, '');
-        if (aadhaarNumbers.length === 12) {
-          params.aadhaar = aadhaarNumbers;
-        }
-      } 
-      
-      if (!params.aadhaar && customer.email && customer.email !== '—') {
-        params.email = customer.email;
-      } 
-      
-      if (!params.aadhaar && !params.email && customer.phone && customer.phone !== '—') {
-        const phoneNumbers = customer.phone.replace(/\D/g, '');
-        if (phoneNumbers.length >= 10) {
-          params.phone = phoneNumbers.slice(-10);
-        }
-      }
-
-      if (Object.keys(params).length === 0) {
+      // By who the application belongs to (linked by Aadhaar, or their own
+      // online booking), not by phone: family members often share a phone.
+      if (!customer.id) {
         setCustomerApplications([]);
         setApplicationsLoading(false);
         return;
       }
-
-      const response = await getCustomerHistory(params);
+      const response = await getCustomerHistory({ customer_id: customer.id });
+      setUnlinkedSamePhone(response.unlinked_same_phone || 0);
       
       const transformedApps = [];
       
@@ -868,6 +851,17 @@ const CustomerProfileSystem = () => {
                                     />
                                   </div>
                                 </div>
+
+                                {!applicationsLoading && unlinkedSamePhone > 0 && (
+                                  <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                                    <FiAlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                                    <span>
+                                      {unlinkedSamePhone === 1 ? '1 more entry uses' : `${unlinkedSamePhone} more entries use`} this phone number but
+                                      {unlinkedSamePhone === 1 ? ' has' : ' have'} no Aadhaar, so {unlinkedSamePhone === 1 ? 'it is' : 'they are'} not shown here.
+                                      Add this customer's Aadhaar on the entry (Track Service) if it is theirs.
+                                    </span>
+                                  </div>
+                                )}
 
                                 {applicationsLoading ? (
                                   <div className="py-10 text-center">

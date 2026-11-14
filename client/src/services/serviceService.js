@@ -361,6 +361,7 @@ export const getCustomerHistory = async (params) => {
     if (params.aadhaar) queryParams.append('aadhaar', params.aadhaar);
     if (params.email) queryParams.append('email', params.email);
     if (params.phone) queryParams.append('phone', params.phone);
+    if (params.customer_id) queryParams.append('customer_id', params.customer_id);
     
     const response = await trackingApi.get(`/customer/history?${queryParams.toString()}`);
     return response.data;

@@ -9,6 +9,7 @@ import { logActivity } from "../utils/activityLogger.js";
 
 import { createReviewRequest } from './reviews.js';
 import { aadhaarColumns, hashAadhaar, digitsOnly, linkEntryToCustomerByAadhaar } from '../utils/aadhaar.js';
+import { staffCustomerCentre, isCustomerAtCentre, bookingInCentreSql } from '../utils/customerCentres.js';
 import { triggerNotification } from '../utils/communication/notificationEngine.js';
 
 const router = express.Router();
@@ -472,8 +473,88 @@ const fetchTrackingEntries = async (client, req, query, values) => {
  */
 router.get('/customer/history', authenticateToken, async (req, res) => {
   const { aadhaar, email, phone } = req.query;
+
+  // One customer's applications, by who they belong to (not by phone: family
+  // members often share a phone):
+  //   walk-ins linked to them by Aadhaar (service_entries.customer_id)
+  //   + their online bookings (taken → processed, not yet taken → pending).
+  // Per-centre portal: staff see only their centre's.
+  if (req.query.customer_id) {
+    const customerId = Number(req.query.customer_id);
+    if (!Number.isInteger(customerId) || customerId <= 0) {
+      return res.status(400).json({ error: 'Invalid customer' });
+    }
+    try {
+      const onlyCentre = await staffCustomerCentre(req.user);
+      if (onlyCentre && !(await isCustomerAtCentre(customerId, onlyCentre))) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+      const centreParam = onlyCentre ? [onlyCentre] : [];
+      const processed = await pool.query(
+        `SELECT DISTINCT ON (st.id)
+                st.id, st.application_number, st.status, st.current_step, st.progress,
+                st.estimated_delivery, st.updated_at, st.aadhaar, st.email, st.priority, st.assigned_to,
+                se.phone, se.customer_name, se.created_at AS submission_date,
+                s.name AS service_name, sc.name AS subcategory_name,
+                se.total_charges, se.customer_service_id,
+                CASE WHEN se.customer_service_id IS NOT NULL THEN 'online' ELSE 'offline' END AS source
+           FROM service_tracking st
+           JOIN service_entries se ON st.service_entry_id = se.id
+           LEFT JOIN services s ON se.category_id = s.id
+           LEFT JOIN subcategories sc ON se.subcategory_id = sc.id
+           LEFT JOIN customer_services cs ON cs.id = se.customer_service_id
+           LEFT JOIN staff sf ON sf.id = se.staff_id
+          WHERE (se.customer_id = $1 OR cs.customer_id = $1)
+            ${onlyCentre ? `AND (CASE WHEN cs.id IS NULL THEN sf.centre_id = $2 ELSE ${bookingInCentreSql('cs', 2)} END)` : ''}
+          ORDER BY st.id DESC`,
+        [customerId, ...centreParam]
+      );
+      const pending = await pool.query(
+        `SELECT cs.id, cs.application_number, cs.status, cs.service_data, cs.applied_at, cs.estimated_completion
+           FROM customer_services cs
+          WHERE cs.customer_id = $1
+            AND NOT EXISTS (SELECT 1 FROM service_entries se WHERE se.customer_service_id = cs.id)
+            ${onlyCentre ? `AND ${bookingInCentreSql('cs', 2)}` : ''}
+          ORDER BY cs.applied_at DESC`,
+        [customerId, ...centreParam]
+      );
+      // Entries with this customer's phone but no Aadhaar: maybe theirs, not linked.
+      const { rows: [unlinked] } = await pool.query(
+        `SELECT count(*)::int AS n
+           FROM service_entries se
+           JOIN customers c ON c.id = $1
+           LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+           LEFT JOIN staff sf ON sf.id = se.staff_id
+          WHERE se.customer_id IS NULL AND se.customer_service_id IS NULL
+            AND st.aadhaar_hash IS NULL
+            AND right(regexp_replace(coalesce(se.phone, ''), '\\D', '', 'g'), 10)
+                = right(regexp_replace(coalesce(c.primary_phone, ''), '\\D', '', 'g'), 10)
+            AND length(regexp_replace(coalesce(c.primary_phone, ''), '\\D', '', 'g')) >= 10
+            ${onlyCentre ? 'AND sf.centre_id = $2' : ''}`,
+        [customerId, ...centreParam]
+      );
+      return res.json({
+        processed: processed.rows.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)),
+        pending: pending.rows.map((cs) => ({
+          id: cs.id,
+          application_number: cs.application_number,
+          status: cs.status,
+          service_name: cs.service_data?.service_name,
+          submission_date: cs.applied_at,
+          estimated_completion: cs.estimated_completion,
+          source: 'online',
+          is_processed: false,
+        })),
+        unlinked_same_phone: unlinked?.n || 0,
+      });
+    } catch (err) {
+      console.error('Error fetching customer history (by customer):', err);
+      return res.status(500).json({ error: 'Failed to fetch customer history' });
+    }
+  }
+
   const client = await pool.connect();
-  
+
   try {
     if (!aadhaar && !email && !phone) {
       return res.status(400).json({ 
