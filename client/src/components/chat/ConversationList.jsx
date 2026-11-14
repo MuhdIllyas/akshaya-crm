@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers } from "react-icons/fi";
+import React, { useState, useEffect, useMemo, useRef } from "react";
+import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers, FiChevronLeft, FiChevronRight } from "react-icons/fi";
 import ChatAvatar from "./ChatAvatar";
 import {
   CHAT_TABS,
@@ -63,6 +63,42 @@ const ConversationList = ({
     (t) => ALWAYS_VISIBLE_TABS.includes(t.id) || t.id === tab || (tabStats[t.id]?.count || 0) > 0
   );
 
+  // Tab row: show arrows when some tabs are out of view
+  const tabsRef = useRef(null);
+  const [tabScroll, setTabScroll] = useState({ left: false, right: false });
+  const updateTabScroll = () => {
+    const el = tabsRef.current;
+    if (!el) return;
+    const next = { left: el.scrollLeft > 2, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 2 };
+    setTabScroll((prev) => (prev.left === next.left && prev.right === next.right ? prev : next));
+  };
+  const scrollTabs = (dir) => tabsRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
+  useEffect(() => {
+    updateTabScroll();
+    const el = tabsRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(updateTabScroll);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [visibleTabs.length]);
+  // a normal (vertical) mouse wheel over the row scrolls it sideways
+  useEffect(() => {
+    const el = tabsRef.current;
+    if (!el) return undefined;
+    const onWheel = (e) => {
+      if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+  // keep the selected tab in view
+  useEffect(() => {
+    tabsRef.current?.querySelector(`[data-tab="${tab}"]`)?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    updateTabScroll();
+  }, [tab]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return conversations.filter((c) => {
@@ -123,13 +159,41 @@ const ConversationList = ({
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1">
+        {/* One row; on narrow screens it scrolls sideways (mouse wheel, arrows, or swipe) */}
+        <div className="relative">
+          {tabScroll.left && (
+            <button
+              type="button"
+              onClick={() => scrollTabs(-1)}
+              className="absolute left-0 top-0 z-10 grid h-8 w-8 place-items-center rounded-full bg-gradient-to-r from-white via-white to-transparent text-slate-500 hover:text-slate-900"
+              aria-label="More tabs to the left"
+            >
+              <FiChevronLeft size={16} />
+            </button>
+          )}
+          {tabScroll.right && (
+            <button
+              type="button"
+              onClick={() => scrollTabs(1)}
+              className="absolute right-0 top-0 z-10 grid h-8 w-8 place-items-center rounded-full bg-gradient-to-l from-white via-white to-transparent text-slate-500 hover:text-slate-900"
+              aria-label="More tabs to the right"
+            >
+              <FiChevronRight size={16} />
+            </button>
+          )}
+        <div
+          ref={tabsRef}
+          onScroll={updateTabScroll}
+          className="flex gap-1 overflow-x-auto [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: "none" }}
+        >
           {visibleTabs.map((t) => {
             const s = tabStats[t.id] || { count: 0, unread: 0 };
             const active = tab === t.id;
             return (
               <button
                 key={t.id}
+                data-tab={t.id}
                 onClick={() => setTab(t.id)}
                 className={`shrink-0 flex items-center gap-1.5 h-8 px-2.5 rounded-full text-xs font-medium transition ${
                   active
@@ -150,6 +214,7 @@ const ConversationList = ({
               </button>
             );
           })}
+        </div>
         </div>
       </div>
 
