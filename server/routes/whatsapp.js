@@ -57,13 +57,45 @@ const isPhoneLike = (q) => {
 };
 
 /**
- * Which centre is this customer chatting with RIGHT NOW?
- * Each centre has its own WhatsApp number → its own conversation (webhook sets
- * centre_id on it). The conversation with the most recent INCOMING message is
- * the one the bot session started from. Outgoing staff messages from another
- * centre are ignored, so they can't pull the lead/chat to the wrong centre.
+ * Which centre's bot is this call from?
+ * Each centre's Libromi bot flow should send its own WhatsApp channel id
+ * ("channel_id": "2686") or centre id ("centre_id": 9) in every HTTP call.
+ * That is exact. Without it we fall back to guessing (findActiveWaConversation),
+ * which goes wrong when the customer's message to this centre hasn't reached
+ * the server yet (or that number's webhook points elsewhere): the bot then
+ * answers with another centre's applications.
  */
-async function findActiveWaConversation(phone10) {
+async function botCentreHint(req) {
+  const b = req.body || {};
+  const channel = clean(b.channel_id);
+  if (channel) {
+    const { rows } = await pool.query(
+      `SELECT c.id FROM communication_accounts ca
+         JOIN centres c ON c.communication_account_id = ca.id
+        WHERE ca.channel_id = $1
+        LIMIT 1`,
+      [String(channel)]
+    );
+    if (rows[0]) return rows[0].id;
+    console.warn(`[bot] channel_id ${channel} isn't linked to a centre`);
+  }
+  const centreId = Number(clean(b.centre_id)) || null;
+  if (centreId) {
+    const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [centreId]);
+    if (rows[0]) return rows[0].id;
+  }
+  return null;
+}
+
+/**
+ * The customer's WhatsApp conversation with a centre.
+ * centreId given (the bot said which centre it is) → that centre's chat with
+ * this phone; if there's no chat yet, just the centre (id null).
+ * No centreId → guess: the chat with the most recent INCOMING message.
+ * Outgoing staff messages from another centre are ignored, so they can't pull
+ * the lead/chat to the wrong centre.
+ */
+async function findActiveWaConversation(phone10, centreId = null) {
   if (phone10.length !== 10) return null;
   const { rows } = await pool.query(
     `SELECT c.id, c.centre_id, c.assigned_staff_id, ce.name AS centre_name, ce.admin_id, li.last_in
@@ -77,19 +109,27 @@ async function findActiveWaConversation(phone10) {
      WHERE c.channel = 'whatsapp'
        AND c.status <> 'deleted'
        AND RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10) = $1
-       AND li.last_in IS NOT NULL
-     ORDER BY li.last_in DESC
+       AND ($2::int IS NULL OR c.centre_id = $2::int)
+       AND ($2::int IS NOT NULL OR li.last_in IS NOT NULL)
+     ORDER BY li.last_in DESC NULLS LAST, c.last_message_at DESC NULLS LAST
      LIMIT 1`,
-    [phone10]
+    [phone10, centreId]
   );
-  return rows[0] || null;
+  if (rows[0] || !centreId) return rows[0] || null;
+  const { rows: centre } = await pool.query(
+    `SELECT NULL::int AS id, id AS centre_id, NULL::int AS assigned_staff_id, name AS centre_name, admin_id, NULL AS last_in
+       FROM centres WHERE id = $1`,
+    [centreId]
+  );
+  return centre[0] || null;
 }
 
 /* =====================================================================
    🤖 BOT: CHECK APPLICATION STATUS
    POST /api/whatsapp/track-application
    Header: x-bot-key: <BOT_API_KEY>
-   Body:   { "query": "{{status_query}}", "wa_phone": "{{STAT_PHONE}}" }
+   Body:   { "query": "{{status_query}}", "wa_phone": "{{STAT_PHONE}}",
+           "channel_id": "<this centre's WhatsApp channel id>" }
    Reply:  { found, count, application_number, reply }
 
    Centre rule: the centre is the one whose WhatsApp number the customer is
@@ -216,7 +256,7 @@ router.post("/track-application", async (req, res) => {
     const waPhone = last10(req.body?.wa_phone || req.body?.phone);
     const queryIsPhone = isPhoneLike(query);
 
-    const conv = await findActiveWaConversation(waPhone);
+    const conv = await findActiveWaConversation(waPhone, await botCentreHint(req));
     const centreId = conv?.centre_id || null;
 
     let rows = [];
@@ -499,7 +539,7 @@ router.post("/create-lead", async (req, res) => {
       docs_ready: clean(req.body?.docs_ready),
     };
 
-    const conv = await findActiveWaConversation(phone);
+    const conv = await findActiveWaConversation(phone, await botCentreHint(req));
     const centreId = conv?.centre_id || null;
 
     // Existing customer? (helps staff; not required)
@@ -614,7 +654,7 @@ router.post("/connect-staff", async (req, res) => {
     const waPhone = last10(req.body?.wa_phone || req.body?.phone);
     const query = clean(req.body?.query);
 
-    const conv = await findActiveWaConversation(waPhone);
+    const conv = await findActiveWaConversation(waPhone, await botCentreHint(req));
     if (!conv || !conv.centre_id) {
       console.warn(`[connect-staff] No WhatsApp conversation found for ${waPhone}`);
       return res.json({ ok: false, reply: fallbackReply });
@@ -692,7 +732,7 @@ router.post("/connect-staff", async (req, res) => {
 
     // --- 3. Assign the chat (only to real staff) ---
     const io = req.io || req.app.get("io");
-    if (staff && !toAdmin) {
+    if (staff && !toAdmin && conv.id) {
       await addStaffToConversation(conv.id, staff.id, "owner");
       await pool.query(
         `UPDATE chat_conversations
@@ -729,10 +769,10 @@ router.post("/connect-staff", async (req, res) => {
     }
     if (staff && !toAdmin) noteParts.push(`Connected to ${staff.name} — ${reason}.`);
     else noteParts.push("No staff found for this customer — admin, please assign a staff member.");
-    await sendSystemMessage(conv.id, noteParts.join("\n"), io);
+    if (conv.id) await sendSystemMessage(conv.id, noteParts.join("\n"), io);
 
     // --- 5. Live alert for the chosen staff member ---
-    if (io && staff) {
+    if (io && staff && conv.id) {
       const unread = await getUnreadCount(staff.id, conv.id);
       io.to(`user:${staff.id}`).emit("unread_update", { conversationId: Number(conv.id), unread });
       io.to(`user:${staff.id}`).emit("conversation_updated", {
@@ -756,12 +796,13 @@ router.post("/connect-staff", async (req, res) => {
     console.log(`[connect-staff] ${waPhone} → staff ${staff?.id ?? "none"} (centre ${centreId}, ${reason})`);
 
     const centreLabel = conv.centre_name ? ` at ${conv.centre_name}` : "";
+    // Named only when the chat really was handed to them (no chat yet → nothing to assign)
     const reply =
-      staff && !toAdmin
+      staff && !toAdmin && conv.id
         ? `You're now connected to *${staff.name}*${centreLabel}. They will reply to you here shortly. 🙏`
         : `Sure! Our team${centreLabel} will reply to you here shortly. 🙏`;
 
-    return res.json({ ok: !!staff, staff_name: staff && !toAdmin ? staff.name : "", reply });
+    return res.json({ ok: !!staff, staff_name: staff && !toAdmin && conv.id ? staff.name : "", reply });
   } catch (err) {
     console.error("[connect-staff] Error:", err);
     return res.status(500).json({ ok: false, reply: fallbackReply });
