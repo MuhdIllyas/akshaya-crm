@@ -84,6 +84,11 @@ async function botCentreHint(req) {
     const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [centreId]);
     if (rows[0]) return rows[0].id;
   }
+  // The flow didn't say which centre (or sent an empty variable): we'll guess.
+  console.warn(
+    `[bot] ${req.path}: no centre from the flow (channel_id=${JSON.stringify(b.channel_id ?? null)}, ` +
+      `centre_id=${JSON.stringify(b.centre_id ?? null)}) — guessing from the last incoming message`
+  );
   return null;
 }
 
