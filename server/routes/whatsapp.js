@@ -3,6 +3,8 @@ import pool from "../db.js";
 import { sendManualWhatsAppTemplate, sendSystemMessage, getUnreadCount } from "../utils/messageRouter.js";
 import { addStaffToConversation } from "../utils/conversationService.js";
 import { notifyNewLead } from "../utils/leadNotifications.js";
+import axios from "axios";
+import { getLibromiApiKey } from "../utils/whatsappAccount.js";
 
 const router = express.Router();
 
@@ -84,9 +86,12 @@ async function botCentreHint(req) {
     const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [centreId]);
     if (rows[0]) return rows[0].id;
   }
-  // No centre from the flow (Libromi sends {{STAT_CHANNEL_ID}} empty): find the
-  // chat that received the message the customer just sent (it can reach us a
-  // moment after this bot call, so wait for it briefly).
+  // No centre from the flow (Libromi sends {{STAT_CHANNEL_ID}} empty): ask
+  // Libromi which of this customer's chats is active right now (the bot
+  // session that made this call) and use its channel.
+  const fromLibromi = await centreFromLibromiChat(last10(b.wa_phone || b.phone));
+  if (fromLibromi) return fromLibromi;
+  // Then: the chat that received this session's messages, if we saved them.
   const fromMessage = await centreFromJustSent(last10(b.wa_phone || b.phone), botStepTexts(req.path, b));
   if (fromMessage) return fromMessage;
   console.warn(
@@ -94,6 +99,63 @@ async function botCentreHint(req) {
       `centre_id=${JSON.stringify(b.centre_id ?? null)}) and no matching message — guessing from the last incoming message`
   );
   return null;
+}
+
+const LIBROMI_API = (process.env.LIBROMI_API_URL || "https://api.wa-api.cloud/v1").replace(/\/$/, "");
+const ACTIVE_CHAT_MINUTES = 30; // a bot session is the customer's newest chat, active just now
+
+// Libromi developer API key: any active account's (they share one Libromi
+// workspace), else the default organization's from .env.
+async function anyLibromiApiKey() {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id FROM communication_accounts
+        WHERE is_active = true AND api_key IS NOT NULL AND api_key <> ''
+        ORDER BY id LIMIT 1`
+    );
+    return await getLibromiApiKey(rows[0]?.id || null);
+  } catch {
+    return getLibromiApiKey(null);
+  }
+}
+
+/**
+ * Centre of the customer's most recently active Libromi chat. Libromi lists
+ * the customer's chats with their channel (one per centre number) and last
+ * activity; the newest is the bot session that is calling us.
+ */
+async function centreFromLibromiChat(phone10) {
+  if (phone10.length !== 10) return null;
+  try {
+    const apiKey = await anyLibromiApiKey();
+    if (!apiKey) return null;
+    const res = await axios.get(`${LIBROMI_API}/conversations`, {
+      params: { query: phone10 },
+      headers: { Authorization: `Bearer ${apiKey}` },
+      timeout: 4000,
+    });
+    const list = Array.isArray(res.data?.data) ? res.data.data : Array.isArray(res.data) ? res.data : [];
+    const newest = list
+      .map((c) => ({
+        channel: String(c.channel?.id ?? c.channel ?? "").trim(),
+        at: new Date(c.updated_at || c.last_message?.created_at || 0).getTime(),
+      }))
+      .filter((c) => c.channel && c.at)
+      .sort((a, b) => b.at - a.at)[0];
+    if (!newest || Date.now() - newest.at > ACTIVE_CHAT_MINUTES * 60 * 1000) return null;
+    const { rows } = await pool.query(
+      `SELECT c.id FROM communication_accounts ca
+         JOIN centres c ON c.communication_account_id = ca.id
+        WHERE ca.channel_id = $1
+        LIMIT 1`,
+      [newest.channel]
+    );
+    if (!rows[0]) console.warn(`[bot] Libromi channel ${newest.channel} isn't linked to a centre`);
+    return rows[0]?.id || null;
+  } catch (err) {
+    console.warn("[bot] Libromi chat lookup failed:", err.response?.status || err.message);
+    return null;
+  }
 }
 
 // Messages that belong to this bot step, for each bot call.
