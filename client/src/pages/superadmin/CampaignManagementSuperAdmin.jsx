@@ -925,7 +925,7 @@ const CampaignManagementSuperAdmin = () => {
                 <div className="space-y-5">
                   <div>
                     <label htmlFor="cs-name" className="mb-1.5 block text-sm font-medium text-slate-700">Campaign name *</label>
-                    <input id="cs-name" type="text" name="name" value={formData.name} onChange={handleInputChange} required className={inputCls} placeholder="e.g., Diwali Offer" />
+                    <input id="cs-name" type="text" name="name" value={formData.name} onChange={handleInputChange} required className={inputCls} placeholder="e.g., HSCAP Applications" />
                   </div>
                   <div>
                     <label htmlFor="cs-desc" className="mb-1.5 block text-sm font-medium text-slate-700">Description</label>

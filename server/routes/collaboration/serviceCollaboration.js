@@ -7,6 +7,7 @@ import pool from '../../db.js';
 import { sendSystemMessage } from '../../utils/messageRouter.js';
 import { logActivity } from '../../utils/activityLogger.js';
 import { createTask } from '../../services/taskService.js';
+import { orgUploadPath } from '../../tenancy/uploads.js';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ if (!fs.existsSync(fullUploadPath)) {
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, fullUploadPath);
+    cb(null, orgUploadPath('service_documents').dir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -991,7 +992,7 @@ router.post('/:serviceEntryId/close', authenticateToken, async (req, res) => {
   // ---- After commit: remove files from disk, notify clients, log ----
   for (const url of filesToDelete) {
     try {
-      const p = path.join(process.cwd(), 'uploads', 'chat', path.basename(url));
+      const p = path.join(orgUploadPath('chat').dir, path.basename(url));
       if (fs.existsSync(p)) fs.unlinkSync(p);
     } catch (e) {
       console.error('File cleanup failed:', url, e.message);

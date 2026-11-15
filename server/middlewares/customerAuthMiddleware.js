@@ -1,5 +1,6 @@
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
+import { customerCentreScope } from "../utils/customerCentres.js";
 
 export const customerAuthMiddleware = async (req, res, next) => {
   try {
@@ -38,10 +39,17 @@ export const customerAuthMiddleware = async (req, res, next) => {
       return res.status(403).json({ error: "Customer account is blocked" });
     }
 
+    // Per-centre portal: the centre this customer signed in at (null = shared
+    // portal, or they still need to choose one).
+    const scope = await customerCentreScope(customer.id, decoded.centre_id);
+
     req.customer = {
       id: customer.id,
       name: customer.name,
-      phone: customer.primary_phone
+      phone: customer.primary_phone,
+      portalMode: scope.mode,
+      centreId: scope.centreId,
+      needsCentre: scope.needsCentre
     };
 
     next();
@@ -49,4 +57,14 @@ export const customerAuthMiddleware = async (req, res, next) => {
     console.error("Customer auth error:", err.message);
     return res.status(401).json({ error: "Invalid or expired customer token" });
   }
+};
+
+// For routes about bookings, chats and centres: in the per-centre portal the
+// customer must have chosen their centre first (the portal sends them to the
+// "choose your centre" page on this answer).
+export const requireCustomerCentre = (req, res, next) => {
+  if (req.customer?.needsCentre) {
+    return res.status(409).json({ code: "choose_centre", message: "Choose your centre to continue" });
+  }
+  next();
 };

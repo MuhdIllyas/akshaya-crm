@@ -97,6 +97,13 @@ const mapDBNotificationToUI = (dbNotif) => {
     actionUrl = `/dashboard/${role}/leads`;
   }
 
+  // New online booking: staff take it from their dashboard; admins see the customer
+  if (dbNotif.related_entity_type === 'customer_booking' || dbNotif.type === 'booking_new') {
+    actionUrl = ["admin", "superadmin"].includes(role)
+      ? `/dashboard/${role}/customers/${dbNotif.related_entity_id}`
+      : `/dashboard/staff`;
+  }
+
   // Safely get type to prevent .includes() crashing
   const typeStr = dbNotif.type || 'system';
 

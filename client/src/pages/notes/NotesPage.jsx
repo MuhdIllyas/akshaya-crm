@@ -165,17 +165,17 @@ const NoteInput = ({ value, onChange, placeholder, minHeight, onFocus, fetchSugg
     style={{
       control: { backgroundColor: 'transparent', minHeight, fontSize: 14, lineHeight: 1.5 },
       highlighter: { padding: '6px 12px', margin: 0 },
-      input: { padding: '6px 12px', border: 'none', outline: 'none', margin: 0, color: '#1e293b' },
+      input: { padding: '6px 12px', border: 'none', outline: 'none', margin: 0, color: 'var(--ui-text, #1e293b)' },
       suggestions: {
         list: {
-          backgroundColor: 'white',
-          border: '1px solid #e2e8f0',
+          backgroundColor: 'var(--ui-card, white)',
+          border: '1px solid var(--ui-line, #e2e8f0)',
           borderRadius: '12px',
           zIndex: 110,
           boxShadow: '0 8px 16px rgba(0,0,0,0.1)',
           overflow: 'hidden',
         },
-        item: { padding: '8px 14px', borderBottom: '1px solid #f1f5f9', fontSize: 13 },
+        item: { padding: '8px 14px', borderBottom: '1px solid var(--ui-line, #f1f5f9)', fontSize: 13 },
       },
     }}
   >

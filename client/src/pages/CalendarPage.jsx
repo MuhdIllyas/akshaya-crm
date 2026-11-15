@@ -44,6 +44,19 @@ const canDeleteItem = (e) => isCalendarRow(e) || isTaskItem(e);
 //  Tooltip Card
 // ----------------------------------------------------------------------
 function TooltipCard({ event, position }) {
+  const adjustedStyle = useMemo(() => {
+    const tw = 280,
+      th = 200,
+      pad = 16;
+    let left = position.x + 10,
+      top = position.y + 10;
+    if (typeof window !== "undefined") {
+      if (left + tw > window.innerWidth - pad) left = position.x - tw - 10;
+      if (top + th > window.innerHeight - pad) top = position.y - th - 10;
+    }
+    return { left: `${left}px`, top: `${top}px` };
+  }, [position.x, position.y]);
+
   if (!event) return null;
 
   const typeColors = {
@@ -59,18 +72,6 @@ function TooltipCard({ event, position }) {
   };
   const typeStyle = typeColors[event.event_type] || typeColors[event.type] || typeColors.default;
 
-  const adjustedStyle = useMemo(() => {
-    const tw = 280,
-      th = 200,
-      pad = 16;
-    let left = position.x + 10,
-      top = position.y + 10;
-    if (typeof window !== "undefined") {
-      if (left + tw > window.innerWidth - pad) left = position.x - tw - 10;
-      if (top + th > window.innerHeight - pad) top = position.y - th - 10;
-    }
-    return { left: `${left}px`, top: `${top}px` };
-  }, [position]);
 
   // 🔥 FIX 1 – helper to format a date string nicely
   const formatDate = (rawDate) => {
@@ -497,15 +498,15 @@ function AgendaView({
 //  CalendarView (with hover callbacks)
 // ----------------------------------------------------------------------
 const eventColors = {
-  deadline: { bg: "#fde7cf", border: "#ea8a3a", text: "#7c3a0a" },
-  start: { bg: "#d4eadb", border: "#3f9a6a", text: "#14532d" },
-  announcement: { bg: "#dbe5f2", border: "#3b5d8f", text: "#162c4a" },
-  expiry: { bg: "#e8e4f6", border: "#8b7ac7", text: "#3b2f6b" },
-  task: { bg: "#e2e8f0", border: "#64748b", text: "#0f172a" },
-  holiday: { bg: "#fef0e0", border: "#f2a766", text: "#7c3a0a" },
-  working: { bg: "#e3f2e8", border: "#7fbf9a", text: "#14532d" },
-  weekend: { bg: "#f3f4f6", border: "#d1d5db", text: "#374151" },
-  default: { bg: "#e5e7eb", border: "#9ca3af", text: "#374151" },
+  deadline: { bg: "var(--cal-deadline-bg, #fde7cf)", border: "var(--cal-deadline-border, #ea8a3a)", text: "var(--cal-deadline-text, #7c3a0a)" },
+  start: { bg: "var(--cal-start-bg, #d4eadb)", border: "var(--cal-start-border, #3f9a6a)", text: "var(--cal-start-text, #14532d)" },
+  announcement: { bg: "var(--cal-announcement-bg, #dbe5f2)", border: "var(--cal-announcement-border, #3b5d8f)", text: "var(--cal-announcement-text, #162c4a)" },
+  expiry: { bg: "var(--cal-expiry-bg, #e8e4f6)", border: "var(--cal-expiry-border, #8b7ac7)", text: "var(--cal-expiry-text, #3b2f6b)" },
+  task: { bg: "var(--cal-task-bg, #e2e8f0)", border: "var(--cal-task-border, #64748b)", text: "var(--cal-task-text, #0f172a)" },
+  holiday: { bg: "var(--cal-holiday-bg, #fef0e0)", border: "var(--cal-holiday-border, #f2a766)", text: "var(--cal-holiday-text, #7c3a0a)" },
+  working: { bg: "var(--cal-working-bg, #e3f2e8)", border: "var(--cal-working-border, #7fbf9a)", text: "var(--cal-working-text, #14532d)" },
+  weekend: { bg: "var(--cal-weekend-bg, #f3f4f6)", border: "var(--cal-weekend-border, #d1d5db)", text: "var(--cal-weekend-text, #374151)" },
+  default: { bg: "var(--cal-default-bg, #e5e7eb)", border: "var(--cal-default-border, #9ca3af)", text: "var(--cal-default-text, #374151)" },
 };
 
 function getEventStyle(event) {

@@ -38,7 +38,7 @@ import ScheduledActionsPanel from '@/components/automations/ScheduledActionsPane
 import { validateDraft, toApiAction } from '@/utils/automations/automationUtils';
 import { getPresets , createAutomations } from '@/services/automationService';
 import { todayIST, addDays } from "@/utils/dates";
-import { printServiceChecklist } from '@/utils/pdf/requiredDocumentsPdf';
+import { printServiceChecklist, collectRequiredDocuments } from '@/utils/pdf/requiredDocumentsPdf';
 import ServiceFilesPopover from '@/components/files/ServiceFilesPopover';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
@@ -416,13 +416,28 @@ const ServiceEntry = () => {
   // Lead being converted (opened from the Leads page with "Create service entry")
   const [fromLead, setFromLead] = useState(null);
 
-  // Refresh today's table without blocking whatever the user is doing.
+  // This centre's wallets, split the way the payment rows use them.
+  const splitWallets = (list, centreId) => ({
+    offline: list.filter(w => w.wallet_type === 'cash' && w.centre_id === centreId),
+    online: list.filter(w => ['digital', 'bank', 'card'].includes(w.wallet_type) && w.status === 'online' && w.centre_id === centreId),
+  });
+
+  // Refresh today's table and the wallet balances shown in the payment
+  // dropdowns (a saved entry moves money) without blocking the user. Only the
+  // displayed balances change; chosen wallets and amounts are left alone.
   const refreshEntries = async () => {
     try {
       const res = await getServiceEntries(true, null, 500);
       setServiceEntries(res.data || []);
     } catch (err) {
       console.warn('ServiceEntry.jsx: could not refresh today\'s entries', err.response?.data || err.message);
+    }
+    try {
+      const centreId = parseInt(localStorage.getItem('centre_id'));
+      const walletsRes = await getWallets();
+      if (Array.isArray(walletsRes.data) && !isNaN(centreId)) setWallets(splitWallets(walletsRes.data, centreId));
+    } catch (err) {
+      console.warn('ServiceEntry.jsx: could not refresh wallet balances', err.response?.data || err.message);
     }
   };
 
@@ -1008,8 +1023,7 @@ const ServiceEntry = () => {
         try {
           const walletsRes = await getWallets();
           console.log('ServiceEntry.jsx: Wallets response:', JSON.stringify(walletsRes.data, null, 2));
-          const offlineWallets = walletsRes.data.filter(w => w.wallet_type === 'cash' && w.centre_id === parseInt(centreId));
-          const onlineWallets = walletsRes.data.filter(w => ['digital', 'bank', 'card'].includes(w.wallet_type) && w.status === 'online' && w.centre_id === parseInt(centreId));
+          const { offline: offlineWallets, online: onlineWallets } = splitWallets(walletsRes.data, parseInt(centreId));
           setWallets({ offline: offlineWallets, online: onlineWallets });
           if (offlineWallets.length === 0) toast.warn('No offline wallets available for your centre.');
           if (onlineWallets.length === 0) toast.warn('No online wallets available for your centre.');
@@ -1147,6 +1161,10 @@ const ServiceEntry = () => {
             const departmentCharge = parseFloat(subcategory?.department_charges || 0);
             const totalCharge = serviceCharge + departmentCharge;
 
+            // Documents the customer didn't upload when booking: collect them at the counter.
+            const missingDocs = Array.isArray(booking.service_data?.missing_documents) ? booking.service_data.missing_documents : [];
+            const collectNote = missingDocs.length ? `Documents to collect from the customer: ${missingDocs.join(', ')}` : '';
+
             setFormData(prev => ({
               ...prev,
               tokenId: null,
@@ -1163,14 +1181,14 @@ const ServiceEntry = () => {
                 requiresWallet: category?.requires_wallet || subcategory?.requires_wallet || false,
                 hasExpiry: category?.has_expiry || false,
                 expiryDate: '',
-                initialNote: '', 
+                initialNote: collectNote, 
                 initialNoteMentions: [], 
                 initialNoteVisibility: 'centre', 
                 createTask: false, 
                 taskTitle: '', 
                 taskAssignee: '', 
                 taskDueDate: null,
-                showNoteArea: false,
+                showNoteArea: Boolean(collectNote),
                 activeTab: 'service',
                 applicationNumber: '',
                 estimatedDelivery: '',
@@ -1233,6 +1251,19 @@ const ServiceEntry = () => {
     const days = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
     setDaysRemaining(days);
   };
+
+  // ===== Customers page → "New entry": fill the customer's name and phone =====
+  useEffect(() => {
+    const prefill = location.state?.prefillCustomer;
+    if (!prefill) return;
+    setEditingEntryId(null);
+    setFormData(prev => ({
+      ...prev,
+      customerName: prefill.name || prev.customerName || '',
+      phone: String(prefill.phone || '').replace(/\D/g, '').slice(-10) || prev.phone || '',
+    }));
+    window.history.replaceState({}, document.title); // don't refill on refresh
+  }, [location.state]);
 
   // ===== Lead → Service Entry: fill name, phone and service from the lead =====
   useEffect(() => {
@@ -1317,7 +1348,7 @@ const ServiceEntry = () => {
         assignedTo: adminEntry.assignedTo || '',
         currentStep: adminEntry.currentStep || 'Submitted',
         trackingStatus: adminEntry.trackingStatus || adminEntry.tracking_status || 'pending',
-        aadhaar: adminEntry.aadhaar || '',
+        aadhaar: adminEntry.aadhaar && adminEntry.aadhaar !== 'N/A' ? adminEntry.aadhaar : '', // 'N/A' is a display label
         email: adminEntry.email || '',
         customerRemarks: adminEntry.customerRemarks || adminEntry.notes || ''
       };
@@ -1492,6 +1523,9 @@ const ServiceEntry = () => {
       if (svc.departmentCharge === '' || parseFloat(svc.departmentCharge) < 0) errors.push(`${prefix}Valid department charge required`);
       if (svc.requiresWallet && (!svc.serviceWalletId || isNaN(parseInt(svc.serviceWalletId)))) errors.push(`${prefix}Requires a wallet assignment`);
       if (svc.hasExpiry && (!svc.expiryDate || isNaN(Date.parse(svc.expiryDate)))) errors.push(`${prefix}Expiry date required`);
+      // Tracking, notes and reminders tabs are hidden while editing and the
+      // edit doesn't send them, so only check them for a new entry.
+      if (isEditMode) return;
       if (svc.createTask && (!svc.taskTitle || !svc.taskAssignee)) errors.push(`${prefix}Task Title & Assignee required`);
       if (svc.createTask && !svc.initialNote?.trim()) errors.push(`${prefix}Write a note before converting it to a task`);
       if (svc.aadhaar && !/^\d{12}$/.test(svc.aadhaar)) errors.push(`${prefix}Aadhaar must be exactly 12 digits`);
@@ -1503,9 +1537,14 @@ const ServiceEntry = () => {
       });
     });
 
-    if (formData.payments.length === 0) errors.push('At least one payment is required');
-    if (balanceAmount > 0 && formData.status === 'completed') errors.push(`Balance amount of ₹${balanceAmount} remains. Add payments or keep status as pending.`);
-    if (paidAmount > grandTotal) errors.push('Collected amount exceeds total charge');
+    // Payments are locked while editing: the edit sends none, the server
+    // refuses any, and it re-works the entry's status from the payments it
+    // holds. So the payment checks only apply to a new entry.
+    if (!isEditMode) {
+      if (formData.payments.length === 0) errors.push('At least one payment is required');
+      if (balanceAmount > 0 && formData.status === 'completed') errors.push(`Balance amount of ₹${balanceAmount} remains. Add payments or keep status as pending.`);
+      if (paidAmount > grandTotal) errors.push('Collected amount exceeds total charge');
+    }
 
     const staffId = localStorage.getItem('id')?.trim();
     if (!staffId) errors.push('Staff ID missing. Please log in again.');
@@ -1789,9 +1828,7 @@ const ServiceEntry = () => {
   const getSuggestedDocs = (categoryId, subcategoryId) => {
     const cat = categories.find(c => c.id === parseInt(categoryId));
     if (!cat) return [];
-    const catDocs = cat.required_documents?.filter(d => !d.sub_category_id) || [];
-    const subDocs = cat.subcategories?.find(s => s.id === parseInt(subcategoryId))?.required_documents || [];
-    return [...new Set([...catDocs, ...subDocs].map(d => d.document_name).filter(Boolean))];
+    return collectRequiredDocuments(cat, cat.subcategories?.find(s => s.id === parseInt(subcategoryId)));
   };
 
   const getServiceLabel = (categoryId, subcategoryId) => {
@@ -1890,10 +1927,12 @@ const ServiceEntry = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-900">
-              {tokenId ? 'Token-Based Service Entry' : 'New Service Entry'}
+              {isEditMode ? 'Edit Service Entry' : tokenId ? 'Token-Based Service Entry' : 'New Service Entry'}
             </h1>
             <p className="text-slate-600 mt-1">
-              {tokenId ? `Processing token #${tokenId}` : 'Create a new service entry'}
+              {isEditMode
+                ? `Editing entry #${editingEntryId} · payments can't be changed here`
+                : tokenId ? `Processing token #${tokenId}` : 'Create a new service entry'}
             </p>
           </div>
           
@@ -2007,8 +2046,11 @@ const ServiceEntry = () => {
                 <AnimatePresence>
                   {(formData.services || []).map((svc, index) => {
                     const subcategories = categories.find(c => c.id === parseInt(svc.category))?.subcategories || [];
-                    const categoryDocs = categories.find(c => c.id === parseInt(svc.category))?.required_documents?.filter(doc => !doc.sub_category_id) || [];
-                    const subcategoryDocs = categories.find(c => c.id === parseInt(svc.category))?.subcategories?.find(s => s.id === parseInt(svc.subcategory))?.required_documents || [];
+                    // Service-level + sub-category docs, each listed once (a doc can be on both).
+                    const requiredDocs = collectRequiredDocuments(
+                      categories.find(c => c.id === parseInt(svc.category)),
+                      subcategories.find(s => s.id === parseInt(svc.subcategory))
+                    );
                     const website = categories.find(c => c.id === parseInt(svc.category))?.website || null;
 
                     // ===== Tab state & counters =====
@@ -2124,7 +2166,7 @@ const ServiceEntry = () => {
                               </div>
 
                               {/* Docs & Web */}
-                              {(website || categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                              {(website || requiredDocs.length > 0) && (
                                 <div className="bg-blue-50/50 p-3 rounded-lg border border-blue-100 flex flex-wrap gap-x-6 gap-y-2 text-xs">
                                   <button
                                     type="button"
@@ -2148,14 +2190,14 @@ const ServiceEntry = () => {
                                       <a href={website} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{website}</a>
                                     </div>
                                   )}
-                                  {(categoryDocs.length > 0 || subcategoryDocs.length > 0) && (
+                                  {requiredDocs.length > 0 && (
                                     <div className="flex items-start gap-1.5">
                                       <FiFileText className="text-navy-500 shrink-0 mt-0.5" />
                                       <div className="flex flex-wrap gap-2">
                                         <span className="font-semibold text-slate-700 mr-1">Required Docs:</span>
-                                        {[...categoryDocs, ...subcategoryDocs].map((d, i) => (
-                                          <span key={i} className="inline-flex items-center gap-1 text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
-                                            <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {d.document_name}
+                                        {requiredDocs.map((name) => (
+                                          <span key={name} className="inline-flex items-center gap-1 text-slate-600 bg-white px-2 py-0.5 rounded border border-slate-200">
+                                            <FiCheckCircle className="text-emerald-500 w-3 h-3" /> {name}
                                           </span>
                                         ))}
                                       </div>
@@ -2400,10 +2442,10 @@ const ServiceEntry = () => {
                                 className="mentions-input text-sm"
                                 placeholder="Write an internal note... Type @ to assign staff members"
                                 style={{
-                                  control: { backgroundColor: '#fff', border: '1px solid #e2e8f0', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
+                                  control: { backgroundColor: 'var(--ui-card, #fff)', border: '1px solid var(--ui-line, #e2e8f0)', borderRadius: '0.5rem', minHeight: '60px', overflow: 'hidden' },
                                   highlighter: { padding: '0.65rem', boxSizing: 'border-box', margin: 0, lineHeight: 1.5 },
                                   input: { padding: '0.65rem', border: 'none', outline: 'none', boxSizing: 'border-box', height: '100%', margin: 0, lineHeight: 1.5 },
-                                  suggestions: { list: { backgroundColor: 'white', border: '1px solid #e2e8f0', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid #f1f5f9' } }
+                                  suggestions: { list: { backgroundColor: 'var(--ui-card, white)', border: '1px solid var(--ui-line, #e2e8f0)', zIndex: 100, borderRadius: '0.5rem' }, item: { padding: '5px 10px', borderBottom: '1px solid var(--ui-line, #f1f5f9)' } }
                                 }}
                               >
                                 <Mention trigger="@" data={fetchStaffSuggestions} markup="@[__display__](__id__)" displayTransform={(id, d) => `@${d}`}

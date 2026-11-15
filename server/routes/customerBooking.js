@@ -1,14 +1,95 @@
 import express from "express";
 import pool from "../db.js";
-import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import { customerAuthMiddleware, requireCustomerCentre } from "../middlewares/customerAuthMiddleware.js";
+import { bookingInCentreSql, linkCustomerToCentre } from "../utils/customerCentres.js";
 import { todayIST, addDays } from "../utils/dates.js";
+import { getSetting } from "../utils/orgSettings.js";
+import { notifyNewBooking } from "../utils/bookingNotifications.js";
 
 const router = express.Router();
+
+// Fees aren't shown to customers (they pay at the centre) until the
+// organization turns on "show_customer_fees" (e.g. once online payment exists).
+// Every reply from these routes then has its price fields removed, and
+// "₹123" amounts are taken out of text such as timeline entries.
+const FEE_KEYS = new Set([
+  "department_charges", "service_charges", "total_charges",
+  "sub_department_charges", "sub_service_charges",
+  "department_charge", "service_charge",
+  "charges", "amount", "total_paid", "paid_amount", "pending_amount", "balance_amount",
+]);
+function stripFees(value) {
+  if (Array.isArray(value)) return value.map(stripFees);
+  if (value instanceof Date) return value;
+  if (value && typeof value === "object") {
+    const out = {};
+    for (const [key, v] of Object.entries(value)) {
+      if (!FEE_KEYS.has(key)) out[key] = stripFees(v);
+    }
+    return out;
+  }
+  if (typeof value === "string" && value.includes("₹")) {
+    return value.replace(/\s*(?:of\s+)?₹\s?[\d,]+(?:\.\d+)?/g, "").replace(/\s+([.,])/g, "$1");
+  }
+  return value;
+}
+// Signed-in customer; in the per-centre portal they must have chosen their
+// centre, and a booking (/:id) must belong to it.
+const bookingInScope = async (req, res, next) => {
+  const centreId = req.customer?.centreId;
+  const id = Number(req.params?.id);
+  if (!centreId || !id) return next();
+  try {
+    const { rows } = await pool.query(
+      `SELECT 1 FROM customer_services cs WHERE cs.id = $1 AND cs.customer_id = $2 AND ${bookingInCentreSql("cs", 3)}`,
+      [id, req.customer.id, centreId]
+    );
+    if (!rows[0]) return res.status(404).json({ message: "Application not found" });
+    next();
+  } catch (err) {
+    next(err);
+  }
+};
+const customerAuth = [customerAuthMiddleware, requireCustomerCentre, bookingInScope];
+
+router.use(async (req, res, next) => {
+  try {
+    if ((await getSetting("show_customer_fees")) === true) return next();
+  } catch {
+    /* setting unavailable: keep fees hidden */
+  }
+  const json = res.json.bind(res);
+  res.json = (body) => json(stripFees(body));
+  next();
+});
+
+// Required-document labels can change (a rename, a merge, the switch to
+// document types), but a booking keeps the names the customer ticked. Find
+// the required document a ticked name means: the same label, the same name
+// ignoring case/spaces, the document type's name, or the name before its note.
+const nameKey = (s) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+function matchRequired(name, requiredRows) {
+  const k = nameKey(name);
+  const base = nameKey(String(name || "").split(/\s*\(|\s+-\s+/)[0]);
+  return (
+    requiredRows.find((r) => r.document_name === name) ||
+    requiredRows.find((r) => nameKey(r.document_name) === k) ||
+    requiredRows.find((r) => r.type_name && nameKey(r.type_name) === k) ||
+    requiredRows.find((r) => r.type_name && nameKey(r.type_name) === base) ||
+    // "Aadhaar Card with Mobile Number Linked" after a merge: the type's name
+    // first, then the line whose note is in the old name.
+    requiredRows.find(
+      (r) => r.type_name && r.note && k.startsWith(nameKey(r.type_name)) && k.includes(nameKey(r.note))
+    ) ||
+    requiredRows.find((r) => r.type_name && !r.note && k.startsWith(nameKey(r.type_name))) ||
+    null
+  );
+}
 
 /* ======================================================
    GET ALL AVAILABLE SERVICES (for customer to apply)
 ====================================================== */
-router.get("/available", customerAuthMiddleware, async (req, res) => {
+router.get("/available", customerAuth, async (req, res) => {
   try {
     // 1. Fetch services
     const servicesResult = await pool.query(`
@@ -108,7 +189,7 @@ router.get("/available", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET CUSTOMER'S APPLIED SERVICES
 ====================================================== */
-router.get("/", customerAuthMiddleware, async (req, res) => {
+router.get("/", customerAuth, async (req, res) => {
   const customerId = req.customer.id;
   const { status } = req.query;
 
@@ -149,19 +230,35 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
         st.email as tracking_email,
         st.updated_at as tracking_updated,
         st.notes as tracking_notes,
-        st.priority as tracking_priority
+        st.priority as tracking_priority,
+
+        -- Centre the customer booked with, and the centre handling it
+        cs.requested_centre_id,
+        rc.name as requested_centre_name,
+        hc.name as handling_centre_name
         
       FROM customer_services cs
       LEFT JOIN services s ON cs.service_id = s.id
       LEFT JOIN subcategories sc ON cs.subcategory_id = sc.id
+      -- tracking of the service entry made from this booking (service_tracking.service_entry_id
+      -- is a service entry id, not a booking id), or one with the same application number
+      LEFT JOIN service_entries se ON se.customer_service_id = cs.id
       LEFT JOIN service_tracking st ON 
         st.application_number = cs.application_number 
-        OR st.service_entry_id = cs.id
+        OR st.service_entry_id = se.id
       LEFT JOIN staff ON st.assigned_to = staff.id
+      LEFT JOIN centres rc ON rc.id = cs.requested_centre_id
+      LEFT JOIN centres hc ON hc.id = cs.handling_centre_id
       WHERE cs.customer_id = $1
     `;
     
     const params = [customerId];
+
+    // Per-centre portal: only this centre's applications.
+    if (req.customer.centreId) {
+      params.push(req.customer.centreId);
+      query += ` AND ${bookingInCentreSql("cs", params.length)}`;
+    }
     
     // Add status filter if provided
     if (status && status !== 'all') {
@@ -247,6 +344,9 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
       
       return {
         id: service.id,
+        requested_centre_id: service.requested_centre_id,
+        requested_centre_name: service.requested_centre_name || null,
+        handling_centre_name: service.handling_centre_name || null,
         service_name: service.service_name || serviceData.service_name || "Unknown Service",
         status: finalStatus,
         status_label: statusLabels[finalStatus] || finalStatus,
@@ -288,9 +388,64 @@ router.get("/", customerAuthMiddleware, async (req, res) => {
 });
 
 /* ======================================================
+   WALK-IN APPLICATIONS ("At the centre")
+   GET /api/customer/bookings/walk-ins
+   Service entries staff made at a centre for this customer (matched by the
+   Aadhaar on the entry). Per-centre portal: only the centre they're at.
+   Entries made from an online booking are left out (they show as bookings).
+====================================================== */
+router.get("/walk-ins", customerAuth, async (req, res) => {
+  try {
+    const params = [req.customer.id];
+    let centreFilter = "";
+    if (req.customer.centreId) {
+      params.push(req.customer.centreId);
+      centreFilter = `AND sf.centre_id = $${params.length}`;
+    }
+    const { rows } = await pool.query(
+      `SELECT DISTINCT ON (se.id)
+              se.id, se.created_at,
+              s.name AS service_name, sc.name AS subcategory_name,
+              st.application_number, st.status AS tracking_status, st.current_step, st.updated_at,
+              c.id AS centre_id, c.name AS centre_name
+         FROM service_entries se
+         JOIN staff sf ON sf.id = se.staff_id
+         LEFT JOIN centres c ON c.id = sf.centre_id
+         LEFT JOIN services s ON s.id = se.category_id
+         LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+         LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+        WHERE se.customer_id = $1
+          AND se.customer_service_id IS NULL
+          ${centreFilter}
+        ORDER BY se.id DESC, st.id DESC`,
+      params
+    );
+    rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        service_name: r.service_name || "Service",
+        subcategory_name: r.subcategory_name,
+        application_number: r.application_number || `APP${r.id}`,
+        status: r.tracking_status || "pending",
+        current_step: r.current_step,
+        centre: r.centre_id ? { id: r.centre_id, name: r.centre_name } : null,
+        created_at: r.created_at,
+        updated_at: r.updated_at || r.created_at,
+      })),
+    });
+  } catch (err) {
+    if (err.code === "42703") return res.json({ success: true, data: [] }); // migration not applied yet
+    console.error("walk-ins error:", err);
+    res.status(500).json({ success: false, message: "Failed to load your applications at the centre" });
+  }
+});
+
+/* ======================================================
    GET SINGLE SERVICE APPLICATION
 ====================================================== */
-router.get("/:id", customerAuthMiddleware, async (req, res) => {
+router.get("/:id", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
 
@@ -314,14 +469,20 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
         st.aadhaar as tracking_aadhaar,
         st.email as tracking_email,
         st.notes as tracking_notes,
-        st.application_number as tracking_application_number
+        st.application_number as tracking_application_number,
+        handler.id as handled_by_id,
+        handler.name as handled_by_name
       FROM customer_services cs
       LEFT JOIN services s ON cs.service_id = s.id
       LEFT JOIN subcategories sc ON cs.subcategory_id = sc.id
+      -- the tracking of the service entry made from this booking (service_tracking.service_entry_id
+      -- is a service entry id, not a booking id), or one with the same application number
+      LEFT JOIN service_entries se ON se.customer_service_id = cs.id
       LEFT JOIN service_tracking st ON 
         st.application_number = cs.application_number 
-        OR st.service_entry_id = cs.id
+        OR st.service_entry_id = se.id
       LEFT JOIN staff ON st.assigned_to = staff.id
+      LEFT JOIN staff handler ON handler.id = cs.assigned_staff_id
       WHERE cs.id = $1 AND cs.customer_id = $2
       ORDER BY st.updated_at DESC NULLS LAST
       LIMIT 1
@@ -424,6 +585,8 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
     
     res.json({
       ...serviceWithoutData,
+      // the staff member who took this booking (the customer can message them)
+      handled_by: service.handled_by_id ? { id: service.handled_by_id, name: service.handled_by_name } : null,
       service_data: mergedServiceData,
       payments: paymentsResult.rows,
       documents: documentsResult.rows,
@@ -448,14 +611,15 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    CREATE NEW SERVICE APPLICATION (DRAFT)
 ====================================================== */
-router.post("/apply", customerAuthMiddleware, async (req, res) => {
+router.post("/apply", customerAuth, async (req, res) => {
   const customerId = req.customer.id;
   const {
     service_id,
     subcategory_id,
     household_id,
     service_data,
-    selected_documents = []
+    selected_documents = [],
+    requested_centre_id = null // centre the customer chose (or its link/QR); null = any centre
   } = req.body;
 
   const client = await pool.connect();
@@ -486,6 +650,17 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
     }
 
     const service = serviceResult.rows[0];
+
+    // Centre the customer booked with (must be one of this organization's centres).
+    // Per-centre portal: always the centre they signed in at.
+    let requestedCentreId = null;
+    if (req.customer.centreId) {
+      requestedCentreId = req.customer.centreId;
+    } else if (requested_centre_id) {
+      const centreRes = await client.query(`SELECT id FROM centres WHERE id = $1`, [requested_centre_id]);
+      if (centreRes.rows.length === 0) throw new Error("Selected centre not found");
+      requestedCentreId = centreRes.rows[0].id;
+    }
     
     // 2. Get required documents for this service
     let requiredDocs = [];
@@ -493,12 +668,14 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
       const requiredDocsQuery = `
         SELECT 
           rd.document_name,
+          rd.document_type_id,
+          rd.note,
           dm.scope,
           dm.requires_number,
           dm.requires_expiry,
           dm.creates_household
         FROM required_documents rd
-        LEFT JOIN document_master dm ON rd.document_name = dm.name
+        LEFT JOIN document_master dm ON dm.id = rd.document_type_id
         WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
            OR (rd.sub_category_id = $2)
       `;
@@ -577,8 +754,9 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
         last_updated,
         service_data,
         estimated_completion,
-        remarks
-      ) VALUES ($1, $2, $3, $4, $5, 'draft', NOW(), NOW(), $6, $7, $8)
+        remarks,
+        requested_centre_id
+      ) VALUES ($1, $2, $3, $4, $5, 'draft', NOW(), NOW(), $6, $7, $8, $9)
       RETURNING id, application_number
       `,
       [
@@ -603,7 +781,8 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
         service.has_expiry 
           ? addDays(todayIST(), 30)
           : null,
-        "Draft application created by customer"
+        "Draft application created by customer",
+        requestedCentreId
       ]
     );
 
@@ -630,6 +809,8 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
     );
 
     await client.query("COMMIT");
+    // remember the centre for this customer (used when the portal is per-centre)
+    await linkCustomerToCentre(customerId, requestedCentreId, "booking").catch((e) => console.error("link customer to centre:", e.message));
 
     res.status(201).json({
       success: true,
@@ -685,7 +866,7 @@ router.post("/apply", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    UPDATE SERVICE APPLICATION (Submit documents, make payment, etc.)
 ====================================================== */
-router.put("/:id", customerAuthMiddleware, async (req, res) => {
+router.put("/:id", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const {
@@ -833,125 +1014,94 @@ router.put("/:id", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET REQUIRED DOCUMENTS FOR SERVICE APPLICATION
 ====================================================== */
-router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) => {
-  const { id } = req.params;
-  const customerId = req.customer.id;
+// The booking (with service name) and each required document with what the
+// customer has uploaded for it, matched by document type.
+//   state: "uploaded"  approved upload
+//          "pending"   uploaded, waiting for the centre to check
+//          "rejected"  uploaded but rejected (needs a new one)
+//          "missing"   not uploaded (bring it to the centre, or upload later)
+async function bookingDocuments(db, bookingId, customerId) {
+  const { rows: [booking] } = await db.query(
+    `SELECT cs.*, s.name AS service_name
+       FROM customer_services cs
+       LEFT JOIN services s ON cs.service_id = s.id
+      WHERE cs.id = $1 AND cs.customer_id = $2`,
+    [bookingId, customerId]
+  );
+  if (!booking) return null;
 
+  const { rows: required } = await db.query(
+    `SELECT rd.document_name, rd.document_type_id, rd.note,
+            dm.name AS type_name, dm.scope, dm.requires_number, dm.requires_expiry, dm.creates_household
+       FROM required_documents rd
+       LEFT JOIN document_master dm ON dm.id = rd.document_type_id
+      WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL) OR rd.sub_category_id = $2
+      ORDER BY rd.id`,
+    [booking.service_id, booking.subcategory_id]
+  );
+
+  const typeIds = [...new Set(required.map((r) => r.document_type_id).filter(Boolean))];
+  const { rows: uploads } = typeIds.length
+    ? await db.query(
+        `SELECT document_name, document_type_id, status, version, is_latest, expiry_date, created_at, review_remarks
+           FROM customer_documents
+          WHERE customer_id = $1 AND is_latest = true AND document_type_id = ANY($2::int[])
+          ORDER BY (status = 'approved') DESC, created_at DESC`,
+        [customerId, typeIds]
+      )
+    : { rows: [] };
+
+  let serviceData = {};
   try {
-    // 1. Get service application
-    const serviceResult = await pool.query(
-      `
-      SELECT cs.*, s.name as service_name
-      FROM customer_services cs
-      LEFT JOIN services s ON cs.service_id = s.id
-      WHERE cs.id = $1 AND cs.customer_id = $2
-      `,
-      [id, customerId]
-    );
+    serviceData = typeof booking.service_data === "string" ? JSON.parse(booking.service_data) : booking.service_data || {};
+  } catch {
+    serviceData = {};
+  }
+  const selected = Array.isArray(serviceData.selected_documents) ? serviceData.selected_documents : [];
 
-    if (serviceResult.rows.length === 0) {
-      return res.status(404).json({ message: "Service application not found" });
-    }
+  const documents = required.map((doc) => {
+    const upload = uploads.find((u) => u.document_type_id === doc.document_type_id);
+    const state = !upload ? "missing" : upload.status === "approved" ? "uploaded" : upload.status === "rejected" ? "rejected" : "pending";
+    return {
+      document_name: doc.document_name,
+      document_type_id: doc.document_type_id,
+      type_name: doc.type_name,
+      note: doc.note,
+      scope: doc.scope,
+      requires_number: doc.requires_number,
+      requires_expiry: doc.requires_expiry,
+      creates_household: doc.creates_household,
+      state,
+      status: upload?.status || "not_uploaded",
+      is_available: upload?.status === "approved",
+      is_latest: upload?.is_latest || false,
+      version: upload?.version || 0,
+      expiry_date: upload?.expiry_date,
+      uploaded_at: upload?.created_at,
+      review_remarks: upload?.review_remarks,
+      is_selected: selected.some((name) => matchRequired(typeof name === "string" ? name : name?.document_name, required) === doc),
+      can_be_selected: upload?.status === "approved",
+    };
+  });
+  return { booking, serviceData, documents };
+}
 
-    const service = serviceResult.rows[0];
-    
-    // 2. Get required documents for this service
-    const requiredDocsQuery = `
-      SELECT 
-        rd.document_name,
-        dm.scope,
-        dm.requires_number,
-        dm.requires_expiry,
-        dm.creates_household
-      FROM required_documents rd
-      LEFT JOIN document_master dm ON rd.document_name = dm.name
-      WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
-         OR (rd.sub_category_id = $2)
-      ORDER BY rd.document_name
-    `;
-    
-    const requiredDocsResult = await pool.query(
-      requiredDocsQuery,
-      [service.service_id, service.subcategory_id]
-    );
-
-    const requiredDocuments = requiredDocsResult.rows;
-
-    // 3. Get customer's uploaded documents
-    const customerDocsQuery = `
-      SELECT 
-        document_name,
-        status,
-        version,
-        is_latest,
-        expiry_date,
-        created_at,
-        review_remarks
-      FROM customer_documents
-      WHERE customer_id = $1 
-        AND is_latest = true
-        AND document_name IN (
-          SELECT document_name FROM required_documents 
-          WHERE (service_id = $2 AND sub_category_id IS NULL)
-             OR (sub_category_id = $3)
-        )
-      ORDER BY document_name
-    `;
-    
-    const customerDocsResult = await pool.query(
-      customerDocsQuery,
-      [customerId, service.service_id, service.subcategory_id]
-    );
-
-    const customerDocuments = customerDocsResult.rows;
-
-    // 4. Parse service_data to get selected documents
-    let serviceData = {};
-    let selectedDocuments = [];
-    try {
-      serviceData = service.service_data ? 
-        (typeof service.service_data === 'string' ? 
-          JSON.parse(service.service_data) : 
-          service.service_data) : {};
-      selectedDocuments = serviceData.selected_documents || [];
-    } catch (e) {
-      console.error("Error parsing service_data:", e);
-    }
-
-    // 5. Combine data
-    const documentStatus = requiredDocuments.map(doc => {
-      const customerDoc = customerDocuments.find(cd => cd.document_name === doc.document_name);
-      const isSelected = selectedDocuments.includes(doc.document_name);
-      
-      return {
-        document_name: doc.document_name,
-        scope: doc.scope,
-        requires_number: doc.requires_number,
-        requires_expiry: doc.requires_expiry,
-        creates_household: doc.creates_household,
-        status: customerDoc?.status || 'not_uploaded',
-        is_available: customerDoc?.status === 'approved',
-        is_latest: customerDoc?.is_latest || false,
-        version: customerDoc?.version || 0,
-        expiry_date: customerDoc?.expiry_date,
-        uploaded_at: customerDoc?.created_at,
-        review_remarks: customerDoc?.review_remarks,
-        is_selected: isSelected,
-        can_be_selected: customerDoc?.status === 'approved'
-      };
-    });
-
+router.get("/:id/required-documents", customerAuth, async (req, res) => {
+  try {
+    const result = await bookingDocuments(pool, req.params.id, req.customer.id);
+    if (!result) return res.status(404).json({ message: "Service application not found" });
+    const { booking, documents } = result;
     res.json({
-      service_id: service.service_id,
-      service_name: service.service_name,
-      application_number: service.application_number,
-      status: service.status,
-      required_documents: documentStatus,
-      total_required: requiredDocuments.length,
-      available_count: documentStatus.filter(d => d.is_available).length,
-      selected_count: selectedDocuments.length
+      service_id: booking.service_id,
+      service_name: booking.service_name,
+      application_number: booking.application_number,
+      status: booking.status,
+      required_documents: documents,
+      total_required: documents.length,
+      available_count: documents.filter((d) => d.is_available).length,
+      provided_count: documents.filter((d) => d.state === "uploaded" || d.state === "pending").length,
+      selected_count: documents.filter((d) => d.is_selected).length,
     });
-
   } catch (err) {
     console.error("Error fetching required documents:", err);
     res.status(500).json({ message: "Failed to fetch required documents" });
@@ -959,9 +1109,87 @@ router.get("/:id/required-documents", customerAuthMiddleware, async (req, res) =
 });
 
 /* ======================================================
+   SUBMIT A BOOKING
+   Documents are optional: whatever the customer has uploaded is attached,
+   the rest is listed for the centre to collect. Fees are paid at the centre.
+====================================================== */
+const SUBMITTABLE = ["draft", "pending_documents", "action_required"];
+
+router.put("/:id/submit", customerAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await bookingDocuments(client, req.params.id, req.customer.id);
+    if (!result) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Service application not found" });
+    }
+    const { booking, serviceData, documents } = result;
+    if (!SUBMITTABLE.includes(booking.status)) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "This application has already been submitted" });
+    }
+
+    const provided = documents.filter((d) => d.state === "uploaded" || d.state === "pending");
+    const missing = documents.filter((d) => d.state === "missing" || d.state === "rejected");
+    const updated = {
+      ...serviceData,
+      selected_documents: provided.map((d) => d.document_name),
+      missing_documents: missing.map((d) => d.document_name),
+      payment: { ...(serviceData.payment || {}), payment_method: "pay_at_centre", payment_status: "pending" },
+      submitted_at: new Date().toISOString(),
+    };
+    const remarks = missing.length
+      ? `Submitted. ${missing.length} document(s) to collect: ${missing.map((d) => d.document_name).join(", ")}. Fees paid at the centre.`
+      : "Submitted with all documents. Fees paid at the centre.";
+
+    await client.query(
+      `UPDATE customer_services
+          SET service_data = $1, status = 'under_review', remarks = $2, last_updated = NOW()
+        WHERE id = $3 AND customer_id = $4`,
+      [JSON.stringify(updated), remarks, booking.id, req.customer.id]
+    );
+    await client.query(
+      `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+       VALUES ('Application Submitted', $1, $2, $3, NOW())`,
+      [`customer:${req.customer.id}`, `Application ${booking.application_number} submitted. ${remarks}`, booking.requested_centre_id || null]
+    );
+    await client.query("COMMIT");
+
+    // First submit of a new booking: tell the centre (or every centre if booked for any)
+    if (booking.status === "draft") {
+      notifyNewBooking({
+        bookingId: booking.id,
+        customerId: req.customer.id,
+        centreId: booking.requested_centre_id || null,
+        serviceName: booking.service_name || serviceData.service_name,
+        applicationNumber: booking.application_number,
+        missingDocuments: updated.missing_documents,
+      });
+    }
+
+    res.json({
+      success: true,
+      status: "under_review",
+      application_number: booking.application_number,
+      missing_documents: updated.missing_documents,
+      message: missing.length
+        ? "Application submitted. Please bring the remaining documents to the centre, or upload them later."
+        : "Application submitted. The centre will contact you.",
+    });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Error submitting application:", err);
+    res.status(500).json({ message: "Couldn't submit the application. Please try again." });
+  } finally {
+    client.release();
+  }
+});
+
+/* ======================================================
    UPDATE SELECTED DOCUMENTS FOR SERVICE APPLICATION
 ====================================================== */
-router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => {
+router.put("/:id/select-documents", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const { selected_documents } = req.body;
@@ -1005,10 +1233,11 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
 
     // 3. Get required documents to validate selection
     const requiredDocsQuery = `
-      SELECT document_name
-      FROM required_documents
-      WHERE (service_id = $1 AND sub_category_id IS NULL)
-         OR (sub_category_id = $2)
+      SELECT rd.document_name, rd.document_type_id, rd.note, dm.name AS type_name
+      FROM required_documents rd
+      LEFT JOIN document_master dm ON dm.id = rd.document_type_id
+      WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL)
+         OR (rd.sub_category_id = $2)
     `;
     
     const requiredDocsResult = await client.query(
@@ -1019,28 +1248,28 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
     const requiredDocumentNames = requiredDocsResult.rows.map(row => row.document_name);
     
     // Validate that all selected documents are in required documents
-    const invalidDocuments = selected_documents.filter(doc => !requiredDocumentNames.includes(doc));
+    const invalidDocuments = selected_documents.filter(doc => !matchRequired(doc, requiredDocsResult.rows));
     if (invalidDocuments.length > 0) {
       throw new Error(`Invalid document selection: ${invalidDocuments.join(', ')}`);
     }
 
     // 4. Check if selected documents are available (approved and latest)
-    const availableDocsQuery = `
-      SELECT document_name
+    // Selected documents are the required documents' labels; match by type.
+    const typeOfLabel = new Map(selected_documents.map(doc => [doc, matchRequired(doc, requiredDocsResult.rows)?.document_type_id]));
+    const availableDocsResult = await client.query(
+      `
+      SELECT DISTINCT document_type_id
       FROM customer_documents
       WHERE customer_id = $1 
-        AND document_name = ANY($2)
+        AND document_type_id = ANY($2::int[])
         AND is_latest = true
         AND status = 'approved'
-    `;
-    
-    const availableDocsResult = await client.query(
-      availableDocsQuery,
-      [customerId, selected_documents]
+      `,
+      [customerId, selected_documents.map(doc => typeOfLabel.get(doc)).filter(Boolean)]
     );
     
-    const availableDocumentNames = availableDocsResult.rows.map(row => row.document_name);
-    const unavailableDocuments = selected_documents.filter(doc => !availableDocumentNames.includes(doc));
+    const availableTypes = new Set(availableDocsResult.rows.map(row => row.document_type_id));
+    const unavailableDocuments = selected_documents.filter(doc => !availableTypes.has(typeOfLabel.get(doc)));
     
     if (unavailableDocuments.length > 0) {
       // If some documents are not available, we can still save the selection
@@ -1051,7 +1280,8 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
     // 5. Update service_data with selected documents
     const updatedServiceData = {
       ...currentServiceData,
-      selected_documents: selected_documents
+      // saved under the current labels
+      selected_documents: selected_documents.map(doc => matchRequired(doc, requiredDocsResult.rows)?.document_name || doc)
     };
 
     // 6. Determine new status based on document availability
@@ -1127,7 +1357,7 @@ router.put("/:id/select-documents", customerAuthMiddleware, async (req, res) => 
 /* ======================================================
    UPLOAD DOCUMENTS FOR SERVICE APPLICATION
 ====================================================== */
-router.post("/:id/documents", customerAuthMiddleware, async (req, res) => {
+router.post("/:id/documents", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const { documents } = req.body; // Array of {document_name, document_type, file_hash, etc.}
@@ -1158,9 +1388,21 @@ router.post("/:id/documents", customerAuthMiddleware, async (req, res) => {
 
     const service = serviceResult.rows[0];
 
+    // Required documents of this application, to link each upload to its type.
+    const { rows: requiredRows } = await client.query(
+      `SELECT rd.document_name, rd.document_type_id, dm.name AS type_name
+         FROM required_documents rd
+         LEFT JOIN document_master dm ON dm.id = rd.document_type_id
+        WHERE (rd.service_id = $1 AND rd.sub_category_id IS NULL) OR rd.sub_category_id = $2`,
+      [service.service_id, service.subcategory_id]
+    );
+
     // 2. Process each document
     const uploadedDocs = [];
     for (const doc of documents) {
+      // Store uploads under the type's name ("Aadhaar Card", not "Aadhaar Card (Nominee)").
+      const required = requiredRows.find(r => r.document_name === doc.document_name);
+      if (required?.type_name) doc.document_name = required.type_name;
       // Check if document already exists for this service
       const existingDoc = await client.query(
         `
@@ -1301,7 +1543,7 @@ router.post("/:id/documents", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    GET SERVICE APPLICATION TIMELINE
 ====================================================== */
-router.get("/:id/timeline", customerAuthMiddleware, async (req, res) => {
+router.get("/:id/timeline", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
 
@@ -1564,7 +1806,7 @@ router.get("/:id/timeline", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    CANCEL SERVICE APPLICATION
 ====================================================== */
-router.delete("/:id", customerAuthMiddleware, async (req, res) => {
+router.delete("/:id", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
 
@@ -1659,7 +1901,7 @@ router.delete("/:id", customerAuthMiddleware, async (req, res) => {
 /* ======================================================
    SUBMIT SERVICE APPLICATION (PAYMENT PENDING)
 ====================================================== */
-router.put("/:id/payment", customerAuthMiddleware, async (req, res) => {
+router.put("/:id/payment", customerAuth, async (req, res) => {
   const { id } = req.params;
   const customerId = req.customer.id;
   const {

@@ -6,9 +6,17 @@ import {
 } from 'react-icons/fi';
 import axios from 'axios';
 import { toast } from 'react-toastify';
+import { getCustomerCentre, getPreferredCentreId, setPreferredCentreId, usePortalCentres } from '@/tenancy/centres';
 
 const ApplyForService = ({ onSuccess, onCancel }) => {
   const [step, setStep] = useState(1);
+  // Centre the customer books with ("" = any centre). Pre-selected from the centre's link/QR.
+  const { centres } = usePortalCentres();
+  // Each centre has its own portal: the booking goes to the centre they're signed in at.
+  const ownCentre = getCustomerCentre();
+  const perCentre = ownCentre.mode === 'per_centre';
+  const [centreId, setCentreId] = useState(perCentre && ownCentre.id ? ownCentre.id : getPreferredCentreId());
+  const centreChoice = centres.some((c) => String(c.id) === String(centreId)) ? String(centreId) : '';
   const [services, setServices] = useState([]);
   const [filteredServices, setFilteredServices] = useState([]);
   const [selectedService, setSelectedService] = useState(null);
@@ -109,8 +117,10 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
         },
         selected_documents: finalDocuments.map(doc => ({
           document_name: doc.document_name
-        }))
+        })),
+        requested_centre_id: centreChoice ? Number(centreChoice) : null
       };
+      setPreferredCentreId(centreChoice); // remember for next time
 
       // Use the correct endpoint from customerBooking.js
       const response = await API.post('/api/customer/bookings/apply', serviceData);
@@ -123,7 +133,7 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
           toast.info(response.data.next_steps);
         }
         
-        onSuccess(); // Call parent callback
+        onSuccess(response.data); // parent opens the new application
       } else {
         toast.error(response.data.message || 'Failed to create service application');
       }
@@ -157,7 +167,10 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
   ];
 
   // Format currency
+  // Fees are hidden from customers (paid at the centre) unless the
+  // organization shows them; then the server leaves the amounts in.
   const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) return 'Paid at the centre';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -355,9 +368,11 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
                 <div className="text-lg font-semibold text-slate-900">
                   {formatCurrency(selectedService.total_charges)}
                 </div>
-                <div className="text-sm text-slate-500">
-                  Base service fee
-                </div>
+                {selectedService.total_charges != null && (
+                  <div className="text-sm text-slate-500">
+                    Base service fee
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -391,7 +406,7 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
                     <div className="text-xl font-bold text-navy-700">
                       {formatCurrency(subcategory.total_charges)}
                     </div>
-                    <div className="text-sm text-slate-500">Total fee</div>
+                    {subcategory.total_charges != null && <div className="text-sm text-slate-500">Total fee</div>}
                   </div>
                 </div>
               </button>
@@ -554,6 +569,36 @@ const ApplyForService = ({ onSuccess, onCancel }) => {
               </div>
             )}
           </div>
+
+          {/* Centre to book with */}
+          {perCentre && (ownCentre.name || centres[0]) && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+              <p className="font-semibold text-slate-800">Centre</p>
+              <p className="mt-1 text-sm text-slate-600">
+                This application goes to <span className="font-medium text-slate-900">{ownCentre.name || centres[0]?.name}</span>.
+              </p>
+            </div>
+          )}
+          {!perCentre && centres.length > 0 && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5">
+              <label htmlFor="booking-centre" className="block font-semibold text-slate-800 mb-1">Centre</label>
+              <p className="text-sm text-slate-500 mb-3">Choose the centre that should handle this service.</p>
+              <select
+                id="booking-centre"
+                value={centreChoice}
+                onChange={(e) => setCentreId(e.target.value)}
+                disabled={isSubmitting}
+                className="w-full min-h-[44px] rounded-xl border border-slate-300 bg-white px-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
+              >
+                <option value="">Any centre</option>
+                {centres.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}{c.district ? ` · ${c.district}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex flex-col-reverse gap-3 border-t border-slate-200 pt-6 sm:flex-row sm:items-center sm:justify-between">

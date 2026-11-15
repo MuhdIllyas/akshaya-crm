@@ -18,15 +18,22 @@ const getViewMode = () => {
   try { return localStorage.getItem("centre-view-mode") || "card"; } catch { return "card"; }
 };
 
-const WaBadge = ({ on }) => (
-  <span
-    className={`shrink-0 inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${
-      on ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-slate-100 text-slate-500 border-slate-200"
-    }`}
-  >
-    {on ? "WhatsApp on" : "System only"}
-  </span>
-);
+// state: "on" (number assigned and switched on), "off" (assigned but the
+// account is switched off in Communication Settings), or "none".
+const WA_BADGE = {
+  on: ["WhatsApp on", "bg-emerald-50 text-emerald-700 border-emerald-200"],
+  off: ["Number switched off", "bg-amber-50 text-amber-700 border-amber-200"],
+  none: ["System only", "bg-slate-100 text-slate-500 border-slate-200"],
+};
+
+const WaBadge = ({ state }) => {
+  const [text, cls] = WA_BADGE[state] || WA_BADGE.none;
+  return (
+    <span className={`shrink-0 inline-flex items-center text-xs font-medium px-2 py-0.5 rounded-full border ${cls}`}>
+      {text}
+    </span>
+  );
+};
 
 const CentreManagement = () => {
   const [centres, setCentres] = useState([]);
@@ -47,9 +54,18 @@ const CentreManagement = () => {
     try { localStorage.setItem("centre-view-mode", mode); } catch {}
   };
 
+  // WhatsApp only counts as on when the centre's account is switched on
+  // (the same rule the customer portal and Online Bookings use).
+  const whatsappState = (c) => {
+    if (!c.communication_account_id) return "none";
+    const acc = availableCommAccounts.find((a) => String(a.id) === String(c.communication_account_id));
+    if (!acc) return availableCommAccounts.length ? "off" : "on"; // accounts not loaded yet: trust the assignment
+    return acc.is_active ? "on" : "off";
+  };
+
   const visibleCentres = centres.filter((c) => {
     if (filterMode === "no_admin" && c.admin_name) return false;
-    if (filterMode === "no_whatsapp" && c.communication_account_id) return false;
+    if (filterMode === "no_whatsapp" && whatsappState(c) === "on") return false;
     const q = searchTerm.trim().toLowerCase();
     if (!q) return true;
     return [c.name, c.admin_name, c.created_by_name, c.district, c.phone].some((f) => String(f || "").toLowerCase().includes(q));
@@ -638,7 +654,7 @@ const CentreManagement = () => {
             { label: "Total centres", value: centres.length, icon: FiHome, tone: "bg-slate-100 text-navy-700" },
             { label: "With admin", value: centres.filter((c) => c.admin_name).length, icon: FiUserCheck, tone: "bg-emerald-50 text-emerald-600" },
             { label: "No admin", value: centres.filter((c) => !c.admin_name).length, icon: FiAlertCircle, tone: "bg-amber-50 text-amber-600" },
-            { label: "WhatsApp connected", value: centres.filter((c) => c.communication_account_id).length, icon: FiMessageCircle, tone: "bg-slate-100 text-navy-700" },
+            { label: "WhatsApp connected", value: centres.filter((c) => whatsappState(c) === "on").length, icon: FiMessageCircle, tone: "bg-slate-100 text-navy-700" },
           ].map(({ label, value, icon: Icon, tone }) => (
             <div key={label} className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex items-center justify-between">
               <div>
@@ -775,7 +791,7 @@ const CentreManagement = () => {
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{centre.phone || "—"}</td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{centre.working_hours || "—"}</td>
-                      <td className="px-5 py-3.5 whitespace-nowrap"><WaBadge on={!!centre.communication_account_id} /></td>
+                      <td className="px-5 py-3.5 whitespace-nowrap"><WaBadge state={whatsappState(centre)} /></td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-sm text-slate-600">{centre.created_by_name || centre.created_by}</td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-right">
                         <CentreActions centre={centre} />
@@ -800,7 +816,7 @@ const CentreManagement = () => {
                       </p>
                     </div>
                     {centre.admin_name ? (
-                      <WaBadge on={!!centre.communication_account_id} />
+                      <WaBadge state={whatsappState(centre)} />
                     ) : (
                       <span className="shrink-0 text-xs font-medium px-2 py-0.5 rounded-full border bg-amber-50 text-amber-700 border-amber-200">No admin</span>
                     )}

@@ -5,7 +5,8 @@ const IST = { timeZone: 'Asia/Kolkata'};
 // ==========================================
 // EXCEL GENERATOR
 // ==========================================
-export const buildExcel = async (reportData, reportIds) => {
+// One workbook with a sheet per selected report; Excel and CSV exports both use it.
+const buildWorkbook = (reportData, reportIds) => {
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'Akshaya CRM';
   workbook.created = new Date();
@@ -32,7 +33,8 @@ export const buildExcel = async (reportData, reportIds) => {
       sheet.getCell('A6').value = "Today's Overview";
       sheet.getCell('A6').font = { bold: true };
       
-      sheet.addRow(['Revenue Collected', data.financials.today.revenueCollected]);
+      sheet.addRow(['Revenue (received)', data.financials.today.amountReceived ?? 0]);
+      sheet.addRow(['Billed (paid or not)', data.financials.today.revenueCollected]);
       sheet.addRow(['Operating Expenses', data.financials.today.operatingExpenses]);
       sheet.addRow(['Net Profit', data.financials.today.netProfit]);
       
@@ -56,7 +58,7 @@ export const buildExcel = async (reportData, reportIds) => {
       sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
 
       // Headers
-      const headerRow = sheet.addRow(['Service Name', 'Total Requests', 'Revenue Collected', 'Dept Charges', 'Gross Profit']);
+      const headerRow = sheet.addRow(['Service Name', 'Total Requests', 'Billed', 'Dept Charges', 'Gross Profit']);
       headerRow.font = { bold: true };
       
       // Data
@@ -535,7 +537,7 @@ export const buildExcel = async (reportData, reportIds) => {
       sheet.getCell('B3').value = `${metadata.fromDate} to ${metadata.toDate}`;
 
       // Headers
-      const headerRow = sheet.addRow(['Staff Name', 'Service Handled', 'Volume (Requests)', 'Revenue Collected', 'Gross Profit']);
+      const headerRow = sheet.addRow(['Staff Name', 'Service Handled', 'Volume (Requests)', 'Billed', 'Gross Profit']);
       headerRow.font = { bold: true };
       
       // Data
@@ -877,10 +879,11 @@ export const buildExcel = async (reportData, reportIds) => {
     }
   }
 
-  // Generate Buffer
-  const buffer = await workbook.xlsx.writeBuffer();
-  return buffer;
+  return workbook;
 };
+
+export const buildExcel = async (reportData, reportIds) =>
+  buildWorkbook(reportData, reportIds).xlsx.writeBuffer();
 
 // ==========================================
 // PDF GENERATOR
@@ -912,7 +915,8 @@ export const buildPDF = (reportData, reportIds) => {
         doc.moveDown(0.5);
         
         doc.fontSize(12);
-        doc.text(`Revenue Collected: Rs. ${data.financials.today.revenueCollected}`);
+        doc.text(`Revenue (received): Rs. ${data.financials.today.amountReceived ?? 0}`);
+        doc.text(`Billed (paid or not): Rs. ${data.financials.today.revenueCollected}`);
         doc.text(`Operating Expenses: Rs. ${data.financials.today.operatingExpenses}`);
         doc.text(`Net Profit: Rs. ${data.financials.today.netProfit}`);
         doc.moveDown(2);
@@ -1263,18 +1267,42 @@ export const buildPDF = (reportData, reportIds) => {
 // ==========================================
 // CSV GENERATOR
 // ==========================================
-export const buildCSV = async (reportData, reportIds) => {
-  // CSVs are flat, so they are best used for lists (like Transactions or Ledgers)
-  // Here is a basic implementation that flattens the financial data
-  
-  const { data } = reportData;
-  let csvString = "Category,Value\n";
-  
-  if (data.financials) {
-    csvString += `Revenue Collected,${data.financials.today.revenueCollected}\n`;
-    csvString += `Operating Expenses,${data.financials.today.operatingExpenses}\n`;
-    csvString += `Net Profit,${data.financials.today.netProfit}\n`;
+// CSV: the same sheets as the Excel export, one after another, each headed
+// by its name and separated by a blank line. Numbers stay raw (no ₹ format)
+// so spreadsheets can add them up.
+const csvCell = (cell) => {
+  let v = cell.value;
+  if (v == null) return '';
+  if (v instanceof Date) v = v.toISOString().slice(0, 10);
+  else if (typeof v === 'object') {
+    if (Array.isArray(v.richText)) v = v.richText.map((t) => t.text).join('');
+    else if ('result' in v) v = v.result ?? '';
+    else if ('text' in v) v = v.text;
+    else if ('error' in v) v = '';
+    else v = String(v);
   }
-  
-  return Buffer.from(csvString, 'utf-8');
+  const text = String(v);
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+export const buildCSV = async (reportData, reportIds) => {
+  const workbook = buildWorkbook(reportData, reportIds);
+  const blocks = [];
+  workbook.eachSheet((sheet) => {
+    const lines = [csvCell({ value: sheet.name })];
+    sheet.eachRow({ includeEmpty: false }, (row) => {
+      const cells = [];
+      for (let c = 1; c <= row.cellCount; c++) {
+        const cell = row.getCell(c);
+        // a merged range keeps its value in the first cell only
+        cells.push(cell.isMerged && cell.master !== cell ? '' : csvCell(cell));
+      }
+      while (cells.length && cells[cells.length - 1] === '') cells.pop();
+      if (cells.length) lines.push(cells.join(','));
+    });
+    blocks.push(lines.join('\r\n'));
+  });
+  const body = blocks.length ? blocks.join('\r\n\r\n') : 'No data for the selected reports';
+  // BOM so Excel opens ₹ and Malayalam text correctly
+  return Buffer.from('﻿' + body + '\r\n', 'utf-8');
 };

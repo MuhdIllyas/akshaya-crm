@@ -17,7 +17,6 @@ import { Line, Doughnut } from "react-chartjs-2";
 import { getWalletsForCentre, getWalletsByCentre } from "@/services/walletService";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
-ChartJS.defaults.color = "#64748b";
 
 /* ---------- Helpers ---------- */
 const IST = "Asia/Kolkata";

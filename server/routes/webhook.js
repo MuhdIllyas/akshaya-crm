@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import { resolveConversation } from '../utils/conversationService.js';
 import { sendMessage } from '../utils/messageRouter.js';
 import pool from '../db.js';
+import { getLibromiApiKey } from '../utils/whatsappAccount.js';
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 
@@ -14,11 +16,7 @@ const router = express.Router();
 // ===============================
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const UPLOAD_DIR = path.join(process.cwd(), 'uploads', 'chat');
-
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
+// Files are saved per organization: uploads/chat (default) or uploads/<slug>/chat.
 
 // ===============================
 // 📥 MEDIA DOWNLOADER (via Libromi API Platform)
@@ -30,18 +28,17 @@ if (!fs.existsSync(UPLOAD_DIR)) {
 //   1. find the Libromi conversation  (GET /v1/conversations?query=<phone>&channel_id=<id>)
 //   2. find the matching inbound media message (GET /v1/conversations/{id}/messages)
 //   3. download media.url (works WITHOUT a key for ~10 min) and save locally.
-// Needs env LIBROMI_API_KEY (key from Libromi developer portal → Keys; read access is enough).
+// Needs the account's Libromi developer API key (Communication Settings; read access is enough).
 
 const LIBROMI_API = (process.env.LIBROMI_API_URL || 'https://api.wa-api.cloud/v1').replace(/\/$/, '');
-const LIBROMI_API_KEY = process.env.LIBROMI_API_KEY;
 
 const KIND_TO_TYPE = { image: 'IMAGE', video: 'VIDEO', audio: 'AUDIO', document: 'DOCUMENT', sticker: 'STICKER' };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-const libromiGet = (url, params) =>
+const libromiGet = (apiKey, url, params) =>
   axios.get(`${LIBROMI_API}${url}`, {
     params,
-    headers: { Authorization: `Bearer ${LIBROMI_API_KEY}` },
+    headers: { Authorization: `Bearer ${apiKey}` },
     timeout: 15000,
   });
 
@@ -61,7 +58,8 @@ async function saveStreamToDisk(url, mimeType, filenameHint) {
   const res = await axios.get(url, { responseType: 'stream', timeout: 60000 });
   const ext = pickExtension(res.headers['content-type'] || mimeType, filenameHint);
   const uniqueFilename = `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
-  const filePath = path.join(UPLOAD_DIR, uniqueFilename);
+  const target = orgUploadPath('chat');
+  const filePath = path.join(target.dir, uniqueFilename);
 
   await new Promise((resolve, reject) => {
     const writer = fs.createWriteStream(filePath);
@@ -72,39 +70,40 @@ async function saveStreamToDisk(url, mimeType, filenameHint) {
   });
 
   console.log('[Webhook] LOCAL FILE SAVED:', filePath);
-  return `/uploads/chat/${uniqueFilename}`;
+  return `${target.url}/${uniqueFilename}`;
 }
 
 // Find the Libromi conversation id for this customer on this channel.
-async function findLibromiConversationId(customerPhone, channelId) {
+async function findLibromiConversationId(apiKey, customerPhone, channelId) {
   const digits = String(customerPhone).replace(/\D/g, '').slice(-10); // "contains" match
   const params = { query: digits };
   if (channelId) params.channel_id = String(channelId);
 
-  let res = await libromiGet('/conversations', params);
+  let res = await libromiGet(apiKey, '/conversations', params);
   let list = res.data?.data || [];
 
   // If our stored channel_id doesn't match Libromi's id format, retry without it.
   if (!list.length && channelId) {
-    res = await libromiGet('/conversations', { query: digits });
+    res = await libromiGet(apiKey, '/conversations', { query: digits });
     list = res.data?.data || [];
   }
   return list[0]?.id || null;
 }
 
-async function downloadWhatsAppMedia({ customerPhone, channelId, kind, caption, sentAtMs, mimeType, filenameHint }) {
-  if (!LIBROMI_API_KEY) {
-    console.error('[Webhook] LIBROMI_API_KEY is not set – cannot download media.');
+async function downloadWhatsAppMedia({ accountId, customerPhone, channelId, kind, caption, sentAtMs, mimeType, filenameHint }) {
+  const apiKey = await getLibromiApiKey(accountId);
+  if (!apiKey) {
+    console.error('[Webhook] No Libromi developer API key in Communication Settings – cannot download media.');
     return null;
   }
 
   try {
-    const conversationId = await findLibromiConversationId(customerPhone, channelId);
+    const conversationId = await findLibromiConversationId(apiKey, customerPhone, channelId);
     if (!conversationId) throw new Error(`No Libromi conversation found for ${customerPhone}`);
 
     // The file may still be downloading inside Libromi for a few seconds → retry.
     for (let attempt = 1; attempt <= 4; attempt++) {
-      const res = await libromiGet(`/conversations/${conversationId}/messages`, {
+      const res = await libromiGet(apiKey, `/conversations/${conversationId}/messages`, {
         direction: 'inbound',
         types: KIND_TO_TYPE[kind] || undefined,
         limit: 10,
@@ -333,6 +332,7 @@ router.post('/whatsapp', async (req, res) => {
         const sentAtMs = msgObject?.timestamp ? Number(msgObject.timestamp) * 1000 : Date.now();
 
         const localPath = await downloadWhatsAppMedia({
+          accountId: communicationAccountId,
           customerPhone: from,
           channelId,
           kind: messageType,

@@ -1,6 +1,8 @@
 import express from 'express';
 import pool from '../db.js';
 import jwt from 'jsonwebtoken';
+import { whatsappWebhookUrl } from '../tenancy/links.js';
+import { featureEnabled } from '../tenancy/limits.js';
 
 const router = express.Router();
 
@@ -23,11 +25,34 @@ const authenticateSuperadmin = (req, res, next) => {
   }
 };
 
+const whatsappNotInPlan = (res) =>
+  res.status(403).json({ code: 'PLAN_NO_WHATSAPP', error: 'WhatsApp is not included in your plan. Please contact us to upgrade.' });
+
+// GET the webhook URL to register in Libromi for this organization
+router.get('/webhook-url', authenticateSuperadmin, (req, res) => {
+  res.json({ webhook_url: whatsappWebhookUrl() });
+});
+
+// After saving: keep at most one account marked for customer portal OTPs.
+async function applyPortalOtpChoice(accountId, useForPortalOtp, apiKey) {
+  if (apiKey !== undefined && String(apiKey).trim() !== '') {
+    await pool.query(`UPDATE communication_accounts SET api_key = $1 WHERE id = $2`, [String(apiKey).trim(), accountId]);
+  }
+  if (useForPortalOtp === true) {
+    await pool.query(`UPDATE communication_accounts SET use_for_portal_otp = (id = $1)`, [accountId]);
+  } else if (useForPortalOtp === false) {
+    await pool.query(`UPDATE communication_accounts SET use_for_portal_otp = false WHERE id = $1`, [accountId]);
+  }
+}
+
 // GET all communication accounts
 router.get('/accounts', authenticateSuperadmin, async (req, res) => {
   try {
+    // The developer API key is never sent back, only whether one is saved.
     const result = await pool.query(
-      `SELECT id, name, phone_number, is_active, channel_id FROM communication_accounts ORDER BY id ASC`
+      `SELECT id, name, phone_number, is_active, channel_id, use_for_portal_otp,
+              (api_key IS NOT NULL AND api_key <> '') AS has_api_key
+         FROM communication_accounts ORDER BY id ASC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -38,7 +63,8 @@ router.get('/accounts', authenticateSuperadmin, async (req, res) => {
 
 // POST create a new communication account
 router.post('/accounts', authenticateSuperadmin, async (req, res) => {
-  const { name, phone_number, access_token, channel_id } = req.body;
+  if (!featureEnabled('whatsapp')) return whatsappNotInPlan(res);
+  const { name, phone_number, access_token, channel_id, api_key, use_for_portal_otp } = req.body;
 
   if (!name || !phone_number || !access_token || !channel_id) {
     return res.status(400).json({ error: 'Name, phone number, access token, and channel ID are required' });
@@ -50,6 +76,7 @@ router.post('/accounts', authenticateSuperadmin, async (req, res) => {
        VALUES ($1, $2, $3, true, $4) RETURNING id, name, phone_number, is_active, channel_id`,
       [name, phone_number, access_token, channel_id]
     );
+    await applyPortalOtpChoice(result.rows[0].id, use_for_portal_otp, api_key);
     res.status(201).json({ message: 'Account created', account: result.rows[0] });
   } catch (err) {
     console.error('Error creating account:', err);
@@ -63,7 +90,7 @@ router.post('/accounts', authenticateSuperadmin, async (req, res) => {
 // PUT update an existing communication account
 router.put('/accounts/:id', authenticateSuperadmin, async (req, res) => {
   const { id } = req.params;
-  const { name, phone_number, access_token, channel_id } = req.body;
+  const { name, phone_number, access_token, channel_id, api_key, use_for_portal_otp } = req.body;
 
   if (!name || !phone_number || !channel_id) {
     return res.status(400).json({ error: 'Name, phone number, and channel ID are required' });
@@ -99,6 +126,8 @@ router.put('/accounts/:id', authenticateSuperadmin, async (req, res) => {
       return res.status(404).json({ error: 'Account not found' });
     }
 
+    // An empty api_key field leaves the saved key unchanged, like the access token.
+    await applyPortalOtpChoice(result.rows[0].id, use_for_portal_otp, api_key);
     res.json({ message: 'Account updated successfully', account: result.rows[0] });
   } catch (err) {
     console.error('Error updating account:', err);
@@ -117,6 +146,7 @@ router.patch('/accounts/:id/status', authenticateSuperadmin, async (req, res) =>
   if (typeof is_active !== 'boolean') {
     return res.status(400).json({ error: 'is_active boolean status is required' });
   }
+  if (is_active && !featureEnabled('whatsapp')) return whatsappNotInPlan(res);
 
   try {
     const result = await pool.query(

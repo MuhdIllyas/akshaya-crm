@@ -1,10 +1,11 @@
 import express from "express";
 import axios from "axios";
 import pool from "../db.js"; 
+import { whatsappWebhookUrl } from "../tenancy/links.js";
 
 const router = express.Router();
 
-const WEBHOOK_URL = "https://api.akshayasahayi.com/api/webhook/whatsapp";
+// Each organization registers its own URL (…/api/webhook/whatsapp?org=<slug>).
 
 // 🔥 Register webhook dynamically for a specific account
 router.post("/register-webhook/:accountId", async (req, res) => {
@@ -23,13 +24,13 @@ router.post("/register-webhook/:accountId", async (req, res) => {
 
     const { access_token, base_url, name } = accountQuery.rows[0];
 
-    console.log(`🚀 Registering webhook for '${name}' at:`, WEBHOOK_URL);
+    console.log(`🚀 Registering webhook for '${name}' at:`, whatsappWebhookUrl());
 
     // 2. Dispatch to Libromi using the dynamic credentials
     const response = await axios.post(
       `${base_url}/webhook`,
       {
-        webhook_url: WEBHOOK_URL
+        webhook_url: whatsappWebhookUrl()
       },
       {
         headers: {

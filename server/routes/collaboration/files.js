@@ -4,6 +4,7 @@ import fs from "fs";
 import path from "path";
 import jwt from "jsonwebtoken";
 import pool from "../../db.js";
+import { orgUploadPath } from '../../tenancy/uploads.js';
 
 const router = express.Router();
 
@@ -29,21 +30,22 @@ const authenticateToken = (req, res, next) => {
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const isGlobal = req.body.is_global === "true";
-    let uploadPath = "uploads";
+    const base = orgUploadPath().rel;
+    let uploadPath = base;
 
     if (isGlobal) {
       // 🔥 SECURITY: Prevent staff from uploading to the global folder
       if (req.user.role === "staff") {
         return cb(new Error("Staff members are not allowed to upload global files"));
       }
-      uploadPath = path.join("uploads", "global");
+      uploadPath = path.join(base, "global");
     } else {
       // 🔥 SECURITY: Force admin/staff to only upload to their assigned centre folder
       let finalCentreId = req.body.centre_id;
       if (req.user.role !== "superadmin") {
         finalCentreId = req.user.centre_id; 
       }
-      uploadPath = path.join("uploads", `centre_${finalCentreId}`);
+      uploadPath = path.join(base, `centre_${finalCentreId}`);
     }
 
     if (!fs.existsSync(uploadPath)) {

@@ -1,9 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
+import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo } from "react-icons/fi";
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import DashboardLayout from "./layouts/DashboardLayout";
+import PortalEntry from "./pages/PortalEntry";
+import Logout from "./pages/Logout";
+import DefaultOrgRoute from "./tenancy/DefaultOrgRoute";
+import PlatformLogin from "./pages/platform/PlatformLogin";
+import PlatformAdmin from "./pages/platform/PlatformAdmin";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
@@ -25,6 +31,7 @@ import SuperadminStaffManagement from './pages/superadmin/SuperadminStaffManagem
 import WalletManagementSuperAdmin from './pages/superadmin/WalletManagementSuperAdmin';
 import ServiceManagementSuperAdmin from './pages/superadmin/ServiceManagementSuperAdmin';
 import SuperadminServiceLogs from './pages/superadmin/SuperadminServiceLogs';
+import DocumentTypes from "./pages/superadmin/DocumentTypes";
 import AttendanceSuperAdmin from './pages/superadmin/AttendanceSuperAdmin';
 import CampaignManagementSuperAdmin from './pages/superadmin/CampaignManagementSuperAdmin';
 import SuperAdminReports from './pages/reports/SuperAdminReports';
@@ -62,6 +69,7 @@ import OperationsHub from './pages/operationshub/OperationsHub';
 //Notification Page
 import NotificationsPage from './pages/notifications/NotificationsPage';
 import { NotificationProvider } from './context/NotificationContext';
+import { useTheme } from './context/ThemeContext';
 
 //Analytics Page
 import ReportsSection from './pages/ReportsSection';
@@ -69,10 +77,12 @@ import ReportsSection from './pages/ReportsSection';
 import CustomerRegistration from './pages/CustomerRegistration';
 import CustomerDashboard from './pages/customers/CustomerDashboard';
 import CustomerMyServices from './pages/customers/MyServices';
+import CustomerChat from './pages/customers/CustomerChat';
+import ChooseCentre from './pages/customers/ChooseCentre';
+import { fetchCustomerPortalContext } from './tenancy/centres';
 import CustomerMyDocuments from './pages/customers/MyDocuments';
 import CustomerProfile from './pages/customers/CustomerProfile';
 import ContinueApplication from './components/ContinueApplication';
-import ApplicationDocuments from './components/ApplicationDocuments';
 import ConfirmationPage from './components/ConfirmationPage';
 import ViewServiceDetails from './components/ViewServiceDetails';
 
@@ -156,7 +166,11 @@ const ProtectedRoute = ({ allowedRoles, children }) => {
 // ---------------------------------------------------------------------
 const CustomerProtectedRoute = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(null);
+  // The token that still has to choose a centre (per-centre portal). Tied to the
+  // token so a new session (after choosing) isn't sent back by the old answer.
+  const [needsCentreFor, setNeedsCentreFor] = useState(null);
   const customerToken = localStorage.getItem("customer_token");
+  const location = useLocation();
 
   useEffect(() => {
     const verifyCustomerToken = async () => {
@@ -171,6 +185,13 @@ const CustomerProtectedRoute = ({ children }) => {
           headers: { Authorization: `Bearer ${customerToken}` },
         });
         console.log("CustomerProtectedRoute: Token verification successful");
+        // Per-centre portal: they must be working at one of their centres.
+        try {
+          const ctx = await fetchCustomerPortalContext();
+          setNeedsCentreFor(ctx.needs_centre ? customerToken : null);
+        } catch {
+          setNeedsCentreFor(null); // older server: no centres to choose
+        }
         setIsAuthenticated(true);
       } catch (err) {
         console.warn("CustomerProtectedRoute: Token verification failed - Session expired");
@@ -205,13 +226,26 @@ const CustomerProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace state={{ reason: "customer_session_expired" }} />;
   }
 
+  if (needsCentreFor && needsCentreFor === customerToken && location.pathname !== "/customer/choose-centre") {
+    return <Navigate to="/customer/choose-centre" replace />;
+  }
+
   return children;
 };
 
 // ---------------------------------------------------------------------
 // Main App Component
 // ---------------------------------------------------------------------
+const TOAST_ICONS = { success: FiCheck, error: FiAlertCircle, warning: FiAlertTriangle };
+
+const toastIcon = ({ type, isLoading }) => {
+  if (isLoading) return <div className="Toastify__spinner" />;
+  const Icon = TOAST_ICONS[type] || FiInfo;
+  return <Icon aria-hidden="true" />;
+};
+
 const App = () => {
+  const { isDark } = useTheme();
 
   // ---> NEW: Global SMS Listener for Instant OTP Popups <---
   useEffect(() => {
@@ -258,7 +292,8 @@ const App = () => {
         pauseOnFocusLoss
         draggable
         pauseOnHover
-        theme="light"
+        theme={isDark ? "dark" : "light"}
+        icon={toastIcon}
         style={{ zIndex: 999999 }}
       />
       <Routes>
@@ -270,10 +305,17 @@ const App = () => {
         <Route path="/home" element={<Navigate to="/" replace />} />
 
         {/* 2. AUTH & PUBLIC SERVICES */}
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<DefaultOrgRoute path="login"><Login /></DefaultOrgRoute>} />
+        {/* Signs out and opens the organization's own login */}
+        <Route path="/logout" element={<Logout />} />
+        {/* A business's own portal link: /portal/<slug>/login, /portal/<slug>/customer/register … */}
+        <Route path="/portal/:slug/*" element={<PortalEntry />} />
+        {/* Platform admin (software owner): organizations, plans, billing */}
+        <Route path="/platform/login" element={<PlatformLogin />} />
+        <Route path="/platform" element={<PlatformAdmin />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/aadhaar-docufinder" element={<AadhaarDocu />} />
-        <Route path="/customer/register" element={<CustomerRegistration />} />
+        <Route path="/customer/register" element={<DefaultOrgRoute path="customer/register"><CustomerRegistration /></DefaultOrgRoute>} />
         
         {/* 3. DYNAMIC PUBLIC PAGES */}
         <Route path="/review/:token" element={<PublicReview />} />
@@ -407,6 +449,10 @@ const App = () => {
             <Route
               path="superadmin/servicemanagement"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><ServiceManagementSuperAdmin /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/documenttypes"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><DocumentTypes /></ProtectedRoute>}
             />
             <Route
               path="superadmin/servicelogs"
@@ -563,6 +609,23 @@ const App = () => {
               path="staff/customers/:customerId"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor", "admin", "superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
             />
+            {/* Same customers page under each role's own path (see utils/customersPath) */}
+            <Route
+              path="admin/customers"
+              element={<ProtectedRoute allowedRoles={["admin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="admin/customers/:customerId"
+              element={<ProtectedRoute allowedRoles={["admin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/customers"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/customers/:customerId"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><CustomerProfileSystem /></ProtectedRoute>}
+            />
           </Route>
         </Route>
 
@@ -582,7 +645,7 @@ const App = () => {
           />
           <Route
             path="/customer/myservices/:id/documents"
-            element={<CustomerProtectedRoute><ApplicationDocuments /></CustomerProtectedRoute>}
+            element={<CustomerProtectedRoute><ContinueApplication /></CustomerProtectedRoute>}
           />
           <Route
             path="/customer/myservices/:id/confirmation"
@@ -599,6 +662,14 @@ const App = () => {
           <Route
             path="/customer/myprofile"
             element={<CustomerProtectedRoute><CustomerProfile /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/messages"
+            element={<CustomerProtectedRoute><CustomerChat /></CustomerProtectedRoute>}
+          />
+          <Route
+            path="/customer/choose-centre"
+            element={<CustomerProtectedRoute><ChooseCentre /></CustomerProtectedRoute>}
           />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

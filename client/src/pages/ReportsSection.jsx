@@ -16,6 +16,7 @@ import {
     Legend, ComposedChart, Area, AreaChart
 } from 'recharts';
 import { toPng } from 'html-to-image';
+import { withLightTheme } from '../context/ThemeContext';
 import { jsPDF } from "jspdf";
 import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
@@ -331,10 +332,10 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
 
         try {
             // Take snapshot using native browser rendering (Supports oklch & modern CSS!)
-            const dataUrl = await toPng(reportRef.current, {
+            const dataUrl = await withLightTheme(() => toPng(reportRef.current, {
                 pixelRatio: 2, // High resolution for crisp charts
                 backgroundColor: '#ffffff'
-            });
+            }));
 
             // Set up the PDF
             const pdf = new jsPDF('p', 'mm', 'a4');
@@ -383,7 +384,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                     const trendData = previewData?.data?.financials?.periodTrend || [];
                     exportData = trendData.map(row => ({
                         Date: row.label,
-                        Revenue_Collected: row.revenueCollected,
+                        Billed: row.revenueCollected,
                         Gross_Profit: row.grossProfit,
                         Operating_Expenses: row.operatingExpenses,
                         Net_Profit: row.netProfit
@@ -488,7 +489,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                 const pdfTrendData = previewData?.data?.financials?.periodTrend || [];
                 exportData = pdfTrendData.map(row => ({
                     Date: row.label,
-                    Revenue_Collected: row.revenueCollected,
+                    Billed: row.revenueCollected,
                     Gross_Profit: row.grossProfit,
                     Operating_Expenses: row.operatingExpenses,
                     Net_Profit: row.netProfit
@@ -1199,7 +1200,8 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                             {/* V3 Financial Summary Cards (Now Guaranteed to Render) */}
                             {Object.keys(financials).length > 0 && (
                                 <div className="grid grid-cols-4 gap-3">
-                                    <StatCard title="Revenue Collected" value={`₹${(financials.revenueCollected || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiTrendingUp} color="bg-emerald-600" />
+                                    <StatCard title="Revenue" value={`₹${(financials.amountReceived || 0).toLocaleString()}`} subtitle="Money received · same as Accounting" icon={FiTrendingUp} color="bg-emerald-600" />
+                                    <StatCard title="Billed" value={`₹${(financials.revenueCollected || 0).toLocaleString()}`} subtitle="Total billed for entries in the period, paid or not" icon={FiFileText} color="bg-slate-600" />
                                     <StatCard title="Operating Expenses" value={`₹${(financials.operatingExpenses || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiFileText} color="bg-rose-600" />
                                     <StatCard title="Net Profit" value={`₹${(financials.netProfit || 0).toLocaleString()}`} subtitle="Selected Period" icon={FiDollarSign} color="bg-navy-700" />
                                 </div>
@@ -1226,7 +1228,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                         <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickFormatter={(v) => `₹${v/1000}k`} axisLine={false} tickLine={false} />
                                         <Tooltip content={<CustomTooltipComponent formatter={formatCurrency} />} />
                                         <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                                        <Bar dataKey="revenue" name="Revenue Collected" fill="url(#revenueGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
+                                        <Bar dataKey="revenue" name="Billed" fill="url(#revenueGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                         <Bar dataKey="expenses" name="Operating Expenses" fill="url(#expenseGrad)" radius={[4, 4, 0, 0]} animationDuration={800} />
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -2775,7 +2777,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                     <tr>
                                                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Service Handled</th>
                                                         <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Volume</th>
-                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Revenue Collected</th>
+                                                        <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Billed</th>
                                                         <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Gross Profit</th>
                                                     </tr>
                                                 </thead>
@@ -2952,7 +2954,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                             <tr>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Service Name</th>
                                                 <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Requests</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Revenue Collected</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Billed</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Govt/Dept Charges</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Gross Profit</th>
                                             </tr>
@@ -3545,7 +3547,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                         <tr>
                                             <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Service Name</th>
                                             <th className="px-4 py-3 text-center text-xs font-semibold text-slate-500 uppercase">Requests</th>
-                                            <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Revenue Collected</th>
+                                            <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Billed</th>
                                             <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase">Gross Profit</th>
                                         </tr>
                                     </thead>
@@ -3565,7 +3567,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                         <thead className="bg-slate-50">
                                             <tr>
                                                 <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">Date</th>
-                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Revenue Collected</th>
+                                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Billed</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Gross Profit</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Operating Expenses</th>
                                                 <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider">Net Profit</th>

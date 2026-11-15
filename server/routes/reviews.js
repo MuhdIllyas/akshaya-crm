@@ -2,6 +2,7 @@ import express from "express";
 import crypto from "crypto";
 import { triggerNotification } from "../utils/communication/notificationEngine.js";
 import pool from "../db.js";
+import { frontendUrl } from "../tenancy/links.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
 import notificationService from "../utils/notificationService.js";
 import { notificationTemplates } from "../utils/notificationTemplates.js";
@@ -40,7 +41,7 @@ export async function createReviewRequest({
       ]
     );
 
-    const reviewUrl = `${process.env.FRONTEND_URL}/review/${token}`;
+    const reviewUrl = frontendUrl(`/review/${token}`);
 
     // 🔥 HAND OFF TO THE CENTRAL NOTIFICATION ENGINE
     const notificationResult = await triggerNotification({

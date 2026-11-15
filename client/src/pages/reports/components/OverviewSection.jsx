@@ -37,8 +37,9 @@ ChartJS.register(
 );
 
 // Shared chart text style (UI only)
-const TICK = { font: { size: 11 }, color: '#64748b' };
+const TICK = { font: { size: 11 } };
 const GRID = { color: 'rgba(148, 163, 184, 0.18)' };
+const legendColor = () => (document.documentElement.classList.contains('dark') ? '#a9b5c2' : '#475569');
 
 // Card shell used by every chart (UI only)
 const ChartCard = ({ title, icon: Icon, children }) => (
@@ -85,7 +86,7 @@ const RevenueTrendChart = ({ data }) => {
     labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
     datasets: [
       {
-        label: 'Revenue',
+        label: 'Billed',
         data: data?.charts?.financialTrend?.revenueCollected || [],
         borderColor: 'rgb(16, 185, 129)',
         backgroundColor: 'rgba(16, 185, 129, 0.1)',
@@ -107,7 +108,7 @@ const RevenueTrendChart = ({ data }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: legendColor } },
       title: { display: false },
     },
     scales: {
@@ -141,7 +142,7 @@ const WalletBalanceChart = ({ wallets }) => {
     responsive: true,
     maintainAspectRatio: false,
     plugins: {
-      legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 12, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'bottom', labels: { boxWidth: 8, usePointStyle: true, padding: 12, font: { size: 11 }, color: legendColor } },
       title: { display: false },
     },
   };
@@ -160,7 +161,7 @@ const StaffPerformanceChart = ({ staffData }) => {
     labels: safeStaffData.map(s => s.staff_name || s.name),
     datasets: [
       {
-        label: 'Revenue Collected',
+        label: 'Billed',
         data: safeStaffData.map(s => Number(s.total_revenue || s.revenue || 0)),
         backgroundColor: 'rgba(30, 58, 95, 0.85)',
         borderColor: 'rgb(30, 58, 95)',
@@ -175,7 +176,7 @@ const StaffPerformanceChart = ({ staffData }) => {
     maintainAspectRatio: false,
     indexAxis: 'y',
     plugins: {
-      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: '#475569' } },
+      legend: { position: 'top', align: 'end', labels: { boxWidth: 8, usePointStyle: true, font: { size: 11 }, color: legendColor } },
       title: { display: false },
     },
     scales: {
@@ -281,8 +282,8 @@ const OverviewSection = ({
 
       {/* Stats Overview */}
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <StatCard title="Total Revenue" value={stats.totalRevenue} subtitle="YTD" change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
-        <StatCard title="Net Profit" value={stats.totalProfit} subtitle="YTD" change={stats.profitChange} icon={FiDollarSign} color="bg-green-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Revenue Today" value={stats.collectedToday} subtitle={`Billed: ${stats.totalRevenue}`} change={stats.revenueChange} icon={FiTrendingUp} color="bg-emerald-600" onClick={() => setActiveSection('transactions')} />
+        <StatCard title="Net Profit" value={stats.totalProfit} subtitle="Today" change={stats.profitChange} icon={FiDollarSign} color="bg-green-600" onClick={() => setActiveSection('transactions')} />
         <StatCard title="Wallet Balance" value={stats.totalWalletBalance} subtitle="Total" icon={FiSmartphone} color="bg-navy-700" onClick={() => setActiveSection('wallets')} />
         <StatCard title="Cash in Hand" value={stats.totalCashInHand} subtitle="Physical" icon={FiHome} color="bg-amber-600" onClick={() => setActiveSection('wallets')} />
         <StatCard title="Today's Flow" value={stats.netCashFlowToday} subtitle={`In: ${stats.totalCashInToday}`} icon={FiActivity} color="bg-violet-600" onClick={() => setActiveSection('accounting')} />

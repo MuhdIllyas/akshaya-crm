@@ -49,7 +49,10 @@ export const NOTIFICATION_TYPES = {
   // Leads (WhatsApp bot / walk-in enquiries)
   LEAD_NEW: 'lead_new',
   LEAD_ASSIGNED: 'lead_assigned',
-  LEAD_ENQUIRY: 'lead_enquiry'
+  LEAD_ENQUIRY: 'lead_enquiry',
+
+  // Customer portal
+  BOOKING_NEW: 'booking_new'
 };
 
 export const notificationTemplates = {
@@ -397,6 +400,23 @@ export const notificationTemplates = {
       'Phone': data.phone,
       'Service': data.serviceName,
       ...(data.docsReady ? { 'Documents': data.docsReady } : {})
+    }
+  }),
+
+  bookingNew: (data) => ({
+    type: NOTIFICATION_TYPES.BOOKING_NEW,
+    category: NOTIFICATION_CATEGORIES.WORK,
+    title: '🌐 New online booking',
+    message: `${data.customerName} booked ${data.serviceName}` +
+      (data.centreName ? ` at ${data.centreName}` : ' (any centre)') + '. Take it from the online bookings list.',
+    priority: 'high',
+    metadata: {
+      'Customer': data.customerName,
+      'Phone': data.phone,
+      'Service': data.serviceName,
+      'Application': data.applicationNumber,
+      'Centre': data.centreName || 'Any centre',
+      ...(data.missingDocuments ? { 'Documents to collect': data.missingDocuments } : {})
     }
   }),
 

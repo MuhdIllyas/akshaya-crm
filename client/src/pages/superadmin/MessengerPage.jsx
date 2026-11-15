@@ -582,7 +582,7 @@ const MessengerPage = ({ user }) => {
 
         const filteredMessages = currentMessages.filter(m => {
           if (!m.isOptimistic) return true;
-          const sameSender = String(msg.sender_id) === String(currentUser.id);
+          const sameSender = msg.sender_type !== 'customer' && String(msg.sender_id) === String(currentUser.id);
           const sameText = m.text === msg.message;
           if (sameSender && sameText) return false;
           return true;
@@ -591,7 +591,7 @@ const MessengerPage = ({ user }) => {
         let senderName = msg.sender_name;
         if (msg.sender_type === 'customer') {
           senderName = senderName || 'Customer';
-        } else if (String(msg.sender_id) === String(currentUser.id)) {
+        } else if (msg.sender_type !== 'customer' && String(msg.sender_id) === String(currentUser.id)) {
           senderName = 'You';
         } else {
           senderName = senderName || 'Unknown';
@@ -610,8 +610,9 @@ const MessengerPage = ({ user }) => {
           fileSize: msg.file_size,
           messageType: msg.message_type,
           isDeleted: msg.is_deleted,
-          isCurrentUser: String(msg.sender_id) === String(currentUser.id),
-          is_read_by_me: String(msg.sender_id) === String(currentUser.id),
+          // a customer's id can equal a staff id: only staff messages can be mine
+          isCurrentUser: msg.sender_type !== 'customer' && String(msg.sender_id) === String(currentUser.id),
+          is_read_by_me: msg.sender_type !== 'customer' && String(msg.sender_id) === String(currentUser.id),
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
@@ -934,7 +935,7 @@ const MessengerPage = ({ user }) => {
       lastMessageIdsRef.current.clear();
 
       const formattedMessages = data.map(msg => {
-        const isCurrentUser = String(msg.sender_id) === String(currentUser.id);
+        const isCurrentUser = msg.sender_type !== 'customer' && String(msg.sender_id) === String(currentUser.id);
         let senderName = msg.sender_name;
         if (msg.sender_type === 'customer') {
           senderName = senderName || 'Customer';

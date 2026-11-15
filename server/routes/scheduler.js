@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { scheduleForEachOrg } from '../tenancy/jobs.js';
 import pool from '../db.js';
 import generateDailyBalances from './walletDailyBalanceService.js';
 import generateRecurringTasks from "../controllers/recurringTaskService.js";
@@ -15,7 +16,7 @@ import { calculateHours, recalculateDayDeviation } from './salary.js';
 // ==========================================
 
 // Run every day at 00:05 AM IST
-cron.schedule("5 0 * * *", async () => {
+scheduleForEachOrg("5 0 * * *", async () => {
   try {
     const now = new Date();
     now.setDate(now.getDate() - 1);
@@ -35,7 +36,7 @@ cron.schedule("5 0 * * *", async () => {
 });
 
 // Run every day at 00:10 AM IST - Cleanup ALL old normal tokens
-cron.schedule("10 0 * * *", async () => {
+scheduleForEachOrg("10 0 * * *", async () => {
   try {
     const result = await pool.query(`
       DELETE FROM tokens
@@ -52,7 +53,7 @@ cron.schedule("10 0 * * *", async () => {
 });
 
 // Run every day at 00:15 AM IST for recurring tasks
-cron.schedule("15 0 * * *", async () => {
+scheduleForEachOrg("15 0 * * *", async () => {
   console.log("[CRON] Running recurring engine...");
   await generateRecurringTasks();
 }, {
@@ -179,7 +180,7 @@ const checkAndRunSchedules = async () => {
 };
 
 // 👉 The "Tick" Engine: Runs every 1 minute to check for scheduled reports
-cron.schedule("* * * * *", async () => {
+scheduleForEachOrg("* * * * *", async () => {
     await checkAndRunSchedules();
 }, {
     timezone: "Asia/Kolkata"
@@ -190,7 +191,7 @@ cron.schedule("* * * * *", async () => {
 // Every minute: send due WhatsApp reminders and
 // create due staff tasks from scheduled_actions.
 // ==========================================
-cron.schedule("* * * * *", async () => {
+scheduleForEachOrg("* * * * *", async () => {
   try {
     await runScheduledActions();
   } catch (err) {
@@ -201,7 +202,7 @@ cron.schedule("* * * * *", async () => {
 });
 
 // Run every day at 00:20 AM IST - Cleanup previous days' chat_messages (OTPs and Notifications)
-cron.schedule("20 0 * * *", async () => {
+scheduleForEachOrg("20 0 * * *", async () => {
   try {
     // 1. Bulletproof JS Time Calculation
     const now = new Date();
@@ -230,7 +231,7 @@ cron.schedule("20 0 * * *", async () => {
 });
 
 // Run every day at 23:55 (11:55 PM) - Auto-mark Absent
-cron.schedule('55 23 * * *', async () => {
+scheduleForEachOrg('55 23 * * *', async () => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -269,7 +270,7 @@ cron.schedule('55 23 * * *', async () => {
 // AUTO PUNCH-OUT AT END OF DAY
 // Runs every day at 23:59 IST
 // ==========================================
-cron.schedule('59 23 * * *', async () => {
+scheduleForEachOrg('59 23 * * *', async () => {
   const client = await pool.connect();
 
   try {

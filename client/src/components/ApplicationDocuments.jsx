@@ -62,7 +62,7 @@ const ApplicationDocuments = () => {
       if (error.response?.status === 401) {
         errorMessage = 'Session expired. Please login again.';
         setTimeout(() => {
-          navigate('/customer/login');
+          navigate('/login');
         }, 2000);
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;

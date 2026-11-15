@@ -7,6 +7,9 @@ import { triggerNotification } from '../utils/communication/notificationEngine.j
 import crypto from 'crypto';
 import axios from "axios";
 import notificationService from '../utils/notificationService.js';
+import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
+import { linkCustomerToCentre } from '../utils/customerCentres.js';
+import { aadhaarColumns } from '../utils/aadhaar.js';
 import { todayIST, istParts } from '../utils/dates.js';
 
 const router = express.Router();
@@ -59,6 +62,39 @@ async function assertOwnWallets(client, walletIds, centreId) {
 }
 
 // Middleware to verify token and role
+// Saves a service's (or sub-category's) required documents. Each item is a
+// document type picked from the list, { document_type_id, note }, or, from
+// older screens, just a name (found or added in the list by the database).
+// The same type with the same note is kept once.
+async function saveRequiredDocuments(client, serviceId, subId, list) {
+  const saved = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(list) ? list : []) {
+    const item = typeof raw === 'string' ? { name: raw } : (raw || {});
+    const note = String(item.note || '').replace(/\s+/g, ' ').trim().slice(0, 200) || null;
+    let typeId = Number(item.document_type_id) || null;
+    if (typeId) {
+      const { rows } = await client.query('SELECT id FROM document_master WHERE id = $1', [typeId]);
+      if (!rows[0]) throw new Error('A chosen document no longer exists. Please pick it again.');
+    } else {
+      const name = String(item.name || '').replace(/\s+/g, ' ').trim();
+      if (!name.replace(/[^a-zA-Z0-9]/g, '')) continue;
+      typeId = (await client.query('SELECT doc_type_for($1) AS id', [name])).rows[0].id;
+    }
+    const key = `${typeId}|${(note || '').toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    // document_name ("<type> (<note>)") is filled in by the database trigger.
+    const { rows } = await client.query(
+      `INSERT INTO required_documents (service_id, sub_category_id, document_type_id, note, document_name)
+       VALUES ($1, $2, $3, $4, '') RETURNING *`,
+      [serviceId, subId, typeId, note]
+    );
+    saved.push(rows[0]);
+  }
+  return saved;
+}
+
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
@@ -588,11 +624,7 @@ router.post('/services', authenticateToken, async (req, res) => {
     // 3. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, document_name) VALUES ($1, $2) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [newService.id, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, newService.id, null, requiredDocuments);
     }
 
     const auditDetails = `Created service ${name} by ${req.user.role}`;
@@ -730,11 +762,7 @@ router.put('/services/:id', authenticateToken, async (req, res) => {
     await client.query('DELETE FROM required_documents WHERE service_id = $1 AND sub_category_id IS NULL', [id]);
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, document_name) VALUES ($1, $2) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [id, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, id, null, requiredDocuments);
     }
 
     // record what changed in the shared details, so other centres / the superadmin can see who changed it
@@ -868,11 +896,7 @@ router.post('/services/:id/subcategories', authenticateToken, async (req, res) =
     // 4. Insert Documents
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, sub_category_id, document_name) VALUES ($1, $2, $3) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [id, newSubcategory.id, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, id, newSubcategory.id, requiredDocuments);
     }
 
     const auditDetails = `Added subcategory ${name} to service ID ${id} by ${req.user.role}`;
@@ -987,11 +1011,7 @@ router.put('/services/:id/subcategories/:subId', authenticateToken, async (req, 
     await client.query('DELETE FROM required_documents WHERE sub_category_id = $1', [subId]);
     let documents = [];
     if (requiredDocuments && Array.isArray(requiredDocuments) && requiredDocuments.length > 0) {
-      const docQuery = `INSERT INTO required_documents (service_id, sub_category_id, document_name) VALUES ($1, $2, $3) RETURNING *`;
-      for (const doc of requiredDocuments) {
-        const docResult = await client.query(docQuery, [id, subId, doc]);
-        documents.push(docResult.rows[0]);
-      }
+      documents = await saveRequiredDocuments(client, id, subId, requiredDocuments);
     }
 
     const auditDetails = `Updated subcategory ${name} in service ID ${id} by ${req.user.role}`;
@@ -1037,6 +1057,38 @@ router.get('/categories', authenticateToken, async (req, res) => {
   try {
     // 🔥 Handle Superadmin impersonating a centre, fallback to user's centre
     const targetCentreId = req.query.centre_id ? parseInt(req.query.centre_id) : parseInt(req.user.centre_id);
+
+    // A superadmin has no centre: without ?centre_id, list the whole catalogue
+    // (used by the all-centres Service Logs filter) instead of failing on NaN.
+    if (!Number.isInteger(targetCentreId)) {
+      const { rows } = await client.query(`
+        SELECT s.id, s.name, s.description, s.website, s.status,
+               s.wallet_id, s.requires_wallet, s.requires_workflow, s.has_expiry,
+               COALESCE(s.department_charges, 0) AS department_charges,
+               COALESCE(s.service_charges, 0) AS service_charges,
+               (SELECT COALESCE(json_agg(json_build_object(
+                         'id', sub.id, 'name', sub.name, 'service_id', sub.service_id,
+                         'department_charges', COALESCE(sub.department_charges, 0),
+                         'service_charges', COALESCE(sub.service_charges, 0)) ORDER BY sub.name), '[]'::json)
+                  FROM subcategories sub WHERE sub.service_id = s.id) AS subcategories
+          FROM services s
+         WHERE s.status = 'active'
+         ORDER BY s.name ASC`);
+      return res.json(rows.map((c) => ({
+        ...c,
+        department_charges: parseFloat(c.department_charges),
+        service_charges: parseFloat(c.service_charges),
+        required_documents: [],
+        subcategories: (c.subcategories || []).map((sub) => ({
+          ...sub,
+          wallet_id: null,
+          requires_wallet: false,
+          department_charges: parseFloat(sub.department_charges),
+          service_charges: parseFloat(sub.service_charges),
+          required_documents: [],
+        })),
+      })));
+    }
 
     const query = `
       SELECT 
@@ -1679,10 +1731,12 @@ router.post('/entry', authenticateToken, async (req, res) => {
     }
 
     if (!isQuickEntry) {
+      const aadhaarFor = (() => { const a = aadhaarColumns(customerAadhaar); return a && !a.invalid ? a : null; })();
       await client.query(
-        `INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, aadhaar, email, updated_at)
-         VALUES ($1, $2, 'pending', 'Application Received', 0, $3, $4, NOW())`,
-        [serviceEntryId, req.user.id, customerAadhaar || null, customerEmail || null]
+        `INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, aadhaar, email, updated_at, aadhaar_hash, aadhaar_last4)
+         VALUES ($1, $2, 'pending', 'Application Received', 0, $3, $4, NOW(), $5, $6)`,
+        // masked Aadhaar + fingerprint, never the full number
+        [serviceEntryId, req.user.id, aadhaarFor?.aadhaar ?? null, customerEmail || null, aadhaarFor?.aadhaar_hash ?? null, aadhaarFor?.aadhaar_last4 ?? null]
       );
     }
 
@@ -5194,14 +5248,24 @@ router.get('/customer-services', authenticateToken, async (req, res) => {
       SELECT cs.*, 
              c.name AS customer_name, 
              c.primary_phone AS phone,
-             c.email AS email
+             c.email AS email,
+             rc.name AS requested_centre_name,
+             hc.name AS handling_centre_name
       FROM customer_services cs
       JOIN customers c ON cs.customer_id = c.id
+      LEFT JOIN centres rc ON rc.id = cs.requested_centre_id
+      LEFT JOIN centres hc ON hc.id = cs.handling_centre_id
       WHERE 1=1
     `;
 
     const values = [];
     let paramIndex = 1;
+
+    // Strict booking mode: staff only see bookings for their centre or "any centre".
+    if (req.user.role !== 'superadmin' && req.user.centre_id && (await getBookingMode()) === BOOKING_MODES.STRICT) {
+      query += ` AND (cs.requested_centre_id IS NULL OR cs.requested_centre_id = $${paramIndex++})`;
+      values.push(req.user.centre_id);
+    }
 
     if (status) {
       query += ` AND cs.status = $${paramIndex++}`;
@@ -5225,23 +5289,78 @@ router.get('/customer-services', authenticateToken, async (req, res) => {
 });
 
 // PUT /api/servicemanagement/customer-services/:id/take
+// Body: { confirm_other_centre?: boolean }
+// A booking can be made for one centre (requested_centre_id). Depending on the
+// organization's booking mode (superadmin setting):
+//   shared: staff of another centre get 409 OTHER_CENTRE first and must confirm;
+//           the takeover is recorded and the booked centre's admin is notified.
+//   strict: only the booked centre's staff can take it (403 CENTRE_ONLY).
+// "Any centre" bookings (no requested centre) can be taken by anyone.
 router.put('/customer-services/:id/take', authenticateToken, async (req, res) => {
   const { id } = req.params;
+  const confirmOtherCentre = req.body?.confirm_other_centre === true;
   const client = await pool.connect();
 
   try {
+    const mode = await getBookingMode();
+    const meRes = await client.query(
+      `SELECT s.name, s.centre_id, c.name AS centre_name
+         FROM staff s LEFT JOIN centres c ON c.id = s.centre_id
+        WHERE s.id = $1`,
+      [req.user.id]
+    );
+    const me = meRes.rows[0] || {};
+    const myCentreId = me.centre_id ?? null;
+
     await client.query('BEGIN');
+
+    const bookingRes = await client.query(
+      `SELECT cs.id, cs.application_number, cs.requested_centre_id,
+              c.name AS requested_centre_name, c.admin_id AS requested_centre_admin_id
+         FROM customer_services cs
+         LEFT JOIN centres c ON c.id = cs.requested_centre_id
+        WHERE cs.id = $1
+        FOR UPDATE OF cs`,
+      [id]
+    );
+    const booking = bookingRes.rows[0];
+    if (!booking) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const otherCentre =
+      booking.requested_centre_id != null && myCentreId != null && Number(booking.requested_centre_id) !== Number(myCentreId);
+
+    if (otherCentre && mode === BOOKING_MODES.STRICT) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({
+        code: 'CENTRE_ONLY',
+        requested_centre_name: booking.requested_centre_name,
+        error: `This booking is for ${booking.requested_centre_name}. Only that centre can take it.`,
+      });
+    }
+    if (otherCentre && !confirmOtherCentre) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({
+        code: 'OTHER_CENTRE',
+        requested_centre_name: booking.requested_centre_name,
+        error: `This booking was made for ${booking.requested_centre_name}.`,
+      });
+    }
 
     const result = await client.query(
       `UPDATE customer_services
        SET status = 'processing',
            assigned_staff_id = $1,
-           taken_at = NOW()
+           taken_at = NOW(),
+           handling_centre_id = $3,
+           taken_from_other_centre = $4
        WHERE id = $2
        AND status = 'under_review'
        AND assigned_staff_id IS NULL
        RETURNING *`,
-      [req.user.id, id]
+      [req.user.id, id, myCentreId, otherCentre]
     );
 
     if (result.rows.length === 0) {
@@ -5250,11 +5369,28 @@ router.put('/customer-services/:id/take', authenticateToken, async (req, res) =>
     }
 
     await client.query('COMMIT');
+    // the customer now has business with this centre (used when the portal is per-centre)
+    await linkCustomerToCentre(result.rows[0].customer_id, myCentreId, 'booking').catch((e) => console.error('link customer to centre:', e.message));
+
+    if (otherCentre && booking.requested_centre_admin_id) {
+      notificationService.createNotification({
+        recipientStaffId: booking.requested_centre_admin_id,
+        senderStaffId: req.user.id,
+        centreId: booking.requested_centre_id,
+        relatedEntityType: 'customer_service',
+        relatedEntityId: booking.id,
+        type: 'booking_taken_by_other_centre',
+        category: 'service',
+        title: 'Booking taken by another centre',
+        message: `${me.name || 'A staff member'} (${me.centre_name || 'another centre'}) took booking ${booking.application_number || '#' + booking.id}, which was made for ${booking.requested_centre_name}.`,
+        priority: 'normal',
+      }).catch((e) => console.error('Takeover notification failed:', e.message));
+    }
 
     res.json({ message: 'Work assigned successfully', data: result.rows[0] });
 
   } catch (err) {
-    await client.query('ROLLBACK');
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Error taking customer service:', err);
     res.status(500).json({ error: 'Failed to take work' });
   } finally {

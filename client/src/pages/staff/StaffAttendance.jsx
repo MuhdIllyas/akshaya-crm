@@ -259,7 +259,7 @@ const AttendanceTrendChart = ({ attendance }) => {
   const options = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false } },
-    scales: { y: { beginAtZero: true, suggestedMax: 10, ticks: { callback: (v) => `${v}h` }, grid: { color: "#f1f5f9" } }, x: { grid: { display: false } } },
+    scales: { y: { beginAtZero: true, suggestedMax: 10, ticks: { callback: (v) => `${v}h` }, grid: { color: 'rgba(148, 163, 184, 0.18)' } }, x: { grid: { display: false } } },
   };
   return (
     <Card title="Recent work hours" icon={FiTrendingUp}>
@@ -294,7 +294,7 @@ const SalaryTrendChart = ({ salaries }) => {
   const options = {
     responsive: true, maintainAspectRatio: false,
     plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => ` ${inr(c.parsed.y)}` } } },
-    scales: { y: { beginAtZero: true, ticks: { callback: (v) => `₹${Number(v).toLocaleString("en-IN")}` }, grid: { color: "#f1f5f9" } }, x: { grid: { display: false } } },
+    scales: { y: { beginAtZero: true, ticks: { callback: (v) => `₹${Number(v).toLocaleString("en-IN")}` }, grid: { color: 'rgba(148, 163, 184, 0.18)' } }, x: { grid: { display: false } } },
   };
   return (
     <Card title="Salary trend (last 6 months)" icon={FiDollarSign}>

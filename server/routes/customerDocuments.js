@@ -5,12 +5,13 @@ import fs from "fs";
 import crypto from "crypto";
 import pool from "../db.js";
 import { customerAuthMiddleware } from "../middlewares/customerAuthMiddleware.js";
+import { orgUploadPath } from '../tenancy/uploads.js';
 
 const router = express.Router();
 
 /* ================= MULTER ================= */
 const storage = multer.diskStorage({
-  destination: "uploads/customer-documents",
+  destination: (req, file, cb) => cb(null, orgUploadPath("customer-documents").rel),
   filename: (req, file, cb) => {
     const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
     cb(null, unique);
@@ -156,7 +157,7 @@ router.get("/:id/download", customerAuthMiddleware, async (req, res) => {
 
     const fullPath = path.resolve(
       process.cwd(),
-      "uploads/customer-documents",
+      orgUploadPath("customer-documents").rel,
       result.rows[0].file_hash
     );
 
@@ -250,7 +251,7 @@ router.get("/:id", customerAuthMiddleware, async (req, res) => {
         h.district,
         h.state
       FROM customer_documents cd
-      LEFT JOIN document_master dm ON cd.document_name = dm.name
+      LEFT JOIN document_master dm ON dm.id = cd.document_type_id
       LEFT JOIN households h ON cd.household_id = h.id
       WHERE cd.id = $1 AND cd.customer_id = $2
       `,
@@ -513,7 +514,7 @@ router.post(
 
       // Clean up uploaded file if exists
       if (req.file?.filename) {
-        const filePath = path.join("uploads/customer-documents", req.file.filename);
+        const filePath = path.join(orgUploadPath("customer-documents").rel, req.file.filename);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
@@ -566,7 +567,7 @@ router.put(
           dm.creates_household,
           dm.scope as doc_scope
         FROM customer_documents d
-        LEFT JOIN document_master dm ON d.document_name = dm.name
+        LEFT JOIN document_master dm ON dm.id = d.document_type_id
         WHERE d.id = $1 AND d.customer_id = $2
         `,
         [id, customerId]
@@ -692,7 +693,7 @@ router.put(
         );
 
         // Delete old file
-        const oldFilePath = path.join("uploads/customer-documents", existing.file_hash);
+        const oldFilePath = path.join(orgUploadPath("customer-documents").rel, existing.file_hash);
         if (fs.existsSync(oldFilePath)) {
           fs.unlinkSync(oldFilePath);
         }
@@ -741,7 +742,7 @@ router.put(
 
       // Clean up uploaded file if exists
       if (req.file?.filename) {
-        const filePath = path.join("uploads/customer-documents", req.file.filename);
+        const filePath = path.join(orgUploadPath("customer-documents").rel, req.file.filename);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
@@ -820,7 +821,7 @@ router.delete("/:id", customerAuthMiddleware, async (req, res) => {
     }
 
     // Delete the physical file
-    const filePath = path.join("uploads/customer-documents", document.file_hash);
+    const filePath = path.join(orgUploadPath("customer-documents").rel, document.file_hash);
     if (fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
     }

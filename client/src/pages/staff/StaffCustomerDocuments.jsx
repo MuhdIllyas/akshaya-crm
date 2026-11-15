@@ -19,6 +19,10 @@ import {
   getCustomerHouseholds
 } from '@/services/staffDocumentService';
 
+// Form controls in the modals, in the app theme
+const MODAL_FIELD = 'h-10 w-full rounded-xl border border-slate-300 bg-white px-3 text-base text-slate-900 focus:border-navy-500/40 focus:outline-none focus:ring-2 focus:ring-navy-500/30 disabled:bg-slate-50 sm:text-sm';
+const MODAL_LABEL = 'mb-1.5 block text-sm font-medium text-slate-700';
+
 const StaffCustomerDocuments = ({ customerId }) => {
   const [documents, setDocuments] = useState([]);
   const [filteredDocuments, setFilteredDocuments] = useState([]);
@@ -454,7 +458,7 @@ const fetchCustomerServices = async () => {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mx-auto"></div>
+          <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-navy-700 border-t-transparent"></div>
           <p className="mt-4 text-gray-600">Loading documents...</p>
         </div>
       </div>
@@ -462,408 +466,277 @@ const fetchCustomerServices = async () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div>
       
-      {/* Header */}
-      <div className="mb-8">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">Customer Documents</h1>
-            <p className="text-gray-600 mt-1">Manage and review customer uploaded documents</p>
-          </div>
-          
-          <div className="flex space-x-3">
-            <button
-              onClick={() => setShowUploadModal(true)}
-              className="inline-flex items-center justify-center px-5 py-2.5 bg-indigo-600 text-white rounded-xl font-medium hover:bg-indigo-700 transition-colors duration-200 shadow-sm"
-              disabled={isSubmitting}
-            >
-              <FiUpload className="mr-2" />
-              Upload as Staff
-            </button>
-            
-            <button
-              onClick={fetchDocuments}
-              className="inline-flex items-center justify-center px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors duration-200 shadow-sm"
-              disabled={isSubmitting}
-            >
-              <FiRefreshCw className="mr-2" />
-              Refresh
-            </button>
-          </div>
-        </div>
+      {/* Toolbar: status chips (filter), search, more filters, refresh, upload */}
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {[['all', 'All', stats.total], ['approved', 'Approved', stats.approved], ['pending', 'Pending', stats.pending], ['rejected', 'Rejected', stats.rejected]].map(([value, label, count]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setFilters({ ...filters, status: value })}
+            className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${filters.status === value ? 'bg-navy-700 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'}`}
+          >
+            {label} {count}
+          </button>
+        ))}
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Total</p>
-                <p className="text-2xl font-bold text-gray-800">{stats.total}</p>
-              </div>
-              <div className="bg-blue-50 p-2 rounded-lg">
-                <FiFile className="text-blue-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Approved</p>
-                <p className="text-2xl font-bold text-emerald-600">{stats.approved}</p>
-              </div>
-              <div className="bg-emerald-50 p-2 rounded-lg">
-                <FiCheck className="text-emerald-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Pending</p>
-                <p className="text-2xl font-bold text-amber-600">{stats.pending}</p>
-              </div>
-              <div className="bg-amber-50 p-2 rounded-lg">
-                <FiClock className="text-amber-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Rejected</p>
-                <p className="text-2xl font-bold text-rose-600">{stats.rejected}</p>
-              </div>
-              <div className="bg-rose-50 p-2 rounded-lg">
-                <FiX className="text-rose-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Staff</p>
-                <p className="text-2xl font-bold text-indigo-600">{stats.staffUploaded}</p>
-              </div>
-              <div className="bg-indigo-50 p-2 rounded-lg">
-                <FiShield className="text-indigo-600" />
-              </div>
-            </div>
-          </div>
-          
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Customer</p>
-                <p className="text-2xl font-bold text-amber-600">{stats.customerUploaded}</p>
-              </div>
-              <div className="bg-amber-50 p-2 rounded-lg">
-                <FiUser className="text-amber-600" />
-              </div>
-            </div>
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-48">
+            <FiSearch className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search documents"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="min-h-[36px] w-full rounded-xl border border-slate-300 bg-white py-1.5 pl-9 pr-3 text-base focus:border-navy-500/40 focus:ring-2 focus:ring-navy-500/30 sm:text-sm"
+            />
           </div>
 
-          <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-500">Service</p>
-                <p className="text-2xl font-bold text-purple-600">{stats.service}</p>
-              </div>
-              <div className="bg-purple-50 p-2 rounded-lg">
-                <FiBriefcase className="text-purple-600" />
-              </div>
+          <details className="relative">
+            <summary className="inline-flex h-9 cursor-pointer list-none items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50">
+              <FiFilter className="h-4 w-4" />
+              Filters
+              {(filters.scope !== 'all' || filters.uploadedBy !== 'all' || filters.showOldVersions) && (
+                <span className="h-1.5 w-1.5 rounded-full bg-navy-700" aria-label="Filters on" />
+              )}
+            </summary>
+            <div className="absolute right-0 z-20 mt-2 w-60 space-y-3 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+              <label className="block text-xs font-medium text-slate-600">
+                Scope
+                <select
+                  value={filters.scope}
+                  onChange={(e) => setFilters({ ...filters, scope: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                >
+                  <option value="all">All scopes</option>
+                  <option value="individual">Individual</option>
+                  <option value="household">Household</option>
+                  <option value="service">Service</option>
+                </select>
+              </label>
+              <label className="block text-xs font-medium text-slate-600">
+                Uploaded by
+                <select
+                  value={filters.uploadedBy}
+                  onChange={(e) => setFilters({ ...filters, uploadedBy: e.target.value })}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-2.5 py-1.5 text-sm"
+                >
+                  <option value="all">Anyone</option>
+                  <option value="staff">Staff</option>
+                  <option value="customer">Customer</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  checked={filters.showOldVersions}
+                  onChange={(e) => setFilters({ ...filters, showOldVersions: e.target.checked })}
+                  className="h-4 w-4 accent-navy-700"
+                />
+                Show old versions
+              </label>
             </div>
-          </div>
+          </details>
+
+          <button
+            onClick={fetchDocuments}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            disabled={isSubmitting}
+          >
+            <FiRefreshCw className="h-4 w-4" />
+            Refresh
+          </button>
+          <button
+            onClick={() => setShowUploadModal(true)}
+            className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-navy-700 px-3 text-sm font-medium text-white hover:bg-navy-800"
+            disabled={isSubmitting}
+          >
+            <FiUpload className="h-4 w-4" />
+            Upload
+          </button>
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white rounded-xl p-4 border border-gray-200 shadow-sm mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search documents..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 bg-gray-100 rounded-lg border border-gray-300 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 focus:bg-white"
-              />
-            </div>
-          </div>
-          
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={filters.scope}
-              onChange={(e) => setFilters({...filters, scope: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm"
-            >
-              <option value="all">All Scopes</option>
-              <option value="individual">Individual</option>
-              <option value="household">Household</option>
-              <option value="service">Service</option>
-            </select>
-            
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({...filters, status: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm"
-            >
-              <option value="all">All Status</option>
-              <option value="approved">Approved</option>
-              <option value="pending">Pending</option>
-              <option value="rejected">Rejected</option>
-            </select>
-            
-            <select
-              value={filters.uploadedBy}
-              onChange={(e) => setFilters({...filters, uploadedBy: e.target.value})}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 text-sm"
-            >
-              <option value="all">All Uploaders</option>
-              <option value="staff">Staff Uploads</option>
-              <option value="customer">Customer Uploads</option>
-            </select>
-            
-            <label className="flex items-center space-x-2 px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={filters.showOldVersions}
-                onChange={(e) => setFilters({...filters, showOldVersions: e.target.checked})}
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <span className="text-sm text-gray-700">Show Old Versions</span>
-            </label>
-          </div>
+      {/* Documents */}
+      {filteredDocuments.length === 0 ? (
+        <div className="py-10 text-center text-slate-500">
+          <FiFile className="mx-auto mb-2 h-10 w-10 opacity-30" />
+          <p className="text-sm font-medium">{documents.length === 0 ? 'No documents yet' : 'No documents match these filters'}</p>
         </div>
-      </div>
-
-      {/* Documents List */}
-      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        {filteredDocuments.length === 0 ? (
-          <div className="text-center py-12">
-            <FiFile className="mx-auto h-12 w-12 text-gray-400 mb-3" />
-            <p className="text-gray-500 text-sm">No documents found</p>
-            <p className="text-xs text-gray-400 mt-1">Try adjusting your filters or search</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Document</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Scope</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Number</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Uploaded By</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Version</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Expiry</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredDocuments.map((doc) => (
-                  <tr key={doc.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0">
-                          <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                            doc.scope === 'service' ? 'bg-purple-500' : 
-                            doc.scope === 'household' ? 'bg-green-500' : 'bg-blue-500'
-                          }`}>
-                            {doc.scope === 'service' ? (
-                              <FiBriefcase className="h-4 w-4 text-white" />
-                            ) : doc.scope === 'household' ? (
-                              <FiUsers className="h-4 w-4 text-white" />
-                            ) : (
-                              <FiFile className="h-4 w-4 text-white" />
-                            )}
-                          </div>
-                        </div>
-                        <div className="ml-3">
-                          <p className="text-sm font-medium text-gray-900">{doc.document_name}</p>
-                          <p className="text-xs text-gray-500">{doc.document_type}</p>
-                          <p className="text-xs text-gray-400 mt-1">
-                            {formatDate(doc.created_at)} • {formatFileSize(doc.file_size)}
-                          </p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs rounded-full ${getScopeColor(doc.scope)}`}>
-                        {doc.scope}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        {doc.masked_document_number || 'N/A'}
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Last4: {doc.document_number_last4 || 'N/A'}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs rounded-full ${getStatusColor(doc.status)}`}>
-                        {doc.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs rounded-full ${getUploadedByColor(doc.uploaded_by)}`}>
-                        {doc.uploaded_by}
-                      </span>
-                      {doc.uploaded_by === 'staff' && doc.reviewed_by_staff_name && (
-                        <p className="text-xs text-gray-500 mt-1">Reviewed by: {doc.reviewed_by_staff_name}</p>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        v{doc.version}
-                        {doc.is_latest && (
-                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded">
-                            Latest
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className={`text-sm ${doc.expiry_date && new Date(doc.expiry_date) < new Date() ? 'text-rose-600' : 'text-gray-900'}`}>
-                        {doc.expiry_date ? formatDate(doc.expiry_date) : 'N/A'}
-                        {doc.expiry_date && new Date(doc.expiry_date) < new Date() && (
-                          <span className="ml-2 px-1.5 py-0.5 text-xs bg-rose-100 text-rose-800 rounded">
-                            Expired
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex space-x-2">
-                        <button
-                          onClick={() => handleDownloadDocument(doc.id, doc.document_name)}
-                          className="p-1.5 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                          title="Download"
-                        >
-                          <FiDownload />
-                        </button>
-                        <button
-                          onClick={() => handleViewDocument(doc.id)}
-                          className="p-1.5 text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                          title="View"
-                        >
-                          <FiEye />
-                        </button>
-                        {doc.uploaded_by === 'customer' && doc.status === 'pending' && (
-                          <button
-                            onClick={() => handleReviewClick(doc)}
-                            className="p-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 rounded"
-                            title="Review"
-                          >
-                            <FiCheck />
-                          </button>
-                        )}
-                        {doc.review_remarks && (
-                          <button
-                            onClick={() => {
-                              toast.info(doc.review_remarks, {
-                                autoClose: 5000,
-                                position: 'top-center'
-                              });
-                            }}
-                            className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded"
-                            title="View Remarks"
-                          >
-                            <FiMessageSquare />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {filteredDocuments.map((doc) => {
+            const expired = doc.expiry_date && new Date(doc.expiry_date) < new Date();
+            const Icon = doc.scope === 'service' ? FiBriefcase : doc.scope === 'household' ? FiUsers : FiFile;
+            return (
+              <li
+                key={doc.id}
+                className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 px-1 py-2.5 sm:grid-cols-[2rem_minmax(0,1fr)_6.5rem_6.5rem_5.5rem_auto]"
+              >
+                <span className="grid h-8 w-8 place-items-center rounded-lg bg-navy-500/10 text-navy-700">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-slate-900">
+                    {doc.document_name}
+                    {doc.scope !== 'individual' && (
+                      <span className="ml-2 rounded-full border border-slate-200 px-1.5 py-0.5 align-middle text-[10px] font-medium capitalize text-slate-600">{doc.scope}</span>
+                    )}
+                    {!doc.is_latest && (
+                      <span className="ml-2 rounded-full border border-slate-200 px-1.5 py-0.5 align-middle text-[10px] font-medium text-slate-500">old v{doc.version}</span>
+                    )}
+                  </span>
+                  <span className="block truncate text-xs text-slate-500">
+                    Uploaded by {doc.uploaded_by === 'staff' ? 'staff' : 'customer'} · {formatDate(doc.created_at)} · {formatFileSize(doc.file_size)}
+                  </span>
+                </span>
+                <span className="hidden font-mono text-xs text-slate-600 sm:block">
+                  {doc.document_number_last4 ? `XXXX-${doc.document_number_last4}` : '—'}
+                </span>
+                <span className={`hidden text-xs sm:block ${expired ? 'font-medium text-rose-600' : 'text-slate-500'}`}>
+                  {doc.expiry_date ? `${expired ? 'Expired ' : ''}${formatDate(doc.expiry_date)}` : 'No expiry'}
+                </span>
+                <span className={`hidden justify-self-start rounded-full border px-2 py-0.5 text-xs font-medium capitalize sm:inline-block ${getStatusColor(doc.status)}`}>
+                  {doc.status}
+                </span>
+                <span className="flex items-center justify-end gap-1">
+                  {doc.uploaded_by === 'customer' && doc.status === 'pending' && (
+                    <button
+                      onClick={() => handleReviewClick(doc)}
+                      className="inline-flex h-8 items-center gap-1 rounded-lg bg-navy-700 px-2.5 text-xs font-medium text-white hover:bg-navy-800"
+                      title="Review"
+                    >
+                      <FiCheck className="h-3.5 w-3.5" /> Review
+                    </button>
+                  )}
+                  {doc.review_remarks && (
+                    <button
+                      onClick={() => toast.info(doc.review_remarks, { autoClose: 5000, position: 'top-center' })}
+                      className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-navy-700"
+                      title="Review remarks"
+                      aria-label="Review remarks"
+                    >
+                      <FiMessageSquare className="h-4 w-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleViewDocument(doc.id)}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-navy-700"
+                    title="View"
+                    aria-label="View"
+                  >
+                    <FiEye className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={() => handleDownloadDocument(doc.id, doc.document_name)}
+                    className="grid h-8 w-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-navy-700"
+                    title="Download"
+                    aria-label="Download"
+                  >
+                    <FiDownload className="h-4 w-4" />
+                  </button>
+                </span>
+                {/* phones: status + expiry under the name */}
+                <span className="col-span-2 col-start-2 flex items-center gap-2 text-xs sm:hidden">
+                  <span className={`rounded-full border px-2 py-0.5 font-medium capitalize ${getStatusColor(doc.status)}`}>{doc.status}</span>
+                  <span className={expired ? 'font-medium text-rose-600' : 'text-slate-500'}>
+                    {doc.expiry_date ? `${expired ? 'Expired ' : 'Expires '}${formatDate(doc.expiry_date)}` : 'No expiry'}
+                  </span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {/* Upload Modal for Staff */}
-      {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-xl font-bold text-gray-800">
-                  Upload Document as Staff
-                </h3>
-                <button
-                  onClick={() => setShowUploadModal(false)}
-                  className="text-gray-500 hover:text-gray-700 p-2"
-                  disabled={isSubmitting}
-                >
-                  ✕
-                </button>
+      {showUploadModal && (() => {
+        const canUpload =
+          uploadForm.file &&
+          uploadForm.documentName.trim() &&
+          uploadForm.scope &&
+          !isSubmitting &&
+          (uploadForm.scope !== 'service' || uploadForm.serviceEntryId) &&
+          (uploadForm.scope !== 'household' || selectedDocMeta?.creates_household || uploadForm.householdId);
+        const pickFile = (file) => { if (file && !isSubmitting) setUploadForm({ ...uploadForm, file }); };
+        return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
+            {/* Header */}
+            <div className="flex shrink-0 items-center gap-3 border-b border-slate-200 px-5 py-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-700 text-white">
+                <FiUpload className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-slate-900 sm:text-lg">Upload document</h3>
+                <p className="text-xs text-slate-500 sm:text-sm">Added to this customer's documents by staff</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setShowUploadModal(false)}
+                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                disabled={isSubmitting}
+                aria-label="Close"
+              >
+                <FiX className="h-5 w-5" />
+              </button>
+            </div>
 
-              <form onSubmit={handleUploadSubmit}>
-                <div className="space-y-4">
-                  {/* File Upload */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Select Document (Max 5MB) *
-                    </label>
-                    <div 
-                      className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-indigo-400 transition-colors cursor-pointer"
-                      onClick={() => document.getElementById('staff-file-upload').click()}
-                    >
-                      {uploadForm.file ? (
-                        <div className="text-center">
-                          <FiFile className="text-4xl text-indigo-600 mx-auto mb-2" />
-                          <p className="font-medium text-gray-800">{uploadForm.file.name}</p>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {formatFileSize(uploadForm.file.size)}
-                          </p>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setUploadForm({...uploadForm, file: null});
-                            }}
-                            className="text-rose-600 hover:text-rose-700 text-sm font-medium mt-3"
-                            disabled={isSubmitting}
-                          >
-                            Remove File
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <FiUpload className="text-4xl text-gray-400 mx-auto mb-4" />
-                          <p className="text-gray-600 mb-2">
-                            <span className="font-medium text-indigo-700">Click to browse</span> or drag and drop
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            PDF, JPG, PNG, DOC up to 5MB
-                          </p>
-                          <input
-                            type="file"
-                            id="staff-file-upload"
-                            className="hidden"
-                            onChange={(e) => setUploadForm({...uploadForm, file: e.target.files[0]})}
-                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                            disabled={isSubmitting}
-                          />
-                        </>
-                      )}
+            <form onSubmit={handleUploadSubmit} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5">
+                {/* File */}
+                <div>
+                  <label className={MODAL_LABEL}>File <span className="text-rose-500">*</span></label>
+                  {uploadForm.file ? (
+                    <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-navy-700 ring-1 ring-slate-200">
+                        <FiFile className="h-5 w-5" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900">{uploadForm.file.name}</p>
+                        <p className="text-xs text-slate-500">{formatFileSize(uploadForm.file.size)}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setUploadForm({ ...uploadForm, file: null })}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                        disabled={isSubmitting}
+                      >
+                        <FiTrash2 className="h-4 w-4" />
+                        Remove
+                      </button>
                     </div>
-                  </div>
-
-                  {/* Document Type */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Document Type *
+                  ) : (
+                    <label
+                      htmlFor="staff-file-upload"
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={(e) => { e.preventDefault(); pickFile(e.dataTransfer.files?.[0]); }}
+                      className="flex cursor-pointer flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center transition-colors hover:border-navy-500 hover:bg-navy-50"
+                    >
+                      <span className="mb-3 grid h-12 w-12 place-items-center rounded-xl bg-white text-navy-700 ring-1 ring-slate-200">
+                        <FiUpload className="h-5 w-5" />
+                      </span>
+                      <span className="text-sm text-slate-700">
+                        <span className="font-semibold text-navy-700">Choose a file</span> or drop it here
+                      </span>
+                      <span className="mt-1 text-xs text-slate-500">PDF, JPG, PNG or DOC · up to 5 MB</span>
+                      <input
+                        type="file"
+                        id="staff-file-upload"
+                        className="hidden"
+                        onChange={(e) => pickFile(e.target.files[0])}
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                        disabled={isSubmitting}
+                      />
                     </label>
+                  )}
+                </div>
+
+                {/* Document type + category */}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className={MODAL_LABEL}>Document type <span className="text-rose-500">*</span></label>
                     <select
                       value={uploadForm.documentName}
                       onChange={(e) => {
@@ -877,28 +750,24 @@ const fetchCustomerServices = async () => {
                           // Don't change scope here - let user select scope separately
                         });
                       }}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                      className={MODAL_FIELD}
                       required
                       disabled={isSubmitting}
                     >
                       <option value="">Select document type</option>
                       {documentMaster.map(doc => (
                         <option key={doc.name} value={doc.name}>
-                          {doc.name} ({doc.scope}) {doc.requires_number ? ' [Number Required]' : ''} {doc.requires_expiry ? ' [Expiry Required]' : ''}
+                          {doc.name} ({doc.scope}){doc.requires_number ? ' · number' : ''}{doc.requires_expiry ? ' · expiry' : ''}
                         </option>
                       ))}
                     </select>
                   </div>
-
-                  {/* Document Category */}
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Document Category
-                    </label>
+                    <label className={MODAL_LABEL}>Category</label>
                     <select
                       value={uploadForm.documentType}
                       onChange={(e) => setUploadForm({...uploadForm, documentType: e.target.value})}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                      className={MODAL_FIELD}
                       disabled={isSubmitting}
                     >
                       <option value="identity">Identity Proof</option>
@@ -910,334 +779,273 @@ const fetchCustomerServices = async () => {
                       <option value="other">Other</option>
                     </select>
                   </div>
+                </div>
 
-                  {/* Scope Selection - This is the key dropdown */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Scope *
-                    </label>
-                    <select
-                      value={uploadForm.scope}
-                      onChange={handleScopeChange}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                      required
-                      disabled={isSubmitting}
-                    >
-                      <option value="individual">Individual</option>
-                      <option value="household">Household</option>
-                      <option value="service">Service</option>
-                    </select>
+                {/* Scope */}
+                <div>
+                  <label className={MODAL_LABEL}>Belongs to <span className="text-rose-500">*</span></label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ['individual', 'Individual', FiUser],
+                      ['household', 'Household', FiHome],
+                      ['service', 'Service', FiBriefcase],
+                    ].map(([value, label, Icon]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => handleScopeChange({ target: { value } })}
+                        disabled={isSubmitting}
+                        className={`inline-flex h-10 items-center justify-center gap-2 rounded-xl text-sm font-medium transition-colors ${
+                          uploadForm.scope === value
+                            ? 'bg-navy-700 text-white'
+                            : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {label}
+                      </button>
+                    ))}
                   </div>
+                </div>
 
-                  {/* Service Selection - Show when scope is service */}
-                  {uploadForm.scope === 'service' && (
-                    <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-                      <h4 className="font-medium text-purple-800 mb-3 flex items-center">
-                        <FiBriefcase className="mr-2" />
-                        Select Service Application *
-                      </h4>
-                      
-                      {loadingServices ? (
-                        <div className="text-center py-4">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600 mx-auto"></div>
-                          <p className="text-sm text-purple-600 mt-2">Loading services...</p>
-                        </div>
-                      ) : customerServices.length > 0 ? (
-                        <select
-                          value={uploadForm.serviceEntryId}
-                          onChange={(e) => setUploadForm({...uploadForm, serviceEntryId: e.target.value})}
-                          className="w-full px-4 py-2 border border-purple-300 rounded-lg focus:border-purple-500 focus:ring-2 focus:ring-purple-200"
-                          required
-                          disabled={isSubmitting}
-                        >
-                          <option value="">Select a service application</option>
-                          {customerServices.map(service => (
-                            <option key={service.id} value={service.id}>
-                              {service.service_name} - {service.application_number || 'N/A'} ({service.status})
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-center py-4 bg-white rounded-lg border border-purple-200">
-                          <p className="text-gray-600 mb-2">No service applications found</p>
-                          <p className="text-sm text-gray-500">
-                            This customer doesn't have any in-progress or completed services
-                          </p>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Document Number Field - conditionally required */}
-                  {selectedDocMeta?.requires_number && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Document Number *
-                      </label>
-                      <input
-                        type="text"
-                        value={uploadForm.documentNumber}
-                        onChange={(e) => setUploadForm({...uploadForm, documentNumber: e.target.value})}
-                        placeholder="Enter document number"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                        disabled={isSubmitting}
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {/* Optional Document Number */}
-                  {uploadForm.documentName && !selectedDocMeta?.requires_number && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Document Number (Optional)
-                      </label>
-                      <input
-                        type="text"
-                        value={uploadForm.documentNumber}
-                        onChange={(e) => setUploadForm({...uploadForm, documentNumber: e.target.value})}
-                        placeholder="Enter document number (optional)"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                  )}
-
-                  {/* Expiry Date Field - conditionally required */}
-                  {selectedDocMeta?.requires_expiry && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Expiry Date *
-                      </label>
-                      <input
-                        type="date"
-                        value={uploadForm.expiryDate}
-                        onChange={(e) => setUploadForm({...uploadForm, expiryDate: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                        disabled={isSubmitting}
-                        required
-                      />
-                    </div>
-                  )}
-
-                  {/* Optional Expiry Date */}
-                  {uploadForm.documentName && !selectedDocMeta?.requires_expiry && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Expiry Date (Optional)
-                      </label>
-                      <input
-                        type="date"
-                        value={uploadForm.expiryDate}
-                        onChange={(e) => setUploadForm({...uploadForm, expiryDate: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                        disabled={isSubmitting}
-                      />
-                    </div>
-                  )}
-
-                  {/* Household Creation Fields - for household scope */}
-                  {uploadForm.scope === 'household' && selectedDocMeta?.creates_household && (
-                    <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
-                      <h4 className="font-medium text-blue-800 mb-3 flex items-center">
-                        <FiHome className="mr-2" />
-                        Create New Household
-                      </h4>
-                      
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium text-blue-700 mb-2">
-                            Ration Card Type
-                          </label>
-                          <select
-                            value={uploadForm.rationCardType}
-                            onChange={(e) => setUploadForm({...uploadForm, rationCardType: e.target.value})}
-                            className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                            disabled={isSubmitting}
-                          >
-                            <option value="general">General</option>
-                            <option value="blue">Blue</option>
-                            <option value="red">Red</option>
-                            <option value="white">White</option>
-                            <option value="yellow">Yellow</option>
-                          </select>
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-blue-700 mb-2">
-                            District
-                          </label>
-                          <input
-                            type="text"
-                            value={uploadForm.district}
-                            onChange={(e) => setUploadForm({...uploadForm, district: e.target.value})}
-                            placeholder="Enter district"
-                            className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        
-                        <div>
-                          <label className="block text-sm font-medium text-blue-700 mb-2">
-                            State
-                          </label>
-                          <input
-                            type="text"
-                            value={uploadForm.state}
-                            onChange={(e) => setUploadForm({...uploadForm, state: e.target.value})}
-                            placeholder="Enter state"
-                            className="w-full px-4 py-2 border border-blue-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                            disabled={isSubmitting}
-                          />
-                        </div>
+                {/* Service selection */}
+                {uploadForm.scope === 'service' && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <label className={MODAL_LABEL}>Application <span className="text-rose-500">*</span></label>
+                    {loadingServices ? (
+                      <div className="flex items-center gap-2 py-2 text-sm text-slate-500">
+                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-navy-700 border-t-transparent" />
+                        Loading applications…
                       </div>
-                    </div>
-                  )}
-
-                  {/* Household Selection - for household scope */}
-                  {uploadForm.scope === 'household' && !selectedDocMeta?.creates_household && households.length > 0 && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Select Household *
-                      </label>
+                    ) : customerServices.length > 0 ? (
                       <select
-                        value={uploadForm.householdId}
-                        onChange={(e) => setUploadForm({...uploadForm, householdId: e.target.value})}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
+                        value={uploadForm.serviceEntryId}
+                        onChange={(e) => setUploadForm({...uploadForm, serviceEntryId: e.target.value})}
+                        className={MODAL_FIELD}
                         required
                         disabled={isSubmitting}
                       >
-                        <option value="">Select a household</option>
-                        {households.map(household => (
-                          <option key={household.id} value={household.id}>
-                            Ration Card: ****{household.ration_card_last4} ({household.ration_card_type})
+                        <option value="">Select an application</option>
+                        {customerServices.map(service => (
+                          <option key={service.id} value={service.id}>
+                            {service.service_name} - {service.application_number || 'N/A'} ({service.status})
                           </option>
                         ))}
                       </select>
-                    </div>
-                  )}
-                </div>
+                    ) : (
+                      <p className="text-sm text-slate-500">
+                        This customer has no in-progress or completed applications.
+                      </p>
+                    )}
+                  </div>
+                )}
 
-                <div className="flex items-center justify-end space-x-4 pt-6 border-t border-gray-200 mt-6">
-                  <button
-                    type="button"
-                    onClick={() => setShowUploadModal(false)}
-                    className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
-                    disabled={isSubmitting}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={
-                      !uploadForm.file || 
-                      !uploadForm.documentName.trim() || 
-                      !uploadForm.scope ||
-                      isSubmitting ||
-                      (uploadForm.scope === 'service' && !uploadForm.serviceEntryId) ||
-                      (uploadForm.scope === 'household' && !selectedDocMeta?.creates_household && !uploadForm.householdId)
-                    }
-                    className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                      (uploadForm.file && uploadForm.documentName.trim() && uploadForm.scope && !isSubmitting &&
-                       (uploadForm.scope !== 'service' || uploadForm.serviceEntryId) &&
-                       (uploadForm.scope !== 'household' || selectedDocMeta?.creates_household || uploadForm.householdId))
-                        ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    }`}
-                  >
-                    <FiUpload className="inline mr-2" />
-                    {isSubmitting ? 'Uploading...' : 'Upload Document'}
-                  </button>
-                </div>
-              </form>
-            </div>
+                {/* Household: create new */}
+                {uploadForm.scope === 'household' && selectedDocMeta?.creates_household && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <p className="mb-3 text-sm font-semibold text-slate-800">New household</p>
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div>
+                        <label className={MODAL_LABEL}>Ration card type</label>
+                        <select
+                          value={uploadForm.rationCardType}
+                          onChange={(e) => setUploadForm({...uploadForm, rationCardType: e.target.value})}
+                          className={MODAL_FIELD}
+                          disabled={isSubmitting}
+                        >
+                          <option value="general">General</option>
+                          <option value="blue">Blue</option>
+                          <option value="red">Red</option>
+                          <option value="white">White</option>
+                          <option value="yellow">Yellow</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className={MODAL_LABEL}>District</label>
+                        <input
+                          type="text"
+                          value={uploadForm.district}
+                          onChange={(e) => setUploadForm({...uploadForm, district: e.target.value})}
+                          placeholder="District"
+                          className={MODAL_FIELD}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                      <div>
+                        <label className={MODAL_LABEL}>State</label>
+                        <input
+                          type="text"
+                          value={uploadForm.state}
+                          onChange={(e) => setUploadForm({...uploadForm, state: e.target.value})}
+                          placeholder="State"
+                          className={MODAL_FIELD}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Household: pick existing */}
+                {uploadForm.scope === 'household' && !selectedDocMeta?.creates_household && households.length > 0 && (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <label className={MODAL_LABEL}>Household <span className="text-rose-500">*</span></label>
+                    <select
+                      value={uploadForm.householdId}
+                      onChange={(e) => setUploadForm({...uploadForm, householdId: e.target.value})}
+                      className={MODAL_FIELD}
+                      required
+                      disabled={isSubmitting}
+                    >
+                      <option value="">Select a household</option>
+                      {households.map(household => (
+                        <option key={household.id} value={household.id}>
+                          Ration Card: ****{household.ration_card_last4} ({household.ration_card_type})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Number + expiry (shown once a type is chosen) */}
+                {uploadForm.documentName && (
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div>
+                      <label className={MODAL_LABEL}>
+                        Document number{' '}
+                        {selectedDocMeta?.requires_number
+                          ? <span className="text-rose-500">*</span>
+                          : <span className="font-normal text-slate-400">(optional)</span>}
+                      </label>
+                      <input
+                        type="text"
+                        value={uploadForm.documentNumber}
+                        onChange={(e) => setUploadForm({...uploadForm, documentNumber: e.target.value})}
+                        placeholder="Document number"
+                        className={MODAL_FIELD}
+                        disabled={isSubmitting}
+                        required={!!selectedDocMeta?.requires_number}
+                      />
+                    </div>
+                    <div>
+                      <label className={MODAL_LABEL}>
+                        Expiry date{' '}
+                        {selectedDocMeta?.requires_expiry
+                          ? <span className="text-rose-500">*</span>
+                          : <span className="font-normal text-slate-400">(optional)</span>}
+                      </label>
+                      <input
+                        type="date"
+                        value={uploadForm.expiryDate}
+                        onChange={(e) => setUploadForm({...uploadForm, expiryDate: e.target.value})}
+                        className={MODAL_FIELD}
+                        disabled={isSubmitting}
+                        required={!!selectedDocMeta?.requires_expiry}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Footer */}
+              <div className="flex shrink-0 justify-end gap-2 border-t border-slate-200 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={() => setShowUploadModal(false)}
+                  className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
+                  disabled={isSubmitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!canUpload}
+                  className="inline-flex h-10 items-center gap-2 rounded-xl bg-navy-700 px-4 text-sm font-medium text-white transition-colors hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FiUpload className="h-4 w-4" />
+                  {isSubmitting ? 'Uploading…' : 'Upload'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Review Modal */}
       {showReviewModal && selectedDocument && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl max-w-md w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h3 className="text-xl font-bold text-gray-800">
-                Review Document
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-xl">
+            <div className="flex items-center gap-3 border-b border-slate-200 px-5 py-4">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-navy-700 text-white">
+                <FiShield className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-slate-900 sm:text-lg">Review document</h3>
+                <p className="truncate text-xs text-slate-500 sm:text-sm">
+                  {selectedDocument.document_name} · uploaded by {selectedDocument.uploaded_by}
+                </p>
+              </div>
               <button
+                type="button"
                 onClick={() => setShowReviewModal(false)}
-                className="text-gray-500 hover:text-gray-700 p-2"
+                className="grid h-9 w-9 place-items-center rounded-xl text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-700"
                 disabled={isSubmitting}
+                aria-label="Close"
               >
-                ✕
+                <FiX className="h-5 w-5" />
               </button>
             </div>
 
             <form onSubmit={handleReviewSubmit}>
-              <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">Document: <span className="font-medium">{selectedDocument.document_name}</span></p>
-                <p className="text-sm text-gray-600">Uploaded by: <span className="font-medium">{selectedDocument.uploaded_by}</span></p>
-              </div>
+              <div className="space-y-5 px-5 py-5">
+                <div>
+                  <label className={MODAL_LABEL}>Decision <span className="text-rose-500">*</span></label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      ['approved', 'Approve', FiCheck, 'bg-emerald-600 text-white'],
+                      ['rejected', 'Reject', FiX, 'bg-rose-600 text-white'],
+                      ['pending', 'Keep pending', FiClock, 'bg-amber-500 text-white'],
+                    ].map(([value, label, Icon, activeClass]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setReviewForm({ ...reviewForm, status: value })}
+                        disabled={isSubmitting}
+                        aria-pressed={reviewForm.status === value}
+                        className={`inline-flex h-10 items-center justify-center gap-1.5 rounded-xl px-2 text-sm font-medium transition-colors ${
+                          reviewForm.status === value
+                            ? activeClass
+                            : 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="truncate">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Status *
-                </label>
-                <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="approved"
-                      checked={reviewForm.status === 'approved'}
-                      onChange={(e) => setReviewForm({...reviewForm, status: e.target.value})}
-                      className="text-emerald-600 focus:ring-emerald-500"
-                      disabled={isSubmitting}
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Approved</span>
+                <div>
+                  <label className={MODAL_LABEL}>
+                    Remarks <span className="font-normal text-slate-400">(optional)</span>
                   </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="rejected"
-                      checked={reviewForm.status === 'rejected'}
-                      onChange={(e) => setReviewForm({...reviewForm, status: e.target.value})}
-                      className="text-rose-600 focus:ring-rose-500"
-                      disabled={isSubmitting}
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Rejected</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      value="pending"
-                      checked={reviewForm.status === 'pending'}
-                      onChange={(e) => setReviewForm({...reviewForm, status: e.target.value})}
-                      className="text-amber-600 focus:ring-amber-500"
-                      disabled={isSubmitting}
-                    />
-                    <span className="ml-2 text-sm text-gray-700">Keep Pending</span>
-                  </label>
+                  <textarea
+                    value={reviewForm.remarks}
+                    onChange={(e) => setReviewForm({...reviewForm, remarks: e.target.value})}
+                    placeholder="Add review remarks…"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base text-slate-900 focus:border-navy-500/40 focus:outline-none focus:ring-2 focus:ring-navy-500/30 disabled:bg-slate-50 sm:text-sm"
+                    rows="3"
+                    disabled={isSubmitting}
+                  />
                 </div>
               </div>
 
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Remarks (Optional)
-                </label>
-                <textarea
-                  value={reviewForm.remarks}
-                  onChange={(e) => setReviewForm({...reviewForm, remarks: e.target.value})}
-                  placeholder="Add review remarks..."
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200"
-                  rows="3"
-                  disabled={isSubmitting}
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-4">
+              <div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4">
                 <button
                   type="button"
                   onClick={() => setShowReviewModal(false)}
-                  className="px-6 py-2 text-gray-700 border border-gray-300 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+                  className="inline-flex h-10 items-center rounded-xl border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50"
                   disabled={isSubmitting}
                 >
                   Cancel
@@ -1245,13 +1053,9 @@ const fetchCustomerServices = async () => {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className={`px-6 py-2 rounded-lg font-medium transition-colors ${
-                    !isSubmitting
-                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                  }`}
+                  className="inline-flex h-10 items-center rounded-xl bg-navy-700 px-4 text-sm font-medium text-white transition-colors hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Submitting...' : 'Submit Review'}
+                  {isSubmitting ? 'Submitting…' : 'Submit review'}
                 </button>
               </div>
             </form>

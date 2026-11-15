@@ -2,6 +2,11 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
+import ThemeToggle from '../components/ThemeToggle';
+import QuickServiceModal from '@/components/QuickServiceModal';
+import { getWalletsForCentre } from '@/services/walletService';
+import { toast } from 'react-toastify';
+import { customerAuthHeaders } from '@/tenancy/centres';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -37,6 +42,21 @@ const DashboardLayout = () => {
   // Centre name shown under the admin's name. Read from localStorage ("centre_name", saved at login);
   // no API call here because /api/centres is superadmin-only.
   const centreName = localStorage.getItem("centre_name") || "";
+  // Customer in a per-centre portal: the centre they're signed in at (saved by tenancy/centres).
+  const customerCentreName = role === "customer" && localStorage.getItem("customer_portal_mode") === "per_centre"
+    ? localStorage.getItem("customer_centre_name") || ""
+    : "";
+  // Previous sign-in (saved at login), shown under the name: "Last sign-in: 11 Nov, 9:42 pm"
+  const previousSignIn = (() => {
+    try {
+      const p = JSON.parse(localStorage.getItem("previous_sign_in") || "null");
+      return p?.created_at
+        ? new Date(p.created_at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+        : null;
+    } catch {
+      return null;
+    }
+  })();
   
   // Add state for conversations and unread count
   const [unreadCount, setUnreadCount] = useState(0);
@@ -120,6 +140,33 @@ const DashboardLayout = () => {
       console.error('Error fetching leads count:', err);
     }
   };
+
+  // Customer portal: unread replies from the centre (badge on "Messages")
+  const [customerUnread, setCustomerUnread] = useState(0);
+  useEffect(() => {
+    if (role !== "customer") return undefined;
+    let stopped = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/customer/chat/unread`, { headers: customerAuthHeaders() });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!stopped) setCustomerUnread(Number(data.total) || 0);
+      } catch {
+        /* try again next round */
+      }
+    };
+    load();
+    const timer = setInterval(() => { if (!document.hidden) load(); }, 20000);
+    window.addEventListener("customer-chat-read", load); // the Messages page read a chat
+    window.addEventListener("focus", load);
+    return () => {
+      stopped = true;
+      clearInterval(timer);
+      window.removeEventListener("customer-chat-read", load);
+      window.removeEventListener("focus", load);
+    };
+  }, [role, location.pathname]);
 
   // Initial fetch on component mount
   useEffect(() => {
@@ -271,7 +318,9 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/staffmanagement", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/superadmin/walletmanagement", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/superadmin/servicemanagement", label: "Service Management", icon: ServicesIcon },
+      { path: "/dashboard/superadmin/documenttypes", label: "Document Types", icon: DocumentTypesIcon },
       { path: "/dashboard/superadmin/servicelogs", label: "Service Logs", icon: ServiceLogsIcon },
+      { path: "/dashboard/superadmin/customers", label: "Customers", icon: CustomersIcon },
       { path: "/dashboard/superadmin/attendance", label: "Salary Calculations", icon: SalaryIcon },
       { path: "/dashboard/superadmin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
       { path: "/dashboard/superadmin/teams", label: "Teams", icon: TeamIcon },
@@ -293,6 +342,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/admin/wallets", label: "Wallets", icon: WalletIcon },
       { path: "/dashboard/admin/services", label: "Service Management", icon: ServicesIcon },
       { path: "/dashboard/admin/servicelogs", label: "Service Logs", icon: ServiceLogsIcon },
+      { path: "/dashboard/admin/customers", label: "Customers", icon: CustomersIcon },
       { path: "/dashboard/admin/token", label: "Token Generator", icon: TokenGeneratorIcon },
       { path: "/dashboard/admin/attendancemanagement", label: "Salary Calculations", icon: SalaryIcon },
       { path: "/dashboard/admin/expensemanagement", label: "Expense Management", icon: ExpenseManagementIcon },
@@ -337,6 +387,7 @@ const DashboardLayout = () => {
       { path: "/customer/dashboard", label: "Home", icon: DashboardIcon },
       { path: "/customer/myservices", label: "My Services", icon: ServicesIcon },
       { path: "/customer/mydocuments", label: "My Documents", icon: ServiceLogsIcon },
+      { path: "/customer/messages", label: "Messages", icon: MessengerIconWithBadge },
       { path: "/customer/myprofile", label: "Profile", icon: ProfileIcon }
     ]
   };
@@ -367,8 +418,8 @@ const DashboardLayout = () => {
     "Calendar": "Workspace", "My Tasks": "Workspace", "Notes": "Workspace", "Messenger": "Workspace",
     "Notifications": "Workspace", "Knowledge Hub": "Workspace",
     "Service Entry": "Operations", "Track Service": "Operations", "Service Logs": "Operations",
-    "Service Management": "Operations", "Token Generator": "Operations", "Pending Payments": "Operations",
-    "Leads": "Operations", "Campaigns": "Operations", "Customers Profile": "Operations",
+    "Service Management": "Operations", "Document Types": "Operations", "Token Generator": "Operations", "Pending Payments": "Operations",
+    "Leads": "Operations", "Campaigns": "Operations", "Customers Profile": "Operations", "Customers": "Operations",
     "My Services": "Operations", "My Documents": "Operations", "Approvals": "Operations",
     "Staff Management": "People", "Teams": "People", "My Team": "People", "Centre Management": "People",
     "Salary Calculations": "People", "Salary & Attendance": "People", "Performance": "People",
@@ -408,11 +459,24 @@ const DashboardLayout = () => {
       ? (rawPhoto.startsWith("http") || rawPhoto.startsWith("data:image") ? rawPhoto : `${API_BASE_URL}${rawPhoto}`)
       : "";
 
-  // Single-key shortcuts: T = Track Service, S = Service Entry (ignored while typing or with Ctrl/Alt/Cmd held)
+  // Quick Service Entry is a pop-up (not a page): the layout owns it so "Q" works from any page (staff only)
+  const quickEnabled = role === "staff";
+  const [quickOpen, setQuickOpen] = useState(false);
+  const [quickWallets, setQuickWallets] = useState([]);
+  const quickWalletsLoaded = useRef(false);
+  useEffect(() => {
+    if (!quickOpen || quickWalletsLoaded.current) return;
+    quickWalletsLoaded.current = true;
+    getWalletsForCentre()
+      .then((w) => setQuickWallets(Array.isArray(w) ? w : []))
+      .catch(() => { quickWalletsLoaded.current = false; toast.error("Failed to load wallets"); });
+  }, [quickOpen]);
+
+  // Single-key shortcuts: T = Track Service, S = Service Entry, Q = Quick Service (ignored while typing or with Ctrl/Alt/Cmd held)
   const trackPath = userNavigation.find((item) => item.label === "Track Service")?.path;
   const entryPath = quickEntryItem?.path;
   useEffect(() => {
-    if (!trackPath && !entryPath) return undefined;
+    if (!trackPath && !entryPath && !quickEnabled) return undefined;
     const onKey = (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey || e.repeat) return;
       const el = e.target;
@@ -422,13 +486,14 @@ const DashboardLayout = () => {
       const k = String(e.key).toLowerCase();
       if (k === "t" && trackPath) { e.preventDefault(); navigate(trackPath); }
       if (k === "s" && entryPath) { e.preventDefault(); navigate(entryPath); }
+      if (k === "q" && quickEnabled) { e.preventDefault(); setQuickOpen(true); }
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [trackPath, entryPath, navigate]);
+  }, [trackPath, entryPath, quickEnabled, navigate]);
 
   // Unread total in the browser tab title, e.g. "(3) Akshaya Sahayi" (same total as the phone menu dot)
-  const unreadTotal = role === "customer" ? 0 : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
+  const unreadTotal = role === "customer" ? customerUnread : (unreadCount || 0) + (unreadNotesCount || 0) + (notificationsCount || 0) + (newLeadsCount || 0);
   const baseTitleRef = useRef(null);
   useEffect(() => {
     if (baseTitleRef.current === null) baseTitleRef.current = document.title.replace(/^\(\d+\+?\)\s*/, "");
@@ -438,7 +503,7 @@ const DashboardLayout = () => {
   useEffect(() => () => { if (baseTitleRef.current !== null) document.title = baseTitleRef.current; }, []);
 
   return (
-    <div className="flex min-h-screen min-h-dvh bg-slate-50">
+    <div className="flex min-h-[100dvh] bg-slate-50">
       {/* Phone: dimmed backdrop behind the open drawer */}
       {isMobileOpen && (
         <div
@@ -451,7 +516,7 @@ const DashboardLayout = () => {
       {/* Sidebar with original navy blue colors (off-canvas drawer on phones) */}
       <aside 
         id="app-sidebar"
-        className={`bg-slate-50 text-slate-700 p-2 gap-2 fixed top-0 left-0 bottom-0 h-screen h-dvh flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] ${
+        className={`bg-slate-50 text-slate-700 p-2 gap-2 fixed top-0 left-0 bottom-0 flex flex-col transition-all duration-300 z-50 w-64 max-w-[85vw] max-md:overflow-y-auto max-md:overscroll-contain ${
           isMobileOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0 md:max-w-none ${
           isCollapsed ? "md:w-20" : "md:w-64"
@@ -521,6 +586,17 @@ const DashboardLayout = () => {
                 {role === "admin" && centreName && (
                   <p className="truncate text-[11px] text-slate-500" title={centreName}>{centreName}</p>
                 )}
+                {customerCentreName && (
+                  <p className="truncate text-[11px] text-slate-500" title={customerCentreName}>
+                    {customerCentreName} ·{" "}
+                    <button type="button" onClick={() => navigate("/customer/choose-centre")} className="font-medium text-navy-700 hover:underline">
+                      Switch
+                    </button>
+                  </p>
+                )}
+                {role !== "customer" && previousSignIn && (
+                  <p className="truncate text-[11px] text-slate-400" title="Your sign-in before this one">Last sign-in: {previousSignIn}</p>
+                )}
               </div>
             </div>
           )}
@@ -543,6 +619,7 @@ const DashboardLayout = () => {
               const isActive = activePath === item.path;
               const IconComponent = item.icon;
               const isMessenger = item.label === "Messenger";
+              const isCustomerMessages = role === "customer" && item.label === "Messages";
               const isNotes = item.label === "Notes";
               const isNotifications = item.label === "Notifications";
               const isLeads = item.label === "Leads";
@@ -568,7 +645,8 @@ const DashboardLayout = () => {
                       isActive={isActive} 
                       isCollapsed={isCollapsed} 
                       unreadCount={
-                        isMessenger ? unreadCount : 
+                        isMessenger ? unreadCount :
+                        isCustomerMessages ? customerUnread : 
                         isNotes ? unreadNotesCount : 
                         isNotifications ? notificationsCount :
                         isLeads ? newLeadsCount : 0 
@@ -588,6 +666,12 @@ const DashboardLayout = () => {
                     <div className="absolute left-full ml-3 px-3 py-2 bg-slate-900 text-white text-sm rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-200 whitespace-nowrap z-10 shadow-lg">
                       {item.label}
                       
+                      {isCustomerMessages && customerUnread > 0 && (
+                        <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
+                          {customerUnread > 99 ? '99+' : customerUnread}
+                        </span>
+                      )}
+
                       {/* Messenger Badge */}
                       {isMessenger && unreadCount > 0 && (
                         <span className="ml-2 bg-red-500 px-1.5 py-0.5 rounded-full text-xs">
@@ -633,7 +717,8 @@ const DashboardLayout = () => {
         {/* Common Actions Section */}
         <div className={`rounded-2xl border border-slate-200 bg-white py-2 shadow-sm ${isCollapsed ? "px-2" : "px-3"}`}>
           <nav className="space-y-1">
-            <Link 
+            <ThemeToggle collapsed={isCollapsed} />
+            <Link
               to="/dashboard/my-profile"   // Changed from "/dashboard/profile" to the unified profile route
               onClick={() => handleNavigation("/dashboard/my-profile")}
               className={`flex items-center rounded-xl transition-all duration-200 group relative ${
@@ -723,7 +808,7 @@ const DashboardLayout = () => {
             aria-controls="app-sidebar"
           >
             <MenuIcon />
-            {(unreadCount + unreadNotesCount + (notificationsCount || 0) + newLeadsCount) > 0 && (
+            {(role === "customer" ? customerUnread : unreadCount + unreadNotesCount + (notificationsCount || 0) + newLeadsCount) > 0 && (
               <span className="absolute top-2 right-2 w-2.5 h-2.5 rounded-full bg-red-500 border-2 border-white"></span>
             )}
           </button>
@@ -824,6 +909,10 @@ const DashboardLayout = () => {
         </main>
       </div>
       
+      {quickEnabled && (
+        <QuickServiceModal open={quickOpen} onClose={() => setQuickOpen(false)} wallets={quickWallets} />
+      )}
+
       {/* Color definitions and custom scrollbar styles */}
       <style>{`
         .bg-navy-800 { background-color: #172a45; }
@@ -1101,11 +1190,13 @@ const LeadsIconWithBadge = ({ isActive = false, isCollapsed = false, unreadCount
 );
 
 // Icon Definitions
+const MessengerIcon = createIcon("M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z");
 const DashboardIcon = createIcon("M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6");
 const EventsIcon = createIcon(`M8 7V3m8 4V3m-9 8h10 M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z M12 16h.01 M12 12h.01 M12 20h.01`);
 const CentreIcon = createIcon("M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 8v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4");
 const UsersIcon = createIcon("M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z");
 const WalletIcon = createIcon("M3 10h18M7 15h1m2 0h1m-1 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z");
+const DocumentTypesIcon = createIcon("M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z");
 const ServicesIcon = createIcon("M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z");
 const SalaryIcon = createIcon("M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z");
 const SalaryAttendanceIcon = createIcon("M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z M12 11v5m0 0l-2-2m2 2l2-2");

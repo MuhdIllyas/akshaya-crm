@@ -86,11 +86,13 @@ const fetchServiceAnalytics = async (client, centreId, dates) => {
 };
 
 const fetchFinancialAnalytics = async (client, centreId, dates) => {
-  const [todayRev, todayOpEx, monthlyRev, monthlyOpEx, periodRev, periodOpEx] = await Promise.all([
-    
+  const [todayRev, todayOpEx, monthlyRev, monthlyOpEx, periodRev, periodOpEx, periodReceived] = await Promise.all([
+
     // ✅ 1. Updated to use date ranges (fromDate and toDate)
+    // NOTE: "revenue_collected" here is what was BILLED for entries made in the
+    // period (paid or not). Money actually received is query 7 below.
     client.query(`
-      SELECT 
+      SELECT
         COALESCE(SUM(se.total_charges), 0) as revenue_collected,
         COALESCE(SUM(se.department_charges), 0) as department_charges,
         COALESCE(SUM(se.service_charges), 0) as gross_profit
@@ -155,6 +157,32 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
       AND status IN ('approved', 'auto_approved') 
       AND (is_reversal IS NULL OR is_reversal = FALSE)
       GROUP BY date_label
+    `, [centreId, dates.fromDate, dates.toDate]),
+
+    // ✅ 7. Money actually received in the period, counted exactly like the
+    // Accounting page's income (GET /api/accounting/income): service-payment
+    // credits into wallets, latest version of each corrected payment, no
+    // reversals, dated by when the money came in.
+    client.query(`
+      WITH latest_transactions AS (
+        SELECT DISTINCT ON (COALESCE(correction_group_id::text, id::text))
+          amount, created_at, reference_id, wallet_id
+        FROM wallet_transactions
+        WHERE category = 'Service Payment'
+          AND type = 'credit'
+          AND reference_type = 'payment'
+          AND (is_reversal IS NULL OR is_reversal = FALSE)
+        ORDER BY COALESCE(correction_group_id::text, id::text), created_at DESC
+      )
+      SELECT COALESCE(SUM(wt.amount), 0) AS amount_received
+      FROM latest_transactions wt
+      JOIN service_entries se ON se.id = wt.reference_id
+      JOIN staff s ON s.id = se.staff_id
+      JOIN services sv ON sv.id = se.category_id   -- same joins as Accounting,
+      JOIN wallets w ON w.id = wt.wallet_id        -- so the totals always agree
+      WHERE s.centre_id = $1
+        AND wt.created_at >= $2::date
+        AND wt.created_at < ($3::date + INTERVAL '1 day')
     `, [centreId, dates.fromDate, dates.toDate])
   ]);
 
@@ -164,7 +192,8 @@ const fetchFinancialAnalytics = async (client, centreId, dates) => {
     monthlyRev: monthlyRev.rows,
     monthlyOpEx: monthlyOpEx.rows,
     periodRev: periodRev.rows,
-    periodOpEx: periodOpEx.rows
+    periodOpEx: periodOpEx.rows,
+    periodReceived: periodReceived.rows[0]
   };
 };
 
@@ -1985,7 +2014,8 @@ const fetchRepeatCustomersAnalytics = async (client, centreId, dates) => {
 
 const calculateFinancialMetrics = (raw) => {
   const today = {
-    revenueCollected: Number(raw.todayRev.revenue_collected),
+    revenueCollected: Number(raw.todayRev.revenue_collected), // billed (kept for the profit maths)
+    amountReceived: Number(raw.periodReceived?.amount_received || 0), // money in, as on the Accounting page
     departmentCharges: Number(raw.todayRev.department_charges),
     grossProfit: Number(raw.todayRev.gross_profit),
     operatingExpenses: Number(raw.todayOpEx.operating_expenses),
@@ -2087,7 +2117,8 @@ const buildDashboardStats = (analytics) => {
     servicesCompleted: Number(analytics.services.completed_services),
     averageOrderValue: Math.round(Number(analytics.services.avg_order_value)),
     
-    todayRevenueCollected: analytics.financials.summary.today.revenueCollected,
+    todayRevenueCollected: analytics.financials.summary.today.revenueCollected, // billed
+    todayAmountReceived: analytics.financials.summary.today.amountReceived,
     todayDepartmentCharges: analytics.financials.summary.today.departmentCharges,
     todayGrossProfit: analytics.financials.summary.today.grossProfit,
     todayOperatingExpenses: analytics.financials.summary.today.operatingExpenses,

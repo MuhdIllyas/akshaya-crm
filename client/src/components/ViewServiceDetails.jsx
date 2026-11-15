@@ -49,7 +49,7 @@ const ViewServiceDetails = () => {
       if (error.response?.status === 401) {
         errorMessage = 'Session expired. Please login again.';
         setTimeout(() => {
-          navigate('/customer/login');
+          navigate('/login');
         }, 2000);
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message;
@@ -218,7 +218,10 @@ const ViewServiceDetails = () => {
   };
 
   // Format currency
+  // Fees are hidden from customers (paid at the centre) unless the
+  // organization shows them; then the server leaves the amounts in.
   const formatCurrency = (amount) => {
+    if (amount === undefined || amount === null) return 'Paid at the centre';
     return new Intl.NumberFormat('en-IN', {
       style: 'currency',
       currency: 'INR',
@@ -394,18 +397,27 @@ const ViewServiceDetails = () => {
                     </p>
                   </div>
                 )}
-                {serviceApplication.tracking?.assigned_staff_name && (
+                {(serviceApplication.handled_by?.name || serviceApplication.tracking?.assigned_staff_name) && (
                   <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-100">
                     <div className="flex items-center">
                       <FiUser className="text-blue-600 mr-3" />
                       <div>
                         <p className="text-sm text-blue-700">
-                          <span className="font-medium">Assigned Staff:</span> {serviceApplication.tracking.assigned_staff_name}
+                          <span className="font-medium">Assigned Staff:</span> {serviceApplication.tracking?.assigned_staff_name || serviceApplication.handled_by?.name}
                         </p>
                         <p className="text-xs text-blue-600 mt-1">
                           Last updated: {serviceApplication.tracking.updated_at ? new Date(serviceApplication.tracking.updated_at).toLocaleString() : 'N/A'}
                         </p>
                       </div>
+                      {serviceApplication.handled_by?.name && (
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/customer/messages?booking=${serviceApplication.id}`)}
+                          className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-navy-700 border border-blue-200 hover:bg-blue-100"
+                        >
+                          <FiMessageSquare className="h-3.5 w-3.5" /> Message {serviceApplication.handled_by.name.split(' ')[0]}
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -457,7 +469,7 @@ const ViewServiceDetails = () => {
                     <div>
                       <div className="space-y-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-500 mb-1">Charges Breakdown</label>
+                          <label className="block text-sm font-medium text-gray-500 mb-1">Fees</label>
                           <div className="space-y-2">
                             {serviceData.department_charges > 0 && (
                               <div className="flex justify-between">
@@ -550,7 +562,7 @@ const ViewServiceDetails = () => {
                   <div>
                     <div className="space-y-4">
                       <div>
-                        <label className="block text-sm font-medium text-gray-500 mb-1">Charges Breakdown</label>
+                        <label className="block text-sm font-medium text-gray-500 mb-1">Fees</label>
                         <div className="space-y-2">
                           {serviceData.department_charges > 0 && (
                             <div className="flex justify-between">
@@ -579,9 +591,13 @@ const ViewServiceDetails = () => {
                           <div className="flex items-center">
                             <FiClock className="text-amber-600 mr-3 text-xl" />
                             <div>
-                              <p className="text-sm font-medium text-amber-800">Payment Pending</p>
+                              <p className="text-sm font-medium text-amber-800">
+                                {serviceData.payment.payment_method === 'pay_at_centre' ? 'Pay at the centre' : 'Payment Pending'}
+                              </p>
                               <p className="text-xs text-amber-600 mt-1">
-                                Your payment is being processed
+                                {serviceData.payment.payment_method === 'pay_at_centre'
+                                  ? 'Pay when you visit the centre'
+                                  : 'Your payment is being processed'}
                               </p>
                             </div>
                           </div>
@@ -638,6 +654,30 @@ const ViewServiceDetails = () => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Documents the customer still has to bring (submitted without them) */}
+        {Array.isArray(serviceData.missing_documents) && serviceData.missing_documents.length > 0 && (
+          <div className="bg-white rounded-xl border border-amber-200 p-6 shadow-sm">
+            <h3 className="text-lg font-bold text-gray-800 mb-2 flex items-center">
+              <FiInfo className="mr-2 text-amber-600" />
+              Documents to bring to the centre
+            </h3>
+            <p className="text-sm text-gray-600 mb-4">Bring these when you visit, or upload them now.</p>
+            <ul className="space-y-2 mb-4">
+              {serviceData.missing_documents.map((name) => (
+                <li key={name} className="flex items-center gap-2 text-sm text-gray-800">
+                  <FiFileText className="text-gray-400" /> {name}
+                </li>
+              ))}
+            </ul>
+            <button
+              onClick={() => navigate('/customer/mydocuments')}
+              className="inline-flex items-center px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-navy-700 hover:bg-gray-50"
+            >
+              Upload documents
+            </button>
           </div>
         )}
 

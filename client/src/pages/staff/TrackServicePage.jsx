@@ -1000,7 +1000,8 @@ const TrackServicePage = () => {
         throw new Error('Application number must be 50 characters or less');
       }
 
-      if (trackingFormData.aadhaar && !/^\d{12}$/.test(trackingFormData.aadhaar)) {
+      // a saved number comes back masked (XXXX-XXXX-1234); leaving it as is keeps it
+      if (trackingFormData.aadhaar && !/^\d{12}$/.test(trackingFormData.aadhaar) && !/^x[x\s-]*\d{0,4}$/i.test(trackingFormData.aadhaar)) {
         throw new Error('Aadhaar number must be exactly 12 digits');
       }
 
