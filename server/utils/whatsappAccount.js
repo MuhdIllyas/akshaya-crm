@@ -37,7 +37,7 @@ export async function getPortalWhatsAppAccount() {
   let account = null;
   try {
     const { rows } = await pool.query(
-      `SELECT id, access_token, base_url FROM communication_accounts
+      `SELECT id, access_token, base_url, channel_id FROM communication_accounts
         WHERE is_active = true AND use_for_portal_otp = true
         ORDER BY id ASC LIMIT 1`
     );
@@ -51,6 +51,7 @@ export async function getPortalWhatsAppAccount() {
     return {
       id: account.id,
       platform: false,
+      channelId: account.channel_id || null,
       token: account.access_token,
       baseUrl: (account.base_url || process.env.LIBROMI_BASE_URL || DEFAULT_LIBROMI_BASE_URL).replace(/\/$/, ""),
     };
@@ -66,7 +67,7 @@ export async function getCentreWhatsAppAccount(centreId) {
   if (!centreId) return null;
   try {
     const { rows } = await pool.query(
-      `SELECT ca.id, ca.access_token, ca.base_url
+      `SELECT ca.id, ca.access_token, ca.base_url, ca.channel_id
          FROM centres c
          JOIN communication_accounts ca ON ca.id = c.communication_account_id
         WHERE c.id = $1 AND ca.is_active = true`,
@@ -78,6 +79,7 @@ export async function getCentreWhatsAppAccount(centreId) {
       id: a.id,
       platform: false,
       centreId: Number(centreId),
+      channelId: a.channel_id || null,
       token: a.access_token,
       baseUrl: (a.base_url || process.env.LIBROMI_BASE_URL || DEFAULT_LIBROMI_BASE_URL).replace(/\/$/, ""),
     };

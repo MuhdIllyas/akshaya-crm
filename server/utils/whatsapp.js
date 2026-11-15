@@ -3,8 +3,11 @@ import axios from "axios";
 import { whatsappTemplates } from "../config/whatsappTemplates.js";
 import { getPortalWhatsAppAccount, getPortalOtpAccounts } from "./whatsappAccount.js";
 
+// channel_id picks which of the provider's numbers sends it (accounts can share
+// one provider login). Without it the provider used its default number, so
+// every centre's OTP came from the same number.
 const postWith = (account, payload) =>
-  axios.post(`${account.baseUrl}/messages`, payload, {
+  axios.post(`${account.baseUrl}/messages`, account.channelId ? { ...payload, channel_id: account.channelId } : payload, {
     headers: { Authorization: `Bearer ${account.token}`, "Content-Type": "application/json" },
   });
 
