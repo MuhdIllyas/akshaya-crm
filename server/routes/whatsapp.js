@@ -84,12 +84,58 @@ async function botCentreHint(req) {
     const { rows } = await pool.query(`SELECT id FROM centres WHERE id = $1`, [centreId]);
     if (rows[0]) return rows[0].id;
   }
-  // The flow didn't say which centre (or sent an empty variable): we'll guess.
+  // No centre from the flow (Libromi sends {{STAT_CHANNEL_ID}} empty): find the
+  // chat that received the message the customer just sent (it can reach us a
+  // moment after this bot call, so wait for it briefly).
+  const fromMessage = await centreFromJustSent(last10(b.wa_phone || b.phone), botExpectedTexts(req.path, b));
+  if (fromMessage) return fromMessage;
   console.warn(
     `[bot] ${req.path}: no centre from the flow (channel_id=${JSON.stringify(b.channel_id ?? null)}, ` +
-      `centre_id=${JSON.stringify(b.centre_id ?? null)}) — guessing from the last incoming message`
+      `centre_id=${JSON.stringify(b.centre_id ?? null)}) and no matching message — guessing from the last incoming message`
   );
   return null;
+}
+
+// What the customer just typed or tapped, for each bot call.
+function botExpectedTexts(path, b) {
+  if (path.endsWith("/track-application")) return [b.query, b.application_number];
+  if (path.endsWith("/create-lead")) return [b.docs_ready, b.customer_details, b.service_needed];
+  if (path.endsWith("/connect-staff")) return ["Talk to Staff", b.query];
+  return [];
+}
+
+const textKey = (v) => String(v ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
+const MATCH_WINDOW_SECONDS = 20; // only messages sent just now count
+const MATCH_WAIT_MS = 5000; // the webhook can arrive a little after the bot call
+
+/**
+ * Centre of the chat whose newest matching incoming message (same text as the
+ * customer just sent, within the last few seconds) came from this phone.
+ * Waits up to MATCH_WAIT_MS for the webhook to save it. null if none.
+ */
+async function centreFromJustSent(phone10, texts) {
+  const wanted = [...new Set(texts.map((t) => clean(t)).filter(Boolean).map(textKey).filter(Boolean))];
+  if (phone10.length !== 10 || !wanted.length) return null;
+  const started = Date.now();
+  for (;;) {
+    const { rows } = await pool.query(
+      `SELECT c.centre_id, m.message
+         FROM chat_messages m
+         JOIN chat_conversations c ON c.id = m.conversation_id
+        WHERE c.channel = 'whatsapp' AND c.status <> 'deleted' AND c.centre_id IS NOT NULL
+          AND m.direction = 'incoming'
+          AND RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10) = $1
+          AND m.created_at > LOCALTIMESTAMP - make_interval(secs => $2)
+        ORDER BY m.created_at DESC
+        LIMIT 20`,
+      // window measured from when this bot call came in, on the database clock (messages get NOW() on insert)
+      [phone10, MATCH_WINDOW_SECONDS + (Date.now() - started) / 1000]
+    );
+    const hit = rows.find((r) => wanted.includes(textKey(r.message)));
+    if (hit) return hit.centre_id;
+    if (Date.now() - started >= MATCH_WAIT_MS) return null;
+    await new Promise((r) => setTimeout(r, 500));
+  }
 }
 
 /**
