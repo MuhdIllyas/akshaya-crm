@@ -1,18 +1,24 @@
 import PDFDocument from 'pdfkit';
 
 // ==========================================
-// THEME (matches the dashboard: indigo / gray)
+// THEME (matches the app: navy + teal)
 // ==========================================
 const C = {
-  indigo: '#4F46E5',
-  indigoLight: '#EEF2FF',
-  text: '#111827',
-  muted: '#6B7280',
-  line: '#E5E7EB',
-  zebra: '#F9FAFB',
-  green: '#059669',
-  red: '#DC2626',
+  navy: '#1e3a5f',      // navy-700: table headers
+  navyDark: '#172a45',  // navy-800: page header band, titles
+  navyLight: '#f0f4f8', // navy-50: zebra rows, card fill
+  navyLine: '#d9e2ec',  // navy-100: borders
+  teal: '#14b8a6',      // teal-500: accents
+  tealDark: '#0d9488',  // teal-600
+  text: '#172a45',
+  muted: '#64748b',
+  line: '#e2e8f0',
+  zebra: '#f0f4f8',
+  green: '#0d9488',
+  red: '#dc2626',
 };
+// Accent colours, used in turn for cards and chart bars
+const PALETTE = ['#1e3a5f', '#14b8a6', '#3b6ea5', '#f59e0b', '#0d9488', '#829ab1', '#5eead4', '#2c5282'];
 
 const TZ = 'Asia/Kolkata';
 const MAX_ROWS = 150;
@@ -310,6 +316,123 @@ const REPORTS = {
 REPORTS[15] = REPORTS[3];
 
 // ==========================================
+// SUMMARIES  (cards + bar charts instead of one row per record)
+// summary(rows) → { cards: [{label, value}], charts: [{title, items: [{label, value}], f}], table?: {title, cols, rows} }
+// Reports with a summary show it in place of the full list, unless `alsoList` is set.
+// ==========================================
+const groupBy = (rows, keyFn, valFn = () => 1) => {
+  const map = new Map();
+  for (const r of rows) {
+    const k = keyFn(r) || '-';
+    map.set(k, (map.get(k) || 0) + num(valFn(r)));
+  }
+  return [...map].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+};
+// Keep the biggest n-1 bars and fold the rest into "Others"
+const topN = (items, n = 8) => {
+  if (items.length <= n) return items;
+  const rest = items.slice(n - 1);
+  return [...items.slice(0, n - 1), { label: `Others (${rest.length})`, value: rest.reduce((a, r) => a + r.value, 0) }];
+};
+const sumOf = (rows, k) => rows.reduce((a, r) => a + num(r[k]), 0);
+// "Land Tax - Land Tax Payment (100 - 500)" → "Land Tax"
+const mainService = (name) => String(name || 'Other').split(' - ')[0].trim();
+
+REPORTS[18].summary = (rows) => {
+  const customers = new Set(rows.map((r) => (r.phone && r.phone !== 'N/A' ? r.phone : r.customer_name))).size;
+  const staff = new Set(rows.map((r) => r.assigned_staff)).size;
+  const avgTat = rows.length ? sumOf(rows, 'days_taken') / rows.length : 0;
+  return {
+    cards: [
+      { label: 'Services Completed', value: int(rows.length) },
+      { label: 'Customers Served', value: int(customers) },
+      { label: 'Staff Involved', value: int(staff) },
+      { label: 'Avg Turnaround', value: `${avgTat.toFixed(1)} days` },
+    ],
+    charts: [
+      { title: 'Completed by Service', items: topN(groupBy(rows, (r) => mainService(r.service_name))), f: int },
+      { title: 'Completed by Staff', items: topN(groupBy(rows, (r) => r.assigned_staff)), f: int },
+    ],
+  };
+};
+
+REPORTS[21].summary = (rows) => {
+  const spent = sumOf(rows, 'total_spent');
+  const returning = rows.filter((r) => r.is_returning);
+  const fresh = rows.filter((r) => !r.is_returning);
+  const registered = rows.filter((r) => r.is_registered).length;
+  return {
+    cards: [
+      { label: 'Customers', value: int(rows.length) },
+      { label: 'New', value: int(fresh.length) },
+      { label: 'Returning', value: int(returning.length) },
+      { label: 'Total Spent', value: money(spent) },
+      { label: 'Avg per Customer', value: money(rows.length ? Math.round(spent / rows.length) : 0) },
+    ],
+    charts: [
+      {
+        title: 'Customers',
+        items: [
+          { label: 'New', value: fresh.length },
+          { label: 'Returning', value: returning.length },
+          { label: 'Registered', value: registered },
+          { label: 'Walk-in', value: rows.length - registered },
+        ],
+        f: int,
+      },
+      {
+        title: 'Spend',
+        items: [
+          { label: 'New customers', value: sumOf(fresh, 'total_spent') },
+          { label: 'Returning customers', value: sumOf(returning, 'total_spent') },
+        ],
+        f: money,
+      },
+    ],
+    table: {
+      title: 'Top 5 Customers',
+      rows: [...rows].sort((a, b) => num(b.total_spent) - num(a.total_spent)).slice(0, 5),
+      cols: REPORTS[21].cols.filter((c) => c.h !== 'Phone'),
+    },
+  };
+};
+
+REPORTS[10].summary = (rows) => {
+  const working = rows.filter((r) => num(r.total_services) > 0);
+  return {
+    cards: [
+      { label: 'Staff with Services', value: `${working.length} of ${rows.length}` },
+      { label: 'Services Completed', value: int(sumOf(rows, 'total_services')) },
+      { label: 'Revenue', value: money(sumOf(rows, 'total_revenue')) },
+      { label: 'Gross Profit', value: money(sumOf(rows, 'gross_profit')) },
+    ],
+    charts: [
+      { title: 'Services by Staff', items: topN(working.map((r) => ({ label: r.staff_name, value: num(r.total_services) })).sort((a, b) => b.value - a.value)), f: int },
+      { title: 'Gross Profit by Staff', items: topN(working.map((r) => ({ label: r.staff_name, value: num(r.gross_profit) })).sort((a, b) => b.value - a.value)), f: money },
+    ],
+  };
+};
+REPORTS[10].alsoList = true; // one row per staff member: short enough to keep
+
+REPORTS[9].summary = (rows) => {
+  const count = (s) => rows.filter((r) => r.status === s).length;
+  const late = rows.filter((r) => num(r.late_minutes) > 0);
+  return {
+    cards: [
+      { label: 'Present', value: int(count('present')) },
+      { label: 'Absent', value: int(count('absent')) },
+      { label: 'On Leave', value: int(count('leave') + count('on_leave')) },
+      { label: 'Late', value: int(late.length) },
+    ],
+    charts: [
+      { title: 'Attendance', items: groupBy(rows, (r) => upper(r.status)), f: int },
+      { title: 'Late Arrivals (minutes)', items: topN(late.map((r) => ({ label: r.staff_name, value: num(r.late_minutes) })).sort((a, b) => b.value - a.value)), f: int },
+    ],
+  };
+};
+REPORTS[9].alsoList = true;
+
+// ==========================================
 // HELPERS
 // ==========================================
 const getPeriodTotals = (financials) => {
@@ -375,7 +498,8 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
       const ensureSpace = (h) => { if (doc.y + h > bottomLimit()) doc.addPage(); };
 
       // ---------- Header band ----------
-      doc.rect(0, 0, doc.page.width, 78).fill(C.indigo);
+      doc.rect(0, 0, doc.page.width, 78).fill(C.navyDark);
+      doc.rect(0, 78, doc.page.width, 4).fill(C.teal);
       doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(20)
         .text(reportTitle, left, 20, { width: contentWidth(), lineBreak: false });
       doc.font('Helvetica').fontSize(10)
@@ -387,30 +511,99 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
       doc.y = 96;
       doc.fillColor(C.text);
 
-      // ---------- Financial KPI cards ----------
-      const totals = (ids.includes(1) || ids.includes(2)) ? getPeriodTotals(data.financials) : null;
-      if (totals) {
-        const cards = [
-          { label: 'Revenue', value: money(totals.amountReceived), color: C.text },
-          { label: 'Billed', value: money(totals.revenueCollected), color: C.text },
-          { label: 'Gross Profit', value: money(totals.grossProfit), color: C.text },
-          { label: 'Operating Expenses', value: money(totals.operatingExpenses), color: C.text },
-          { label: 'Net Profit', value: money(totals.netProfit), color: totals.netProfit >= 0 ? C.green : C.red },
-        ];
+      // ---------- Section title with a teal marker ----------
+      function sectionTitle(title, small = false) {
+        const y = doc.y;
+        const size = small ? 10 : 13;
+        doc.rect(left, y + 1, small ? 3 : 4, size).fill(small ? C.navy : C.teal);
+        doc.font('Helvetica-Bold').fontSize(size).fillColor(C.navyDark).text(title, left + 10, y);
+        doc.x = left;
+      }
+
+      // ---------- KPI cards (one row) ----------
+      function drawCards(cards, cardH = 58) {
+        ensureSpace(cardH + 18);
         const gap = 12;
         const cardW = (contentWidth() - gap * (cards.length - 1)) / cards.length;
-        const cardH = 58;
         const y0 = doc.y;
         cards.forEach((c, i) => {
           const x = left + i * (cardW + gap);
-          doc.roundedRect(x, y0, cardW, cardH, 6).fillAndStroke(C.indigoLight, C.line);
+          const accent = PALETTE[i % PALETTE.length];
+          doc.roundedRect(x, y0, cardW, cardH, 6).fillAndStroke('#FFFFFF', C.navyLine);
+          // Coloured strip down the left edge
+          doc.save();
+          doc.roundedRect(x, y0, cardW, cardH, 6).clip();
+          doc.rect(x, y0, 5, cardH).fill(accent);
+          doc.restore();
           doc.fillColor(C.muted).font('Helvetica').fontSize(9)
-            .text(c.label.toUpperCase(), x + 12, y0 + 12, { width: cardW - 24, lineBreak: false });
-          doc.fillColor(c.color).font('Helvetica-Bold').fontSize(cards.length > 4 ? 13 : 16)
-            .text(c.value, x + 12, y0 + 30, { width: cardW - 24, lineBreak: false });
+            .text(c.label.toUpperCase(), x + 16, y0 + 12, { width: cardW - 28, lineBreak: false });
+          doc.fillColor(c.color || C.text).font('Helvetica-Bold').fontSize(cards.length > 4 ? 13 : 16)
+            .text(c.value, x + 16, y0 + (cardH > 52 ? 30 : 27), { width: cardW - 28, lineBreak: false });
         });
         doc.y = y0 + cardH + 18;
         doc.fillColor(C.text);
+      }
+
+      // ---------- Horizontal bar charts, two side by side ----------
+      function drawCharts(charts) {
+        const gap = 24;
+        const perRow = 2;
+        const chartW = (contentWidth() - gap * (perRow - 1)) / perRow;
+        const barH = 12;
+        const rowH = 18;
+
+        for (let i = 0; i < charts.length; i += perRow) {
+          const group = charts.slice(i, i + perRow);
+          const maxItems = Math.max(1, ...group.map((c) => c.items.length));
+          const blockH = 20 + maxItems * rowH + 8;
+          ensureSpace(blockH);
+          const y0 = doc.y;
+
+          group.forEach((chart, j) => {
+            const x0 = left + j * (chartW + gap);
+            doc.font('Helvetica-Bold').fontSize(10).fillColor(C.text)
+              .text(chart.title, x0, y0, { width: chartW, lineBreak: false });
+
+            if (chart.items.length === 0) {
+              doc.font('Helvetica-Oblique').fontSize(8).fillColor(C.muted)
+                .text('No data for this period.', x0, y0 + 22, { width: chartW, lineBreak: false });
+              return;
+            }
+
+            const labelW = chartW * 0.34;
+            const valueW = chartW * 0.2;
+            const barMaxW = chartW - labelW - valueW - 12;
+            const max = Math.max(...chart.items.map((it) => num(it.value)), 0) || 1;
+
+            chart.items.forEach((it, k) => {
+              const y = y0 + 20 + k * rowH;
+              doc.font('Helvetica').fontSize(8).fillColor(C.text)
+                .text(text(it.label), x0, y + 2, { width: labelW - 6, height: barH, ellipsis: true, lineBreak: false });
+              const bx = x0 + labelW;
+              doc.roundedRect(bx, y, barMaxW, barH, 3).fill(C.navyLight);
+              const w = Math.max(num(it.value) > 0 ? 4 : 0, (num(it.value) / max) * barMaxW);
+              if (w > 0) doc.roundedRect(bx, y, w, barH, 3).fill(PALETTE[k % PALETTE.length]);
+              doc.font('Helvetica-Bold').fontSize(8).fillColor(C.text)
+                .text(chart.f ? chart.f(it.value) : String(it.value), bx + barMaxW + 6, y + 2, { width: valueW, align: 'right', lineBreak: false });
+            });
+          });
+
+          doc.y = y0 + blockH;
+        }
+        doc.moveDown(0.5);
+        doc.fillColor(C.text);
+      }
+
+      // ---------- Financial KPI cards ----------
+      const totals = (ids.includes(1) || ids.includes(2)) ? getPeriodTotals(data.financials) : null;
+      if (totals) {
+        drawCards([
+          { label: 'Revenue', value: money(totals.amountReceived) },
+          { label: 'Billed', value: money(totals.revenueCollected) },
+          { label: 'Gross Profit', value: money(totals.grossProfit) },
+          { label: 'Operating Expenses', value: money(totals.operatingExpenses) },
+          { label: 'Net Profit', value: money(totals.netProfit), color: totals.netProfit >= 0 ? C.green : C.red },
+        ]);
 
         // Day-by-day trend (only when the period has more than one day)
         const trend = data.financials?.periodTrend || [];
@@ -430,7 +623,7 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
       }
 
       // ---------- Table renderer ----------
-      function drawTable(title, cols, allRows) {
+      function drawTable(title, cols, allRows, opts = {}) {
         const rows = allRows.slice(0, MAX_ROWS);
         const totalW = cols.reduce((a, c) => a + c.w, 0);
         const widths = cols.map((c) => (c.w / totalW) * contentWidth());
@@ -446,7 +639,7 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
         const drawHeader = () => {
           const h = 22;
           const y0 = doc.y; // capture: doc.y moves after every doc.text()
-          doc.rect(left, y0, contentWidth(), h).fill(C.indigo);
+          doc.rect(left, y0, contentWidth(), h).fill(C.navy);
           let x = left;
           doc.fillColor('#FFFFFF').font('Helvetica-Bold').fontSize(fontSize);
           cols.forEach((c, i) => {
@@ -461,9 +654,11 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
 
         // Section title
         ensureSpace(60);
-        doc.font('Helvetica-Bold').fontSize(13).fillColor(C.text).text(title, left, doc.y);
-        doc.font('Helvetica').fontSize(8).fillColor(C.muted)
-          .text(`${allRows.length} record${allRows.length === 1 ? '' : 's'}`, left, doc.y + 1);
+        sectionTitle(title, opts.small);
+        if (!opts.small) {
+          doc.font('Helvetica').fontSize(8).fillColor(C.muted)
+            .text(`${allRows.length} record${allRows.length === 1 ? '' : 's'}`, left, doc.y + 1);
+        }
         doc.moveDown(0.5);
         doc.fillColor(C.text);
 
@@ -489,6 +684,7 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
           if (doc.y + rowH > bottomLimit()) {
             doc.addPage();
             drawHeader(); // repeat header on every new page
+            doc.font('Helvetica').fontSize(fontSize); // the header leaves the font bold
           }
 
           const y = doc.y;
@@ -515,7 +711,25 @@ export const buildPDF = (reportData, reportIds, options = {}) => {
       // ---------- Report sections ----------
       uniqueSections(ids).forEach((cfg) => {
         const rows = Array.isArray(data[cfg.key]) ? data[cfg.key] : [];
-        drawTable(cfg.title, cfg.cols, rows);
+        if (!cfg.summary || rows.length === 0) {
+          drawTable(cfg.title, cfg.cols, rows);
+          return;
+        }
+
+        const s = cfg.summary(rows);
+        // Keep the title, cards and first row of charts on one page
+        const firstCharts = (s.charts || []).slice(0, 2);
+        const chartH = firstCharts.length ? 28 + Math.max(...firstCharts.map((c) => Math.max(1, c.items.length))) * 18 : 0;
+        ensureSpace(36 + (s.cards?.length ? 68 : 0) + chartH);
+        sectionTitle(cfg.title);
+        doc.font('Helvetica').fontSize(8).fillColor(C.muted)
+          .text(`Summary of ${rows.length} record${rows.length === 1 ? '' : 's'}`, left, doc.y + 1);
+        doc.moveDown(0.6);
+        if (s.cards?.length) drawCards(s.cards, 50);
+        if (s.charts?.length) drawCharts(s.charts);
+        if (s.table) drawTable(s.table.title, s.table.cols, s.table.rows, { small: true });
+        if (cfg.alsoList) drawTable(`${cfg.title} - Details`, cfg.cols, rows, { small: true });
+        doc.moveDown(0.5);
       });
 
       // ---------- Footer with page numbers ----------
@@ -549,9 +763,9 @@ export const buildEmailHTML = (reportData, reportIds, scheduleName = 'Report') =
   const ids = (reportIds || []).map(Number);
   const totals = (ids.includes(1) || ids.includes(2)) ? getPeriodTotals(data.financials) : null;
 
-  const card = (label, value, color = '#111827') => `
+  const card = (label, value, color = '#172a45') => `
     <td style="width:20%;padding:6px;">
-      <div style="background:#EEF2FF;border:1px solid #E5E7EB;border-radius:8px;padding:12px;">
+      <div style="background:#f0f4f8;border:1px solid #d9e2ec;border-left:4px solid #14b8a6;border-radius:8px;padding:12px;">
         <div style="font-size:11px;color:#6B7280;text-transform:uppercase;letter-spacing:.5px;">${label}</div>
         <div style="font-size:18px;font-weight:bold;color:${color};margin-top:4px;">${value}</div>
       </div>
@@ -563,7 +777,7 @@ export const buildEmailHTML = (reportData, reportIds, scheduleName = 'Report') =
       ${card('Billed', money(totals.revenueCollected))}
       ${card('Gross Profit', money(totals.grossProfit))}
       ${card('Expenses', money(totals.operatingExpenses))}
-      ${card('Net Profit', money(totals.netProfit), totals.netProfit >= 0 ? '#059669' : '#DC2626')}
+      ${card('Net Profit', money(totals.netProfit), totals.netProfit >= 0 ? '#0d9488' : '#dc2626')}
     </tr></table>` : '';
 
   const sections = uniqueSections(ids).map((cfg) => {
@@ -576,11 +790,11 @@ export const buildEmailHTML = (reportData, reportIds, scheduleName = 'Report') =
 
   return `
   <div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;">
-    <div style="background:#4F46E5;color:#fff;padding:18px 20px;">
+    <div style="background:#172a45;border-bottom:4px solid #14b8a6;color:#fff;padding:18px 20px;">
       <div style="font-size:18px;font-weight:bold;">${esc(scheduleName)}</div>
       <div style="font-size:12px;opacity:.9;margin-top:4px;">Period: ${esc(metadata.fromDate)} to ${esc(metadata.toDate)}</div>
     </div>
-    <div style="padding:16px 20px;color:#111827;">
+    <div style="padding:16px 20px;color:#172a45;">
       <p style="margin:0 0 4px;font-size:14px;">Hello,</p>
       <p style="margin:0;font-size:14px;color:#374151;">Your automated report is ready. A summary is below and the full report is attached as a PDF.</p>
       ${cards}

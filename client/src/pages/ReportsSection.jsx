@@ -3926,6 +3926,9 @@ const ReportsSection = () => {
         { id: 17, name: "Pending Services" },
         { id: 18, name: "Completed Services" },
         { id: 21, name: "Customer Summary" },
+        { id: 10, name: "Staff Performance" },
+        { id: 9, name: "Staff Attendance" },
+        { id: 12, name: "Staff KPI & Incentives" },
         { id: 26, name: "Team Financials" },
         { id: 27, name: "Team Productivity" }
     ];
