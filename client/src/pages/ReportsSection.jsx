@@ -235,29 +235,34 @@ const ScheduledReportCard = ({ schedule, onToggle, onDelete }) => {
         monthly: 'bg-emerald-50 text-emerald-700 border-emerald-200',
     };
 
-    const emails = schedule.resolved_emails || [];
-    let displayEmails = 'No active users found';
-    if (emails.length > 0) {
-        displayEmails = emails.length > 2 
-            ? `${emails.slice(0, 2).join(', ')} +${emails.length - 2} more`
-            : emails.join(', ');
-    }
+    const sendsEmail = schedule.send_email !== false;
+    const sendsWhatsApp = schedule.send_whatsapp === true;
+    const summarize = (list) => list.length > 2
+        ? `${list.slice(0, 2).join(', ')} +${list.length - 2} more`
+        : list.join(', ');
+    const recipientLines = [
+        sendsEmail && { icon: FiMail, list: schedule.resolved_emails || [], empty: 'No emails found' },
+        sendsWhatsApp && { icon: FiSmartphone, list: schedule.resolved_phones || [], empty: 'No phone numbers found' },
+    ].filter(Boolean);
+    const channelLabel = [sendsEmail && 'Email', sendsWhatsApp && 'WhatsApp'].filter(Boolean).join(' + ');
 
     return (
         <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200 hover:bg-slate-100 transition-colors relative group">
             <div className="flex items-center space-x-3 overflow-hidden mr-6">
                 <div className={`rounded-lg p-2 shrink-0 ${frequencyColors[schedule.frequency] || 'bg-slate-100 text-slate-700'}`}>
-                    <FiMail className="h-4 w-4" />
+                    {sendsEmail ? <FiMail className="h-4 w-4" /> : <FiSmartphone className="h-4 w-4" />}
                 </div>
                 <div className="min-w-0">
                     <p className="font-medium text-slate-900 text-sm truncate">{schedule.name}</p>
                     <p className="text-xs text-slate-500 capitalize">
-                        {schedule.frequency}{schedule.recipient_roles?.length ? ` • ${schedule.recipient_roles.join(', ')}` : ' • Custom emails'}
+                        {schedule.frequency} • {channelLabel}{schedule.recipient_roles?.length ? ` • ${schedule.recipient_roles.join(', ')}` : ' • Custom recipients'}
                     </p>
-                    <div className="flex items-center mt-1 text-xs text-slate-400 font-mono" title={emails.join(', ')}>
-                        <FiUserCheck className="mr-1 h-3 w-3 shrink-0" />
-                        <span className="truncate">{displayEmails}</span>
-                    </div>
+                    {recipientLines.map(({ icon: Icon, list, empty }) => (
+                        <div key={empty} className="flex items-center mt-1 text-xs text-slate-400 font-mono" title={list.join(', ')}>
+                            <Icon className="mr-1 h-3 w-3 shrink-0" />
+                            <span className="truncate">{list.length > 0 ? summarize(list) : empty}</span>
+                        </div>
+                    ))}
                 </div>
             </div>
             
@@ -3909,7 +3914,10 @@ const ReportsSection = () => {
         run_time: '08:00',
         send_to_mode: 'specific', // 👈 NEW: Default to specific emails
         specific_emails: '',      // 👈 NEW: Empty string for text input
-        recipient_roles: []       // 👈 CHANGED: Empty by default
+        recipient_roles: [],      // 👈 CHANGED: Empty by default
+        send_email: true,
+        send_whatsapp: false,
+        specific_phones: ''       // Comma-separated, like specific_emails
     });
 
     const SCHEDULABLE_REPORTS = [
@@ -4695,6 +4703,30 @@ const ReportsSection = () => {
                             {/* Smart Delivery Selection */}
                             <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
                                 <label className="block text-sm font-bold text-slate-900 mb-3">Delivery Method</label>
+
+                                {/* Channels */}
+                                <div className="flex space-x-4 mb-4">
+                                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            className="rounded text-navy-700 focus:ring-navy-500"
+                                            checked={scheduleForm.send_email}
+                                            onChange={(e) => setScheduleForm({...scheduleForm, send_email: e.target.checked})}
+                                        />
+                                        <FiMail className="h-4 w-4 text-slate-500" />
+                                        <span className="font-medium text-slate-700">Email</span>
+                                    </label>
+                                    <label className="flex items-center space-x-2 text-sm cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            className="rounded text-navy-700 focus:ring-navy-500"
+                                            checked={scheduleForm.send_whatsapp}
+                                            onChange={(e) => setScheduleForm({...scheduleForm, send_whatsapp: e.target.checked})}
+                                        />
+                                        <FiSmartphone className="h-4 w-4 text-slate-500" />
+                                        <span className="font-medium text-slate-700">WhatsApp</span>
+                                    </label>
+                                </div>
                                 
                                 {/* The Toggle */}
                                 <div className="flex space-x-4 mb-4">
@@ -4705,14 +4737,14 @@ const ReportsSection = () => {
                                             checked={scheduleForm.send_to_mode === 'specific'}
                                             onChange={() => setScheduleForm({...scheduleForm, send_to_mode: 'specific', recipient_roles: []})}
                                         />
-                                        <span className="font-medium text-slate-700">Specific Emails</span>
+                                        <span className="font-medium text-slate-700">Specific Recipients</span>
                                     </label>
                                     <label className="flex items-center space-x-2 text-sm cursor-pointer">
                                         <input 
                                             type="radio" 
                                             className="text-navy-700 focus:ring-navy-500"
                                             checked={scheduleForm.send_to_mode === 'roles'}
-                                            onChange={() => setScheduleForm({...scheduleForm, send_to_mode: 'roles', specific_emails: ''})}
+                                            onChange={() => setScheduleForm({...scheduleForm, send_to_mode: 'roles', specific_emails: '', specific_phones: ''})}
                                         />
                                         <span className="font-medium text-slate-700">Broadcast to Roles</span>
                                     </label>
@@ -4720,15 +4752,32 @@ const ReportsSection = () => {
 
                                 {/* Dynamic Input: Specific Emails */}
                                 {scheduleForm.send_to_mode === 'specific' && (
-                                    <div>
-                                        <input 
-                                            type="text" 
-                                            placeholder="admin@akshaya.com, staff@akshaya.com"
-                                            className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
-                                            value={scheduleForm.specific_emails}
-                                            onChange={(e) => setScheduleForm({...scheduleForm, specific_emails: e.target.value})}
-                                        />
-                                        <p className="text-xs text-slate-500 mt-1">Separate multiple emails with commas.</p>
+                                    <div className="space-y-3">
+                                        {scheduleForm.send_email && (
+                                            <div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="admin@akshaya.com, staff@akshaya.com"
+                                                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
+                                                    value={scheduleForm.specific_emails}
+                                                    onChange={(e) => setScheduleForm({...scheduleForm, specific_emails: e.target.value})}
+                                                />
+                                                <p className="text-xs text-slate-500 mt-1">Separate multiple emails with commas.</p>
+                                            </div>
+                                        )}
+                                        {scheduleForm.send_whatsapp && (
+                                            <div>
+                                                <input
+                                                    type="text"
+                                                    inputMode="tel"
+                                                    placeholder="9847012345, 9895012345"
+                                                    className="w-full border border-slate-300 rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-navy-500/30 focus:border-navy-500"
+                                                    value={scheduleForm.specific_phones}
+                                                    onChange={(e) => setScheduleForm({...scheduleForm, specific_phones: e.target.value})}
+                                                />
+                                                <p className="text-xs text-slate-500 mt-1">WhatsApp numbers, separated by commas.</p>
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
@@ -4756,6 +4805,7 @@ const ReportsSection = () => {
                                                 ? "⚠️ Global Broadcast: This will send the report to EVERY active user across ALL centres with these roles."
                                                 : "🔒 Centre Locked: This will only send the report to active users with these roles in the currently selected centre (and global Superadmins)."
                                             }
+                                            {scheduleForm.send_whatsapp && " WhatsApp goes to the phone number on each staff profile."}
                                         </p>
                                     </div>
                                 )}
@@ -4771,12 +4821,19 @@ const ReportsSection = () => {
                             </button>
                             <button 
                                 onClick={async () => {
+                                    if (!scheduleForm.send_email && !scheduleForm.send_whatsapp) {
+                                        toast.error('Choose Email, WhatsApp or both.');
+                                        return;
+                                    }
                                     try {
                                         const payload = {
                                             ...scheduleForm,
                                             // Convert comma-separated string into a clean array
                                             specific_emails: scheduleForm.specific_emails 
                                                 ? scheduleForm.specific_emails.split(',').map(e => e.trim()).filter(e => e) 
+                                                : [],
+                                            specific_phones: scheduleForm.send_whatsapp && scheduleForm.specific_phones
+                                                ? scheduleForm.specific_phones.split(',').map(p => p.trim()).filter(p => p)
                                                 : [],
                                             centre_id: selectedCentre === 'all' ? null : parseInt(selectedCentre)
                                         };
@@ -4794,7 +4851,7 @@ const ReportsSection = () => {
                                             fetchSchedules(); 
                                             setIsScheduleModalOpen(false); 
                                             // Reset form
-                                            setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', send_to_mode: 'specific', specific_emails: '', recipient_roles: [] });
+                                            setScheduleForm({ name: '', report_ids: [], frequency: 'daily', run_time: '08:00', send_to_mode: 'specific', specific_emails: '', recipient_roles: [], send_email: true, send_whatsapp: false, specific_phones: '' });
                                             toast.success('Schedule created successfully');
                                         } else {
                                             toast.error('Failed to save schedule.');

@@ -9,6 +9,7 @@ import runScheduledActions from "../controllers/scheduledActionWorker.js";
 import { getReportData } from '../routes/reports/analyticsService.js';
 import { buildPDF, buildEmailHTML } from '../utils/pdfReportBuilder.js';
 import { sendReportEmail } from '../utils/emailService.js';
+import { normalizePhone, saveReportPdf, sendReportWhatsApp, cleanupOldReportPdfs } from '../utils/whatsappReportService.js';
 import { calculateHours, recalculateDayDeviation } from './salary.js';
 
 // ==========================================
@@ -65,6 +66,123 @@ scheduleForEachOrg("15 0 * * *", async () => {
 // 2. DYNAMIC REPORT SCHEDULER ENGINE
 // ==========================================
 
+// Who a schedule goes to, on each channel it's switched on for.
+// Specific mode uses the typed-in emails / phones; role mode looks up active
+// staff with those roles (in the schedule's centre, plus superadmins).
+const resolveRecipients = async (client, schedule) => {
+    const sendEmail = schedule.send_email !== false;
+    const sendWhatsApp = schedule.send_whatsapp === true;
+    const hasSpecific = (schedule.specific_emails?.length || 0) > 0 || (schedule.specific_phones?.length || 0) > 0;
+
+    let emails = [];
+    let phones = []; // { phone, name, centre_id }
+
+    if (hasSpecific) {
+        emails = schedule.specific_emails || [];
+        const typed = [...new Set((schedule.specific_phones || []).map(normalizePhone).filter(Boolean))];
+        if (typed.length > 0) {
+            // Use the staff member's name and centre when the number belongs to one
+            const staffRes = await client.query(
+                `SELECT name, phone, centre_id FROM staff WHERE status = 'Active' AND phone IS NOT NULL AND phone <> ''`
+            );
+            const byPhone = new Map(staffRes.rows.map(s => [normalizePhone(s.phone), s]));
+            phones = typed.map(phone => ({ phone, name: byPhone.get(phone)?.name, centre_id: byPhone.get(phone)?.centre_id }));
+        }
+    } else if (schedule.recipient_roles?.length > 0) {
+        const staffRes = await client.query(
+            `SELECT name, email, phone, centre_id FROM staff
+             WHERE role = ANY($1)
+             AND status = 'Active'
+             AND ($2::int IS NULL OR centre_id = $2 OR role = 'superadmin')`,
+            [schedule.recipient_roles, schedule.centre_id]
+        );
+        emails = staffRes.rows.map(r => r.email).filter(e => e);
+        const seen = new Set();
+        for (const s of staffRes.rows) {
+            const phone = normalizePhone(s.phone);
+            if (!phone || seen.has(phone)) continue;
+            seen.add(phone);
+            phones.push({ phone, name: s.name, centre_id: s.centre_id });
+        }
+    }
+
+    return {
+        emails: sendEmail ? emails : [],
+        phones: sendWhatsApp ? phones : [],
+    };
+};
+
+const parseReportIds = (reportIds) => {
+    if (!reportIds) return [];
+    if (Array.isArray(reportIds)) return reportIds;
+    if (typeof reportIds === 'string') {
+        try {
+            return JSON.parse(reportIds);
+        } catch (e) {
+            return reportIds.replace(/[{}[\]"]/g, '').split(',').filter(Boolean).map(Number);
+        }
+    }
+    return [reportIds];
+};
+
+const runReportSchedule = async (client, schedule) => {
+    const { emails, phones } = await resolveRecipients(client, schedule);
+
+    if (emails.length === 0 && phones.length === 0) {
+        console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No recipients found (roles: ${schedule.recipient_roles})`);
+        return;
+    }
+
+    const reportIds = parseReportIds(schedule.report_ids);
+    if (reportIds.length === 0) {
+        console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No reports selected.`);
+        return;
+    }
+
+    // 👇 Calculate TODAY'S date in IST safely
+    const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const centreId = schedule.centre_id === 'all' ? null : (schedule.centre_id || null);
+
+    const data = await getReportData({
+        targetCentreId: centreId,
+        fromDate: todayStr,
+        toDate: todayStr,
+        period: 'custom',  // Keeps backend from defaulting to an empty 00:00 boundary
+        staffId: null,     // Fixes zero-row returns from the string "all"
+        reportIds
+    });
+
+    const pdfBuffer = await buildPDF(data, reportIds, { title: schedule.name });
+    const fileName = `${schedule.name.replace(/\s+/g, '_')}_${todayStr}.pdf`;
+
+    if (emails.length > 0) {
+        console.log(`[CRON] 📧 Sending "${schedule.name}" to ${emails.length} email recipients...`);
+        try {
+            await sendReportEmail(
+                emails,
+                `${schedule.name} - ${todayStr}`,
+                `Hello,\n\nPlease find attached the automated ${schedule.name} for ${todayStr}.\n\n- Akshaya Sahayi`,
+                [{ filename: fileName, content: pdfBuffer }],
+                buildEmailHTML(data, reportIds, schedule.name)
+            );
+        } catch (err) {
+            console.error(`[CRON] ❌ Email for "${schedule.name}" failed:`, err);
+        }
+    }
+
+    if (phones.length > 0) {
+        console.log(`[CRON] 📱 Sending "${schedule.name}" to ${phones.length} WhatsApp recipients...`);
+        const link = saveReportPdf(pdfBuffer);
+        await sendReportWhatsApp(phones, {
+            link,
+            fileName,
+            reportName: schedule.name,
+            date: todayStr,
+            scheduleCentreId: centreId,
+        });
+    }
+};
+
 const checkAndRunSchedules = async () => {
     const client = await pool.connect();
     try {
@@ -99,77 +217,11 @@ const checkAndRunSchedules = async () => {
 
         // 3. Execute each schedule
         for (let schedule of schedules) {
-            // 👇 NEW: Smart Email Resolution (Supports Specific Emails & Role Broadcasting) 👇
-            let emails = [];
-
-            if (schedule.specific_emails && schedule.specific_emails.length > 0) {
-                // Mode 1: User typed in specific emails manually
-                emails = schedule.specific_emails;
-            } else if (schedule.recipient_roles && schedule.recipient_roles.length > 0) {
-                // Mode 2: User selected roles. Filter safely by Centre (Superadmins always get it)
-                const emailRes = await client.query(
-                    `SELECT email FROM staff 
-                     WHERE role = ANY($1) 
-                     AND status = 'Active' 
-                     AND ($2::int IS NULL OR centre_id = $2 OR role = 'superadmin')`,
-                    [schedule.recipient_roles, schedule.centre_id]
-                );
-                emails = emailRes.rows.map(r => r.email).filter(e => e);
-            }
-            // 👆 END NEW EMAIL RESOLUTION 👆
-
-            if (emails.length > 0) {
-                console.log(`[CRON] 📧 Sending "${schedule.name}" to ${emails.length} recipients...`);
-                
-                // 👇 Calculate TODAY'S date in IST safely
-                const today = new Date();
-                const todayStr = today.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-
-                // 👇 BULLETPROOF ARRAY PARSER 👇
-                let parsedReportIds = schedule.report_ids;
-
-                if (!parsedReportIds) {
-                    parsedReportIds = [];
-                } else if (typeof parsedReportIds === 'string') {
-                    try {
-                        parsedReportIds = JSON.parse(parsedReportIds);
-                    } catch (e) {
-                        parsedReportIds = parsedReportIds.replace(/[{}[\]"]/g, '').split(',').filter(Boolean).map(Number);
-                    }
-                } else if (!Array.isArray(parsedReportIds)) {
-                    parsedReportIds = [parsedReportIds];
-                }
-
-                if (parsedReportIds.length === 0) {
-                    console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No reports selected.`);
-                    continue; 
-                }
-
-                // 👇 FETCH DATA WITH TODAY'S DATE 👇
-                const data = await getReportData({
-                    targetCentreId: schedule.centre_id === 'all' ? null : (schedule.centre_id || null),
-                    fromDate: todayStr,
-                    toDate: todayStr,
-                    period: 'custom',  // Keeps backend from defaulting to an empty 00:00 boundary
-                    staffId: null,     // Fixes zero-row returns from the string "all"
-                    reportIds: parsedReportIds
-                });
-
-                // Build the PDF
-                const pdfBuffer = await buildPDF(data, parsedReportIds, { title: schedule.name });
-                const htmlBody = buildEmailHTML(data, parsedReportIds, schedule.name);
-
-                const fileName = `${schedule.name.replace(/\s+/g, '_')}_${todayStr}.pdf`;
-
-                await sendReportEmail(
-                    emails,
-                    `${schedule.name} - ${todayStr}`,
-                    `Hello,\n\nPlease find attached the automated ${schedule.name} for ${todayStr}.\n\n- Akshaya Sahayi`,
-                    [{ filename: fileName, content: pdfBuffer }],
-                    htmlBody
-                );
-            } else {
-                console.log(`[CRON] ⚠️ Skipped "${schedule.name}" - No active emails found for roles: ${schedule.recipient_roles}`);
+            try {
+                await runReportSchedule(client, schedule);
+            } catch (err) {
+                // One broken schedule shouldn't stop the others due this minute
+                console.error(`[CRON] ❌ Schedule "${schedule.name}" failed:`, err);
             }
         }
     } catch (error) {
@@ -178,6 +230,18 @@ const checkAndRunSchedules = async () => {
         client.release();
     }
 };
+
+// Run every day at 00:25 AM IST - Delete report PDFs that were shared on WhatsApp more than a week ago
+scheduleForEachOrg("25 0 * * *", async () => {
+  try {
+    const deleted = cleanupOldReportPdfs();
+    console.log(`[CRON] 🗑️ Deleted ${deleted} old WhatsApp report PDFs`);
+  } catch (err) {
+    console.error("[CRON] Report PDF cleanup failed", err);
+  }
+}, {
+  timezone: "Asia/Kolkata"
+});
 
 // 👉 The "Tick" Engine: Runs every 1 minute to check for scheduled reports
 scheduleForEachOrg("* * * * *", async () => {

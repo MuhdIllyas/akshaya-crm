@@ -39,7 +39,21 @@ router.get('/', async (req, res) => {
                         AND s.email IS NOT NULL AND s.email <> ''
                         AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id OR s.role = 'superadmin')
                     )
-                END as resolved_emails
+                END as resolved_emails,
+                CASE
+                    WHEN COALESCE(cardinality(rs.specific_phones), 0) > 0
+                        THEN rs.specific_phones
+                    WHEN COALESCE(cardinality(rs.specific_emails), 0) > 0
+                        THEN NULL
+                    ELSE (
+                        SELECT array_agg(DISTINCT s.phone)
+                        FROM staff s
+                        WHERE s.role = ANY(rs.recipient_roles)
+                        AND s.status = 'Active'
+                        AND s.phone IS NOT NULL AND s.phone <> ''
+                        AND (rs.centre_id IS NULL OR s.centre_id = rs.centre_id OR s.role = 'superadmin')
+                    )
+                END as resolved_phones
             FROM report_schedules rs 
             ORDER BY rs.created_at DESC
         `);
@@ -54,13 +68,19 @@ router.get('/', async (req, res) => {
 // 2. CREATE A NEW SCHEDULE
 // ==========================================
 router.post('/', async (req, res) => {
-    const { name, report_ids, frequency, run_time, recipient_roles, specific_emails, centre_id } = req.body;
+    const { name, report_ids, frequency, run_time, recipient_roles, specific_emails, specific_phones, centre_id } = req.body;
+    const send_email = req.body.send_email !== false;
+    const send_whatsapp = req.body.send_whatsapp === true;
+
+    if (!send_email && !send_whatsapp) {
+        return res.status(400).json({ error: 'Choose email, WhatsApp or both' });
+    }
 
     try {
         const result = await pool.query(`
             INSERT INTO report_schedules 
-            (name, report_ids, frequency, run_time, recipient_roles, specific_emails, centre_id) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7) 
+            (name, report_ids, frequency, run_time, recipient_roles, specific_emails, centre_id, send_email, send_whatsapp, specific_phones) 
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) 
             RETURNING *
         `, [
             name, 
@@ -69,7 +89,10 @@ router.post('/', async (req, res) => {
             run_time, 
             recipient_roles || [], 
             specific_emails || [],
-            centre_id || null
+            centre_id || null,
+            send_email,
+            send_whatsapp,
+            send_whatsapp ? (specific_phones || []) : []
         ]);
 
         res.status(201).json(result.rows[0]);
