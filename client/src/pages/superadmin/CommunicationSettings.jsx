@@ -34,7 +34,8 @@ const CommunicationSettings = () => {
     { key: "reengagement_message", label: "Reengagement Request" },
     { key: "document_ready", label: "Document Ready - Public" },
     { key: "passport_appointment_reminder", label: "Passport Appointment Reminder" },
-    { key: "document_submission_reminder", label: "Document Submission Reminder" }
+    { key: "document_submission_reminder", label: "Document Submission Reminder" },
+    { key: "scheduled_report", label: "Scheduled Report (PDF)" }
   ];
 
   useEffect(() => {

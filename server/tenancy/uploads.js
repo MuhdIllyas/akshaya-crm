@@ -33,5 +33,5 @@ export function orgUploadPath(sub = "", root = "uploads") {
 export const RESERVED_UPLOAD_NAMES = [
   "chat", "staff", "customer-documents", "customers", "customer-photos", "knowledge",
   "printing", "print-jobs", "service-tracking", "service-documents", "collaboration",
-  "files", "tasks", "centres", "logos", "temp", "tmp",
+  "files", "tasks", "centres", "logos", "temp", "tmp", "reports",
 ];
