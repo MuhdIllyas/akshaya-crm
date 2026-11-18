@@ -11,6 +11,8 @@ import { createNote } from '@/services/noteService';
 import api from '@/services/serviceService';
 import { toast } from 'react-toastify';
 import StaffName from '@/components/staff/StaffName';
+import ShareInChat from '@/components/staff/ShareInChat';
+import { noteContext } from '@/components/staff/staffDirectory';
 
 /* ---------------- constants ---------------- */
 
@@ -948,7 +950,7 @@ const KeepCard = ({
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 truncate text-[11px] font-medium text-slate-700">
             <FiUser className="h-3 w-3 shrink-0 opacity-50" />
-            <span className="truncate"><StaffName id={note.created_by} name={note.creator_name} fallback="Staff" /></span>
+            <span className="truncate"><StaffName id={note.created_by} name={note.creator_name} fallback="Staff" context={noteContext(note)} /></span>
           </p>
           <p className="text-[10px] text-slate-500">{formatStamp(note.created_at)}</p>
         </div>
@@ -956,6 +958,11 @@ const KeepCard = ({
         {/* actions: shown on hover, always on touch screens */}
         <div className="flex shrink-0 items-center gap-0.5 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
           <ColorPicker value={color} onChange={(key) => onColorChange(note, key)} />
+          <ShareInChat
+            context={noteContext(note)}
+            iconOnly
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-black/5 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+          />
           {canModify && (
             <>
               <button

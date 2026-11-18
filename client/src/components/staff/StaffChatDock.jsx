@@ -7,6 +7,7 @@ import ChatAvatar from "@/components/chat/ChatAvatar";
 import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
 import { LiveTaskCard, TaskReplyChip } from "@/components/chat/TaskCards";
 import EventMentionCard from "@/components/chat/EventMentionCard";
+import NoteMentionCard from "@/components/chat/NoteMentionCard";
 import { onOpenStaffChat, useIsOnline, currentUserId, messengerPath } from "./staffDirectory";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -50,6 +51,13 @@ const buildContextMessage = (context, text) => {
       mentions: [{ mention_type: "task", entity_id: Number(context.id), display_text: tag, start_index: 0, end_index: tag.length }],
     };
   }
+  if (context?.type === "note" && context.id) {
+    const tag = `📝 ${context.title || context.label || "Note"}`;
+    return {
+      body: `${tag}\n${text}`,
+      mentions: [{ mention_type: "note", entity_id: Number(context.id), display_text: tag, start_index: 0, end_index: tag.length }],
+    };
+  }
   if (context?.type === "event" && context.id) {
     // The tag stays readable in previews and notifications; chats show the card in its place.
     const tag = `📅 ${context.title || context.label || "Calendar event"}`;
@@ -70,7 +78,7 @@ const buildContextMessage = (context, text) => {
 
 const MessageText = ({ text, mentions, mine }) => {
   const cards = (mentions || [])
-    .filter((m) => ["tracking", "task", "event"].includes(m.mention_type))
+    .filter((m) => ["tracking", "task", "event", "note"].includes(m.mention_type))
     .sort((a, b) => a.start_index - b.start_index);
   if (!cards.length) return <p className="whitespace-pre-wrap break-words">{text}</p>;
   const parts = [];
@@ -82,6 +90,8 @@ const MessageText = ({ text, mentions, mine }) => {
         ? <TaskReplyChip key={`t-${i}`} text={m.display_text} isOwn={mine} />
         : m.mention_type === "event"
         ? <EventMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
+        : m.mention_type === "note"
+        ? <NoteMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
         : <TrackingMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
     );
     last = m.end_index;
@@ -269,6 +279,10 @@ const StaffChatDock = () => {
                     : `Task card attached: ${context.label}`
                   : context.type === "event"
                   ? `Event card attached: ${context.label}`
+                  : context.type === "note"
+                  ? context.visibility === "private"
+                    ? `Note card attached: ${context.label} (private, so ${staff.name.split(" ")[0]} will see it locked)`
+                    : `Note card attached: ${context.label}`
                   : `Service card attached: ${context.label}`}
               </span>
               <button type="button" onClick={() => setContext(null)} aria-label="Remove attachment" className="text-navy-500 hover:text-navy-800"><FiX className="h-3.5 w-3.5" /></button>

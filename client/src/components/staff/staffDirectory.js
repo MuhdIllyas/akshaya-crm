@@ -118,3 +118,11 @@ export const eventContext = (ev) => {
   const title = ev.title || "Calendar event";
   return { type: "event", id: Number(ev.id), title, label: title, short: "this event" };
 };
+
+// For a note (notes row). `visibility` lets the chat window warn that a
+// private note will show as a locked card to the other person.
+export const noteContext = (note) => {
+  if (!note?.id) return null;
+  const title = note.title || "Untitled note";
+  return { type: "note", id: Number(note.id), title, label: title, short: "this note", visibility: note.visibility };
+};

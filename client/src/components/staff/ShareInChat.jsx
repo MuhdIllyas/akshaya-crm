@@ -12,7 +12,7 @@ import { loadStaffDirectory, openStaffChat, useIsOnline } from "./staffDirectory
  *
  *   <ShareInChat context={eventContext(event)} onShared={onClose} />
  */
-const ShareInChat = ({ context, onShared, className = "" }) => {
+const ShareInChat = ({ context, onShared, className = "", iconOnly = false }) => {
   const [open, setOpen] = useState(false);
   if (!context) return null;
   return (
@@ -20,9 +20,11 @@ const ShareInChat = ({ context, onShared, className = "" }) => {
       <button
         type="button"
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        title={iconOnly ? "Share in chat" : undefined}
+        aria-label={iconOnly ? "Share in chat" : undefined}
         className={className || "flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2 text-sm text-slate-700 hover:bg-slate-50"}
       >
-        <FiMessageCircle className="h-4 w-4" /> Share in chat
+        <FiMessageCircle className="h-4 w-4" />{!iconOnly && " Share in chat"}
       </button>
       {open && (
         <StaffPicker

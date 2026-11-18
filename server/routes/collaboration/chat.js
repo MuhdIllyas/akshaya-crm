@@ -1232,6 +1232,63 @@ router.get("/mentions/event/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Note card (a "note" mention in a chat message). Same rule as the notes list
+// (GET /api/notes/all): the note's creator must be in your centre (unless you're
+// a superadmin), and it must be global/centre, yours, or a non-private note that
+// mentions you. Anyone else gets a locked card, so a chat can't leak a note.
+router.get("/mentions/note/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid note id" });
+    const { id: userId, role, centre_id: userCentre } = req.user;
+
+    const result = await pool.query(
+      `SELECT n.id, n.title, n.content, n.visibility, n.color, n.created_at, n.created_by,
+              s.name AS creator_name, s.centre_id AS creator_centre_id,
+              srv.name AS linked_service_name,
+              EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $2) AS mentions_me
+         FROM notes n
+         LEFT JOIN staff s      ON s.id = n.created_by
+         LEFT JOIN services srv ON srv.id = n.related_service_id
+        WHERE n.id = $1`,
+      [id, userId]
+    );
+    const note = result.rows[0];
+    if (!note) return res.status(404).json({ error: "Note not found" });
+
+    const mine = String(note.created_by) === String(userId);
+    const sameCentre = role === "superadmin" || String(note.creator_centre_id) === String(userCentre);
+    const canSee =
+      sameCentre &&
+      (note.visibility === "global" ||
+        note.visibility === "centre" ||
+        mine ||
+        (note.visibility !== "private" && note.mentions_me));
+    if (!canSee) return res.status(403).json({ code: "NO_ACCESS", error: "You can't see this note" });
+
+    // Only what the card shows: a short plain-text preview, not the whole note
+    const preview = String(note.content || "")
+      .replace(/@\[([^\]]+)\]\(\d+\)/g, "@$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    res.json({
+      id: note.id,
+      title: note.title,
+      preview: preview.length > 160 ? `${preview.slice(0, 157)}…` : preview,
+      visibility: note.visibility,
+      color: note.color,
+      created_at: note.created_at,
+      created_by: note.created_by,
+      creator_name: note.creator_name,
+      linked_service_name: note.linked_service_name,
+    });
+  } catch (err) {
+    console.error("Note mention lookup error:", err);
+    res.status(500).json({ error: "Failed to load note" });
+  }
+});
+
 /* ================================
    ASSIGN CONVERSATION (The "Baton Pass")
 ================================ */
