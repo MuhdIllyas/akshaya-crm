@@ -6,6 +6,7 @@ import { socket } from "@/services/socket";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
 import { LiveTaskCard, TaskReplyChip } from "@/components/chat/TaskCards";
+import EventMentionCard from "@/components/chat/EventMentionCard";
 import { onOpenStaffChat, useIsOnline, currentUserId, messengerPath } from "./staffDirectory";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -49,6 +50,14 @@ const buildContextMessage = (context, text) => {
       mentions: [{ mention_type: "task", entity_id: Number(context.id), display_text: tag, start_index: 0, end_index: tag.length }],
     };
   }
+  if (context?.type === "event" && context.id) {
+    // The tag stays readable in previews and notifications; chats show the card in its place.
+    const tag = `📅 ${context.title || context.label || "Calendar event"}`;
+    return {
+      body: `${tag}\n${text}`,
+      mentions: [{ mention_type: "event", entity_id: Number(context.id), display_text: tag, start_index: 0, end_index: tag.length }],
+    };
+  }
   if (context?.type === "tracking" && context.id) {
     const tag = `@${context.id}`;
     return {
@@ -61,7 +70,7 @@ const buildContextMessage = (context, text) => {
 
 const MessageText = ({ text, mentions, mine }) => {
   const cards = (mentions || [])
-    .filter((m) => m.mention_type === "tracking" || m.mention_type === "task")
+    .filter((m) => ["tracking", "task", "event"].includes(m.mention_type))
     .sort((a, b) => a.start_index - b.start_index);
   if (!cards.length) return <p className="whitespace-pre-wrap break-words">{text}</p>;
   const parts = [];
@@ -71,6 +80,8 @@ const MessageText = ({ text, mentions, mine }) => {
     parts.push(
       m.mention_type === "task"
         ? <TaskReplyChip key={`t-${i}`} text={m.display_text} isOwn={mine} />
+        : m.mention_type === "event"
+        ? <EventMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
         : <TrackingMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
     );
     last = m.end_index;
@@ -256,6 +267,8 @@ const StaffChatDock = () => {
                   ? messages.some((m) => isTaskMsg(m, context.id))
                     ? `Replying about task: ${context.label}`
                     : `Task card attached: ${context.label}`
+                  : context.type === "event"
+                  ? `Event card attached: ${context.label}`
                   : `Service card attached: ${context.label}`}
               </span>
               <button type="button" onClick={() => setContext(null)} aria-label="Remove attachment" className="text-navy-500 hover:text-navy-800"><FiX className="h-3.5 w-3.5" /></button>

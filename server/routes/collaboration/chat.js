@@ -1193,6 +1193,45 @@ router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Calendar event card (an "event" mention in a chat message). Uses the same
+// visibility rules as the calendar (routes/events.js), so a card never shows
+// an event to someone who couldn't see it on their own calendar.
+router.get("/mentions/event/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid event id" });
+
+    const result = await pool.query(
+      `SELECT e.id, e.title, e.description, e.date, e.start_datetime, e.end_datetime,
+              e.type, e.event_type, e.priority, e.status, e.visibility,
+              e.centre_id, e.assigned_to,
+              st.name AS assigned_staff_name,
+              c.name  AS centre_name
+         FROM calendar_events e
+         LEFT JOIN staff st  ON st.id = e.assigned_to
+         LEFT JOIN centres c ON c.id = e.centre_id
+        WHERE e.id = $1 AND e.related_task_id IS NULL`,
+      [id]
+    );
+    const ev = result.rows[0];
+    if (!ev) return res.status(404).json({ error: "Event not found" });
+
+    const { role, centre_id: userCentre, id: userId } = req.user;
+    const centreEvent = ev.visibility === "centre" && String(ev.centre_id) === String(userCentre);
+    const canSee =
+      role === "superadmin" ||
+      ev.visibility === "global" ||
+      (role === "admin" && centreEvent) ||
+      (centreEvent && (ev.assigned_to == null || String(ev.assigned_to) === String(userId)));
+    if (!canSee) return res.status(403).json({ code: "NO_ACCESS", error: "You can't see this event" });
+
+    res.json(ev);
+  } catch (err) {
+    console.error("Event mention lookup error:", err);
+    res.status(500).json({ error: "Failed to load event" });
+  }
+});
+
 /* ================================
    ASSIGN CONVERSATION (The "Baton Pass")
 ================================ */

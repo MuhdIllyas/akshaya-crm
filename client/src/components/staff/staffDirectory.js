@@ -110,3 +110,11 @@ export const loadMyConversationIds = () => {
   }
   return convPromise;
 };
+
+// For <StaffName context={...}> on a calendar event (a calendar_events row).
+// Generated calendar items (expiry-…, delivery-…) have no card.
+export const eventContext = (ev) => {
+  if (!ev || !/^\d+$/.test(String(ev.id))) return null;
+  const title = ev.title || "Calendar event";
+  return { type: "event", id: Number(ev.id), title, label: title, short: "this event" };
+};

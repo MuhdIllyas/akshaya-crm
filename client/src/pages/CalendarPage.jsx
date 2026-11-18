@@ -28,7 +28,7 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
 import StaffName from '@/components/staff/StaffName';
-import { taskContext } from '@/components/staff/staffDirectory';
+import { taskContext, eventContext } from '@/components/staff/staffDirectory';
 
 // ----------------------------------------------------------------------
 //  What kind of item is this?
@@ -40,6 +40,16 @@ import { taskContext } from '@/components/staff/staffDirectory';
 const isCalendarRow = (e) => !!e && (!e.source || e.source === "calendar_event");
 const isTaskItem = (e) => e?.source === "task";
 const canEditItem = (e) => isCalendarRow(e);
+// "Message about …" on the assigned staff name: tasks attach the task card,
+// real calendar events the event card.
+const calendarItemContext = (e) => {
+  if (!e) return null;
+  if (isTaskItem(e) || e.type === 'task') {
+    const taskId = e.related_task_id || e.task_id || (isTaskItem(e) ? e.id : null);
+    return taskContext({ title: e.title, conversation_id: e.conversation_id }, taskId);
+  }
+  return isCalendarRow(e) ? eventContext(e) : null;
+};
 const canDeleteItem = (e) => isCalendarRow(e) || isTaskItem(e);
 
 // ----------------------------------------------------------------------
@@ -146,7 +156,7 @@ function TooltipCard({ event, position }) {
         {event.assigned_staff_name && (
           <div className="flex items-center gap-2 text-xs text-slate-600">
             <FiUser className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} context={event.type === 'task' ? taskContext(null, event.related_task_id || event.task_id) : null} /></span>
+            <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} context={calendarItemContext(event)} /></span>
           </div>
         )}
 
@@ -805,7 +815,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
             {event.assigned_staff_name && (
               <div className="flex items-center gap-2 text-slate-700">
                 <FiUser className="h-4 w-4 text-slate-400" />
-                <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} context={event.type === 'task' ? taskContext(null, event.related_task_id || event.task_id) : null} /></span>
+                <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} context={calendarItemContext(event)} /></span>
               </div>
             )}
           </div>

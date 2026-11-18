@@ -38,6 +38,7 @@ import axios from "axios";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
 import { TaskMessage, NormalTaskMessage, TaskReplyChip } from "@/components/chat/TaskCards";
+import EventMentionCard from "@/components/chat/EventMentionCard";
 import { taskContext } from "@/components/staff/staffDirectory";
 import {
   getAvatarUrl,
@@ -580,6 +581,8 @@ const Chat = ({
             {m.display_text}
           </span>
         );
+      } else if (m.mention_type === "event") {
+        parts.push(<EventMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
       } else if (m.mention_type === "task") {
         // A reply about a task whose card is already in this chat
         parts.push(<TaskReplyChip key={`mnt-${idx}`} text={m.display_text} isOwn={isOwn} />);
