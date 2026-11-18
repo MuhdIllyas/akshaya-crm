@@ -15,6 +15,7 @@ import {
 } from "chart.js";
 import { Line, Doughnut } from "react-chartjs-2";
 import { getWalletsForCentre, getWalletsByCentre } from "@/services/walletService";
+import StaffName from '@/components/staff/StaffName';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
 
@@ -907,7 +908,7 @@ const AdminExpenseManagement = () => {
                       <div className="flex flex-wrap items-center gap-2">
                         <StatusChip status={expense.status} />
                         <span className="text-xs text-slate-500">{getWalletMeta(wallet).icon} {expense.wallet_name}</span>
-                        <span className="inline-flex items-center gap-1 text-xs text-slate-500"><FiUser className="h-3 w-3" />{expense.staff_name || "N/A"}</span>
+                        <span className="inline-flex items-center gap-1 text-xs text-slate-500"><FiUser className="h-3 w-3" /><StaffName id={expense.staff_id} name={expense.staff_name} fallback="N/A" /></span>
                       </div>
                       {renderActions(expense)}
                     </div>
@@ -942,7 +943,7 @@ const AdminExpenseManagement = () => {
                           <StatusChip status={expense.status} />
                           {expense.requires_approval && <p className="mt-1.5 text-xs text-amber-600">Requires approval</p>}
                         </td>
-                        <td className="px-4 py-3.5"><span className="inline-flex items-center gap-1.5 text-sm text-slate-700"><FiUser className="h-4 w-4 text-slate-400" />{expense.staff_name || "N/A"}</span></td>
+                        <td className="px-4 py-3.5"><span className="inline-flex items-center gap-1.5 text-sm text-slate-700"><FiUser className="h-4 w-4 text-slate-400" /><StaffName id={expense.staff_id} name={expense.staff_name} fallback="N/A" /></span></td>
                         <td className="px-4 py-3.5">{renderActions(expense)}</td>
                       </tr>
                     );

@@ -8,6 +8,7 @@ import {
   FiMail, FiPhone, FiCalendar, FiGift, FiMapPin, FiUsers, FiUserCheck, FiHome,
   FiDownload, FiActivity, FiBriefcase,
 } from "react-icons/fi";
+import StaffName from '@/components/staff/StaffName';
 
 const API_BASE = import.meta.env.VITE_API_URL;
 const authHeader = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
@@ -386,7 +387,7 @@ const SuperadminStaffManagement = () => {
                           <div className="flex items-center gap-3">
                             <Avatar staff={staff} />
                             <div className="min-w-0">
-                              <p className="text-sm font-semibold text-gray-900 truncate">{staff.name}</p>
+                              <p className="text-sm font-semibold text-gray-900 truncate"><StaffName id={staff.id} name={staff.name} /></p>
                               <p className="text-xs text-gray-500 truncate max-w-[220px]">{staff.email}</p>
                             </div>
                           </div>
@@ -418,7 +419,7 @@ const SuperadminStaffManagement = () => {
                     <div className="flex items-start gap-3">
                       <Avatar staff={staff} size="w-14 h-14" text="text-base" />
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-gray-900 truncate">{staff.name}</h3>
+                        <h3 className="font-semibold text-gray-900 truncate"><StaffName id={staff.id} name={staff.name} /></h3>
                         <p className="text-xs text-gray-500 truncate">
                           @{staff.username}
                           {staff.employeeId && <span className="text-gray-400"> · {staff.employeeId}</span>}

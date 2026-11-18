@@ -8,6 +8,7 @@ import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
 // Same reminders panel as Service Entry (WhatsApp templates + staff tasks)
 import ScheduledActionsPanel from "@/components/automations/ScheduledActionsPanel";
+import StaffName from '@/components/staff/StaffName';
 
 /* ------------------------------------------------------------------
    Paths in your app — change these two if your routes are different
@@ -367,7 +368,7 @@ export default function Leads({ user }) {
                                 <span className="w-7 h-7 rounded-full bg-indigo-100 text-navy-700 text-xs font-bold flex items-center justify-center">
                                   {(l.assigned_to_name || "?")[0]}
                                 </span>
-                                {l.assigned_to === me.id ? "You" : l.assigned_to_name}
+                                {l.assigned_to === me.id ? "You" : <StaffName id={l.assigned_to} name={l.assigned_to_name} />}
                                 {manager && ["new", "contacted", "follow_up"].includes(l.status) && (
                                   <button type="button" onClick={() => setSelectedId(l.id)}
                                           className="text-xs font-semibold text-navy-700 underline underline-offset-2 hover:text-navy-800">
@@ -650,7 +651,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
         </div>
         {!canEdit && (
           <p className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-3 py-2">
-            This lead is with <strong>{lead.assigned_to_name}</strong>. Only they or an admin can update it.
+            This lead is with <strong><StaffName id={lead.assigned_to} name={lead.assigned_to_name} /></strong>. Only they or an admin can update it.
           </p>
         )}
 
@@ -671,7 +672,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
               {staff.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           ) : lead.assigned_to ? (
-            <span className="font-semibold text-gray-900">{lead.assigned_to === me.id ? "You" : lead.assigned_to_name}</span>
+            <span className="font-semibold text-gray-900">{lead.assigned_to === me.id ? "You" : <StaffName id={lead.assigned_to} name={lead.assigned_to_name} />}</span>
           ) : isOpen ? (
             <button type="button" onClick={() => onClaim(lead)} className="h-10 px-4 rounded-lg border border-navy-700 text-navy-700 font-semibold flex items-center gap-2 hover:bg-indigo-50">
               <FiUserPlus /> Take this lead
@@ -883,7 +884,7 @@ function LeadPanel({ lead, me, manager, api, onClose, onPatch, onClaim, onOpenCh
               <span className="w-2 h-2 rounded-full bg-navy-700 mt-1.5" />
               <div>
                 <div className="text-gray-900">
-                  <span className="font-medium">{a.staff_name || "System"}</span>
+                  <span className="font-medium"><StaffName id={a.staff_id} name={a.staff_name} fallback="System" /></span>
                   {" · "}{ACTIVITY_TEXT[a.action] || a.action}
                 </div>
                 {a.details && <div className={`text-gray-700 ${a.action === "note" ? "whitespace-pre-line bg-gray-50 rounded-lg px-3 py-2 mt-1" : ""}`}>{a.details}</div>}

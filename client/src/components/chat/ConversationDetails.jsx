@@ -30,6 +30,7 @@ import {
   formatShortDate,
   API_BASE_URL,
 } from "./chatUtils";
+import StaffName from '@/components/staff/StaffName';
 
 /* ---------------- small building blocks ---------------- */
 
@@ -301,7 +302,7 @@ const ConversationDetails = ({
                     <KV label="Handled by">
                       <span className="inline-flex items-center gap-1">
                         <FiUser size={12} className="text-slate-400" />
-                        {serviceDetails.assigned_staff_name || serviceDetails.staff_name || "Unassigned"}
+                        <StaffName id={serviceDetails.assigned_staff_id ?? serviceDetails.staff_id} name={serviceDetails.assigned_staff_name || serviceDetails.staff_name} fallback="Unassigned" />
                       </span>
                     </KV>
                   </div>

@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line } from "recharts";
 import StaffTargetsPanel from "./StaffTargetsPanel";
 import StaffTargetHistory from "./StaffTargetHistory";
+import StaffName from '@/components/staff/StaffName';
 
 // Local-date formatter (YYYY-MM-DD). toISOString() converts to UTC, which shifts
 // the date back by a day in IST (e.g. 1 Oct 00:00 IST -> 30 Sep).
@@ -352,7 +353,7 @@ const StaffDetailsPanel = ({ staff, categoryStrength, loadingCategories, ratingD
                 <FiArrowLeft className="h-4 w-4 text-slate-600" />
               </button>
               <div>
-                <h2 className="text-base font-bold text-slate-900">{staff.name}</h2>
+                <h2 className="text-base font-bold text-slate-900"><StaffName id={staff.id} name={staff.name} /></h2>
                 <p className="text-xs text-slate-500">{staff.role}</p>
               </div>
             </div>
@@ -1536,7 +1537,7 @@ const StaffPerformanceSection = ({
                     const deptCharge = staff.revenueCollected - staff.serviceCharge;
                     return (
                       <tr key={staff.id} className={`border-b border-slate-100 ${idx % 2 === 0 ? 'bg-slate-50/60' : ''}`}>
-                        <td className="px-3 py-2.5 font-medium text-slate-900">{staff.name}</td>
+                        <td className="px-3 py-2.5 font-medium text-slate-900"><StaffName id={staff.id} name={staff.name} /></td>
                         <td className="px-3 py-2.5">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
                             staff.type === 'Permanent' ? 'bg-slate-100 text-navy-700' : 'bg-amber-100 text-amber-700'

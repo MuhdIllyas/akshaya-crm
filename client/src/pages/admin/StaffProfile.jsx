@@ -6,6 +6,7 @@ import {
 } from "react-icons/fi";
 import ChangePassword from "../../components/ChangePassword";
 import SignInHistory from "../../components/security/SignInHistory";
+import StaffName from '@/components/staff/StaffName';
 
 // ---------- helpers ----------
 const API = import.meta.env.VITE_API_URL;
@@ -224,7 +225,7 @@ const StaffProfile = () => {
                   {initials(staff.name)}
                 </div>
               )}
-              <h2 className="text-xl font-bold text-gray-900 mt-4">{staff.name}</h2>
+              <h2 className="text-xl font-bold text-gray-900 mt-4"><StaffName id={staff.id} name={staff.name} profilePath={null} /></h2>
               <p className="text-sm text-gray-500">@{staff.username}</p>
               <div className="flex flex-wrap justify-center gap-2 mt-3">
                 <span className="text-xs font-medium px-2.5 py-1 rounded-full border bg-gray-50 text-gray-700 border-gray-200 capitalize">

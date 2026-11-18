@@ -19,6 +19,7 @@ import {
   getWalletTodayBalance,
   getWallets,
 } from "@/services/walletService";
+import StaffName from '@/components/staff/StaffName';
 
 // Old transfers were saved as "Transfer from wallet 91 to wallet 82".
 // Show "Transfer from HDFC Bank (#91) to Cash (#82)" instead — display only, the database is untouched.
@@ -784,7 +785,7 @@ const WalletActivity = () => {
                 <div><dt className="text-xs text-slate-500">Date & time</dt><dd className="font-medium text-slate-900">{fmt(selected.date, "dd MMM yyyy, hh:mm a")}</dd></div>
                 <div><dt className="text-xs text-slate-500">Type</dt><dd className="font-medium text-slate-900">{selected.type === "credit" ? "Money in" : "Money out"}</dd></div>
                 <div><dt className="text-xs text-slate-500">Category</dt><dd className="font-medium text-slate-900">{selected.category}</dd></div>
-                <div><dt className="text-xs text-slate-500">Staff</dt><dd className="font-medium text-slate-900">{staffName(selected)}</dd></div>
+                <div><dt className="text-xs text-slate-500">Staff</dt><dd className="font-medium text-slate-900"><StaffName id={selected.staff_id} name={staffName(selected)} /></dd></div>
                 <div><dt className="text-xs text-slate-500">Wallet</dt><dd className="font-medium text-slate-900">{wallet.name}</dd></div>
                 <div><dt className="text-xs text-slate-500">Transaction ID</dt><dd className="font-medium text-slate-900">#{selected.id}</dd></div>
               </dl>

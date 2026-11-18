@@ -7,6 +7,7 @@ import {
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { getServices, createToken, getTokens, getCampaigns, getStaff, assignToken } from '/src/services/campaignService';
+import StaffName from '@/components/staff/StaffName';
 
 // ---------- helpers ----------
 const toYmd = (value) => {
@@ -275,7 +276,7 @@ const TokenGenerator = () => {
           <FiUser className="h-4 w-4" />
         </div>
         <div>
-          <div className="text-sm font-medium text-slate-800">{token.staffName || 'Unassigned'}</div>
+          <div className="text-sm font-medium text-slate-800"><StaffName name={token.staffName} fallback="Unassigned" /></div>
           {token.centreName && <div className="text-xs text-slate-400">{token.centreName}</div>}
         </div>
       </div>

@@ -6,6 +6,7 @@ import {
   FiPlus, FiSearch, FiX, FiGrid, FiList, FiEye, FiEdit2, FiTrash2, FiUserPlus, FiPhone, FiClock,
   FiHome, FiUserCheck, FiAlertCircle, FiMessageCircle, FiUser,
 } from "react-icons/fi";
+import StaffName from '@/components/staff/StaffName';
 
 const EMPTY_CENTRE_FORM = {
   name: "", admin_id: "", communication_account_id: "",
@@ -909,7 +910,7 @@ const CentreManagement = () => {
                             </div>
                           )}
                           <div>
-                            <h4 className="text-md font-semibold text-gray-800">{staff.name}</h4>
+                            <h4 className="text-md font-semibold text-gray-800"><StaffName id={staff.id} name={staff.name} /></h4>
                             <p className="text-sm text-gray-600">{staff.role}</p>
                           </div>
                         </div>

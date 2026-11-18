@@ -18,6 +18,7 @@ import { toast } from 'react-toastify';
 import AdminExpenseEntry from './AdminExpenseEntry';
 import WalletReconciliation from './WalletReconciliation';
 import BankStatementSection from './BankStatementSection';
+import StaffName from '@/components/staff/StaffName';
 
 // Today's date in IST (YYYY-MM-DD)
 const todayIST = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
@@ -1237,7 +1238,7 @@ const IncomeViewComponent = ({ transactions = [] }) => {
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="flex items-center text-xs text-slate-600">
                         <FiBriefcase className="mr-1 h-3 w-3 text-slate-400" />
-                        {row.staff_name || '—'}
+                        <StaffName id={row.staff_id} name={row.staff_name} />
                       </span>
                       {renderStatus(row)}
                     </div>
@@ -1301,7 +1302,7 @@ const IncomeViewComponent = ({ transactions = [] }) => {
                               <div className="mr-2 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100">
                                 <FiBriefcase className="h-3 w-3 text-emerald-600" />
                               </div>
-                              <span className="text-xs font-medium text-slate-900">{row.staff_name || '—'}</span>
+                              <span className="text-xs font-medium text-slate-900"><StaffName id={row.staff_id} name={row.staff_name} /></span>
                             </div>
                           </td>
                           <td className="px-3 py-3">
@@ -1672,7 +1673,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
                     <span className="flex min-w-0 items-center truncate">
                       <FiUser className="mr-1 h-3 w-3 shrink-0 text-slate-400" />
                       <span className="truncate">
-                        {tx.staff_name || 'System'}
+                        <StaffName id={tx.staff_id} name={tx.staff_name} fallback="System" />
                         {tx.customer_name ? ` · ${tx.customer_name}` : ''}
                       </span>
                     </span>
@@ -1764,7 +1765,7 @@ const LedgerView = ({ ledger, onLedgerRowClick }) => {
                               <FiUser className="h-3 w-3 text-navy-700" />
                             </div>
                             <div>
-                              <p className="text-xs font-medium text-slate-900">{tx.staff_name || 'System'}</p>
+                              <p className="text-xs font-medium text-slate-900"><StaffName id={tx.staff_id} name={tx.staff_name} fallback="System" /></p>
                               {tx.customer_name && (
                                 <p className="max-w-[120px] truncate text-xs text-slate-500">{tx.customer_name}</p>
                               )}
@@ -1961,7 +1962,7 @@ const ExpenseManagement = ({
             <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
               <span>{expense.date}</span>
               {dotSep}
-              <span>{expense.staff_name || 'Staff'}</span>
+              <span><StaffName id={expense.staff_id} name={expense.staff_name} fallback="Staff" /></span>
               {dotSep}
               <span>{expense.wallet_name || 'Wallet'}</span>
               {expense.team_name && <>{dotSep}{teamPill(expense)}</>}
@@ -2044,7 +2045,7 @@ const ExpenseManagement = ({
                             {expense.paymentMethod}
                           </span>
                           {dotSep}
-                          <span className="text-xs text-slate-600">by {expense.staff_name || 'Staff'}</span>
+                          <span className="text-xs text-slate-600">by <StaffName id={expense.staff_id} name={expense.staff_name} fallback="Staff" /></span>
                           {dotSep}
                           <span className="text-xs text-slate-600">{expense.date}</span>
                           {expense.team_name && <>{dotSep}<span className="text-xs">{teamPill(expense)}</span></>}

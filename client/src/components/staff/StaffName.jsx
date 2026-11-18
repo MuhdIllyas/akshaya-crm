@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { FiMessageCircle, FiLink, FiUser, FiX } from "react-icons/fi";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import { getAvatarUrl } from "@/components/chat/chatUtils";
-import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat } from "./staffDirectory";
+import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat, findIdByName, findIdByNameSync } from "./staffDirectory";
 
 /**
  * A staff member's name that opens a small staff card with "Message" actions.
@@ -12,15 +12,32 @@ import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat } from ".
  *   <StaffName id={service.assignedToId} name={service.staffName}
  *              context={{ label: "TR-104 · Income certificate" }} />
  *
- * Falls back to plain text when there's no id (e.g. "Unassigned").
+ * `id` is optional: without it the name is matched against the active staff
+ * list, and used only when exactly one person has that name. Anything that
+ * can't be matched (e.g. "Unassigned", "System", former staff) stays plain text.
+ *
+ * `profilePath` defaults to the admin staff profile for admins and superadmins;
+ * pass `profilePath={null}` explicitly to hide "View profile".
  */
-const StaffName = ({ id, name, context = null, profilePath = null, className = "", showDot = true }) => {
+const StaffName = ({ id: givenId, name, context = null, profilePath, className = "", showDot = true, fallback = "—" }) => {
   const ref = useRef(null);
   const [open, setOpen] = useState(false);
+  const [matchedId, setMatchedId] = useState(() => (hasId(givenId) ? null : findIdByNameSync(name)));
+  const id = hasId(givenId) ? givenId : matchedId;
   const online = useIsOnline(id);
   const isSelf = id != null && String(id) === String(currentUserId());
 
-  if (id == null || id === "" || !name) return <span className={className}>{name || "—"}</span>;
+  useEffect(() => {
+    if (hasId(givenId) || !name) return;
+    let alive = true;
+    findIdByName(name).then((found) => alive && setMatchedId(found));
+    return () => { alive = false; };
+  }, [givenId, name]);
+
+  if (!name) return <span className={className}>{fallback}</span>;
+  if (!hasId(id) || isSelf) return <span className={className}>{name}</span>;
+
+  const profile = profilePath !== undefined ? profilePath : defaultProfilePath(id);
 
   return (
     <>
@@ -49,7 +66,7 @@ const StaffName = ({ id, name, context = null, profilePath = null, className = "
           online={online}
           isSelf={isSelf}
           context={context}
-          profilePath={profilePath}
+          profilePath={profile}
           onClose={() => setOpen(false)}
         />
       )}
@@ -174,5 +191,12 @@ const StaffCard = ({ anchor, id, name, online, isSelf, context, profilePath, onC
 };
 
 const cap = (s = "") => s.charAt(0).toUpperCase() + s.slice(1);
+
+const hasId = (v) => v != null && v !== "" && v !== "N/A";
+
+const defaultProfilePath = (id) => {
+  const role = localStorage.getItem("role")?.trim()?.toLowerCase();
+  return role === "admin" || role === "superadmin" ? `/dashboard/admin/staff/${id}` : null;
+};
 
 export default StaffName;

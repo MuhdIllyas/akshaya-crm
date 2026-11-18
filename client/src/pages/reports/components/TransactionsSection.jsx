@@ -32,6 +32,7 @@ import {
   FiTag // Added for category icon
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
+import StaffName from '@/components/staff/StaffName';
 
 /* =========================
    Shared style tokens (UI only)
@@ -308,7 +309,7 @@ const TransactionsSection = ({
                 </div>
                 <div>
                   <p className="text-xs font-medium text-slate-900">Staff</p>
-                  <p className="text-xs text-slate-700">{transaction.staffName}</p>
+                  <p className="text-xs text-slate-700"><StaffName id={transaction.staffId} name={transaction.staffName} /></p>
                 </div>
               </div>
             )}
@@ -752,7 +753,7 @@ const TransactionsSection = ({
                                 </div>
                                 <div className="flex flex-col">
                                   <span className="text-xs font-medium text-slate-900">
-                                    {transaction.staffName}
+                                    <StaffName id={transaction.staffId} name={transaction.staffName} />
                                   </span>
                                   <span className="text-xs text-slate-500">
                                     Staff

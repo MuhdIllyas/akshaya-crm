@@ -40,6 +40,7 @@ import { getPresets , createAutomations } from '@/services/automationService';
 import { todayIST, addDays } from "@/utils/dates";
 import { printServiceChecklist, collectRequiredDocuments } from '@/utils/pdf/requiredDocumentsPdf';
 import ServiceFilesPopover from '@/components/files/ServiceFilesPopover';
+import StaffName from '@/components/staff/StaffName';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -2844,7 +2845,7 @@ const ServiceEntry = () => {
                       </div>
                       <div className="text-xs text-slate-500">{entry.phone}</div>
                       {(userRole === 'admin' || userRole === 'superadmin') && (
-                        <div className="text-xs text-slate-500 mt-0.5">Staff: <span className="font-medium text-slate-700">{entry.staffName || 'Unknown'}</span></div>
+                        <div className="text-xs text-slate-500 mt-0.5">Staff: <span className="font-medium text-slate-700"><StaffName id={entry.staffId} name={entry.staffName} fallback="Unknown" /></span></div>
                       )}
                     </div>
                     <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded-full ${statusDisplay.color}`}>
@@ -3003,7 +3004,7 @@ const ServiceEntry = () => {
 
                       {(userRole === 'admin' || userRole === 'superadmin') && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
-                          {entry.staffName || 'Unknown'}
+                          <StaffName id={entry.staffId} name={entry.staffName} fallback="Unknown" />
                         </td>
                       )}
 

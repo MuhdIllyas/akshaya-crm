@@ -9,6 +9,7 @@ import {
 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import StaffName from '@/components/staff/StaffName';
 
 // ==========================================
 // SHARED PRIMITIVES (same look as the dashboards)
@@ -1242,7 +1243,7 @@ const TeamManagement = () => {
                                           <Avatar name={member.name} photo={member.photo} size={40} />
                                           <div className="min-w-0 flex-1">
                                             <p className="flex items-center gap-1 truncate text-sm font-medium text-slate-900">
-                                              {member.name}
+                                              <StaffName id={member.staff_id} name={member.name} />
                                               {member.is_primary && <FiStar className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" title="Primary team" aria-label="Primary team" />}
                                             </p>
                                             <p className="truncate text-xs text-slate-500">{member.role}{member.centre_name ? ` · ${member.centre_name}` : ""}</p>
@@ -1522,7 +1523,7 @@ const TeamManagement = () => {
                                       <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md bg-slate-100 text-[11px] font-semibold text-slate-600">{idx + 1}</span>
                                       <Avatar name={member.name} photo={member.photo} size={40} />
                                       <span className="min-w-0">
-                                        <span className="block truncate text-sm font-medium text-slate-900">{member.name}</span>
+                                        <span className="block truncate text-sm font-medium text-slate-900"><StaffName id={member.staff_id} name={member.name} /></span>
                                         <span className="block truncate text-xs text-slate-500">{member.role}{member.centre_name ? ` · ${member.centre_name}` : ""}</span>
                                       </span>
                                     </span>
@@ -1633,7 +1634,7 @@ const TeamManagement = () => {
                                   <div className="flex items-center gap-3">
                                     <Avatar name={m.name} photo={m.photo} size={32} />
                                     <div className="min-w-0">
-                                      <p className="truncate font-medium text-slate-900">{m.name}</p>
+                                      <p className="truncate font-medium text-slate-900"><StaffName id={m.staff_id} name={m.name} /></p>
                                       <p className="truncate text-xs text-slate-500">{m.centre_name || m.role}</p>
                                     </div>
                                   </div>

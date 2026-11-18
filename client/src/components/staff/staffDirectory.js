@@ -27,16 +27,34 @@ export const useIsOnline = (staffId) =>
 
 /* ---------------- staff directory ---------------- */
 let staffPromise = null;
+let byName = null; // normalized name -> id, or null when two people share it
+const norm = (n) => String(n || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+let staffToken = null;
 export const loadStaffDirectory = () => {
+  const token = localStorage.getItem("token");
+  if (token !== staffToken) { staffPromise = null; byName = null; } // signed in as someone else
   if (!staffPromise) {
-    const token = localStorage.getItem("token");
+    staffToken = token;
     staffPromise = fetch(`${API_BASE_URL}/api/chat/staff`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : []))
-      .then((rows) => new Map(rows.map((s) => [String(s.id), s])))
+      .then((rows) => {
+        byName = new Map();
+        rows.forEach((s) => {
+          const k = norm(s.name);
+          byName.set(k, byName.has(k) ? null : s.id);
+        });
+        return new Map(rows.map((s) => [String(s.id), s]));
+      })
       .catch(() => { staffPromise = null; return new Map(); });
   }
   return staffPromise;
 };
+
+// For lists that only carry a staff name: the id of the one active staff member
+// with that name, or null (no match, or the name is shared).
+export const findIdByNameSync = (name) => (byName && name ? byName.get(norm(name)) ?? null : null);
+export const findIdByName = (name) => loadStaffDirectory().then(() => findIdByNameSync(name));
 
 export const currentUserId = () => localStorage.getItem("id");
 

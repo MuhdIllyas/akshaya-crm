@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { FiEdit2, FiEye } from "react-icons/fi";
+import StaffName from '@/components/staff/StaffName';
 
 // ---------- helpers ----------
 export const getPhotoUrl = (photo) => {
@@ -94,7 +95,7 @@ const StaffTable = ({ staffList }) => {
                   <div className="flex items-center gap-3">
                     <StaffAvatar staff={staff} />
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-slate-900 truncate">{staff.name}</p>
+                      <p className="text-sm font-semibold text-slate-900 truncate"><StaffName id={staff.id} name={staff.name} /></p>
                       <p className="text-xs text-slate-500 truncate">
                         @{staff.username}
                         {staff.employeeId && <span className="text-slate-400"> · {staff.employeeId}</span>}
