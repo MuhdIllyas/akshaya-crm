@@ -568,11 +568,15 @@ const Chat = ({
     const sorted = [...mentions].sort((a, b) => a.start_index - b.start_index);
     const parts = [];
     let lastIndex = 0;
+    // Cards are blocks, so the line break typed after them would add an empty line
+    let afterCard = false;
+    const pushText = (s) => { parts.push(afterCard ? s.replace(/^\r?\n/, "") : s); afterCard = false; };
 
     sorted.forEach((m, idx) => {
-      if (m.start_index > lastIndex) parts.push(text.slice(lastIndex, m.start_index));
+      if (m.start_index > lastIndex) pushText(text.slice(lastIndex, m.start_index));
       if (m.mention_type === "tracking") {
         parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        afterCard = true;
       } else if (m.mention_type === "staff") {
         parts.push(
           <span
@@ -584,8 +588,10 @@ const Chat = ({
         );
       } else if (m.mention_type === "note") {
         parts.push(<NoteMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        afterCard = true;
       } else if (m.mention_type === "event") {
         parts.push(<EventMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        afterCard = true;
       } else if (m.mention_type === "task") {
         // A reply about a task whose card is already in this chat
         parts.push(<TaskReplyChip key={`mnt-${idx}`} text={m.display_text} isOwn={isOwn} />);
@@ -596,7 +602,7 @@ const Chat = ({
       lastIndex = m.end_index;
     });
 
-    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    if (lastIndex < text.length) pushText(text.slice(lastIndex));
     return <div className="whitespace-pre-wrap break-words">{parts}</div>;
   };
 

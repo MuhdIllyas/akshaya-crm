@@ -7,6 +7,7 @@ import {
 } from "react-icons/fi";
 import StaffTable, { StaffAvatar, StatusBadge, RoleBadge, formatDate } from "../../components/StaffTable";
 import AddStaffForm from "../../components/AddStaffForm";
+import StaffName from '@/components/staff/StaffName';
 
 const DEPARTMENTS = ["All", "Accounts", "Reception", "Front Office", "Aadhaar", "Staff Executive", "Customer Relations"];
 const STATUSES = ["All", "Active", "On Leave", "Terminated"];
@@ -257,7 +258,7 @@ const StaffManagement = () => {
                     <div className="flex items-start gap-3">
                       <StaffAvatar staff={staff} size="w-14 h-14" text="text-base" />
                       <div className="min-w-0 flex-1">
-                        <h3 className="font-semibold text-slate-900 truncate">{staff.name}</h3>
+                        <h3 className="font-semibold text-slate-900 truncate"><StaffName id={staff.id} name={staff.name} /></h3>
                         <p className="text-xs text-slate-500 truncate">
                           @{staff.username}
                           {staff.employeeId && <span className="text-slate-400"> · {staff.employeeId}</span>}
