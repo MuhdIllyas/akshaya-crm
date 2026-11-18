@@ -1,10 +1,16 @@
 // src/components/files/ServiceFilesPopover.jsx
 // Paperclip button for a service cart card. Shows the File Repository files linked to the
 // selected service (files.related_service_id === categoryId) and opens one in a new tab.
-// Read-only and self-contained: it never touches the service entry form, its state or its payload.
-import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
+// PDFs can also be filled in on screen (PdfFormFiller) and printed or downloaded.
+// Self-contained: it never touches the service entry form, its state or its payload; it only reads
+// `fillValues` (customer details) to offer them as one-click inserts in the filler.
+import React, { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { FiPaperclip, FiChevronDown, FiExternalLink, FiFileText, FiFile, FiBell, FiGlobe, FiHome } from 'react-icons/fi';
+import { FiPaperclip, FiChevronDown, FiExternalLink, FiFileText, FiFile, FiBell, FiGlobe, FiHome, FiEdit3 } from 'react-icons/fi';
+
+// pdf.js is large, so the filler is only downloaded when someone opens it.
+const PdfFormFiller = lazy(() => import('./PdfFormFiller'));
+const isPdf = (f) => f.mime_type === 'application/pdf' || /\.pdf$/i.test(f.name || '') || /\.pdf$/i.test(f.file_path || '');
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` });
@@ -39,11 +45,12 @@ const loadAllFiles = () => {
 // Call after uploading a file if you want the next popover open to refetch.
 export const clearServiceFilesCache = () => { filesCache = null; };
 
-const ServiceFilesPopover = ({ categoryId, repositoryPath }) => {
+const ServiceFilesPopover = ({ categoryId, repositoryPath, fillValues }) => {
   const [files, setFiles] = useState([]);
   const [open, setOpen] = useState(false);
   const [openingId, setOpeningId] = useState(null);
   const [error, setError] = useState('');
+  const [filling, setFilling] = useState(null); // file open in the PDF filler
   const [pos, setPos] = useState({ top: 0, left: 0, width: 320 });
   const btnRef = useRef(null);
   const popRef = useRef(null);
@@ -158,13 +165,14 @@ const ServiceFilesPopover = ({ categoryId, repositoryPath }) => {
               const Icon = meta.icon;
               const busy = openingId === f.id;
               return (
+                <div key={f.id} className="flex items-stretch hover:bg-slate-50">
                 <button
-                  key={f.id}
                   type="button"
                   role="menuitem"
                   onClick={() => openFile(f)}
                   disabled={busy}
-                  className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-slate-50 disabled:opacity-60"
+                  title="Open"
+                  className="flex-1 min-w-0 flex items-center gap-3 pl-3 pr-2 py-2.5 text-left disabled:opacity-60"
                 >
                   <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${meta.color}`}>
                     <Icon className="h-3.5 w-3.5" />
@@ -183,6 +191,18 @@ const ServiceFilesPopover = ({ categoryId, repositoryPath }) => {
                     ? <span className="h-4 w-4 border-2 border-navy-500 border-t-transparent rounded-full animate-spin" />
                     : <FiExternalLink className="h-4 w-4 text-slate-400" />}
                 </button>
+                {isPdf(f) && f.version_id && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => { setOpen(false); setFilling(f); }}
+                    title="Fill this form on screen"
+                    className="my-2 mr-2 flex items-center gap-1 px-2 rounded-lg border border-navy-500/30 bg-navy-500/5 text-navy-700 text-[11px] font-semibold hover:bg-navy-500/15"
+                  >
+                    <FiEdit3 className="h-3 w-3" /> Fill
+                  </button>
+                )}
+                </div>
               );
             })}
           </div>
@@ -195,6 +215,15 @@ const ServiceFilesPopover = ({ categoryId, repositoryPath }) => {
           )}
         </div>,
         document.body
+      )}
+
+      {filling && (
+        <Suspense fallback={createPortal(
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-900/30">
+            <span className="h-6 w-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          </div>, document.body)}>
+          <PdfFormFiller file={filling} fillValues={fillValues || []} onClose={() => setFilling(null)} />
+        </Suspense>
       )}
     </>
   );
