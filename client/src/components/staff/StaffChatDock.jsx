@@ -4,10 +4,17 @@ import { FiX, FiMinus, FiMaximize2, FiSend, FiLink } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
 import ChatAvatar from "@/components/chat/ChatAvatar";
+import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
 import { onOpenStaffChat, useIsOnline, currentUserId, messengerPath } from "./staffDirectory";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const auth = () => ({ Authorization: `Bearer ${localStorage.getItem("token")}` });
+
+const parseMentions = (m) => {
+  if (Array.isArray(m)) return m;
+  if (typeof m === "string") { try { return JSON.parse(m); } catch { return []; } }
+  return [];
+};
 
 const toMsg = (m) => ({
   id: m.id,
@@ -15,10 +22,42 @@ const toMsg = (m) => ({
   type: m.type ?? m.message_type ?? "text",
   mine: String(m.sender_id) === String(currentUserId()),
   at: m.created_at,
+  mentions: parseMentions(m.mentions),
 });
 
 const timeOf = (d) =>
   d ? new Date(d).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
+
+/**
+ * What the chat is "about", sent the same way the Messenger does it, so every
+ * participant sees a live card instead of plain text. Today only services
+ * (`@<tracking id>` → tracking mention); tasks, events, leads etc. will add
+ * their own mention_type and card here and in Chat.jsx.
+ */
+const buildContextMessage = (context, text) => {
+  if (context?.type === "tracking" && context.id) {
+    const tag = `@${context.id}`;
+    return {
+      body: `${tag} ${text}`,
+      mentions: [{ mention_type: "tracking", entity_id: Number(context.id), display_text: tag, start_index: 0, end_index: tag.length }],
+    };
+  }
+  return { body: text, mentions: [] };
+};
+
+const MessageText = ({ text, mentions }) => {
+  const cards = (mentions || []).filter((m) => m.mention_type === "tracking").sort((a, b) => a.start_index - b.start_index);
+  if (!cards.length) return <p className="whitespace-pre-wrap break-words">{text}</p>;
+  const parts = [];
+  let last = 0;
+  cards.forEach((m, i) => {
+    if (m.start_index > last) parts.push(text.slice(last, m.start_index));
+    parts.push(<TrackingMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />);
+    last = m.end_index;
+  });
+  if (last < text.length) parts.push(text.slice(last).replace(/^\s+/, ""));
+  return <div className="whitespace-pre-wrap break-words">{parts}</div>;
+};
 
 /**
  * Floating chat window for a 1:1 chat with a staff member. Mounted once in the
@@ -36,6 +75,7 @@ const StaffChatDock = () => {
   const [sending, setSending] = useState(false);
   const listRef = useRef(null);
   const inputRef = useRef(null);
+  const readIds = useRef(new Set());
   const online = useIsOnline(staff?.id);
 
   const close = useCallback(() => {
@@ -46,6 +86,7 @@ const StaffChatDock = () => {
   // Open (or switch to) a chat
   useEffect(() => onOpenStaffChat(async ({ staff: s, context: ctx }) => {
     setStaff(s); setMinimized(false); setContext(ctx); setMessages([]); setConv(null);
+    readIds.current = new Set();
     setDraft(ctx?.label ? "Can you check this one?" : "");
     setLoading(true);
     try {
@@ -59,16 +100,9 @@ const StaffChatDock = () => {
       setConv(c);
       const mRes = await fetch(`${API_BASE_URL}/api/chat/messages/${c.id}`, { headers: auth() });
       const rows = mRes.ok ? await mRes.json() : [];
-      const list = rows.filter((m) => !m.is_deleted).map(toMsg);
-      setMessages(list);
-      const unread = list.filter((m) => !m.mine).map((m) => m.id);
-      if (unread.length) {
-        fetch(`${API_BASE_URL}/api/chat/read`, {
-          method: "POST",
-          headers: { ...auth(), "Content-Type": "application/json" },
-          body: JSON.stringify({ message_ids: unread }),
-        }).catch(() => {});
-      }
+      // Already-read messages shouldn't be sent to /read again.
+      rows.forEach((m) => { if (m.is_read_by_me) readIds.current.add(m.id); });
+      setMessages(rows.filter((m) => !m.is_deleted).map(toMsg));
     } catch {
       toast.error(`Couldn't open a chat with ${s.name}`);
       setStaff(null);
@@ -90,6 +124,20 @@ const StaffChatDock = () => {
     return () => { socket.off("new_message", onNew); socket.emit("leave_conversation", conv.id); };
   }, [conv]);
 
+  // Whatever the window shows (open, not minimized) counts as read, so the
+  // Messenger unread badge doesn't keep counting it.
+  useEffect(() => {
+    if (!conv || minimized || loading) return;
+    const unread = messages.filter((m) => !m.mine && !readIds.current.has(m.id)).map((m) => m.id);
+    if (!unread.length) return;
+    unread.forEach((id) => readIds.current.add(id));
+    fetch(`${API_BASE_URL}/api/chat/read`, {
+      method: "POST",
+      headers: { ...auth(), "Content-Type": "application/json" },
+      body: JSON.stringify({ message_ids: unread }),
+    }).catch(() => unread.forEach((id) => readIds.current.delete(id)));
+  }, [messages, minimized, conv, loading]);
+
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight;
   }, [messages, minimized]);
@@ -97,17 +145,18 @@ const StaffChatDock = () => {
   const send = async () => {
     const text = draft.trim();
     if (!text || !conv || sending) return;
-    const body = context?.label ? `[${context.label}] ${text}` : text;
+    const { body, mentions } = buildContextMessage(context, text);
     setSending(true);
     try {
       const fd = new FormData();
       fd.append("conversation_id", conv.id);
       fd.append("message", body);
       fd.append("message_type", "text");
+      if (mentions.length) fd.append("mentions", JSON.stringify(mentions));
       const res = await fetch(`${API_BASE_URL}/api/chat/message`, { method: "POST", headers: auth(), body: fd });
       if (!res.ok) throw new Error();
       const saved = await res.json();
-      setMessages((prev) => (prev.some((x) => x.id === saved.id) ? prev : [...prev, toMsg({ ...saved, sender_id: currentUserId() })]));
+      setMessages((prev) => (prev.some((x) => x.id === saved.id) ? prev : [...prev, toMsg({ mentions, ...saved, sender_id: currentUserId() })]));
       setDraft(""); setContext(null);
     } catch {
       toast.error("Message not sent. Try again.");
@@ -143,7 +192,7 @@ const StaffChatDock = () => {
 
       {!minimized && (
         <>
-          <div ref={listRef} className="h-72 space-y-1.5 overflow-y-auto bg-slate-50 px-3 py-3">
+          <div ref={listRef} className="h-80 space-y-1.5 overflow-y-auto bg-slate-50 px-3 py-3">
             {loading ? (
               <p className="pt-24 text-center text-sm text-slate-400">Opening chat…</p>
             ) : messages.length === 0 ? (
@@ -151,8 +200,8 @@ const StaffChatDock = () => {
             ) : (
               messages.map((m) => (
                 <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[80%] rounded-2xl px-3 py-1.5 text-sm leading-snug ${m.mine ? "rounded-br-md bg-navy-700 text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-800"}`}>
-                    <p className="whitespace-pre-wrap break-words">{m.type === "text" ? m.text : `[${m.type}]`}</p>
+                  <div className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm leading-snug ${m.mine ? "rounded-br-md bg-navy-700 text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-800"}`}>
+                    {m.type === "text" ? <MessageText text={m.text} mentions={m.mentions} /> : <p>[{m.type}]</p>}
                     <p className={`mt-0.5 text-right text-[10px] ${m.mine ? "text-navy-200" : "text-slate-400"}`}>{timeOf(m.at)}</p>
                   </div>
                 </div>
@@ -163,8 +212,8 @@ const StaffChatDock = () => {
           {context?.label && (
             <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg bg-navy-50 px-2.5 py-1.5 text-xs text-navy-700">
               <FiLink className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">About {context.label}</span>
-              <button type="button" onClick={() => setContext(null)} aria-label="Remove link" className="text-navy-500 hover:text-navy-800"><FiX className="h-3.5 w-3.5" /></button>
+              <span className="min-w-0 flex-1 truncate">Service card attached: {context.label}</span>
+              <button type="button" onClick={() => setContext(null)} aria-label="Remove service card" className="text-navy-500 hover:text-navy-800"><FiX className="h-3.5 w-3.5" /></button>
             </div>
           )}
 

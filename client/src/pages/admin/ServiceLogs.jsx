@@ -16,7 +16,8 @@ const staffNameProps = (service) => ({
   id: service.assignedToId ?? null,
   name: service.staffName,
   profilePath: service.assignedToId ? `/dashboard/admin/staff/${service.assignedToId}` : null,
-  context: { label: `${service.applicationNumber} · ${service.serviceName}`, short: service.applicationNumber },
+  // Sent as an @<tracking id> mention, so the chat shows the live service card.
+  context: { type: 'tracking', id: service.id, label: `${service.applicationNumber} · ${service.serviceName}`, short: service.applicationNumber },
 });
 import { getTrackingEntries, updateTrackingStatus, notifyCustomer, getTrackingStats, getStaff, getCategories } from '/src/services/serviceService';
 
