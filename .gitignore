@@ -1,1 +1,7 @@
+# Secrets: real values live only on each machine. Copy .env.example to .env and fill it in.
 .env
+.env.*
+!.env.example
+
+# Dependencies: installed with `npm ci`, never committed
+node_modules/
