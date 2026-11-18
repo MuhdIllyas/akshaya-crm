@@ -4,6 +4,7 @@ import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
 import ThemeToggle from '../components/ThemeToggle';
 import QuickServiceModal from '@/components/QuickServiceModal';
+import StaffChatDock from '@/components/staff/StaffChatDock';
 import { getWalletsForCentre } from '@/services/walletService';
 import { toast } from 'react-toastify';
 import { customerAuthHeaders } from '@/tenancy/centres';
@@ -908,7 +909,9 @@ const DashboardLayout = () => {
           </div>
         </main>
       </div>
-      
+
+      <StaffChatDock />
+
       {quickEnabled && (
         <QuickServiceModal open={quickOpen} onClose={() => setQuickOpen(false)} wallets={quickWallets} />
       )}

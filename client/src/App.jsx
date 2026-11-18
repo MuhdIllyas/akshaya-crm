@@ -4,6 +4,8 @@ import { ToastContainer, toast } from "react-toastify";
 import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo } from "react-icons/fi";
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
+// Attaches the online-status listeners before the socket connects.
+import "@/components/staff/staffDirectory";
 import DashboardLayout from "./layouts/DashboardLayout";
 import PortalEntry from "./pages/PortalEntry";
 import Logout from "./pages/Logout";
