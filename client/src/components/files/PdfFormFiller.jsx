@@ -148,8 +148,10 @@ const PdfPage = ({ index, info, proxy, scale, tool, items, fieldValues, selected
                 ref={el => {
                   if (el && it.autoFocus) {
                     onItemChange(it.id, { autoFocus: false });
-                    // after the click that created it has finished, so nothing takes the focus back
-                    setTimeout(() => el.focus(), 0);
+                    // Focus right away, so even a keystroke straight after the click lands here (the page's
+                    // pointerdown cancels the browser's own focus change). Re-check once the click is over.
+                    el.focus();
+                    setTimeout(() => { if (document.activeElement !== el) el.focus(); }, 0);
                   }
                 }}
                 value={it.text}
