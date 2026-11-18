@@ -29,6 +29,7 @@ import { useNavigate } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
 import StaffName from '@/components/staff/StaffName';
 import { taskContext, eventContext } from '@/components/staff/staffDirectory';
+import ShareInChat from '@/components/staff/ShareInChat';
 
 // ----------------------------------------------------------------------
 //  What kind of item is this?
@@ -819,7 +820,9 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
               </div>
             )}
           </div>
-          <div className="flex gap-2 mt-6 pt-4 border-t">
+          {/* Send this event (or task) as a card to any staff member's chat */}
+          <ShareInChat context={calendarItemContext(event)} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white py-2 text-sm text-slate-700 hover:bg-slate-50" />
+          <div className="flex gap-2 mt-4 pt-4 border-t">
             {onEdit && canEditItem(event) && (
               <button
                 onClick={() => {
