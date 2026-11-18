@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { FiMessageCircle, FiLink, FiUser, FiX, FiCheckSquare } from "react-icons/fi";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import { getAvatarUrl } from "@/components/chat/chatUtils";
-import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat, findIdByName, findIdByNameSync, messengerPath } from "./staffDirectory";
+import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat, findIdByName, findIdByNameSync, messengerPath, loadMyConversationIds } from "./staffDirectory";
 
 /**
  * A staff member's name that opens a small staff card with "Message" actions.
@@ -91,12 +91,22 @@ const StaffCard = ({ anchor, id, name, online, isSelf, context, profilePath, onC
   const cardRef = useRef(null);
   const [info, setInfo] = useState(null);
   const [pos, setPos] = useState(null);
+  // "Open task chat" only when the signed-in user is actually in that chat
+  const [canOpenTaskChat, setCanOpenTaskChat] = useState(false);
 
   useEffect(() => {
     let alive = true;
     loadStaffDirectory().then((m) => alive && setInfo(m.get(String(id)) || {}));
     return () => { alive = false; };
   }, [id]);
+
+  useEffect(() => {
+    const convId = context?.type === "task" ? context.conversationId : null;
+    if (!convId) return;
+    let alive = true;
+    loadMyConversationIds().then((ids) => alive && setCanOpenTaskChat(ids.has(String(convId))));
+    return () => { alive = false; };
+  }, [context]);
 
   useEffect(() => {
     const place = () => {
@@ -182,7 +192,7 @@ const StaffCard = ({ anchor, id, name, online, isSelf, context, profilePath, onC
                   <span className="truncate">Message about {context.short || context.label}</span>
                 </button>
               )}
-              {context?.type === "task" && context.conversationId && (
+              {context?.type === "task" && context.conversationId && canOpenTaskChat && (
                 // The task's own chat (where its card was posted when it was created),
                 // e.g. the service's group chat, so everyone involved sees the reply.
                 <button

@@ -94,3 +94,19 @@ export const taskContext = (task, taskId = task?.id) => {
     task: task?.id === taskId && task?.status ? task : null,
   };
 };
+
+/* ---------------- my conversations ---------------- */
+// Ids of the chats the signed-in user is in, so "Open task chat" only shows
+// for a chat they can actually open. Cached for a minute.
+let convPromise = null;
+let convAt = 0;
+export const loadMyConversationIds = () => {
+  if (!convPromise || Date.now() - convAt > 60000) {
+    convAt = Date.now();
+    convPromise = fetch(`${API_BASE_URL}/api/chat/conversations`, { headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } })
+      .then((r) => (r.ok ? r.json() : []))
+      .then((rows) => new Set((Array.isArray(rows) ? rows : []).map((c) => String(c.id))))
+      .catch(() => { convPromise = null; return new Set(); });
+  }
+  return convPromise;
+};
