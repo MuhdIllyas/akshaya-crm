@@ -75,6 +75,8 @@ const PdfPage = ({ index, info, proxy, scale, tool, items, fieldValues, selected
 
   const handlePointerDown = (e) => {
     if (e.target !== e.currentTarget) return; // clicks on items/fields are handled by them
+    // Stop the browser's own mousedown focus handling, which would pull focus off the new text box onto <body>.
+    e.preventDefault();
     const r = e.currentTarget.getBoundingClientRect();
     onPlace(index, (e.clientX - r.left) / scale, (e.clientY - r.top) / scale);
   };
@@ -143,7 +145,13 @@ const PdfPage = ({ index, info, proxy, scale, tool, items, fieldValues, selected
                 </span>
               )}
               <textarea
-                ref={el => { if (el && it.autoFocus) { el.focus(); onItemChange(it.id, { autoFocus: false }); } }}
+                ref={el => {
+                  if (el && it.autoFocus) {
+                    onItemChange(it.id, { autoFocus: false });
+                    // after the click that created it has finished, so nothing takes the focus back
+                    setTimeout(() => el.focus(), 0);
+                  }
+                }}
                 value={it.text}
                 onChange={e => onItemChange(it.id, { text: e.target.value })}
                 onFocus={e => { onSelect(it.id); registerInput({ el: e.target, item: it.id }); }}
@@ -564,13 +572,15 @@ const PdfFormFiller = ({ file, fillValues = [], onClose }) => {
         </div>
       )}
 
+      {/* Pages. The hint/message floats over them so the pages don't jump when it appears or goes. */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
       {(armedText != null || message) && (
-        <div className={`px-4 py-1.5 text-xs border-b ${message ? 'bg-rose-50 text-rose-700 border-rose-100' : 'bg-amber-50 text-amber-800 border-amber-100'}`}>
-          {message || <>Click on the form where “{armedText}” should go. <button type="button" className="underline ml-1" onClick={() => setArmedText(null)}>Cancel</button></>}
+        <div className="pointer-events-none absolute top-2 inset-x-0 z-10 flex justify-center px-4">
+          <div className={`pointer-events-auto max-w-full px-3 py-1.5 rounded-lg shadow-md text-xs border ${message ? 'bg-rose-50 text-rose-700 border-rose-200' : 'bg-amber-50 text-amber-800 border-amber-200'}`}>
+            {message || <>Click on the form where “{armedText}” should go. <button type="button" className="underline ml-1" onClick={() => setArmedText(null)}>Cancel</button></>}
+          </div>
         </div>
       )}
-
-      {/* Pages */}
       <div ref={scrollRef} className="flex-1 overflow-auto py-6 px-6">
         {status === 'loading' && (
           <div className="h-full flex items-center justify-center text-sm text-slate-500 gap-2">
@@ -597,6 +607,7 @@ const PdfFormFiller = ({ file, fillValues = [], onClose }) => {
             ))}
           </div>
         )}
+      </div>
       </div>
     </div>,
     document.body
