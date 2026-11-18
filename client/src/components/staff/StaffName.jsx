@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { FiMessageCircle, FiLink, FiUser, FiX } from "react-icons/fi";
+import { FiMessageCircle, FiLink, FiUser, FiX, FiCheckSquare } from "react-icons/fi";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import { getAvatarUrl } from "@/components/chat/chatUtils";
-import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat, findIdByName, findIdByNameSync } from "./staffDirectory";
+import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat, findIdByName, findIdByNameSync, messengerPath } from "./staffDirectory";
 
 /**
  * A staff member's name that opens a small staff card with "Message" actions.
@@ -19,9 +19,19 @@ import { useIsOnline, loadStaffDirectory, currentUserId, openStaffChat, findIdBy
  * `profilePath` defaults to the admin staff profile for admins and superadmins;
  * pass `profilePath={null}` explicitly to hide "View profile".
  */
-const StaffName = ({ id: givenId, name, context = null, profilePath, className = "", showDot = true, fallback = "—" }) => {
+const StaffName = ({ id: givenId, name: givenName, context = null, profilePath, className = "", showDot = true, fallback = "—" }) => {
   const ref = useRef(null);
   const [open, setOpen] = useState(false);
+  // Records that only store the staff id (e.g. tasks) get the name from the staff list.
+  const [lookedUpName, setLookedUpName] = useState(null);
+  useEffect(() => {
+    if (givenName || !hasId(givenId)) return;
+    if (String(givenId) === String(currentUserId())) { setLookedUpName("You"); return; }
+    let alive = true;
+    loadStaffDirectory().then((m) => alive && setLookedUpName(m.get(String(givenId))?.name || null));
+    return () => { alive = false; };
+  }, [givenId, givenName]);
+  const name = givenName || lookedUpName;
   const [matchedId, setMatchedId] = useState(() => (hasId(givenId) ? null : findIdByNameSync(name)));
   const id = hasId(givenId) ? givenId : matchedId;
   const online = useIsOnline(id);
@@ -170,6 +180,17 @@ const StaffCard = ({ anchor, id, name, online, isSelf, context, profilePath, onC
                 >
                   <FiLink className="h-4 w-4 shrink-0" />
                   <span className="truncate">Message about {context.short || context.label}</span>
+                </button>
+              )}
+              {context?.type === "task" && context.conversationId && (
+                // The task's own chat (where its card was posted when it was created),
+                // e.g. the service's group chat, so everyone involved sees the reply.
+                <button
+                  type="button"
+                  onClick={() => { onClose(); navigate(messengerPath(), { state: { openConversationId: context.conversationId } }); }}
+                  className="flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-slate-200 text-sm text-slate-700 hover:bg-slate-50"
+                >
+                  <FiCheckSquare className="h-4 w-4 shrink-0" /> Open task chat
                 </button>
               )}
             </>

@@ -30,6 +30,7 @@ import { useServiceChat } from '/src/hooks/useServiceChat';
 import { socket } from '@/services/socket';
 import { AppNoDisplay } from './tracking/ApplicationNumberField';
 import StaffName from '@/components/staff/StaffName';
+import { taskContext } from '@/components/staff/staffDirectory';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -1168,7 +1169,7 @@ const BoardTaskCard = ({ task, onMove }) => {
         <div className="flex items-center gap-2.5 text-[11px] text-gray-500 min-w-0">
           <span className="inline-flex items-center gap-1 min-w-0">
             <Avatar name={task.assigned_to_name || '?'} size="xs" />
-            <span className="truncate max-w-[90px]"><StaffName id={task.assigned_to} name={task.assigned_to_name} fallback="Unassigned" /></span>
+            <span className="truncate max-w-[90px]"><StaffName id={task.assigned_to} name={task.assigned_to_name} fallback="Unassigned" context={taskContext(task)} /></span>
           </span>
           {task.due_date && (
             <span className={`inline-flex items-center gap-1 shrink-0 ${overdue ? 'text-rose-700 font-semibold' : ''}`}>
@@ -1211,7 +1212,7 @@ const TaskRow = ({ task, onStatusUpdate }) => {
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1.5 text-xs text-gray-500">
           <span className="inline-flex items-center gap-1.5">
             <Avatar name={task.assigned_to_name || '?'} size="xs" />
-            <StaffName id={task.assigned_to} name={task.assigned_to_name} fallback="Unassigned" />
+            <StaffName id={task.assigned_to} name={task.assigned_to_name} fallback="Unassigned" context={taskContext(task)} />
           </span>
           {task.due_date && (
             <span className={`inline-flex items-center gap-1 ${overdue ? 'text-rose-700 font-semibold' : ''}`}>

@@ -10,6 +10,7 @@ import { getStaff } from '@/services/serviceService';
 import { createNote } from '@/services/noteService';
 import api from '@/services/serviceService';
 import { toast } from 'react-toastify';
+import StaffName from '@/components/staff/StaffName';
 
 /* ---------------- constants ---------------- */
 
@@ -947,7 +948,7 @@ const KeepCard = ({
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-1 truncate text-[11px] font-medium text-slate-700">
             <FiUser className="h-3 w-3 shrink-0 opacity-50" />
-            <span className="truncate">{note.creator_name || 'Staff'}</span>
+            <span className="truncate"><StaffName id={note.created_by} name={note.creator_name} fallback="Staff" /></span>
           </p>
           <p className="text-[10px] text-slate-500">{formatStamp(note.created_at)}</p>
         </div>

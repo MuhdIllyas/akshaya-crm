@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
+import { LiveTaskCard, TaskReplyChip } from "@/components/chat/TaskCards";
 import { onOpenStaffChat, useIsOnline, currentUserId, messengerPath } from "./staffDirectory";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
@@ -23,18 +24,31 @@ const toMsg = (m) => ({
   mine: String(m.sender_id) === String(currentUserId()),
   at: m.created_at,
   mentions: parseMentions(m.mentions),
+  // task messages carry the task id as their text; the server adds the live row
+  task: m.live_task_data || m.data || null,
 });
+
+const isTaskMsg = (m, taskId) => m.type === "task" && String(m.task?.id ?? m.text) === String(taskId);
 
 const timeOf = (d) =>
   d ? new Date(d).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "";
 
 /**
  * What the chat is "about", sent the same way the Messenger does it, so every
- * participant sees a live card instead of plain text. Today only services
- * (`@<tracking id>` → tracking mention); tasks, events, leads etc. will add
- * their own mention_type and card here and in Chat.jsx.
+ * participant sees a live card instead of plain text:
+ *  - service: `@<tracking id>` tracking mention → service card
+ *  - task already in this chat: a "task" mention → small reply chip above the text
+ *    (a task whose card isn't here yet gets the card posted first, see send())
+ * Calendar events, notes, leads etc. will add their own mention_type here and in Chat.jsx.
  */
 const buildContextMessage = (context, text) => {
+  if (context?.type === "task" && context.id) {
+    const tag = `Task: ${context.title || context.label || `#${context.id}`}`;
+    return {
+      body: `${tag}\n${text}`,
+      mentions: [{ mention_type: "task", entity_id: Number(context.id), display_text: tag, start_index: 0, end_index: tag.length }],
+    };
+  }
   if (context?.type === "tracking" && context.id) {
     const tag = `@${context.id}`;
     return {
@@ -45,14 +59,20 @@ const buildContextMessage = (context, text) => {
   return { body: text, mentions: [] };
 };
 
-const MessageText = ({ text, mentions }) => {
-  const cards = (mentions || []).filter((m) => m.mention_type === "tracking").sort((a, b) => a.start_index - b.start_index);
+const MessageText = ({ text, mentions, mine }) => {
+  const cards = (mentions || [])
+    .filter((m) => m.mention_type === "tracking" || m.mention_type === "task")
+    .sort((a, b) => a.start_index - b.start_index);
   if (!cards.length) return <p className="whitespace-pre-wrap break-words">{text}</p>;
   const parts = [];
   let last = 0;
   cards.forEach((m, i) => {
     if (m.start_index > last) parts.push(text.slice(last, m.start_index));
-    parts.push(<TrackingMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />);
+    parts.push(
+      m.mention_type === "task"
+        ? <TaskReplyChip key={`t-${i}`} text={m.display_text} isOwn={mine} />
+        : <TrackingMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
+    );
     last = m.end_index;
   });
   if (last < text.length) parts.push(text.slice(last).replace(/^\s+/, ""));
@@ -145,9 +165,23 @@ const StaffChatDock = () => {
   const send = async () => {
     const text = draft.trim();
     if (!text || !conv || sending) return;
-    const { body, mentions } = buildContextMessage(context, text);
     setSending(true);
     try {
+      let ctx = context;
+      // A task whose card isn't in this chat yet: post the card once (a normal
+      // task message, like task creation does), then send the text on its own.
+      if (ctx?.type === "task" && !messages.some((m) => isTaskMsg(m, ctx.id))) {
+        const tf = new FormData();
+        tf.append("conversation_id", conv.id);
+        tf.append("message", String(ctx.id));
+        tf.append("message_type", "task");
+        const tr = await fetch(`${API_BASE_URL}/api/chat/message`, { method: "POST", headers: auth(), body: tf });
+        if (!tr.ok) throw new Error();
+        const savedTask = await tr.json();
+        setMessages((prev) => (prev.some((x) => x.id === savedTask.id) ? prev : [...prev, toMsg({ ...savedTask, sender_id: currentUserId(), live_task_data: ctx.task || null })]));
+        ctx = null;
+      }
+      const { body, mentions } = buildContextMessage(ctx, text);
       const fd = new FormData();
       fd.append("conversation_id", conv.id);
       fd.append("message", body);
@@ -198,10 +232,15 @@ const StaffChatDock = () => {
             ) : messages.length === 0 ? (
               <p className="pt-24 text-center text-sm text-slate-400">Say hello to {staff.name.split(" ")[0]}</p>
             ) : (
-              messages.map((m) => (
+              messages.map((m) => m.type === "task" ? (
+                // Task cards sit outside a bubble, like in the Messenger
+                <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
+                  {m.task ? <LiveTaskCard task={m.task} /> : <p className="text-xs text-slate-400">Task #{m.text}</p>}
+                </div>
+              ) : (
                 <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
                   <div className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm leading-snug ${m.mine ? "rounded-br-md bg-navy-700 text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-800"}`}>
-                    {m.type === "text" ? <MessageText text={m.text} mentions={m.mentions} /> : <p>[{m.type}]</p>}
+                    {m.type === "text" ? <MessageText text={m.text} mentions={m.mentions} mine={m.mine} /> : <p>[{m.type}]</p>}
                     <p className={`mt-0.5 text-right text-[10px] ${m.mine ? "text-navy-200" : "text-slate-400"}`}>{timeOf(m.at)}</p>
                   </div>
                 </div>
@@ -212,8 +251,14 @@ const StaffChatDock = () => {
           {context?.label && (
             <div className="mx-3 mt-2 flex items-center gap-2 rounded-lg bg-navy-50 px-2.5 py-1.5 text-xs text-navy-700">
               <FiLink className="h-3.5 w-3.5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">Service card attached: {context.label}</span>
-              <button type="button" onClick={() => setContext(null)} aria-label="Remove service card" className="text-navy-500 hover:text-navy-800"><FiX className="h-3.5 w-3.5" /></button>
+              <span className="min-w-0 flex-1 truncate">
+                {context.type === "task"
+                  ? messages.some((m) => isTaskMsg(m, context.id))
+                    ? `Replying about task: ${context.label}`
+                    : `Task card attached: ${context.label}`
+                  : `Service card attached: ${context.label}`}
+              </span>
+              <button type="button" onClick={() => setContext(null)} aria-label="Remove attachment" className="text-navy-500 hover:text-navy-800"><FiX className="h-3.5 w-3.5" /></button>
             </div>
           )}
 

@@ -28,6 +28,7 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
 import StaffName from '@/components/staff/StaffName';
+import { taskContext } from '@/components/staff/staffDirectory';
 
 // ----------------------------------------------------------------------
 //  What kind of item is this?
@@ -145,7 +146,7 @@ function TooltipCard({ event, position }) {
         {event.assigned_staff_name && (
           <div className="flex items-center gap-2 text-xs text-slate-600">
             <FiUser className="h-3.5 w-3.5 text-slate-400 shrink-0" />
-            <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} /></span>
+            <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} context={event.type === 'task' ? taskContext(null, event.related_task_id || event.task_id) : null} /></span>
           </div>
         )}
 
@@ -804,7 +805,7 @@ function EventModal({ event, onClose, onDelete, onUpdate, onEdit, onViewService 
             {event.assigned_staff_name && (
               <div className="flex items-center gap-2 text-slate-700">
                 <FiUser className="h-4 w-4 text-slate-400" />
-                <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} /></span>
+                <span><StaffName id={event.assigned_staff_id} name={event.assigned_staff_name} context={event.type === 'task' ? taskContext(null, event.related_task_id || event.task_id) : null} /></span>
               </div>
             )}
           </div>

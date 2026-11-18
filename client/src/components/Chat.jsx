@@ -37,6 +37,8 @@ import { socket } from "@/services/socket";
 import axios from "axios";
 import ChatAvatar from "@/components/chat/ChatAvatar";
 import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
+import { TaskMessage, NormalTaskMessage, TaskReplyChip } from "@/components/chat/TaskCards";
+import { taskContext } from "@/components/staff/staffDirectory";
 import {
   getAvatarUrl,
   getAvatarColor,
@@ -49,6 +51,7 @@ import {
   isSameDay,
   toDate,
 } from "@/components/chat/chatUtils";
+import StaffName from '@/components/staff/StaffName';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -133,111 +136,6 @@ const ModalShell = ({ title, onClose, children, footer }) => (
     </motion.div>
   </div>
 );
-
-/* ══════════════════════════════════════════════════════════════
-   Task cards
-   ══════════════════════════════════════════════════════════════ */
-
-const TaskCardShell = ({ title, completed, meta, onComplete, completing }) => (
-  <div className="w-full max-w-sm bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-3.5">
-    <div className="flex items-start gap-3">
-      <div className={`mt-0.5 h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${completed ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-navy-700"}`}>
-        <FiCheckSquare size={16} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Task</p>
-        <h4 className={`text-sm font-semibold leading-snug ${completed ? "line-through text-slate-400" : "text-slate-900"}`}>{title}</h4>
-        <div className="mt-1 space-y-0.5 text-xs text-slate-500">{meta}</div>
-      </div>
-    </div>
-    <div className="mt-3 flex justify-end">
-      {completed ? (
-        <span className="text-xs font-medium text-emerald-600">✓ Completed</span>
-      ) : (
-        <button
-          onClick={onComplete}
-          disabled={completing}
-          className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition disabled:opacity-50"
-        >
-          {completing ? "Saving…" : "Mark complete"}
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-// Service task card (system message with task id in fileName)
-const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
-  const [completing, setCompleting] = useState(false);
-  const completed = taskData?.status === "completed";
-
-  const handleComplete = async () => {
-    if (completing || completed) return;
-    setCompleting(true);
-    try {
-      if (onStatusUpdate) await onStatusUpdate(taskId, "completed");
-    } catch {
-      // Error toast is handled by parent
-    } finally {
-      setCompleting(false);
-    }
-  };
-
-  const match = text.match(/📋 Task created: "(.*?)" assigned to (.*?)\. Due: (.*?)(\.|$)/);
-  const title = match ? match[1] : text.replace(/^📋 Task created: /, "").replace(/\.$/, "");
-  const assignee = match ? match[2] : "";
-  const dueDate = match ? match[3] : "";
-
-  return (
-    <TaskCardShell
-      title={title}
-      completed={completed}
-      completing={completing}
-      onComplete={handleComplete}
-      meta={
-        <>
-          {assignee && <p className="flex items-center gap-1"><FiUser size={11} /> {assignee}</p>}
-          {dueDate && <p className="flex items-center gap-1"><FiClock size={11} /> {dueDate}</p>}
-        </>
-      }
-    />
-  );
-};
-
-// Normal task shared into a chat
-const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
-  const [completing, setCompleting] = useState(false);
-  const completed = taskData?.status === "completed";
-
-  const handleComplete = async () => {
-    if (completing || completed) return;
-    setCompleting(true);
-    try {
-      if (onStatusUpdate) await onStatusUpdate(taskId, taskData.status);
-    } catch {
-      // parent handles the error toast
-    } finally {
-      setCompleting(false);
-    }
-  };
-
-  return (
-    <TaskCardShell
-      title={taskData.title}
-      completed={completed}
-      completing={completing}
-      onComplete={handleComplete}
-      meta={
-        <>
-          <p className="capitalize">
-            {taskData.priority || "medium"} priority · {String(taskData.status || "pending").replace("_", " ")}
-          </p>
-          {taskData.due_date && <p className="flex items-center gap-1"><FiClock size={11} /> {formatDate(taskData.due_date)}</p>}
-        </>
-      }
-    />
-  );
-};
 
 /* ══════════════════════════════════════════════════════════════
    MAIN CHAT
@@ -682,6 +580,12 @@ const Chat = ({
             {m.display_text}
           </span>
         );
+      } else if (m.mention_type === "task") {
+        // A reply about a task whose card is already in this chat
+        parts.push(<TaskReplyChip key={`mnt-${idx}`} text={m.display_text} isOwn={isOwn} />);
+      } else {
+        // Unknown mention types keep their text instead of disappearing
+        parts.push(text.slice(m.start_index, m.end_index));
       }
       lastIndex = m.end_index;
     });
@@ -1341,7 +1245,7 @@ const Chat = ({
                   </h4>
                   {task.description && <p className="text-xs text-slate-600 mt-1">{task.description}</p>}
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-500">
-                    {task.assigned_to_name && <span className="flex items-center gap-1"><FiUser size={10} /> {task.assigned_to_name}</span>}
+                    {task.assigned_to_name && <span className="flex items-center gap-1"><FiUser size={10} /> <StaffName id={task.assigned_to} name={task.assigned_to_name} showDot={false} context={taskContext(task)} /></span>}
                     {task.due_date && <span className="flex items-center gap-1"><FiClock size={10} /> {formatDate(task.due_date)}</span>}
                     <span
                       className={`px-1.5 py-0.5 rounded font-medium capitalize ${

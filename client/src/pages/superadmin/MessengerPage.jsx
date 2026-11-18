@@ -66,6 +66,8 @@ import ServiceLinkChip from "@/components/automations/ServiceLinkChip";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
+import { taskContext } from "@/components/staff/staffDirectory";
+import StaffName from '@/components/staff/StaffName';
 
 // Message types that carry an attachment (WhatsApp media + uploads)
 const FILE_TYPES = ['file', 'image', 'audio', 'video', 'document'];
@@ -2312,7 +2314,7 @@ const MessengerPage = ({ user }) => {
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap"><h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>{task.title}</h4>{isFromTemplate && (<span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full flex items-center gap-1"><FiRepeat size={10} />Recurring</span>)}{task.centre_name && (<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{task.centre_name}</span>)}</div>
               {task.description && (<p className="text-sm text-gray-600 mt-1">{task.description}</p>)}
-              <div className="flex flex-wrap items-center gap-3 mt-2"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[task.priority] || priorityColors.medium}`}>{task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}</span>{task.due_date && (<div className="flex items-center gap-1 text-sm text-gray-500"><FiCalendar size={14} /><span className="text-xs">{new Date(task.due_date).toLocaleDateString()}</span></div>)}<div className="flex items-center gap-1 text-sm text-gray-500"><FiUser size={14} /><span className="text-xs">{assignee?.name || `Staff #${task.assigned_to}`}</span></div></div>
+              <div className="flex flex-wrap items-center gap-3 mt-2"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[task.priority] || priorityColors.medium}`}>{task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}</span>{task.due_date && (<div className="flex items-center gap-1 text-sm text-gray-500"><FiCalendar size={14} /><span className="text-xs">{new Date(task.due_date).toLocaleDateString()}</span></div>)}<div className="flex items-center gap-1 text-sm text-gray-500"><FiUser size={14} /><span className="text-xs"><StaffName id={task.assigned_to} name={assignee?.name} fallback={`Staff #${task.assigned_to}`} context={taskContext(task)} /></span></div></div>
             </div>
           </div>
           <button onClick={() => deleteTask(task.id)} className="p-1 text-gray-400 hover:text-red-500 transition flex-shrink-0"><FiTrash2 size={16} /></button>
@@ -2657,7 +2659,7 @@ const renderTasksView = () => {
                                   )}
                                 </div>
                                 <span className="text-[10px] font-bold text-gray-700 truncate max-w-[65px]">
-                                  {assignee?.name?.split(' ')[0] || 'Unassigned'}
+                                  <StaffName id={task.assigned_to} name={assignee?.name?.split(' ')[0]} fallback="Unassigned" showDot={false} context={taskContext(task)} />
                                 </span>
                               </div>
 
@@ -2747,7 +2749,7 @@ const renderTasksView = () => {
                                     assignee?.name?.charAt(0) || 'U'
                                   )}
                                 </div>
-                                <span className="truncate max-w-[120px]">{assignee?.name || 'Unassigned'}</span>
+                                <span className="truncate max-w-[120px]"><StaffName id={task.assigned_to} name={assignee?.name} fallback="Unassigned" context={taskContext(task)} /></span>
                               </div>
                             </td>
                             <td className="py-3 px-4">

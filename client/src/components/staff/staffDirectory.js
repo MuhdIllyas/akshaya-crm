@@ -75,3 +75,22 @@ export const messengerPath = () => {
   if (role === "admin") return "/dashboard/admin/messenger";
   return "/dashboard/staff/messenger";
 };
+
+/* ---------------- "Message about…" contexts ---------------- */
+// For <StaffName context={...}> on a task row. `task` is the task record (or
+// a calendar event that points at one). conversationId is the chat the task's
+// card was posted in when it was created (tasks.conversation_id).
+export const taskContext = (task, taskId = task?.id) => {
+  if (!taskId) return null;
+  const title = task?.title || `Task #${taskId}`;
+  return {
+    type: "task",
+    id: taskId,
+    title,
+    label: title,
+    short: "this task",
+    conversationId: task?.conversation_id || null,
+    // only a real task row can be shown as a card straight away
+    task: task?.id === taskId && task?.status ? task : null,
+  };
+};
