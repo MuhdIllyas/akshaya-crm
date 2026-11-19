@@ -46,3 +46,11 @@ export const timeAgoOtp = (value) => {
   if (h < 24) return `${h}h ago`;
   return `${Math.floor(h / 24)}d ago`;
 };
+
+/** "8 min left", "under 1 min left" or "Expired" for an OTP's live window. */
+export const otpTimeLeft = (receivedAt, liveMinutes = 10) => {
+  const msLeft = liveMinutes * 60000 - (Date.now() - new Date(receivedAt).getTime());
+  if (msLeft <= 0) return "Expired";
+  const m = Math.floor(msLeft / 60000);
+  return m < 1 ? "under 1 min left" : `${m} min left`;
+};

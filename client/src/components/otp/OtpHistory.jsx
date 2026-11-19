@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { FiRefreshCw, FiCopy, FiKey, FiTrash2 } from "react-icons/fi";
 import { toast } from "react-toastify";
 import { socket } from "@/services/socket";
-import { copyOtp, timeAgoOtp } from "@/utils/otpAlert";
+import { copyOtp, otpTimeLeft } from "@/utils/otpAlert";
 
 // Notifications → OTPs: OTPs from the centre's companion phone.
 // Shows only live OTPs (same window as the top bar), with a link for today's
@@ -140,36 +140,33 @@ const OtpHistory = () => {
           <p className="mt-1 text-xs text-slate-500">New OTPs on the centre's companion phone show here and in the top bar.</p>
         </div>
       ) : (
-        <ul className="divide-y divide-slate-100 py-1 lg:max-h-[calc(100vh-24rem)] lg:overflow-y-auto">
+        <ul className="mx-4 md:mx-5 my-3 divide-y divide-slate-200 rounded-xl border border-slate-200 lg:max-h-[calc(100vh-24rem)] lg:overflow-y-auto">
           {shown.map((r) => {
             const live = isLive(r);
             return (
-              <li key={r.id} className={`flex items-start gap-3 px-4 md:px-5 py-3 ${live ? "bg-amber-50" : ""}`}>
+              <li key={r.id} className="flex items-center gap-3 px-3 py-2.5">
+                <span className={`min-w-[5.5rem] shrink-0 font-mono text-lg font-semibold tracking-wider ${live ? "text-slate-900" : "text-slate-400"}`}>
+                  {r.code || "—"}
+                </span>
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    {r.code && (
-                      <span className={`font-mono text-lg font-bold tracking-widest ${live ? "text-amber-950" : "text-slate-400"}`}>{r.code}</span>
-                    )}
-                    {live ? (
-                      <span className="rounded-full bg-amber-500 px-2 py-0.5 text-[11px] font-semibold text-white">Live</span>
-                    ) : (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500">Expired</span>
-                    )}
-                    <span className="text-sm font-medium text-slate-800">{r.sender || "Unknown sender"}</span>
-                    {r.centre_name && <span className="text-xs text-slate-400">· {r.centre_name}</span>}
+                  <div className={`text-sm ${live ? "text-slate-800" : "text-slate-500"}`}>
+                    {r.sender || "Unknown sender"}
+                    {r.centre_name && <span className="text-xs text-slate-400"> · {r.centre_name}</span>}
                   </div>
-                  <p className={`mt-0.5 break-words text-sm ${live ? "text-slate-700" : "text-slate-500"}`}>{r.message}</p>
-                  <p className="mt-0.5 text-xs text-slate-400">{timeAgoOtp(r.received_at)} · {formatTime(r.received_at)}</p>
+                  <div className="truncate text-xs text-slate-500" title={r.message}>{r.message}</div>
                 </div>
+                <span className={`hidden shrink-0 text-xs sm:inline ${live ? "text-amber-700" : "text-slate-400"}`} title={formatTime(r.received_at)}>
+                  {live ? otpTimeLeft(r.received_at, liveMinutes) : `Expired · ${formatTime(r.received_at)}`}
+                </span>
                 {r.code && (
                   <button
                     type="button"
                     onClick={() => copyOtp(r.code)}
-                    className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold ${
-                      live ? "bg-amber-500 text-white hover:bg-amber-600" : "border border-slate-300 bg-white text-slate-600 hover:bg-slate-50"
-                    }`}
+                    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                    aria-label={`Copy OTP ${r.code}`}
+                    title="Copy"
                   >
-                    <FiCopy className="h-3.5 w-3.5" /> Copy
+                    <FiCopy className="h-4 w-4" />
                   </button>
                 )}
               </li>

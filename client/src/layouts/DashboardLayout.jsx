@@ -9,7 +9,8 @@ import { getWalletsForCentre } from '@/services/walletService';
 import { toast } from 'react-toastify';
 import { customerAuthHeaders } from '@/tenancy/centres';
 import useLiveOtps from '@/hooks/useLiveOtps';
-import { copyOtp, timeAgoOtp } from '@/utils/otpAlert';
+import { copyOtp, otpTimeLeft } from '@/utils/otpAlert';
+import { FiCopy } from 'react-icons/fi';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -989,23 +990,20 @@ const timeAgoShort = (value) => {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 };
-// ---- Live OTP in the top bar ----
-const KeyIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
-    <circle cx="7.5" cy="15.5" r="4.5" /><path d="M10.7 12.3 21 2m-4 4 3 3m-6-1 2 2" />
-  </svg>
-);
-
-const OtpCopyButton = ({ code, compact = false }) => (
+// ---- Live OTP in the top bar (calm strip: dot, code, sender, copy) ----
+const OtpCopyButton = ({ code }) => (
   <button
     type="button"
     onClick={(e) => { e.stopPropagation(); copyOtp(code); }}
-    className={`shrink-0 rounded-lg bg-amber-500 font-semibold text-white transition-colors hover:bg-amber-600 ${compact ? "px-2 py-1 text-xs" : "px-2.5 py-1 text-xs"}`}
-    title={`Copy ${code}`}
+    className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-200 hover:text-slate-900"
+    aria-label={`Copy OTP ${code}`}
+    title="Copy"
   >
-    Copy
+    <FiCopy className="h-4 w-4" />
   </button>
 );
+
+const OtpDot = () => <span className="h-2 w-2 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />;
 
 // Below the xl breakpoint the ticker is hidden, so show the newest OTP as a small pill
 const OtpPill = ({ otp, count, onOpen }) => (
@@ -1014,13 +1012,13 @@ const OtpPill = ({ otp, count, onOpen }) => (
     tabIndex={0}
     onClick={onOpen}
     onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
-    className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 pl-2.5 pr-1.5 text-amber-900 xl:hidden"
+    className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-1 hover:bg-slate-100 xl:hidden"
     title={`OTP from ${otp.sender || "unknown"}: ${otp.message}`}
   >
-    <KeyIcon />
-    <span className="font-mono text-base font-bold tracking-wider">{otp.code || "OTP"}</span>
-    {count > 1 && <span className="rounded-full bg-amber-200 px-1.5 text-[11px] font-semibold">+{count - 1}</span>}
-    {otp.code && <OtpCopyButton code={otp.code} compact />}
+    <OtpDot />
+    <span className="font-mono text-[15px] font-semibold tracking-wider text-slate-900">{otp.code || "OTP"}</span>
+    {count > 1 && <span className="text-xs text-slate-500">+{count - 1}</span>}
+    {otp.code && <OtpCopyButton code={otp.code} />}
   </div>
 );
 
@@ -1082,19 +1080,17 @@ const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, navigat
           tabIndex={0}
           onClick={openOtps}
           onKeyDown={(e) => { if (e.key === "Enter") openOtps(); }}
-          className="flex h-11 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-left transition-colors hover:bg-amber-100"
+          className="flex h-11 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50 pl-3 pr-1.5 text-left transition-colors hover:bg-slate-100"
           title={otp.message}
         >
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-500 text-white"><KeyIcon /></span>
-          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-amber-800">OTP</span>
-          {otp.code && <span className="shrink-0 font-mono text-lg font-bold tracking-widest text-amber-950">{otp.code}</span>}
-          <span className="min-w-0 truncate text-xs text-amber-900">
-            {[otp.sender, timeAgoOtp(otp.received_at)].filter(Boolean).join(" · ")}
+          <OtpDot />
+          <span className="shrink-0 text-sm text-slate-600">OTP</span>
+          {otp.code && <span className="shrink-0 font-mono text-[15px] font-semibold tracking-wider text-slate-900">{otp.code}</span>}
+          <span className="min-w-0 truncate text-xs text-slate-500">
+            {[otp.sender && `from ${otp.sender}`, otpTimeLeft(otp.received_at)].filter(Boolean).join(" · ")}
           </span>
-          {liveOtps.length > 1 && (
-            <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-900">+{liveOtps.length - 1} more</span>
-          )}
           <span className="ml-auto" />
+          {liveOtps.length > 1 && <span className="shrink-0 text-xs text-slate-500">+{liveOtps.length - 1} more</span>}
           {otp.code && <OtpCopyButton code={otp.code} />}
         </div>
       </div>
