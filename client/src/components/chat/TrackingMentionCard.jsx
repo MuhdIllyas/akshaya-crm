@@ -8,7 +8,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL;
    Tracking mention card (@284)
    ══════════════════════════════════════════════════════════════ */
 
-export const TrackingMentionCard = ({ entityId, displayText }) => {
+// bare: no border/shadow of its own, for when it sits inside a joined message block
+export const TrackingMentionCard = ({ entityId, displayText, bare = false }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,7 +41,9 @@ export const TrackingMentionCard = ({ entityId, displayText }) => {
         e.stopPropagation();
         window.open(`/dashboard/staff/track_service/${data.tracking_id || entityId}`, "_blank");
       }}
-      className="block w-72 max-w-full bg-white text-slate-800 rounded-xl shadow-sm ring-1 ring-slate-200 hover:ring-blue-300 transition cursor-pointer text-left overflow-hidden select-none"
+      className={bare
+        ? "block w-full bg-white text-slate-800 hover:bg-slate-50 transition cursor-pointer text-left overflow-hidden select-none"
+        : "block w-72 max-w-full bg-white text-slate-800 rounded-xl shadow-sm ring-1 ring-slate-200 hover:ring-blue-300 transition cursor-pointer text-left overflow-hidden select-none"}
     >
       <div className="px-3 py-2 flex items-center justify-between border-b border-slate-100">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-navy-700">

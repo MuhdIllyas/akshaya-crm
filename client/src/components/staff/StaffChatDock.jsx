@@ -82,10 +82,10 @@ const BLOCK_CARD_TYPES = ["tracking", "event", "note"];
 const blockCardsOf = (mentions) =>
   (mentions || []).filter((m) => BLOCK_CARD_TYPES.includes(m.mention_type)).sort((a, b) => a.start_index - b.start_index);
 
-const BlockCard = ({ m }) =>
-  m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} />
-  : m.mention_type === "note" ? <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} />
-  : <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} />;
+const BlockCard = ({ m, bare }) =>
+  m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />
+  : m.mention_type === "note" ? <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />
+  : <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />;
 
 // The message text with block cards removed and task mentions shown as tags.
 const MessageText = ({ text, mentions, mine }) => {
@@ -273,12 +273,22 @@ const StaffChatDock = () => {
                   {m.task ? <LiveTaskCard task={m.task} /> : <p className="text-xs text-slate-400">Task #{m.text}</p>}
                 </div>
               ) : (
-                <div key={m.id} className={`flex flex-col gap-1 ${m.mine ? "items-end" : "items-start"}`}>
-                  {m.type === "text" && blockCardsOf(m.mentions).map((c, i) => (
-                    <div key={`c-${i}`} className="max-w-full"><BlockCard m={c} /></div>
-                  ))}
-                  {m.type === "text" && blockCardsOf(m.mentions).length > 0 && !textWithoutCards(m.text, m.mentions).trim() ? (
-                    <p className="px-1 text-[10px] text-slate-400">{timeOf(m.at)}</p>
+                <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"} ${m.type === "text" && blockCardsOf(m.mentions).length ? "py-1.5" : ""}`}>
+                  {m.type === "text" && blockCardsOf(m.mentions).length > 0 ? (
+                    // One block: card(s) on top, the text joined below
+                    <div className={`w-72 max-w-full overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 ${m.mine ? "rounded-br-md" : "rounded-bl-md"}`}>
+                      {blockCardsOf(m.mentions).map((c, i) => (
+                        <div key={`c-${i}`} className={i > 0 ? "border-t border-slate-100" : ""}><BlockCard m={c} bare /></div>
+                      ))}
+                      {!textWithoutCards(m.text, m.mentions).trim() ? (
+                        <p className="border-t border-slate-100 px-3 py-1 text-right text-[10px] text-slate-400">{timeOf(m.at)}</p>
+                      ) : (
+                        <div className={`px-3 py-1.5 text-sm leading-snug ${m.mine ? "bg-navy-700 text-white" : "border-t border-slate-100 text-slate-800"}`}>
+                          <MessageText text={m.text} mentions={m.mentions} mine={m.mine} />
+                          <p className={`mt-0.5 text-right text-[10px] ${m.mine ? "text-navy-200" : "text-slate-400"}`}>{timeOf(m.at)}</p>
+                        </div>
+                      )}
+                    </div>
                   ) : (
                   <div className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm leading-snug ${m.mine ? "rounded-br-md bg-navy-700 text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-800"}`}>
                     {m.type === "text" ? <MessageText text={m.text} mentions={m.mentions} mine={m.mine} /> : <p>[{m.type}]</p>}

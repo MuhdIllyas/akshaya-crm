@@ -18,7 +18,8 @@ const VISIBILITY = { private: "Private", mention: "Mentioned staff", centre: "Ce
  * notes list's own visibility rules and returns only a short preview, so a
  * private note shared in a chat shows a locked card to everyone else.
  */
-const NoteMentionCard = ({ entityId, displayText }) => {
+// bare: no border/shadow of its own, for when it sits inside a joined message block
+const NoteMentionCard = ({ entityId, displayText, bare = false }) => {
   const [state, setState] = useState({ loading: true, data: null, status: 0 });
 
   useEffect(() => {
@@ -32,7 +33,7 @@ const NoteMentionCard = ({ entityId, displayText }) => {
     return () => { alive = false; };
   }, [entityId]);
 
-  const shell = "block w-72 max-w-full overflow-hidden rounded-xl bg-white text-left text-slate-800 shadow-sm ring-1 ring-slate-200";
+  const shell = bare ? "block w-full overflow-hidden bg-white text-left text-slate-800" : "block w-72 max-w-full overflow-hidden rounded-xl bg-white text-left text-slate-800 shadow-sm ring-1 ring-slate-200";
 
   if (state.loading) return <span className="animate-pulse font-medium opacity-70">{displayText}</span>;
   if (state.status === 403) {

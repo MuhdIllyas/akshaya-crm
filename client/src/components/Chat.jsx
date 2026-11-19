@@ -57,10 +57,10 @@ const textWithoutCards = (text = "", mentions) => {
   });
   return out + text.slice(last);
 };
-const BlockCard = ({ m }) =>
-  m.mention_type === "tracking" ? <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} />
-  : m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} />
-  : <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} />;
+const BlockCard = ({ m, bare }) =>
+  m.mention_type === "tracking" ? <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />
+  : m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />
+  : <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />;
 import { taskContext } from "@/components/staff/staffDirectory";
 import {
   getAvatarUrl,
@@ -959,14 +959,17 @@ const Chat = ({
                         </div>
                       )}
 
-                      <div className={`flex min-w-0 flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>
+                      {/* A card message is one block: the card(s) on top, the text bubble joined below */}
+                      <div className={blockCards.length
+                        ? `w-72 max-w-full min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 ${isOwn ? "rounded-tr-md" : "rounded-tl-md"} ${selected ? "ring-2 ring-blue-300" : ""}`
+                        : `flex min-w-0 flex-col ${isOwn ? "items-end" : "items-start"}`}>
                       {blockCards.map((m, i) => (
-                        <div key={`card-${i}`} className="max-w-full" onClick={(e) => e.stopPropagation()}>
-                          <BlockCard m={m} />
+                        <div key={`card-${i}`} className={i > 0 ? "border-t border-slate-100" : ""} onClick={(e) => e.stopPropagation()}>
+                          <BlockCard m={m} bare />
                         </div>
                       ))}
                       {cardsOnly ? (
-                        <div className={`flex items-center gap-1 px-1 text-[10.5px] text-slate-400`}>
+                        <div className="flex items-center justify-end gap-1 border-t border-slate-100 px-3 py-1 text-[10.5px] text-slate-400">
                           <span>{msg.time}</span>
                           {isOwn && renderMessageStatus(msg)}
                         </div>
@@ -977,11 +980,17 @@ const Chat = ({
                           e.stopPropagation();
                           setSelectedMsgId((id) => (id === msg.id ? null : msg.id));
                         }}
-                        className={`relative min-w-0 px-3.5 py-2 text-[14px] leading-relaxed shadow-sm ${
-                          isOwn
-                            ? `bg-navy-700 text-white rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
-                            : `bg-white text-slate-800 ring-1 ring-slate-200/80 rounded-2xl ${isFirstInRun ? "rounded-tl-md" : ""}`
-                        } ${msg.isOptimistic ? "opacity-70" : ""} ${selected ? "ring-2 ring-blue-300" : ""}`}
+                        className={`relative min-w-0 px-3.5 py-2 text-[14px] leading-relaxed ${
+                          blockCards.length
+                            ? isOwn
+                              ? "bg-navy-700 text-white"
+                              : "border-t border-slate-100 bg-white text-slate-800"
+                            : `shadow-sm ${
+                                isOwn
+                                  ? `bg-navy-700 text-white rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
+                                  : `bg-white text-slate-800 ring-1 ring-slate-200/80 rounded-2xl ${isFirstInRun ? "rounded-tl-md" : ""}`
+                              } ${selected ? "ring-2 ring-blue-300" : ""}`
+                        } ${msg.isOptimistic ? "opacity-70" : ""}`}
                       >
                         {showSenderNames && !isOwn && isFirstInRun && (
                           <p className={`text-xs font-semibold mb-0.5 ${getSenderNameColor(msg.senderId)}`}>{senderLabel}</p>
@@ -1107,7 +1116,13 @@ const Chat = ({
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.15 }}
-                    className={isFirstInRun ? "mt-3" : "mt-0.5"}
+                    className={
+                      isFirstInRun ||
+                      (!msg.isFile && cardMentionsOf(msg.mentions).length > 0) ||
+                      (prevMsg && !prevMsg.isFile && cardMentionsOf(prevMsg.mentions).length > 0)
+                        ? "mt-3"
+                        : "mt-0.5"
+                    }
                   >
                     {body}
                   </motion.div>
