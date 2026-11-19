@@ -35,7 +35,7 @@ const EventMentionCard = ({ entityId, displayText }) => {
     return () => { alive = false; };
   }, [entityId]);
 
-  const shell = "my-2 block w-full max-w-[18rem] overflow-hidden rounded-xl bg-white text-left text-slate-800 ring-1 ring-slate-200";
+  const shell = "block w-72 max-w-full overflow-hidden rounded-xl bg-white text-left text-slate-800 shadow-sm ring-1 ring-slate-200";
 
   if (state.loading) return <span className="animate-pulse font-medium opacity-70">{displayText}</span>;
   if (state.status === 403) {

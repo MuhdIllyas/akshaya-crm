@@ -76,28 +76,42 @@ const buildContextMessage = (context, text) => {
   return { body: text, mentions: [] };
 };
 
+// Service, calendar event and note cards sit outside the bubble at a fixed
+// width (like task cards); the bubble keeps the text and the task reply tag.
+const BLOCK_CARD_TYPES = ["tracking", "event", "note"];
+const blockCardsOf = (mentions) =>
+  (mentions || []).filter((m) => BLOCK_CARD_TYPES.includes(m.mention_type)).sort((a, b) => a.start_index - b.start_index);
+
+const BlockCard = ({ m }) =>
+  m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} />
+  : m.mention_type === "note" ? <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} />
+  : <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} />;
+
+// The message text with block cards removed and task mentions shown as tags.
 const MessageText = ({ text, mentions, mine }) => {
-  const cards = (mentions || [])
-    .filter((m) => ["tracking", "task", "event", "note"].includes(m.mention_type))
+  const marks = (mentions || [])
+    .filter((m) => m.mention_type === "task" || BLOCK_CARD_TYPES.includes(m.mention_type))
     .sort((a, b) => a.start_index - b.start_index);
-  if (!cards.length) return <p className="whitespace-pre-wrap break-words">{text}</p>;
+  if (!marks.length) return <p className="whitespace-pre-wrap break-words">{text}</p>;
   const parts = [];
   let last = 0;
-  cards.forEach((m, i) => {
-    if (m.start_index > last) parts.push(text.slice(last, m.start_index));
-    parts.push(
-      m.mention_type === "task"
-        ? <TaskReplyChip key={`t-${i}`} text={m.display_text} isOwn={mine} />
-        : m.mention_type === "event"
-        ? <EventMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
-        : m.mention_type === "note"
-        ? <NoteMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
-        : <TrackingMentionCard key={`t-${i}`} entityId={m.entity_id} displayText={m.display_text} />
-    );
+  let afterCard = false;
+  const pushText = (t) => { parts.push(afterCard ? t.replace(/^\s+/, "") : t); afterCard = false; };
+  marks.forEach((m, i) => {
+    if (m.start_index > last) pushText(text.slice(last, m.start_index));
+    if (m.mention_type === "task") parts.push(<TaskReplyChip key={`t-${i}`} text={m.display_text} isOwn={mine} />);
+    else afterCard = true; // drawn outside the bubble
     last = m.end_index;
   });
-  if (last < text.length) parts.push(text.slice(last).replace(/^\s+/, ""));
+  if (last < text.length) pushText(text.slice(last));
   return <div className="whitespace-pre-wrap break-words">{parts}</div>;
+};
+
+const textWithoutCards = (text = "", mentions) => {
+  let out = "";
+  let last = 0;
+  blockCardsOf(mentions).forEach((m) => { out += text.slice(last, m.start_index); last = m.end_index; });
+  return out + text.slice(last);
 };
 
 /**
@@ -259,11 +273,18 @@ const StaffChatDock = () => {
                   {m.task ? <LiveTaskCard task={m.task} /> : <p className="text-xs text-slate-400">Task #{m.text}</p>}
                 </div>
               ) : (
-                <div key={m.id} className={`flex ${m.mine ? "justify-end" : "justify-start"}`}>
+                <div key={m.id} className={`flex flex-col gap-1 ${m.mine ? "items-end" : "items-start"}`}>
+                  {m.type === "text" && blockCardsOf(m.mentions).map((c, i) => (
+                    <div key={`c-${i}`} className="max-w-full"><BlockCard m={c} /></div>
+                  ))}
+                  {m.type === "text" && blockCardsOf(m.mentions).length > 0 && !textWithoutCards(m.text, m.mentions).trim() ? (
+                    <p className="px-1 text-[10px] text-slate-400">{timeOf(m.at)}</p>
+                  ) : (
                   <div className={`max-w-[85%] rounded-2xl px-3 py-1.5 text-sm leading-snug ${m.mine ? "rounded-br-md bg-navy-700 text-white" : "rounded-bl-md border border-slate-200 bg-white text-slate-800"}`}>
                     {m.type === "text" ? <MessageText text={m.text} mentions={m.mentions} mine={m.mine} /> : <p>[{m.type}]</p>}
                     <p className={`mt-0.5 text-right text-[10px] ${m.mine ? "text-navy-200" : "text-slate-400"}`}>{timeOf(m.at)}</p>
                   </div>
+                  )}
                 </div>
               ))
             )}

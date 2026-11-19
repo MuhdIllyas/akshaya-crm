@@ -40,7 +40,7 @@ export const TrackingMentionCard = ({ entityId, displayText }) => {
         e.stopPropagation();
         window.open(`/dashboard/staff/track_service/${data.tracking_id || entityId}`, "_blank");
       }}
-      className="my-2 block w-full max-w-[18rem] bg-white text-slate-800 rounded-xl ring-1 ring-slate-200 hover:ring-blue-300 transition cursor-pointer text-left overflow-hidden select-none"
+      className="block w-72 max-w-full bg-white text-slate-800 rounded-xl shadow-sm ring-1 ring-slate-200 hover:ring-blue-300 transition cursor-pointer text-left overflow-hidden select-none"
     >
       <div className="px-3 py-2 flex items-center justify-between border-b border-slate-100">
         <span className="flex items-center gap-1.5 text-xs font-semibold text-navy-700">

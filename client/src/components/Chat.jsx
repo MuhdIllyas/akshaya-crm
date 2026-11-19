@@ -40,6 +40,27 @@ import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
 import { TaskMessage, NormalTaskMessage, TaskReplyChip } from "@/components/chat/TaskCards";
 import EventMentionCard from "@/components/chat/EventMentionCard";
 import NoteMentionCard from "@/components/chat/NoteMentionCard";
+
+// Service, calendar event and note cards are drawn outside the text bubble
+// (like task cards), at a fixed width, so a short message doesn't squeeze them.
+const BLOCK_CARD_TYPES = ["tracking", "event", "note"];
+const cardMentionsOf = (mentions) =>
+  (Array.isArray(mentions) ? mentions : [])
+    .filter((m) => BLOCK_CARD_TYPES.includes(m.mention_type))
+    .sort((a, b) => a.start_index - b.start_index);
+const textWithoutCards = (text = "", mentions) => {
+  let out = "";
+  let last = 0;
+  cardMentionsOf(mentions).forEach((m) => {
+    out += text.slice(last, m.start_index);
+    last = m.end_index;
+  });
+  return out + text.slice(last);
+};
+const BlockCard = ({ m }) =>
+  m.mention_type === "tracking" ? <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} />
+  : m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} />
+  : <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} />;
 import { taskContext } from "@/components/staff/staffDirectory";
 import {
   getAvatarUrl,
@@ -575,7 +596,7 @@ const Chat = ({
     sorted.forEach((m, idx) => {
       if (m.start_index > lastIndex) pushText(text.slice(lastIndex, m.start_index));
       if (m.mention_type === "tracking") {
-        parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        // drawn outside the bubble (see BlockCard)
         afterCard = true;
       } else if (m.mention_type === "staff") {
         parts.push(
@@ -587,10 +608,10 @@ const Chat = ({
           </span>
         );
       } else if (m.mention_type === "note") {
-        parts.push(<NoteMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        // drawn outside the bubble (see BlockCard)
         afterCard = true;
       } else if (m.mention_type === "event") {
-        parts.push(<EventMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        // drawn outside the bubble (see BlockCard)
         afterCard = true;
       } else if (m.mention_type === "task") {
         // A reply about a task whose card is already in this chat
@@ -917,6 +938,8 @@ const Chat = ({
                 const isVideo = msg.messageType === "video" && msg.fileUrl && !msg.isDeleted;
                 // WhatsApp captions are saved as the message text; show them under the attachment
                 const caption = msg.isFile && msg.text && !msg.text.startsWith("[") ? msg.text : null;
+                const blockCards = !msg.isFile && !msg.isDeleted ? cardMentionsOf(msg.mentions) : [];
+                const cardsOnly = blockCards.length > 0 && !textWithoutCards(msg.text, msg.mentions).trim();
                 body = (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} group`}>
                     <div className={`relative flex items-end gap-2 max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
@@ -935,7 +958,19 @@ const Chat = ({
                         </div>
                       )}
 
-                      {/* Bubble */}
+                      <div className={`flex min-w-0 flex-col gap-1 ${isOwn ? "items-end" : "items-start"}`}>
+                      {blockCards.map((m, i) => (
+                        <div key={`card-${i}`} className="max-w-full" onClick={(e) => e.stopPropagation()}>
+                          <BlockCard m={m} />
+                        </div>
+                      ))}
+                      {cardsOnly ? (
+                        <div className={`flex items-center gap-1 px-1 text-[10.5px] text-slate-400`}>
+                          <span>{msg.time}</span>
+                          {isOwn && renderMessageStatus(msg)}
+                        </div>
+                      ) : (
+                      /* Bubble */
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1032,6 +1067,8 @@ const Chat = ({
                           <span>{msg.time}</span>
                           {renderMessageStatus(msg)}
                         </div>
+                      </div>
+                      )}
                       </div>
 
                       {/* Actions: hover on desktop, tap bubble on mobile */}
