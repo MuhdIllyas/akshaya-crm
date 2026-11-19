@@ -154,25 +154,13 @@
   opacity: 0.7;
 }
 
-/* OTP toast: same orange as the OTP dot in the top bar, with a key and a
-   thin border, so it reads as "OTP" rather than as a warning */
+/* OTP toast: an ordinary toast with the orange dot, laid out like the OTP
+   strip in the top bar (code, then sender and time left) */
 .Toastify .Toastify__toast.otp-toast {
-  border: 1.5px solid color-mix(in srgb, var(--toast-warning) 70%, transparent);
   align-items: center;
 }
 .Toastify .Toastify__toast.otp-toast .Toastify__toast-icon {
-  width: 32px;
-  height: 32px;
-}
-.Toastify .otp-toast-key {
-  display: grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--toast-warning) 16%, transparent);
-  color: var(--toast-warning);
-  font-size: 16px;
+  margin-top: 0;
 }
 
 @media print {
