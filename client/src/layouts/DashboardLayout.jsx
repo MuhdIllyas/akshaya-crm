@@ -8,6 +8,8 @@ import StaffChatDock from '@/components/staff/StaffChatDock';
 import { getWalletsForCentre } from '@/services/walletService';
 import { toast } from 'react-toastify';
 import { customerAuthHeaders } from '@/tenancy/centres';
+import useLiveOtps from '@/hooks/useLiveOtps';
+import { copyOtp, timeAgoOtp } from '@/utils/otpAlert';
 
 const DashboardLayout = () => {
   const role = localStorage.getItem("role");
@@ -450,6 +452,9 @@ const DashboardLayout = () => {
   const quickTokenItem = userNavigation.find((item) => item.label === "Token Generator");
   // Notification / event strip in the top bar (desktop only; not for customers or supervisors)
   const showTicker = ["staff", "admin", "superadmin"].includes(role) && !!notificationsItem;
+  // OTPs from the companion phone: shown live in the top bar, never counted as unread
+  const otpsPath = notificationsItem ? `${notificationsItem.path}?tab=otps` : null;
+  const { otps: liveOtps } = useLiveOtps({ token, apiBase: API_BASE_URL, enabled: showTicker });
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -858,10 +863,15 @@ const DashboardLayout = () => {
               unreadSignal={notificationsCount}
               notificationsPath={notificationsItem?.path}
               navigate={navigate}
+              liveOtps={liveOtps}
+              otpsPath={otpsPath}
             />
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {showTicker && liveOtps.length > 0 && (
+              <OtpPill otp={liveOtps[0]} count={liveOtps.length} onOpen={() => otpsPath && navigate(otpsPath)} />
+            )}
             {quickTokenItem && (
               <Link
                 to={quickTokenItem.path}
@@ -979,7 +989,42 @@ const timeAgoShort = (value) => {
   if (h < 24) return `${h}h`;
   return `${Math.floor(h / 24)}d`;
 };
-const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, navigate }) => {
+// ---- Live OTP in the top bar ----
+const KeyIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4" aria-hidden="true">
+    <circle cx="7.5" cy="15.5" r="4.5" /><path d="M10.7 12.3 21 2m-4 4 3 3m-6-1 2 2" />
+  </svg>
+);
+
+const OtpCopyButton = ({ code, compact = false }) => (
+  <button
+    type="button"
+    onClick={(e) => { e.stopPropagation(); copyOtp(code); }}
+    className={`shrink-0 rounded-lg bg-amber-500 font-semibold text-white transition-colors hover:bg-amber-600 ${compact ? "px-2 py-1 text-xs" : "px-2.5 py-1 text-xs"}`}
+    title={`Copy ${code}`}
+  >
+    Copy
+  </button>
+);
+
+// Below the xl breakpoint the ticker is hidden, so show the newest OTP as a small pill
+const OtpPill = ({ otp, count, onOpen }) => (
+  <div
+    role="button"
+    tabIndex={0}
+    onClick={onOpen}
+    onKeyDown={(e) => { if (e.key === "Enter") onOpen(); }}
+    className="flex h-11 cursor-pointer items-center gap-2 rounded-xl border border-amber-300 bg-amber-50 pl-2.5 pr-1.5 text-amber-900 xl:hidden"
+    title={`OTP from ${otp.sender || "unknown"}: ${otp.message}`}
+  >
+    <KeyIcon />
+    <span className="font-mono text-base font-bold tracking-wider">{otp.code || "OTP"}</span>
+    {count > 1 && <span className="rounded-full bg-amber-200 px-1.5 text-[11px] font-semibold">+{count - 1}</span>}
+    {otp.code && <OtpCopyButton code={otp.code} compact />}
+  </div>
+);
+
+const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, navigate, liveOtps = [], otpsPath }) => {
   const [notifs, setNotifs] = useState([]);
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -1025,6 +1070,36 @@ const HeaderTicker = ({ token, apiBase, unreadSignal, notificationsPath, navigat
     const t = setInterval(() => setIndex((i) => (i + 1) % items.length), 5000);
     return () => clearInterval(t);
   }, [paused, items.length]);
+
+  // A fresh OTP takes over the strip until it expires
+  if (liveOtps.length > 0) {
+    const otp = liveOtps[0];
+    const openOtps = () => { if (otpsPath) navigate(otpsPath); };
+    return (
+      <div className="hidden min-w-0 flex-1 xl:block">
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={openOtps}
+          onKeyDown={(e) => { if (e.key === "Enter") openOtps(); }}
+          className="flex h-11 w-full min-w-0 cursor-pointer items-center gap-2.5 rounded-xl border border-amber-300 bg-amber-50 px-3 text-left transition-colors hover:bg-amber-100"
+          title={otp.message}
+        >
+          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-500 text-white"><KeyIcon /></span>
+          <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-amber-800">OTP</span>
+          {otp.code && <span className="shrink-0 font-mono text-lg font-bold tracking-widest text-amber-950">{otp.code}</span>}
+          <span className="min-w-0 truncate text-xs text-amber-900">
+            {[otp.sender, timeAgoOtp(otp.received_at)].filter(Boolean).join(" · ")}
+          </span>
+          {liveOtps.length > 1 && (
+            <span className="shrink-0 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-900">+{liveOtps.length - 1} more</span>
+          )}
+          <span className="ml-auto" />
+          {otp.code && <OtpCopyButton code={otp.code} />}
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) return <div className="hidden min-w-0 flex-1 xl:block" />;
   const item = items[Math.min(index, items.length - 1)];
