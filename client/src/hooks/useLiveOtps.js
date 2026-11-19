@@ -39,8 +39,14 @@ export default function useLiveOtps({ token, apiBase, enabled = true }) {
       if (otp.live_minutes) setLiveMinutes(otp.live_minutes);
       setOtps((prev) => [otp, ...prev.filter((o) => o.id !== otp.id)]);
     };
+    // An admin cleared the centre's OTPs
+    const onCleared = () => setOtps([]);
     socket.on("centre_otp", onOtp);
-    return () => socket.off("centre_otp", onOtp);
+    socket.on("centre_otps_cleared", onCleared);
+    return () => {
+      socket.off("centre_otp", onOtp);
+      socket.off("centre_otps_cleared", onCleared);
+    };
   }, [enabled]);
 
   // Re-check every 15s so expired OTPs leave and "2m ago" stays current

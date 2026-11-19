@@ -2,6 +2,8 @@
 
 // How long an OTP stays "live" in the top bar. Most portals expire OTPs in 5–10 minutes.
 export const OTP_LIVE_MINUTES = 10;
+// OTPs are deleted this long after they arrive (hourly cleanup in routes/sms.js).
+export const OTP_KEEP_HOURS = 24;
 
 const OTP_WORDS = /\b(otp|one[\s-]?time|verification|verify|passcode|password|code|pin)\b/i;
 
