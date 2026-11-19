@@ -942,7 +942,8 @@ const Chat = ({
                 const cardsOnly = blockCards.length > 0 && !textWithoutCards(msg.text, msg.mentions).trim();
                 body = (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} group`}>
-                    <div className={`relative flex items-end gap-2 max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+                    {/* Card messages may use the full width, so a narrow chat pane doesn't squeeze the 18rem card */}
+                    <div className={`relative flex items-end gap-2 ${blockCards.length ? "max-w-full" : "max-w-[88%] sm:max-w-[75%] lg:max-w-[65%]"} ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
                       {/* Avatar (groups only, first message of a run) */}
                       {!isOwn && showSenderNames && (
                         <div className="w-8 shrink-0 self-start">
