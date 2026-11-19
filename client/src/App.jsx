@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
-import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo } from "react-icons/fi";
+import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo, FiCopy, FiKey } from "react-icons/fi";
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import { copyOtp, playOtpChime } from "@/utils/otpAlert";
@@ -260,22 +260,29 @@ const App = () => {
       toast.warning(
         <div className="flex items-center gap-3">
           <div className="min-w-0 flex-1">
-            <strong>OTP{otp.sender ? ` from ${otp.sender}` : ""}</strong>
+            <strong className="block truncate text-[13px] font-medium">OTP{otp.sender ? ` from ${otp.sender}` : ""}</strong>
             {otp.code
-              ? <div className="font-mono text-xl font-bold tracking-widest">{otp.code}</div>
+              ? <div className="font-mono text-xl font-semibold tracking-[0.2em] text-[var(--toast-title)]">{otp.code}</div>
               : <div className="text-sm">{otp.message}</div>}
           </div>
           {otp.code && (
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); copyOtp(otp.code); }}
-              className="shrink-0 rounded-lg bg-amber-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-amber-600"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-600"
             >
-              Copy
+              <FiCopy className="h-3.5 w-3.5" /> Copy
             </button>
           )}
         </div>,
-        { autoClose: 20000, toastId: `otp-${otp.id}`, closeOnClick: false }
+        {
+          autoClose: 20000,
+          toastId: `otp-${otp.id}`,
+          closeOnClick: false,
+          className: "otp-toast",
+          // Wrapped in a span so the theme keeps the key (it turns bare icons into a dot)
+          icon: <span className="otp-toast-key"><FiKey aria-hidden="true" /></span>,
+        }
       );
     };
 
