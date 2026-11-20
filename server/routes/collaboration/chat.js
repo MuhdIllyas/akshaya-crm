@@ -187,6 +187,24 @@ router.get("/conversations", authenticateToken, async (req, res) => {
           ORDER BY m.created_at DESC LIMIT 1
         ) as last_message_sender_id,
         (
+          SELECT m.sender_type
+          FROM chat_messages m
+          WHERE m.conversation_id = c.id AND m.is_deleted = false
+          ORDER BY m.created_at DESC LIMIT 1
+        ) as last_message_sender_type,
+        -- Customer chats: when the customer's oldest unanswered message came in
+        CASE WHEN c.channel IN ('whatsapp', 'portal') THEN (
+          SELECT MIN(m.created_at)
+          FROM chat_messages m
+          WHERE m.conversation_id = c.id AND m.is_deleted = false AND m.sender_type = 'customer'
+            AND m.created_at > COALESCE((
+              SELECT MAX(r.created_at) FROM chat_messages r
+              WHERE r.conversation_id = c.id AND r.is_deleted = false
+                AND (r.sender_type = 'staff' OR r.direction = 'outgoing')
+            ), 'epoch'::timestamp)
+        ) END as waiting_since,
+        my.pinned_at,
+        (
           SELECT COALESCE(
             json_agg(
               json_build_object(
@@ -205,8 +223,8 @@ router.get("/conversations", authenticateToken, async (req, res) => {
           WHERE p.conversation_id = c.id AND p.participant_type = 'staff'
         ) as participants
       FROM chat_conversations c
-      INNER JOIN chat_participants p ON c.id = p.conversation_id
-      WHERE p.staff_id = $1 
+      INNER JOIN chat_participants my ON c.id = my.conversation_id
+      WHERE my.staff_id = $1
         AND c.status = $2
         ${role !== "superadmin" ? "AND (c.centre_id = $3 OR c.centre_id IS NULL)" : ""}
       ORDER BY c.last_message_at DESC NULLS LAST
@@ -974,6 +992,44 @@ router.get("/staff", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Fetch staff error:", err);
     res.status(500).json({ error: "Failed to fetch staff", details: err.message });
+  }
+});
+
+/* ================================
+   PIN / UNPIN A CHAT (for yourself)
+================================ */
+
+const MAX_PINNED = 5;
+
+router.patch("/conversation/:conversationId/pin", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    if (!Number.isInteger(conversationId)) return res.status(400).json({ error: "Invalid chat" });
+    const pinned = req.body?.pinned !== false;
+
+    if (pinned) {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM chat_participants p
+           JOIN chat_conversations c ON c.id = p.conversation_id AND c.status <> 'deleted'
+          WHERE p.staff_id = $1 AND p.pinned_at IS NOT NULL AND p.conversation_id <> $2`,
+        [req.user.id, conversationId]
+      );
+      if (rows[0].n >= MAX_PINNED) {
+        return res.status(400).json({ error: `You can pin up to ${MAX_PINNED} chats. Unpin one first.` });
+      }
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE chat_participants SET pinned_at = ${pinned ? "COALESCE(pinned_at, NOW())" : "NULL"}
+        WHERE conversation_id = $1 AND staff_id = $2
+        RETURNING pinned_at`,
+      [conversationId, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "You're not in this chat" });
+    res.json({ conversation_id: conversationId, pinned_at: rows[0].pinned_at });
+  } catch (err) {
+    console.error("Pin chat error:", err);
+    res.status(500).json({ error: "Couldn't pin this chat" });
   }
 });
 

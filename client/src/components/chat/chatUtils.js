@@ -1,5 +1,4 @@
 // Shared helpers for the Messenger UI (Chat, ConversationList, ConversationDetails)
-import { FiUsers, FiSmartphone, FiBriefcase, FiUser, FiGlobe } from "react-icons/fi";
 
 export const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -35,26 +34,64 @@ export const initials = (name = "") =>
     .join("")
     .toUpperCase() || "?";
 
-/* ---------------- Conversation categories (tabs) ---------------- */
+/* ---------------- Folders (Messenger left column) ---------------- */
 
-export const CHAT_TABS = [
-  { id: "all", label: "All" },
-  { id: "internal", label: "Internal", icon: FiUsers },
-  { id: "whatsapp", label: "WhatsApp", icon: FiSmartphone },
-  { id: "service", label: "Service", icon: FiBriefcase },
-  { id: "portal", label: "Portal", icon: FiGlobe },
-  { id: "customer", label: "Customer", icon: FiUser },
+// Built-in folders. Your tags are added after these as "tag:<id>".
+export const CHAT_FOLDERS = [
+  { id: "all", label: "All chats" },
+  { id: "unread", label: "Unread" },
+  { id: "pinned", label: "Pinned" },
+  { id: "customers", label: "Customers", group: "Chats" },
+  { id: "staff", label: "Staff", group: "Chats" },
+  { id: "services", label: "Services", group: "Chats" },
+  { id: "teams", label: "Teams", group: "Chats" },
 ];
 
-// Shown even when empty; "Portal" and "Customer" only appear once they have chats
-export const ALWAYS_VISIBLE_TABS = ["all", "internal", "whatsapp", "service"];
+export const isCustomerChat = (c) =>
+  c?.channel === "whatsapp" || c?.channel === "portal" || c?.context_type === "customer";
 
-export const getConversationCategory = (c) => {
-  if (c?.channel === "whatsapp") return "whatsapp";
-  if (c?.channel === "portal") return "portal";
-  if (c?.context_type === "service_entry") return "service";
-  if (c?.context_type === "customer") return "customer";
-  return "internal";
+export const getFolderKind = (c) => {
+  if (isCustomerChat(c)) return "customers";
+  if (c?.context_type === "service_entry") return "services";
+  if (c?.context_type === "team") return "teams";
+  return "staff";
+};
+
+export const inFolder = (c, folder, tagIds) => {
+  if (folder === "all") return true;
+  if (folder === "unread") return (c.unread || 0) > 0;
+  if (folder === "pinned") return !!c.pinned_at;
+  if (String(folder).startsWith("tag:")) return !!tagIds?.has(String(c.id));
+  return getFolderKind(c) === folder;
+};
+
+// A customer chat is waiting when the customer wrote last and nobody has replied yet.
+export const isWaiting = (c) => isCustomerChat(c) && !!c.waiting_since;
+
+// "4m", "2h 10m", "3d"
+export const formatWaiting = (since, now = Date.now()) => {
+  const t = new Date(since).getTime();
+  if (!since || isNaN(t)) return "";
+  const mins = Math.max(0, Math.floor((now - t) / 60000));
+  if (mins < 60) return `${mins || 1}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return mins % 60 ? `${hours}h ${mins % 60}m` : `${hours}h`;
+  return `${Math.floor(hours / 24)}d`;
+};
+
+// Over 2 hours waiting shows red, otherwise amber
+export const waitingIsLate = (since, now = Date.now()) => now - new Date(since).getTime() > 2 * 3600000;
+
+// Section a chat goes under in the list
+export const listSection = (c, now = new Date()) => {
+  if (c.pinned_at) return "Pinned";
+  const d = new Date(c.last_message_at || 0);
+  if (!c.last_message_at || isNaN(d.getTime())) return "Earlier";
+  if (isSameDay(d, now)) return "Today";
+  const y = new Date(now);
+  y.setDate(now.getDate() - 1);
+  if (isSameDay(d, y)) return "Yesterday";
+  return "Earlier";
 };
 
 /* ---------------- Conversation identity ---------------- */

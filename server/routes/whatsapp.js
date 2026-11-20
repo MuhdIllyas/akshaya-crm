@@ -913,6 +913,7 @@ router.post("/connect-staff", async (req, res) => {
         conversationId: Number(conv.id),
         lastMessage: "🙋 Customer asked to talk to staff",
         lastMessageSender: "System",
+        lastMessageSenderType: "system",
         time: new Date().toISOString(),
         unread,
       });

@@ -206,6 +206,7 @@ export async function sendMessage({
             conversationId: safeConvId,
             lastMessage: message || 'Attachment',
             lastMessageSenderId: sender_id,
+            lastMessageSenderType: sender_type,
             lastMessageSender: completeMessage?.sender_name || 'Customer',
             time: completeMessage.created_at,
             unread: unreadCount

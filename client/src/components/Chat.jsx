@@ -1,5 +1,6 @@
 import { customersPath } from '@/utils/customersPath';
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { BsPinAngle } from "react-icons/bs";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -192,6 +193,8 @@ const Chat = ({
   onAddTag = null,
   activeTags = [],
   onLeaveGroup = null,
+  isPinned = false,
+  onTogglePin = null,
 }) => {
   const navigate = useNavigate();
   const [newMessage, setNewMessage] = useState("");
@@ -842,6 +845,9 @@ const Chat = ({
                   <MenuItem icon={FiCheckSquare} label="Create task" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); onOpenTaskModal(); }} />
                   {hasTasks && (
                     <MenuItem icon={FiList} label="View tasks" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); setShowTasksModal(true); }} />
+                  )}
+                  {onTogglePin && (
+                    <MenuItem icon={BsPinAngle} label={isPinned ? "Unpin chat" : "Pin chat"} onClick={() => { setIsMoreMenuOpen(false); onTogglePin(); }} />
                   )}
                   {onAddPeople && (
                     <MenuItem icon={FiUserPlus} label="Add people" onClick={() => { setIsMoreMenuOpen(false); onAddPeople(); }} />

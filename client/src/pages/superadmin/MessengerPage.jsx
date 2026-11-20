@@ -59,6 +59,7 @@ import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
 import Chat from '@/components/Chat';
 import ConversationList from "@/components/chat/ConversationList";
+import ChatFolders from "@/components/chat/ChatFolders";
 import ConversationDetails from "@/components/chat/ConversationDetails";
 import MessengerNav from "@/components/chat/MessengerNav";
 import SchedulesView from "@/components/automations/SchedulesView";
@@ -339,6 +340,14 @@ const MessengerPage = ({ user }) => {
   useEffect(() => {
     try { localStorage.setItem("messenger_details_open", String(isContactPanelOpen)); } catch { /* storage unavailable */ }
   }, [isContactPanelOpen]);
+  // Screen width buckets for the folders column (see showFoldersColumn below)
+  const widthQuery = (q) => typeof window !== "undefined" && window.matchMedia(q).matches;
+  const [screen, setScreen] = useState(() => ({ wide: widthQuery("(min-width: 1536px)"), xwide: widthQuery("(min-width: 1800px)") }));
+  useEffect(() => {
+    const onResize = () => setScreen({ wide: widthQuery("(min-width: 1536px)"), xwide: widthQuery("(min-width: 1800px)") });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
 
@@ -362,6 +371,28 @@ const MessengerPage = ({ user }) => {
   const [staffList, setStaffList] = useState([]);
   // Tags (like WhatsApp lists) and group members
   const chatTags = useTags("conversations");
+  // Folder shown in the chat list (All, Unread, Pinned, Customers, …, "tag:<id>"), remembered per browser
+  const [chatFolder, setChatFolderState] = useState(() => {
+    try {
+      return localStorage.getItem("messenger_folder") || "all";
+    } catch {
+      return "all";
+    }
+  });
+  const setChatFolder = (id) => {
+    setChatFolderState(id);
+    try {
+      localStorage.setItem("messenger_folder", id);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  // A tag deleted here or on another device: back to All chats
+  useEffect(() => {
+    if (chatTags.loaded && String(chatFolder).startsWith("tag:") && !chatTags.tags.some((t) => `tag:${t.id}` === chatFolder)) {
+      setChatFolder("all");
+    }
+  }, [chatTags.loaded, chatTags.tags, chatFolder]); // eslint-disable-line react-hooks/exhaustive-deps
   const conversationsRef = useRef([]);
   useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
   const [isTagPickerOpen, setIsTagPickerOpen] = useState(false);
@@ -682,20 +713,26 @@ const MessengerPage = ({ user }) => {
           return prev;
         }
 
-        const updated = prev.map(conv =>
-          String(conv.id) === String(data.conversationId)
-            ? {
-              ...conv,
-              last_message: data.lastMessage,
-              lastMessage: data.lastMessage,
-              last_message_sender_id: data.lastMessageSenderId,
-              last_message_sender: data.lastMessageSender,
-              last_message_at: data.time,
-              time: data.time,
-              unread: data.unread !== undefined ? data.unread : conv.unread
-            }
-            : conv
-        );
+        // Some updates (e.g. "assigned to") carry no message: keep the last message then
+        const updated = prev.map(conv => {
+          if (String(conv.id) !== String(data.conversationId)) return conv;
+          const next = { ...conv, unread: data.unread !== undefined ? data.unread : conv.unread };
+          if (data.assigned_staff_id !== undefined) next.assigned_staff_id = data.assigned_staff_id;
+          if (data.lastMessage === undefined) return next;
+          Object.assign(next, {
+            last_message: data.lastMessage,
+            lastMessage: data.lastMessage,
+            last_message_sender_id: data.lastMessageSenderId,
+            last_message_sender: data.lastMessageSender,
+            last_message_sender_type: data.lastMessageSenderType,
+            last_message_at: data.time,
+            time: data.time,
+          });
+          // Customer wrote: start (or keep) the "waiting" clock. Staff replied: stop it.
+          if (data.lastMessageSenderType === "customer") next.waiting_since = conv.waiting_since || data.time;
+          else if (data.lastMessageSenderType === "staff") next.waiting_since = null;
+          return next;
+        });
         return updated.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
       });
     };
@@ -1403,6 +1440,29 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== PIN A CHAT (for yourself) ==============
+  const handleTogglePin = async (conv) => {
+    const pinned = !conv.pinned_at;
+    const apply = (value) => {
+      setConversations(prev => prev.map(c => String(c.id) === String(conv.id) ? { ...c, pinned_at: value } : c));
+      setActiveConversation(prev => prev && String(prev.id) === String(conv.id) ? { ...prev, pinned_at: value } : prev);
+    };
+    apply(pinned ? new Date().toISOString() : null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${conv.id}/pin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pinned }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't pin this chat");
+      apply(data.pinned_at || null);
+    } catch (err) {
+      apply(conv.pinned_at || null);
+      toast.error(err.message);
+    }
+  };
+
   const activeConversationTags = activeConversation ? (chatTags.tagsByItem.get(String(activeConversation.id)) || []) : [];
   const canEditActiveMembers = isGroupAdmin(activeConversation, currentUser);
   const canLeaveActive = hasEditableMembers(activeConversation);
@@ -2104,11 +2164,15 @@ const MessengerPage = ({ user }) => {
   // ============== LAYOUT HELPERS (UI moved into components/chat/*) ==============
 
   const unreadTotal = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
+  // Folders get their own column on wide screens; while the Details column is open they
+  // move into the list's dropdown unless the screen is very wide, so the chat keeps its room.
+  const detailsColumnOpen = !!activeConversation && isContactPanelOpen && screen.wide;
+  const showFoldersColumn = screen.wide && (!detailsColumnOpen || screen.xwide);
   const showChatOnMobile = activeView === "chats" && !!activeConversation;
 
   // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
   const handleOpenDetails = () => {
-    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
+    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1536px)").matches;
     if (isWide) setIsContactPanelOpen(prev => !prev);
     else setIsDetailsDrawerOpen(true);
   };
@@ -3094,8 +3158,22 @@ const renderTasksView = () => {
       <main className="flex-1 min-h-0 min-w-0 flex">
         {activeView === "chats" ? (
           <>
+            {/* Folders column (wide screens); smaller screens get the same folders as a dropdown in the list header */}
+            {showFoldersColumn && (
+            <aside className="flex w-[232px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white">
+              <ChatFolders
+                folder={chatFolder}
+                onChange={setChatFolder}
+                conversations={conversations}
+                tags={chatTags.tags}
+                onManageTags={() => setIsTagManagerOpen(true)}
+                onNewChat={() => setIsNewChatModalOpen(true)}
+              />
+            </aside>
+            )}
+
             {/* Conversation list: full screen on mobile until a chat is opened */}
-            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[290px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
+            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[300px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
               <ConversationList
                 conversations={conversations}
                 activeConversationId={activeConversation?.id}
@@ -3104,9 +3182,11 @@ const renderTasksView = () => {
                 typingUsers={typingUsers}
                 onSelect={setActiveConversation}
                 onNewChat={() => setIsNewChatModalOpen(true)}
+                folder={chatFolder}
+                onFolderChange={setChatFolder}
                 tags={chatTags.tags}
-                tagsLoaded={chatTags.loaded}
                 tagsByConversation={chatTags.tagsByItem}
+                foldersInColumn={showFoldersColumn}
                 onManageTags={() => setIsTagManagerOpen(true)}
               />
             </aside>
@@ -3139,12 +3219,14 @@ const renderTasksView = () => {
                 onAddTag={() => setIsTagPickerOpen(true)}
                 activeTags={activeConversationTags}
                 onLeaveGroup={canLeaveActive ? handleLeaveGroup : null}
+                isPinned={!!activeConversation?.pinned_at}
+                onTogglePin={() => activeConversation && handleTogglePin(activeConversation)}
               />
             </section>
 
             {/* Details column (wide screens only) */}
             {activeConversation && isContactPanelOpen && (
-              <aside className="hidden lg:flex w-[300px] 2xl:w-[360px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+              <aside className="hidden 2xl:flex w-[320px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
                 {renderDetails(() => setIsContactPanelOpen(false))}
               </aside>
             )}
@@ -3177,7 +3259,7 @@ const renderTasksView = () => {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="lg:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
+            className="2xl:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
           >
             {renderDetails(() => setIsDetailsDrawerOpen(false))}
           </motion.div>
