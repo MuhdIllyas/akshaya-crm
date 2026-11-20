@@ -2164,15 +2164,23 @@ const MessengerPage = ({ user }) => {
   // ============== LAYOUT HELPERS (UI moved into components/chat/*) ==============
 
   const unreadTotal = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
-  // Folders get their own column on wide screens; while the Details column is open they
-  // move into the list's dropdown unless the screen is very wide, so the chat keeps its room.
-  const detailsColumnOpen = !!activeConversation && isContactPanelOpen && screen.wide;
-  const showFoldersColumn = screen.wide && (!detailsColumnOpen || screen.xwide);
+  // Wide screens (1536px+) get the folders column; the Details panel sits beside the chat
+  // only from 1800px and slides in below that, so the chat keeps its room.
+  const showFoldersColumn = screen.wide;
+  // Tasks row in the folders column: admins see what was handed back, staff what is waiting for them
+  const tasksBadge = (() => {
+    if (currentUser.role === "admin" || currentUser.role === "superadmin") {
+      const n = tasks.filter((t) => t.status === "declined").length;
+      return n ? { label: `${n} handed back`, tone: "red" } : null;
+    }
+    const n = tasks.filter((t) => String(t.assigned_to) === String(currentUser.id) && (t.status === "pending" || !t.status)).length;
+    return n ? { label: `${n} to do`, tone: "blue" } : null;
+  })();
   const showChatOnMobile = activeView === "chats" && !!activeConversation;
 
   // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
   const handleOpenDetails = () => {
-    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1536px)").matches;
+    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1800px)").matches;
     if (isWide) setIsContactPanelOpen(prev => !prev);
     else setIsDetailsDrawerOpen(true);
   };
@@ -3153,24 +3161,29 @@ const renderTasksView = () => {
         onChange={setActiveView}
         unreadTotal={unreadTotal}
         hideMobileBar={showChatOnMobile}
+        hideDesktopRail={showFoldersColumn}
       />
 
       <main className="flex-1 min-h-0 min-w-0 flex">
+        {/* Folders column on wide screens: chat folders on top, the other views at the bottom.
+            Smaller screens get the folders as a dropdown in the list header and the icon rail. */}
+        {showFoldersColumn && (
+          <aside className="flex w-[232px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white">
+            <ChatFolders
+              folder={chatFolder}
+              onChange={(id) => { setChatFolder(id); setActiveView("chats"); }}
+              conversations={conversations}
+              tags={chatTags.tags}
+              onManageTags={() => setIsTagManagerOpen(true)}
+              onNewChat={() => setIsNewChatModalOpen(true)}
+              activeView={activeView}
+              onViewChange={setActiveView}
+              tasksBadge={tasksBadge}
+            />
+          </aside>
+        )}
         {activeView === "chats" ? (
           <>
-            {/* Folders column (wide screens); smaller screens get the same folders as a dropdown in the list header */}
-            {showFoldersColumn && (
-            <aside className="flex w-[232px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white">
-              <ChatFolders
-                folder={chatFolder}
-                onChange={setChatFolder}
-                conversations={conversations}
-                tags={chatTags.tags}
-                onManageTags={() => setIsTagManagerOpen(true)}
-                onNewChat={() => setIsNewChatModalOpen(true)}
-              />
-            </aside>
-            )}
 
             {/* Conversation list: full screen on mobile until a chat is opened */}
             <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[300px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
@@ -3219,6 +3232,12 @@ const renderTasksView = () => {
                 onAddTag={() => setIsTagPickerOpen(true)}
                 activeTags={activeConversationTags}
                 onLeaveGroup={canLeaveActive ? handleLeaveGroup : null}
+                assignedName={(() => {
+                  const s = activeConversation?.assigned_staff_id
+                    ? detailsStaffList.find((x) => String(x.id) === String(activeConversation.assigned_staff_id))
+                    : null;
+                  return s ? String(s.name).replace(/ \(Me\)$/, "") : null;
+                })()}
                 isPinned={!!activeConversation?.pinned_at}
                 onTogglePin={() => activeConversation && handleTogglePin(activeConversation)}
               />
@@ -3226,7 +3245,7 @@ const renderTasksView = () => {
 
             {/* Details column (wide screens only) */}
             {activeConversation && isContactPanelOpen && (
-              <aside className="hidden 2xl:flex w-[320px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+              <aside className="hidden min-[1800px]:flex w-[320px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
                 {renderDetails(() => setIsContactPanelOpen(false))}
               </aside>
             )}
@@ -3259,7 +3278,7 @@ const renderTasksView = () => {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="2xl:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
+            className="min-[1800px]:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
           >
             {renderDetails(() => setIsDetailsDrawerOpen(false))}
           </motion.div>

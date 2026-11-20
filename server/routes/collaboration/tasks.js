@@ -684,7 +684,22 @@ router.delete("/:id", async (req, res) => {
       [id]
     );
 
+    // Take the task's card out of the chat too, or the chat shows an empty gap
+    const { rows: cards } = await client.query(
+      `UPDATE chat_messages SET is_deleted = true
+        WHERE message_type = 'task' AND message = $1 AND is_deleted = false
+        RETURNING id, conversation_id`,
+      [String(task.id)]
+    );
+
     await client.query("COMMIT");
+
+    for (const card of cards) {
+      io.to(`conversation:${card.conversation_id}`).emit("message_deleted", {
+        conversationId: card.conversation_id,
+        messageId: card.id,
+      });
+    }
 
     await logActivity({
       centre_id: task.centre_id,

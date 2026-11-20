@@ -1,11 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { FiGlobe,
   FiX,
   FiUsers,
   FiBriefcase,
   FiFile,
-  FiImage,
-  FiDownload,
   FiStar,
   FiCheckSquare,
   FiCheck,
@@ -16,9 +14,7 @@ import { FiGlobe,
   FiSmartphone,
   FiMessageSquare,
   FiAlertCircle,
-  FiChevronDown,
   FiExternalLink,
-  FiTag,
   FiUserPlus,
   FiLogOut,
   FiMoreHorizontal,
@@ -39,6 +35,7 @@ import {
   API_BASE_URL,
   hasEditableMembers,
   isGroupAdmin,
+  isCustomerChat,
 } from "./chatUtils";
 import StaffName from '@/components/staff/StaffName';
 import { useNavigate } from "react-router-dom";
@@ -46,25 +43,30 @@ import { isServiceTask, isClosedTask, startServiceEntry } from "@/components/tas
 
 /* ---------------- small building blocks ---------------- */
 
-const Section = ({ title, icon: Icon, count, action, defaultOpen = true, children }) => {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <section className="border-t border-slate-100">
-      <div className="flex items-center justify-between px-5 py-3">
-        <button
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-2 text-[13px] font-semibold text-slate-700 hover:text-slate-900"
-        >
-          {Icon && <Icon className="text-slate-400" size={14} />}
-          {title}
-          {count > 0 && <span className="text-[11px] font-medium text-slate-400">{count}</span>}
-          <FiChevronDown className={`text-slate-400 transition-transform ${open ? "" : "-rotate-90"}`} size={14} />
-        </button>
-        {action}
-      </div>
-      {open && <div className="px-5 pb-4">{children}</div>}
-    </section>
-  );
+// A titled block in the panel: small uppercase label, optional action on the right
+const Section = ({ title, count, action, children }) => (
+  <section className="px-5 pb-5">
+    <div className="mb-2 flex items-center justify-between">
+      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        {title}
+        {count > 0 && <span className="ml-1.5 font-medium normal-case tracking-normal text-slate-400">{count}</span>}
+      </h4>
+      {action}
+    </div>
+    {children}
+  </section>
+);
+
+const monthYear = (d) => {
+  const t = new Date(d);
+  return isNaN(t.getTime()) ? "" : t.toLocaleDateString("en-IN", { month: "short", year: "numeric" });
+};
+
+const trackingPill = (status) => {
+  const s = String(status || "").toLowerCase();
+  if (["completed", "approved", "delivered", "closed"].includes(s)) return ["Done", "bg-emerald-100 text-emerald-800"];
+  if (["rejected", "cancelled"].includes(s)) return ["Closed", "bg-rose-100 text-rose-700"];
+  return ["Open", "bg-sky-100 text-sky-800"];
 };
 
 const KV = ({ label, children }) => (
@@ -127,6 +129,26 @@ const ConversationDetails = ({
   const [memberMenu, setMemberMenu] = useState(null); // staff_id whose menu is open
   const [renaming, setRenaming] = useState(false);
   const [newName, setNewName] = useState("");
+  const [changingAssignee, setChangingAssignee] = useState(false);
+  // Customer chats: when they became a customer, their services
+  const [summary, setSummary] = useState(null);
+  const convId = conversation?.id;
+  const customerChat = !!conversation && isCustomerChat(conversation);
+  useEffect(() => {
+    setSummary(null);
+    setChangingAssignee(false);
+    if (!convId || !customerChat) return undefined;
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/api/chat/conversation/${convId}/customer-summary`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => !cancelled && setSummary(d))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [convId, customerChat]);
   if (!conversation) return null;
 
   const editableMembers = hasEditableMembers(conversation);
@@ -171,7 +193,15 @@ const ConversationDetails = ({
       });
   }
 
-  const subtitle = isWhatsApp
+  const customerLine = summary
+    ? [
+        summary.customer_since && `Customer since ${monthYear(summary.customer_since)}`,
+        `${summary.service_count} service${summary.service_count === 1 ? "" : "s"}`,
+      ].filter(Boolean).join(" · ")
+    : null;
+  const subtitle = customerLine
+    ? customerLine
+    : isWhatsApp
     ? conversation.context_identifier || "WhatsApp"
     : isPortal
     ? "Customer portal"
@@ -188,7 +218,7 @@ const ConversationDetails = ({
   return (
     <div className="flex flex-col h-full min-h-0 bg-white">
       {/* Top bar */}
-      <div className="shrink-0 h-14 flex items-center justify-between px-4 border-b border-slate-100">
+      <div className="shrink-0 h-14 flex items-center justify-between px-4">
         <p className="text-sm font-semibold text-slate-800">Details</p>
         {onClose && (
           <button
@@ -203,7 +233,7 @@ const ConversationDetails = ({
 
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
         {/* Profile */}
-        <div className="px-5 py-6 flex flex-col items-center text-center">
+        <div className="px-5 pb-6 pt-1 flex flex-col items-center text-center">
           <ChatAvatar
             name={name}
             photo={getConversationPhoto(conversation, currentUser.id)}
@@ -257,22 +287,7 @@ const ConversationDetails = ({
             {subtitle}
           </p>
 
-          <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-            {isWhatsApp && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 px-2 py-0.5 text-[11px] font-medium">
-                <FiSmartphone size={10} /> WhatsApp
-              </span>
-            )}
-            {isTeam && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 text-navy-700 ring-1 ring-blue-200 px-2 py-0.5 text-[11px] font-medium">
-                <FiUsers size={10} /> Team chat
-              </span>
-            )}
-            {isService && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-violet-50 text-violet-700 ring-1 ring-violet-200 px-2 py-0.5 text-[11px] font-medium">
-                <FiBriefcase size={10} /> Service
-              </span>
-            )}
+          <div className="mt-3 flex flex-wrap justify-center gap-1.5 empty:hidden">
             {!isGroup && !isExternal && (
               <span
                 className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${
@@ -293,48 +308,108 @@ const ConversationDetails = ({
             </p>
           )}
 
-          {/* Your tags */}
-          {onOpenTagPicker && (
-            <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-1.5">
+        </div>
+
+        {/* Your tags */}
+        {onOpenTagPicker && (
+          <Section title="Your tags">
+            <div className="flex flex-wrap gap-1.5">
               {conversationTags.map((l) => (
                 <button
                   key={l.id}
                   onClick={onOpenTagPicker}
-                  className={`inline-flex max-w-[160px] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tagColor(l.color).chip}`}
+                  className={`inline-flex h-6 max-w-[180px] items-center rounded-full px-2.5 text-[11px] font-semibold ${tagColor(l.color).chip}`}
                   title={`Tagged "${l.name}"`}
                 >
-                  <FiTag size={10} className="shrink-0" />
                   <span className="truncate">{l.name}</span>
                 </button>
               ))}
               <button
                 onClick={onOpenTagPicker}
-                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-dashed ring-slate-300 hover:text-navy-700 hover:ring-slate-400"
+                className="inline-flex h-6 items-center rounded-full border border-dashed border-slate-300 bg-white px-2.5 text-[11px] font-semibold text-slate-600 hover:text-navy-700"
               >
-                <FiTag size={10} /> {conversationTags.length ? "Edit tags" : "Add tag"}
+                + Tag
               </button>
             </div>
-          )}
+          </Section>
+        )}
 
-          {/* Assignment (WhatsApp / customer chats) */}
-          {(isWhatsApp || conversation.context_type === "customer") && onAssign && (
-            <div className="mt-4 w-full text-left">
-              <label className="block text-[11px] font-medium text-slate-400 mb-1">Assigned to</label>
-              <select
-                value={conversation.assigned_staff_id || ""}
-                onChange={(e) => onAssign(e.target.value)}
-                className="w-full h-9 rounded-lg bg-slate-50 border border-slate-200 px-2.5 text-sm text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-slate-300"
-              >
-                <option value="">Unassigned</option>
-                {staffList.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.role ? `(${s.role})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-        </div>
+        {/* Assigned to (customer chats) */}
+        {(isWhatsApp || isPortal || conversation.context_type === "customer") && onAssign && (() => {
+          const assignee = staffList.find((s) => String(s.id) === String(conversation.assigned_staff_id));
+          return (
+            <Section title="Assigned to">
+              {changingAssignee ? (
+                <select
+                  autoFocus
+                  value={conversation.assigned_staff_id || ""}
+                  onChange={(e) => {
+                    onAssign(e.target.value);
+                    setChangingAssignee(false);
+                  }}
+                  onBlur={() => setChangingAssignee(false)}
+                  aria-label="Assign to"
+                  className="w-full h-10 rounded-[10px] bg-white border border-slate-200 px-2.5 text-sm text-slate-700 focus:outline-none focus:ring-4 focus:ring-blue-50 focus:border-slate-300"
+                >
+                  <option value="">Unassigned</option>
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.role ? `(${s.role})` : ""}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="flex items-center gap-2.5 rounded-[10px] border border-slate-200 px-2.5 py-2">
+                  {assignee ? (
+                    <ChatAvatar name={assignee.name} photo={getAvatarUrl(assignee.photo)} size="xs" color={getAvatarColor(assignee.id)} />
+                  ) : (
+                    <span className="grid h-6 w-6 place-items-center rounded-full bg-slate-100 text-slate-400"><FiUser size={12} /></span>
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-slate-800">
+                    {assignee ? String(assignee.name).replace(/ \(Me\)$/, "") : "Unassigned"}
+                  </span>
+                  <button type="button" onClick={() => setChangingAssignee(true)} className="shrink-0 text-xs font-semibold text-navy-700 hover:underline">
+                    Change
+                  </button>
+                </div>
+              )}
+            </Section>
+          );
+        })()}
+
+        {/* Services (customer chats) */}
+        {customerChat && summary && (
+          <Section title="Services" count={summary.service_count}>
+            {summary.services.length === 0 ? (
+              <EmptyHint icon={FiBriefcase} text="No services for this customer yet" />
+            ) : (
+              <div className="space-y-2">
+                {summary.services.map((s) => {
+                  const [label, cls] = trackingPill(s.tracking_status);
+                  return (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => s.tracking_id && onOpenTracking?.(s.tracking_id)}
+                      className="w-full rounded-[10px] border border-slate-200 px-3 py-2.5 text-left transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[13px] font-semibold text-slate-900">
+                          {[s.service_name, s.subcategory_name].filter(Boolean).join(" – ") || "Service"}
+                        </span>
+                        <span className={`shrink-0 rounded-full px-2 py-px text-[10px] font-semibold ${cls}`}>{label}</span>
+                      </div>
+                      <p className="mt-0.5 truncate text-xs text-slate-500">
+                        {s.application_number ? `App #${s.application_number}` : formatShortDate(s.created_at)}
+                        {s.staff_name ? ` · ${s.staff_name}` : ""}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </Section>
+        )}
 
         {/* Service details */}
         {isService && (
@@ -665,25 +740,28 @@ const ConversationDetails = ({
           {sharedFiles.length === 0 ? (
             <EmptyHint icon={FiFile} text="No files shared yet" />
           ) : (
-            <div className="space-y-1">
-              {sharedFiles.map((file) => (
-                <button
-                  key={file.id}
-                  onClick={() => openFile(file)}
-                  className="w-full flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-50 text-left transition"
-                >
-                  <div className="h-9 w-9 shrink-0 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500">
-                    {file.messageType === "image" ? <FiImage size={16} /> : <FiFile size={16} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-slate-800 truncate">{file.fileName || "File"}</p>
-                    <p className="text-[11px] text-slate-400">
-                      {file.fileSize ? `${(file.fileSize / 1024).toFixed(1)} KB` : file.time}
-                    </p>
-                  </div>
-                  <FiDownload className="text-slate-400" size={14} />
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-2">
+              {sharedFiles.map((file) => {
+                const url = file.fileUrl ? (file.fileUrl.startsWith("http") ? file.fileUrl : `${API_BASE_URL}${file.fileUrl}`) : null;
+                return (
+                  <button
+                    key={file.id}
+                    type="button"
+                    onClick={() => openFile(file)}
+                    title={file.fileName || "File"}
+                    className="relative h-[60px] overflow-hidden rounded-lg border border-slate-200 bg-slate-100 text-slate-600 transition hover:border-slate-300"
+                  >
+                    {file.messageType === "image" && url ? (
+                      <img src={url} alt={file.fileName || "Image"} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="flex h-full flex-col items-center justify-center gap-1 px-1.5">
+                        <FiFile size={15} className="text-slate-400" aria-hidden="true" />
+                        <span className="w-full truncate text-[10px]">{file.fileName || "File"}</span>
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           )}
         </Section>

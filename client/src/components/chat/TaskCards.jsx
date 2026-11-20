@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FiCheckSquare, FiClock, FiUser } from "react-icons/fi";
+import { FiCheckSquare } from "react-icons/fi";
 import StaffName from "@/components/staff/StaffName";
 import { TaskActionButtons, TaskCloseNote, isServiceTask, isClosedTask, serviceLabel } from "@/components/tasks/ServiceTaskBits";
 
@@ -19,33 +19,43 @@ const formatDate = (dateString) => {
    Task cards
    ══════════════════════════════════════════════════════════════ */
 
-export const TaskCardShell = ({ title, completed, meta, onComplete, completing, footer }) => (
-  <div className="w-full max-w-sm bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-3.5">
-    <div className="flex items-start gap-3">
-      <div className={`mt-0.5 h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${completed ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-navy-700"}`}>
-        <FiCheckSquare size={16} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Task</p>
-        <h4 className={`text-sm font-semibold leading-snug ${completed ? "line-through text-slate-400" : "text-slate-900"}`}>{title}</h4>
-        <div className="mt-1 space-y-0.5 text-xs text-slate-500">{meta}</div>
-      </div>
-    </div>
-    <div className="mt-3 flex justify-end">
-      {footer ? footer : completed ? (
-        <span className="text-xs font-medium text-emerald-600">✓ Completed</span>
-      ) : (
-        <button
-          onClick={onComplete}
-          disabled={completing}
-          className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition disabled:opacity-50"
-        >
-          {completing ? "Saving…" : "Mark complete"}
-        </button>
-      )}
-    </div>
-  </div>
+const STATUS_PILL = {
+  pending: ["Pending", "bg-amber-100 text-amber-800"],
+  in_progress: ["In progress", "bg-sky-100 text-sky-800"],
+  completed: ["Completed", "bg-emerald-100 text-emerald-800"],
+  declined: ["Handed back", "bg-amber-100 text-amber-800"],
+  cancelled: ["Cancelled", "bg-rose-100 text-rose-700"],
+};
+
+const Pill = ({ className, children }) => (
+  <span className={`inline-flex h-[18px] items-center rounded-full px-2 text-[10px] font-semibold ${className}`}>{children}</span>
 );
+
+// Card for a task in a chat: kind + status pills, title, one line of details, actions.
+export const TaskCardShell = ({ title, completed, meta, onComplete, completing, footer, kind = "Task", status }) => {
+  const [statusLabel, statusClass] = STATUS_PILL[status || (completed ? "completed" : "pending")] || STATUS_PILL.pending;
+  return (
+    <div className="w-[340px] max-w-full rounded-[14px] bg-white p-3.5 ring-1 ring-slate-200 shadow-sm">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <Pill className={kind === "Service task" ? "bg-violet-100 text-violet-800" : "bg-slate-100 text-slate-700"}>{kind}</Pill>
+        <Pill className={statusClass}>{statusLabel}</Pill>
+      </div>
+      <h4 className={`mt-2 text-sm font-semibold leading-snug ${completed ? "line-through text-slate-400" : "text-slate-900"}`}>{title}</h4>
+      <div className="mt-1 space-y-0.5 text-xs text-slate-500">{meta}</div>
+      <div className="mt-2.5 flex justify-end">
+        {footer ? footer : completed ? null : (
+          <button
+            onClick={onComplete}
+            disabled={completing}
+            className="h-8 rounded-lg bg-emerald-600 px-3 text-xs font-medium text-white transition hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {completing ? "Saving…" : "Mark complete"}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 // Service task card (system message with task id in fileName)
 export const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
@@ -75,12 +85,8 @@ export const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
       completed={completed}
       completing={completing}
       onComplete={handleComplete}
-      meta={
-        <>
-          {assignee && <p className="flex items-center gap-1"><FiUser size={11} /> {assignee}</p>}
-          {dueDate && <p className="flex items-center gap-1"><FiClock size={11} /> {dueDate}</p>}
-        </>
-      }
+      status={taskData?.status}
+      meta={[assignee && `Assigned to ${assignee}`, dueDate && `due ${dueDate}`].filter(Boolean).join(" · ") || null}
     />
   );
 };
@@ -125,23 +131,25 @@ export const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate, onTaskChan
       completing={completing}
       onComplete={handleComplete}
       footer={footer}
+      kind={isServiceTask(taskData) ? "Service task" : "Task"}
+      status={taskData.status}
       meta={
         <>
           {isServiceTask(taskData) && (
-            <p className="font-medium text-indigo-700">
-              {[serviceLabel(taskData), taskData.customer_name, taskData.customer_phone].filter(Boolean).join(" · ") || "Service task"}
+            <p className="font-medium text-violet-700">
+              {[serviceLabel(taskData), taskData.customer_name].filter(Boolean).join(" · ") || "Service"}
             </p>
           )}
-          <p className="capitalize">
-            {taskData.priority || "medium"} priority · {String(taskData.status || "pending").replace("_", " ")}
+          <p>
+            {taskData.assigned_to && (
+              <>
+                Assigned to{" "}
+                <StaffName id={taskData.assigned_to} name={taskData.assigned_to_name} showDot={false} fallback="staff" />
+              </>
+            )}
+            {taskData.due_date && ` · due ${formatDate(taskData.due_date)}`}
+            {` · ${taskData.priority || "medium"} priority`}
           </p>
-          {taskData.assigned_to && (
-            <p className="flex items-center gap-1">
-              <FiUser size={11} />{" "}
-              <StaffName id={taskData.assigned_to} name={taskData.assigned_to_name} showDot={false} fallback="Assigned staff" />
-            </p>
-          )}
-          {taskData.due_date && <p className="flex items-center gap-1"><FiClock size={11} /> {formatDate(taskData.due_date)}</p>}
         </>
       }
     />

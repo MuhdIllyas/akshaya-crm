@@ -1,6 +1,8 @@
 import { customersPath } from '@/utils/customersPath';
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { BsPinAngle } from "react-icons/bs";
+import { tagColor } from "@/components/tags/tagColors";
+import QuickReplies from "./chat/QuickReplies";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -195,6 +197,7 @@ const Chat = ({
   onLeaveGroup = null,
   isPinned = false,
   onTogglePin = null,
+  assignedName = null,
 }) => {
   const navigate = useNavigate();
   const [newMessage, setNewMessage] = useState("");
@@ -723,12 +726,18 @@ const Chat = ({
       </span>
     );
   } else if (isWhatsApp) {
-    subtitle = <span className="flex items-center gap-1"><FiSmartphone size={11} /> {activeConversation.context_identifier || "WhatsApp"}</span>;
+    subtitle = (
+      <span className="truncate">
+        WhatsApp · {activeConversation.context_identifier || "no number"}
+        {assignedName ? ` · assigned to ${assignedName}` : " · unassigned"}
+      </span>
+    );
   } else if (isPortal) {
     subtitle = (
       <span className="flex items-center gap-1 truncate">
         <FiGlobe size={11} className="shrink-0" />
         {activeConversation.context_type === "customer_service" ? "Customer portal · about an application" : "Customer portal"}
+        {assignedName ? ` · assigned to ${assignedName}` : ""}
       </span>
     );
   } else if (isFunctionallyGroup) {
@@ -789,8 +798,13 @@ const Chat = ({
                 </span>
               )}
               {activeConversation.context_type === "service_entry" && (
-                <FiBriefcase className="shrink-0 text-violet-600" size={12} title="Service" />
+                <span className="shrink-0 rounded-full bg-violet-100 px-1.5 py-px text-[10px] font-semibold text-violet-800">Service</span>
               )}
+              {activeTags.slice(0, 2).map((t) => (
+                <span key={t.id} className={`hidden sm:inline-flex shrink-0 max-w-[140px] rounded-full px-2 py-px text-[10px] font-semibold ring-1 ${tagColor(t.color).chip}`} title={`Tagged ${t.name}`}>
+                  <span className="truncate">{t.name}</span>
+                </span>
+              ))}
             </div>
             <div className="text-xs text-slate-500 flex items-center gap-2 min-w-0">
               {subtitle}
@@ -818,9 +832,9 @@ const Chat = ({
           <HeaderButton onClick={() => onOpenTaskModal()} title="Create task" className="hidden sm:flex">
             <FiCheckSquare size={17} />
           </HeaderButton>
-          {hasTasks && (
-            <HeaderButton onClick={() => setShowTasksModal(true)} title="View tasks" className="hidden sm:flex">
-              <FiList size={17} />
+          {onAddTag && (
+            <HeaderButton onClick={onAddTag} title={activeTags.length ? "Edit tags" : "Add tag"} className="hidden sm:flex">
+              <FiTag size={17} />
             </HeaderButton>
           )}
           {onOpenDetails && (
@@ -844,7 +858,7 @@ const Chat = ({
                 >
                   <MenuItem icon={FiCheckSquare} label="Create task" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); onOpenTaskModal(); }} />
                   {hasTasks && (
-                    <MenuItem icon={FiList} label="View tasks" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); setShowTasksModal(true); }} />
+                    <MenuItem icon={FiList} label="View tasks" onClick={() => { setIsMoreMenuOpen(false); setShowTasksModal(true); }} />
                   )}
                   {onTogglePin && (
                     <MenuItem icon={BsPinAngle} label={isPinned ? "Unpin chat" : "Pin chat"} onClick={() => { setIsMoreMenuOpen(false); onTogglePin(); }} />
@@ -940,13 +954,22 @@ const Chat = ({
                   </div>
                 );
               } else if (isNewTaskMessage) {
-                const task =
-                  msg.live_task_data || msg.data || allTasks.find((t) => String(t.id) === String(msg.text));
+                const task = msg.isDeleted
+                  ? null
+                  : msg.live_task_data || msg.data || allTasks.find((t) => String(t.id) === String(msg.text));
+                // The task may have been deleted since: say so instead of leaving a gap
                 body = task ? (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"}`}>
                     <NormalTaskMessage taskId={task.id} taskData={task} onStatusUpdate={onNormalTaskStatusUpdate} />
                   </div>
-                ) : null;
+                ) : (
+                  <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-white/90 px-3 py-1.5 text-xs italic text-slate-500 ring-1 ring-slate-200">
+                      <FiCheckSquare size={12} className="not-italic text-slate-400" aria-hidden="true" />
+                      This task was deleted
+                    </span>
+                  </div>
+                );
               } else if (isSystemNote) {
                 body = (
                   <div className="w-full flex justify-center">
@@ -1174,7 +1197,7 @@ const Chat = ({
 
       {/* Composer */}
       <div
-        className="shrink-0 relative bg-white border-t border-slate-200 px-2 sm:px-4 pt-2"
+        className="shrink-0 relative bg-white border-t border-slate-200 px-2 sm:px-4 pt-3"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
         {windowClosed && (
@@ -1243,10 +1266,20 @@ const Chat = ({
           </div>
         )}
 
-        <div className="flex items-end gap-2">
+        {!windowClosed && (
+          <QuickReplies
+            disabled={inputDisabled}
+            onPick={(text) => {
+              setNewMessage((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text));
+              setTimeout(() => chatInputRef.current?.focus(), 0);
+            }}
+          />
+        )}
+
+        <div className="flex items-end gap-2.5">
           <div
-            className={`flex-1 min-w-0 flex items-end gap-0.5 rounded-3xl px-1.5 py-1 transition ring-1 ${
-              inputDisabled ? "bg-slate-50 ring-slate-100" : "bg-slate-100 ring-transparent focus-within:bg-white focus-within:ring-slate-300"
+            className={`flex-1 min-w-0 flex items-end gap-0.5 rounded-xl px-1.5 py-1 transition ring-1 ${
+              inputDisabled ? "bg-slate-50 ring-slate-100" : "bg-slate-50 ring-slate-200 focus-within:bg-white focus-within:ring-slate-300"
             }`}
           >
             <div className="relative" ref={emojiPickerRef}>
@@ -1309,7 +1342,7 @@ const Chat = ({
             whileTap={{ scale: 0.92 }}
             onClick={handleSendMessage}
             disabled={!canSend}
-            className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center transition shadow-sm ${
+            className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center transition shadow-sm ${
               canSend ? "bg-navy-700 text-white hover:bg-navy-800" : "bg-slate-200 text-slate-400"
             }`}
             title="Send"

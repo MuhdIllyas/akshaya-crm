@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import {
   FiList, FiCircle, FiSmartphone, FiUsers, FiBriefcase, FiShield, FiPlus, FiTag,
+  FiCheckSquare, FiActivity, FiCalendar, FiGrid, FiClock,
 } from "react-icons/fi";
 import { BsPinAngle } from "react-icons/bs";
 import { CHAT_FOLDERS, inFolder, isWaiting } from "./chatUtils";
@@ -33,6 +34,9 @@ const ChatFolders = ({
   onManageTags,
   onNewChat,
   variant = "column",
+  activeView = "chats",
+  onViewChange,
+  tasksBadge = null,
 }) => {
   const stats = useMemo(() => {
     const out = {};
@@ -86,7 +90,7 @@ const ChatFolders = ({
 
   const FolderButton = ({ f }) => {
     const Icon = ICONS[f.id];
-    const active = folder === f.id;
+    const active = activeView === "chats" && folder === f.id;
     return (
       <button type="button" onClick={() => onChange(f.id)} aria-current={active ? "true" : undefined} className={rowCls(active)}>
         <Icon size={15} className={`shrink-0 ${active ? "" : ICON_COLOR[f.id] || "text-slate-500"}`} aria-hidden="true" />
@@ -149,7 +153,7 @@ const ChatFolders = ({
         ) : (
           tags.map((t) => {
             const id = `tag:${t.id}`;
-            const active = folder === id;
+            const active = activeView === "chats" && folder === id;
             return (
               <button key={t.id} type="button" onClick={() => onChange(id)} aria-current={active ? "true" : undefined} className={rowCls(active)}>
                 <span className={`mx-[3px] h-2.5 w-2.5 shrink-0 rounded-full ${tagColor(t.color).dot}`} aria-hidden="true" />
@@ -160,6 +164,46 @@ const ChatFolders = ({
           })
         )}
       </div>
+
+      {!isMenu && onViewChange && (
+        <div className="shrink-0 space-y-0.5 border-t border-slate-200 py-2.5">
+          <button type="button" onClick={() => onViewChange("tasks")} aria-current={activeView === "tasks" ? "page" : undefined} className={rowCls(activeView === "tasks")}>
+            <FiCheckSquare size={15} className="shrink-0" aria-hidden="true" />
+            Tasks
+            {tasksBadge && (
+              <span className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[10px] font-semibold ${tasksBadge.tone === "red" ? "bg-rose-100 text-rose-700" : "bg-blue-50 text-navy-700"}`}>
+                {tasksBadge.label}
+              </span>
+            )}
+          </button>
+          <button type="button" onClick={() => onViewChange("activity")} aria-current={activeView === "activity" ? "page" : undefined} className={rowCls(activeView === "activity")}>
+            <FiActivity size={15} className="shrink-0" aria-hidden="true" />
+            Activity
+          </button>
+          <div className="flex items-center gap-1 px-1 pt-1">
+            {[
+              { id: "calendar", label: "Calendar", Icon: FiCalendar },
+              { id: "files", label: "Files", Icon: FiGrid },
+              { id: "schedules", label: "Schedules", Icon: FiClock },
+            ].map(({ id, label, Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => onViewChange(id)}
+                title={label}
+                aria-label={label}
+                aria-current={activeView === id ? "page" : undefined}
+                className={`flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg text-[11px] font-medium transition ${
+                  activeView === id ? "bg-blue-50 text-navy-700" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                }`}
+              >
+                <Icon size={14} aria-hidden="true" />
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </nav>
   );
 };

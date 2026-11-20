@@ -996,6 +996,133 @@ router.get("/staff", authenticateToken, async (req, res) => {
 });
 
 /* ================================
+   QUICK REPLIES (chips above the message box)
+================================ */
+
+// Your centre's replies plus the ones for every centre
+router.get("/quick-replies", authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, centre_id, title, body, created_by FROM chat_quick_replies
+        WHERE centre_id IS NULL OR centre_id = $1
+        ORDER BY title`,
+      [req.user.centre_id || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Quick replies error:", err);
+    res.status(500).json({ error: "Couldn't load quick replies" });
+  }
+});
+
+router.post("/quick-replies", authenticateToken, async (req, res) => {
+  try {
+    const title = String(req.body?.title || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    const body = String(req.body?.body || "").trim().slice(0, 2000);
+    if (!title || !body) return res.status(400).json({ error: "Give the reply a name and a message" });
+    // A superadmin without a centre makes replies for every centre
+    const centreId = req.user.centre_id || null;
+    const { rows } = await pool.query(
+      `INSERT INTO chat_quick_replies (centre_id, title, body, created_by) VALUES ($1, $2, $3, $4)
+       RETURNING id, centre_id, title, body, created_by`,
+      [centreId, title, body, req.user.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Add quick reply error:", err);
+    res.status(500).json({ error: "Couldn't save the quick reply" });
+  }
+});
+
+router.delete("/quick-replies/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows } = await pool.query(`SELECT * FROM chat_quick_replies WHERE id = $1`, [id]);
+    const reply = rows[0];
+    if (!reply) return res.status(404).json({ error: "Quick reply not found" });
+    const isAdmin = req.user.role === "superadmin" ||
+      (req.user.role === "admin" && Number(reply.centre_id) === Number(req.user.centre_id));
+    if (!isAdmin && Number(reply.created_by) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Only the person who made it or an admin can delete it" });
+    }
+    await pool.query(`DELETE FROM chat_quick_replies WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete quick reply error:", err);
+    res.status(500).json({ error: "Couldn't delete the quick reply" });
+  }
+});
+
+/* ================================
+   CUSTOMER SUMMARY (Details panel of a customer chat)
+================================ */
+
+router.get("/conversation/:conversationId/customer-summary", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    if (!Number.isInteger(conversationId)) return res.status(400).json({ error: "Invalid chat" });
+    if (!(await checkConversationAccess(conversationId, req.user.id)) && req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Not a participant in this conversation" });
+    }
+    const { rows: convRows } = await pool.query(
+      `SELECT c.customer_id, c.phone_number, c.centre_id, st.name AS assigned_staff_name
+         FROM chat_conversations c LEFT JOIN staff st ON st.id = c.assigned_staff_id
+        WHERE c.id = $1`,
+      [conversationId]
+    );
+    const conv = convRows[0];
+    if (!conv) return res.status(404).json({ error: "Conversation not found" });
+
+    const last10 = String(conv.phone_number || "").replace(/\D/g, "").slice(-10);
+    let customer = null;
+    if (conv.customer_id || last10) {
+      const { rows } = await pool.query(
+        `SELECT id, name, created_at FROM customers
+          WHERE ($1::int IS NOT NULL AND id = $1) OR ($2 <> '' AND RIGHT(regexp_replace(primary_phone, '\\D', '', 'g'), 10) = $2)
+          ORDER BY (id = $1) DESC NULLS LAST, id LIMIT 1`,
+        [conv.customer_id || null, last10]
+      );
+      customer = rows[0] || null;
+    }
+
+    const params = [customer?.id || null, last10];
+    let centreFilter = "";
+    if (req.user.role !== "superadmin") {
+      params.push(req.user.centre_id);
+      centreFilter = `AND sf.centre_id = $${params.length}`;
+    }
+    const { rows: services } = await pool.query(
+      `SELECT DISTINCT ON (se.id)
+              se.id, se.created_at, s.name AS service_name, sc.name AS subcategory_name,
+              st.id AS tracking_id, st.application_number, st.status AS tracking_status,
+              sf.name AS staff_name
+         FROM service_entries se
+         JOIN staff sf ON sf.id = se.staff_id
+         LEFT JOIN services s ON s.id = se.category_id
+         LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+         LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+        WHERE (($1::int IS NOT NULL AND se.customer_id = $1)
+               OR ($2 <> '' AND RIGHT(regexp_replace(COALESCE(se.phone, ''), '\\D', '', 'g'), 10) = $2))
+          ${centreFilter}
+        ORDER BY se.id DESC, st.id DESC`,
+      params
+    );
+    services.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({
+      customer_since: customer?.created_at || null,
+      customer_id: customer?.id || null,
+      assigned_staff_name: conv.assigned_staff_name || null,
+      service_count: services.length,
+      services: services.slice(0, 5),
+    });
+  } catch (err) {
+    console.error("Customer summary error:", err);
+    res.status(500).json({ error: "Couldn't load the customer's details" });
+  }
+});
+
+/* ================================
    PIN / UNPIN A CHAT (for yourself)
 ================================ */
 
@@ -1078,6 +1205,7 @@ router.get("/unread/all", authenticateToken, async (req, res) => {
           WHERE r.message_id = m.id AND r.staff_id = $1
         )
       WHERE p.staff_id = $1
+        AND c.status <> 'deleted' -- a deleted chat can't be opened, so its messages can't be read
       GROUP BY c.id
       `,
       [userId]

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers, FiChevronDown } from "react-icons/fi";
+import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiUsers, FiChevronDown } from "react-icons/fi";
 import { BsPinAngleFill } from "react-icons/bs";
 import ChatAvatar from "./ChatAvatar";
 import ChatFolders from "./ChatFolders";
@@ -133,7 +133,7 @@ const ConversationList = ({
         <ChatAvatar
           name={name}
           photo={getConversationPhoto(c, currentUser.id)}
-          size="lg"
+          size="md"
           color={isWhatsApp ? "bg-emerald-600" : isPortal ? "bg-sky-600" : isTeam ? "bg-navy-700" : c.avatarColor || getAvatarColor(c.id)}
           isGroup={isGroup && !isTeam}
           icon={isWhatsApp ? FiSmartphone : isPortal ? FiGlobe : isTeam ? FiUsers : undefined}
@@ -145,10 +145,10 @@ const ConversationList = ({
             <span className={`truncate text-[14px] ${hasUnread ? "font-semibold text-slate-900" : "font-medium text-slate-800"}`}>
               {name}
             </span>
-            {isWhatsApp && <FiSmartphone className="shrink-0 text-emerald-600" size={12} title="WhatsApp" />}
-            {isPortal && <FiGlobe className="shrink-0 text-sky-600" size={12} title="Customer portal" />}
-            {isService && <FiBriefcase className="shrink-0 text-violet-600" size={12} title="Service" />}
-            {isTeam && <span className="shrink-0 rounded-full bg-blue-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-navy-700">Team</span>}
+            {isWhatsApp && <span className="shrink-0 rounded-full bg-emerald-100 px-1.5 py-px text-[10px] font-semibold text-emerald-800">WhatsApp</span>}
+            {isPortal && <span className="shrink-0 rounded-full bg-sky-100 px-1.5 py-px text-[10px] font-semibold text-sky-800">Portal</span>}
+            {isService && <span className="shrink-0 rounded-full bg-violet-100 px-1.5 py-px text-[10px] font-semibold text-violet-800">Service</span>}
+            {isTeam && <span className="shrink-0 rounded-full bg-sky-100 px-1.5 py-px text-[10px] font-semibold text-sky-800">Team</span>}
             {c.pinned_at && <BsPinAngleFill className="shrink-0 text-slate-400" size={11} title="Pinned" aria-label="Pinned" />}
             <span className={`ml-auto shrink-0 text-[11px] ${hasUnread ? "text-navy-700 font-semibold" : "text-slate-500"}`}>
               {formatListTime(c.last_message_at)}
