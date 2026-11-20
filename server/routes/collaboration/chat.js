@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
 import { resolveConversation } from '../../utils/conversationService.js';
-import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
+import { sendMessage, getUnreadCount, sendSystemMessage } from '../../utils/messageRouter.js';
 import notificationService from "../../utils/notificationService.js";
 import { notificationTemplates } from "../../utils/notificationTemplates.js";
 
@@ -193,7 +193,7 @@ router.get("/conversations", authenticateToken, async (req, res) => {
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
-                'photo', s.photo,
+                'photo', s.photo, 'member_role', p.role,
                 'centre_name', c_staff.name
               )
             ),
@@ -337,7 +337,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
-                'photo', s.photo,
+                'photo', s.photo, 'member_role', p.role,
                 'joined_at', p.joined_at,
                 'centre_name', c_staff.name
               )
@@ -1347,7 +1347,7 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
              (
                SELECT COALESCE(
                  json_agg(
-                   json_build_object('staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'centre_name', c_staff.name)
+                   json_build_object('staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'member_role', p.role, 'centre_name', c_staff.name)
                  ), '[]'::json
                )
                FROM chat_participants p
@@ -1406,6 +1406,248 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
   }
 });
 
+
+/* ================================
+   GROUP MEMBERS (add / remove / leave / group admins / rename)
+================================ */
+
+// The conversation as the Messenger list expects it (same shape as GET /conversations).
+async function loadConversationForClient(conversationId, db = pool) {
+  const { rows } = await db.query(
+    `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id,
+            c.phone_number AS context_identifier, c.name AS context_name, c.status,
+            c.assigned_staff_id, c.customer_id, c.centre_id, c.created_by, c.last_message_at,
+            (SELECT COALESCE(json_agg(json_build_object(
+                      'staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'member_role', p.role,
+                      'member_role', p.role, 'joined_at', p.joined_at, 'centre_name', cs.name)
+                    ORDER BY (p.role = 'owner') DESC, s.name), '[]'::json)
+               FROM chat_participants p
+               JOIN staff s ON s.id = p.staff_id
+               LEFT JOIN centres cs ON cs.id = s.centre_id
+              WHERE p.conversation_id = c.id AND p.participant_type = 'staff') AS participants
+       FROM chat_conversations c
+      WHERE c.id = $1`,
+    [conversationId]
+  );
+  return rows[0] || null;
+}
+
+// Only internal group chats have editable members. Team chats follow their team;
+// WhatsApp / portal chats use "Assigned to".
+const hasEditableMembers = (c) =>
+  !!c && c.status !== "deleted" && (c.channel || "internal") === "internal" && c.is_group && c.context_type !== "team";
+
+// Group admins: the chat's owners, plus admins and superadmins who are in the chat.
+async function memberAccess(conversationId, user) {
+  if (!Number.isInteger(conversationId)) return { conversation: null, isMember: false, canManage: false };
+  const { rows: convRows } = await pool.query(`SELECT * FROM chat_conversations WHERE id = $1`, [conversationId]);
+  const { rows } = await pool.query(
+    `SELECT role FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+    [conversationId, user.id]
+  );
+  const isMember = rows.length > 0;
+  const canManage = isMember && (rows[0].role === "owner" || user.role === "admin" || user.role === "superadmin");
+  return { conversation: convRows[0], isMember, canManage };
+}
+
+const staffNames = async (ids) => {
+  if (!ids.length) return [];
+  const { rows } = await pool.query(`SELECT id, name FROM staff WHERE id = ANY($1::int[])`, [ids]);
+  return ids.map((id) => rows.find((r) => r.id === id)?.name).filter(Boolean);
+};
+
+const actorName = async (req) => (await staffNames([Number(req.user.id)]))[0] || "Someone";
+
+const joinNames = (names) =>
+  names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+// Tell everyone in the chat (and anyone just removed) about the new member list.
+async function broadcastMembers(req, conversationId, { added = [], removed = [], reason = "removed" } = {}) {
+  const full = await loadConversationForClient(conversationId);
+  if (!req.io || !full) return full;
+  for (const p of full.participants) {
+    const event = added.includes(p.staff_id) ? "added_to_conversation" : "conversation_members_updated";
+    req.io.to(`user:${p.staff_id}`).emit(event, full);
+  }
+  for (const id of removed) {
+    req.io.to(`user:${id}`).emit("conversation_deleted", { conversationId: Number(conversationId), reason });
+  }
+  return full;
+}
+
+const systemNote = async (req, conversationId, text) => {
+  try {
+    await sendSystemMessage(conversationId, text, req.io);
+    await pool.query(`UPDATE chat_conversations SET last_message_at = NOW() WHERE id = $1`, [conversationId]);
+  } catch (err) {
+    console.error("Non-fatal: member system message failed", err);
+  }
+};
+
+// Add staff. Body: { staff_ids: [..] }
+router.post("/conversation/:conversationId/participants", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const { conversation, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "Members of this chat can't be changed" });
+    if (!canManage) return res.status(403).json({ error: "Only group admins can add people" });
+
+    const requested = [...new Set((req.body?.staff_ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    if (!requested.length) return res.status(400).json({ error: "Pick at least one person" });
+
+    const { rows: valid } = await pool.query(
+      `SELECT s.id FROM staff s
+        WHERE s.id = ANY($1::int[]) AND s.status = 'Active'
+          AND NOT EXISTS (SELECT 1 FROM chat_participants p WHERE p.conversation_id = $2 AND p.staff_id = s.id)`,
+      [requested, conversationId]
+    );
+    const added = valid.map((r) => r.id);
+    if (!added.length) return res.status(400).json({ error: "They are already in this chat" });
+
+    for (const id of added) {
+      await pool.query(
+        `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+         VALUES ($1, $2, 'staff', 'member', NOW()) ON CONFLICT DO NOTHING`,
+        [conversationId, id]
+      );
+    }
+
+    const actor = await actorName(req);
+    await systemNote(req, conversationId, `${actor} added ${joinNames(await staffNames(added))}`);
+    const full = await broadcastMembers(req, conversationId, { added });
+
+    try {
+      await notificationService.createBulkNotifications({
+        recipientStaffIds: added,
+        senderStaffId: req.user.id,
+        centreId: req.user.centre_id,
+        relatedEntityType: "conversation",
+        relatedEntityId: conversationId,
+        conversationId,
+        type: "system",
+        category: "communication",
+        title: "👥 Added to a group",
+        message: `${actor} added you to ${conversation.name || "a group chat"}.`,
+        priority: "medium",
+      });
+    } catch (notifErr) {
+      console.error("Non-fatal: add member notification failed", notifErr);
+    }
+
+    res.json(full);
+  } catch (err) {
+    console.error("Add members error:", err);
+    res.status(500).json({ error: "Couldn't add people to this chat" });
+  }
+});
+
+// Remove someone, or leave (your own id).
+router.delete("/conversation/:conversationId/participants/:staffId", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const staffId = Number(req.params.staffId);
+    if (!Number.isInteger(staffId)) return res.status(400).json({ error: "Invalid staff member" });
+    const leaving = staffId === Number(req.user.id);
+    const { conversation, isMember, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "Members of this chat can't be changed" });
+    if (leaving ? !isMember : !canManage) return res.status(403).json({ error: "Only group admins can remove people" });
+
+    const actor = await actorName(req);
+    const [name] = await staffNames([staffId]);
+
+    await client.query("BEGIN");
+    const { rows: gone } = await client.query(
+      `DELETE FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2 RETURNING role`,
+      [conversationId, staffId]
+    );
+    if (!gone.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "They are not in this chat" });
+    }
+    // When the last group admin goes, the longest-standing member takes over.
+    const { rows: owners } = await client.query(
+      `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND role = 'owner' AND participant_type = 'staff'`,
+      [conversationId]
+    );
+    if (gone[0].role === "owner" && !owners.length) {
+      await client.query(
+        `UPDATE chat_participants SET role = 'owner'
+          WHERE conversation_id = $1 AND staff_id = (
+            SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'
+             ORDER BY joined_at, staff_id LIMIT 1)`,
+        [conversationId]
+      );
+    }
+    // Their own tags shouldn't stay on a chat they can no longer open.
+    await client.query(
+      `DELETE FROM staff_tag_conversations lc USING staff_tags l
+        WHERE lc.tag_id = l.id AND l.staff_id = $1 AND lc.conversation_id = $2`,
+      [staffId, conversationId]
+    );
+    await client.query("COMMIT");
+
+    await systemNote(req, conversationId, leaving ? `${name || "Someone"} left` : `${actor} removed ${name || "a member"}`);
+    res.json(await broadcastMembers(req, conversationId, { removed: [staffId], reason: leaving ? "left" : "removed" }));
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Remove member error:", err);
+    res.status(500).json({ error: "Couldn't remove them from this chat" });
+  } finally {
+    client.release();
+  }
+});
+
+// Make someone a group admin, or a normal member again. Body: { member_role: 'owner' | 'member' }
+router.patch("/conversation/:conversationId/participants/:staffId", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const staffId = Number(req.params.staffId);
+    if (!Number.isInteger(staffId)) return res.status(400).json({ error: "Invalid staff member" });
+    const role = req.body?.member_role === "owner" ? "owner" : "member";
+    const { conversation, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "Members of this chat can't be changed" });
+    if (!canManage) return res.status(403).json({ error: "Only group admins can do this" });
+
+    if (role === "member") {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM chat_participants WHERE conversation_id = $1 AND role = 'owner' AND staff_id <> $2`,
+        [conversationId, staffId]
+      );
+      if (!rows[0].n) return res.status(400).json({ error: "A group needs at least one admin" });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE chat_participants SET role = $1 WHERE conversation_id = $2 AND staff_id = $3`,
+      [role, conversationId, staffId]
+    );
+    if (!rowCount) return res.status(404).json({ error: "They are not in this chat" });
+
+    res.json(await broadcastMembers(req, conversationId));
+  } catch (err) {
+    console.error("Member role error:", err);
+    res.status(500).json({ error: "Couldn't change their role" });
+  }
+});
+
+// Rename a group. Body: { name }
+router.patch("/conversation/:conversationId/name", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const name = String(req.body?.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!name) return res.status(400).json({ error: "Give the group a name" });
+    const { conversation, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "This chat can't be renamed" });
+    if (!canManage) return res.status(403).json({ error: "Only group admins can rename the group" });
+
+    await pool.query(`UPDATE chat_conversations SET name = $1, updated_at = NOW() WHERE id = $2`, [name, conversationId]);
+    await systemNote(req, conversationId, `${await actorName(req)} renamed the group to "${name}"`);
+    res.json(await broadcastMembers(req, conversationId));
+  } catch (err) {
+    console.error("Rename group error:", err);
+    res.status(500).json({ error: "Couldn't rename the group" });
+  }
+});
 
 /* ================================
    CUSTOMER CONVERSATIONS (customer profile → Messages)

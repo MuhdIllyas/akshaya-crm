@@ -162,3 +162,17 @@ export const getSenderNameColor = (id) => {
   for (let i = 0; i < str.length; i++) hash = (hash * 31 + str.charCodeAt(i)) | 0;
   return SENDER_NAME_COLORS[Math.abs(hash) % SENDER_NAME_COLORS.length];
 };
+/* ---------------- Group members ---------------- */
+
+// Internal group chats have editable members. Team chats follow their team,
+// WhatsApp / portal chats use "Assigned to" instead.
+export const hasEditableMembers = (conv) =>
+  !!conv && (conv.channel || "internal") === "internal" && !!conv.is_group && conv.context_type !== "team";
+
+// Group admins: the chat's owners, plus admins / superadmins who are in it.
+export const isGroupAdmin = (conv, user) => {
+  if (!hasEditableMembers(conv) || !user) return false;
+  const me = (conv.participants || []).find((p) => String(p.staff_id) === String(user.id));
+  if (!me) return false;
+  return me.member_role === "owner" || user.role === "admin" || user.role === "superadmin";
+};

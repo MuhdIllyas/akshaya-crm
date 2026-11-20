@@ -70,6 +70,7 @@ import staffperformanceRoutes from "./routes/staffPerformance.js";
 import eventsRoutes from "./routes/events.js";
 
 import notesRoutes from "./routes/notes.js";
+import tagsRoutes from "./routes/tags.js";
 
 import printingRoutes from "./routes/printing.js"
 import printAgentRoutes from "./routes/printAgent.js";
@@ -433,6 +434,7 @@ app.use("/api/events", eventsRoutes);
 
 /* Notes */
 app.use("/api/notes", notesRoutes);
+app.use("/api/tags", tagsRoutes);
 
 /* Printing */
 app.use("/api/printing", printingRoutes);

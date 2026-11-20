@@ -18,7 +18,15 @@ import { FiGlobe,
   FiAlertCircle,
   FiChevronDown,
   FiExternalLink,
+  FiTag,
+  FiUserPlus,
+  FiLogOut,
+  FiMoreHorizontal,
+  FiEdit2,
+  FiShield,
+  FiUserMinus,
 } from "react-icons/fi";
+import { tagColor } from "@/components/tags/tagColors";
 import ChatAvatar from "./ChatAvatar";
 import {
   getAvatarUrl,
@@ -29,6 +37,8 @@ import {
   isGroupConversation,
   formatShortDate,
   API_BASE_URL,
+  hasEditableMembers,
+  isGroupAdmin,
 } from "./chatUtils";
 import StaffName from '@/components/staff/StaffName';
 import { useNavigate } from "react-router-dom";
@@ -105,9 +115,28 @@ const ConversationDetails = ({
   onOpenTracking,
   socketConnected = true,
   onClose,
+  conversationTags = [],
+  onOpenTagPicker,
+  onAddMembers,
+  onRemoveMember,
+  onSetMemberRole,
+  onLeaveGroup,
+  onRenameGroup,
 }) => {
   const navigate = useNavigate();
+  const [memberMenu, setMemberMenu] = useState(null); // staff_id whose menu is open
+  const [renaming, setRenaming] = useState(false);
+  const [newName, setNewName] = useState("");
   if (!conversation) return null;
+
+  const editableMembers = hasEditableMembers(conversation);
+  const canManageMembers = isGroupAdmin(conversation, currentUser);
+  const saveRename = async () => {
+    const value = newName.trim();
+    if (!value || value === conversation.name) return setRenaming(false);
+    const ok = await onRenameGroup?.(value);
+    if (ok !== false) setRenaming(false);
+  };
 
   const name = getConversationDisplayName(conversation, currentUser.id);
   const others = getOtherParticipants(conversation, currentUser.id);
@@ -184,7 +213,45 @@ const ConversationDetails = ({
             icon={isWhatsApp ? FiSmartphone : isPortal ? FiGlobe : isTeam ? FiUsers : undefined}
             online={singleOnline}
           />
-          <h3 className="mt-3 text-base font-semibold text-slate-900 break-words">{name}</h3>
+          {renaming ? (
+            <div className="mt-3 flex w-full items-center gap-1.5">
+              <input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveRename();
+                  if (e.key === "Escape") setRenaming(false);
+                }}
+                maxLength={80}
+                aria-label="Group name"
+                className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-800 focus:border-slate-300 focus:outline-none focus:ring-4 focus:ring-blue-50"
+              />
+              <button onClick={saveRename} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-navy-700 text-white hover:bg-navy-800" aria-label="Save name">
+                <FiCheck size={15} />
+              </button>
+              <button onClick={() => setRenaming(false)} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg text-slate-500 hover:bg-slate-100" aria-label="Cancel">
+                <FiX size={15} />
+              </button>
+            </div>
+          ) : (
+            <h3 className="mt-3 flex items-center justify-center gap-1.5 text-base font-semibold text-slate-900 break-words">
+              {name}
+              {canManageMembers && onRenameGroup && (
+                <button
+                  onClick={() => {
+                    setNewName(conversation.name || name);
+                    setRenaming(true);
+                  }}
+                  className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-navy-700"
+                  title="Rename group"
+                  aria-label="Rename group"
+                >
+                  <FiEdit2 size={13} />
+                </button>
+              )}
+            </h3>
+          )}
           <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
             {!isGroup && !isExternal && others[0]?.centre_name && <FiMapPin size={11} />}
             {subtitle}
@@ -224,6 +291,29 @@ const ConversationDetails = ({
             <p className="mt-3 text-xs text-amber-600 flex items-center gap-1">
               <FiAlertCircle size={12} /> Reconnecting…
             </p>
+          )}
+
+          {/* Your tags */}
+          {onOpenTagPicker && (
+            <div className="mt-4 flex w-full flex-wrap items-center justify-center gap-1.5">
+              {conversationTags.map((l) => (
+                <button
+                  key={l.id}
+                  onClick={onOpenTagPicker}
+                  className={`inline-flex max-w-[160px] items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ring-1 ${tagColor(l.color).chip}`}
+                  title={`Tagged "${l.name}"`}
+                >
+                  <FiTag size={10} className="shrink-0" />
+                  <span className="truncate">{l.name}</span>
+                </button>
+              ))}
+              <button
+                onClick={onOpenTagPicker}
+                className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium text-slate-500 ring-1 ring-dashed ring-slate-300 hover:text-navy-700 hover:ring-slate-400"
+              >
+                <FiTag size={10} /> {conversationTags.length ? "Edit tags" : "Add tag"}
+              </button>
+            </div>
           )}
 
           {/* Assignment (WhatsApp / customer chats) */}
@@ -337,13 +427,28 @@ const ConversationDetails = ({
 
         {/* Participants */}
         {!isWhatsApp && (
-          <Section title="Members" icon={FiUsers} count={conversation.participants?.length || 0} defaultOpen={isGroup}>
+          <Section
+            title="Members"
+            icon={FiUsers}
+            count={conversation.participants?.length || 0}
+            defaultOpen={isGroup}
+            action={
+              canManageMembers && onAddMembers && (
+                <button onClick={onAddMembers} className="inline-flex items-center gap-1 text-xs font-medium text-navy-700 hover:underline">
+                  <FiUserPlus size={12} /> Add
+                </button>
+              )
+            }
+          >
             <div className="space-y-1">
               {(conversation.participants || []).map((p, i) => {
                 const isOnline = onlineUsers.has(String(p.staff_id));
                 const isMe = String(p.staff_id) === String(currentUser.id);
+                const isOwner = p.member_role === "owner";
+                const menuOpen = memberMenu === p.staff_id;
+                const canAct = canManageMembers && !isMe;
                 return (
-                  <div key={`${p.staff_id}-${i}`} className="flex items-center gap-3 py-1.5">
+                  <div key={`${p.staff_id}-${i}`} className="relative flex items-center gap-3 py-1.5">
                     <ChatAvatar
                       name={p.name}
                       photo={getAvatarUrl(p.photo)}
@@ -352,19 +457,75 @@ const ConversationDetails = ({
                       online={isOnline ? true : undefined}
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-medium text-slate-800 truncate">
-                        {p.name}
-                        {isMe && <span className="text-slate-400 font-normal"> (You)</span>}
+                      <p className="flex items-center gap-1.5 text-[13px] font-medium text-slate-800">
+                        <span className="truncate">
+                          {p.name}
+                          {isMe && <span className="text-slate-400 font-normal"> (You)</span>}
+                        </span>
+                        {editableMembers && isOwner && (
+                          <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200">
+                            Group admin
+                          </span>
+                        )}
                       </p>
                       <p className="text-[11px] text-slate-500 truncate capitalize">
                         {p.role || "member"}
                         {p.centre_name ? ` · ${p.centre_name}` : ""}
                       </p>
                     </div>
+                    {canAct && (
+                      <button
+                        onClick={() => setMemberMenu(menuOpen ? null : p.staff_id)}
+                        className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        aria-label={`Options for ${p.name}`}
+                        aria-expanded={menuOpen}
+                      >
+                        <FiMoreHorizontal size={15} />
+                      </button>
+                    )}
+                    {menuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setMemberMenu(null)} />
+                        <div className="absolute right-0 top-full z-20 -mt-1 w-48 overflow-hidden rounded-xl bg-white py-1 shadow-lg ring-1 ring-slate-200">
+                          {onSetMemberRole && (
+                            <button
+                              onClick={() => {
+                                setMemberMenu(null);
+                                onSetMemberRole(p, isOwner ? "member" : "owner");
+                              }}
+                              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-slate-700 hover:bg-slate-50"
+                            >
+                              <FiShield size={14} className="text-slate-400" />
+                              {isOwner ? "Dismiss as group admin" : "Make group admin"}
+                            </button>
+                          )}
+                          {onRemoveMember && (
+                            <button
+                              onClick={() => {
+                                setMemberMenu(null);
+                                onRemoveMember(p);
+                              }}
+                              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-[13px] text-rose-600 hover:bg-rose-50"
+                            >
+                              <FiUserMinus size={14} />
+                              Remove from group
+                            </button>
+                          )}
+                        </div>
+                      </>
+                    )}
                   </div>
                 );
               })}
             </div>
+            {editableMembers && onLeaveGroup && (
+              <button
+                onClick={onLeaveGroup}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] font-medium text-rose-600 hover:bg-rose-50"
+              >
+                <FiLogOut size={14} /> Leave group
+              </button>
+            )}
           </Section>
         )}
 

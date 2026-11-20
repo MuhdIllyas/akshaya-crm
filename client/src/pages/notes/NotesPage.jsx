@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback, useLayoutEffe
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   FiSearch, FiEdit3, FiAtSign, FiUser, FiExternalLink, FiLock, FiMapPin,
-  FiBookmark, FiEdit2, FiTrash2, FiX, FiCheck, FiDroplet, FiChevronDown,
+  FiBookmark, FiEdit2, FiTrash2, FiX, FiCheck, FiDroplet, FiChevronDown, FiTag, FiPlus,
 } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { MentionsInput, Mention } from 'react-mentions';
@@ -13,6 +13,9 @@ import { toast } from 'react-toastify';
 import StaffName from '@/components/staff/StaffName';
 import ShareInChat from '@/components/staff/ShareInChat';
 import { noteContext } from '@/components/staff/staffDirectory';
+import useTags from '@/hooks/useTags';
+import { TagPickerModal, TagManagerModal, TagBadges } from '@/components/tags/TagModals';
+import { tagColor } from '@/components/tags/tagColors';
 
 /* ---------------- constants ---------------- */
 
@@ -21,6 +24,7 @@ const COLOR_STORAGE_KEY = 'notes_colors_v1';
 const GAP = 12; // px between cards
 const MIN_CARD_W = 250; // px, decides how many columns fit
 const COLLAPSE_LINES = 10; // taller notes are cut with "Show more"
+const TAG_FILTER_KEY = 'notes_tag_filter';
 
 // Google-Keep style note colours. Full class names so Tailwind can see them.
 const NOTE_COLORS = [
@@ -215,6 +219,32 @@ const NotesPage = () => {
   // colours picked on this device (used when the server does not return one)
   const [colorOverrides, setColorOverrides] = useState(loadColors);
 
+  // Tags (like WhatsApp lists): your own tags, shared with Messenger
+  const noteTags = useTags('notes');
+  const [activeTagId, setActiveTagId] = useState(() => {
+    try {
+      return localStorage.getItem(TAG_FILTER_KEY) || '';
+    } catch {
+      return '';
+    }
+  });
+  const [pickerNote, setPickerNote] = useState(null);
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const activeTag = noteTags.tags.find((l) => String(l.id) === String(activeTagId)) || null;
+
+  useEffect(() => {
+    try {
+      if (activeTagId) localStorage.setItem(TAG_FILTER_KEY, activeTagId);
+      else localStorage.removeItem(TAG_FILTER_KEY);
+    } catch {
+      /* storage unavailable */
+    }
+  }, [activeTagId]);
+  // a tag deleted here or on another device: show everything again
+  useEffect(() => {
+    if (noteTags.loaded && activeTagId && !activeTag) setActiveTagId('');
+  }, [noteTags.loaded, activeTagId, activeTag]);
+
   const creatorRef = useRef(null);
   const boardRef = useRef(null);
   const [boardWidth, setBoardWidth] = useState(1200);
@@ -380,7 +410,9 @@ const NotesPage = () => {
 
   const processedNotes = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
+    const tagged = activeTag ? new Set((activeTag.note_ids || []).map(String)) : null;
     const filtered = notes.filter((note) => {
+      if (tagged && !tagged.has(String(note.id))) return false;
       if (!q) return true;
       return (
         plainText(note.content).toLowerCase().includes(q) ||
@@ -402,7 +434,7 @@ const NotesPage = () => {
       }
     });
     return filtered;
-  }, [notes, searchQuery, sortBy]);
+  }, [notes, searchQuery, sortBy, activeTag]);
 
   const boardSections = useMemo(() => {
     const mentioned = [];
@@ -430,6 +462,14 @@ const NotesPage = () => {
     currentUserId,
     currentUserRole,
     fetchSuggestions: fetchStaffSuggestions,
+    tagsOf: (note) => noteTags.tagsByItem.get(String(note.id)) || [],
+    onOpenTags: setPickerNote,
+  };
+
+  const filtering = Boolean(searchQuery.trim() || activeTag);
+  const noteCountIn = (l) => {
+    const ids = new Set((l.note_ids || []).map(String));
+    return notes.filter((n) => ids.has(String(n.id))).length;
   };
 
   const creatorColor = colorOf(noteColor);
@@ -478,10 +518,80 @@ const NotesPage = () => {
             <option value="alpha">A–Z</option>
           </select>
           <span className="hidden text-xs font-medium tabular-nums text-slate-400 sm:block">
-            {searchQuery.trim() ? `${processedNotes.length} of ${notes.length}` : notes.length} notes
+            {filtering ? `${processedNotes.length} of ${notes.length}` : notes.length} notes
           </span>
         </div>
       </div>
+
+      {/* ===== TAGS ===== */}
+      <div className="border-b border-slate-200 bg-white">
+        <div
+          className="mx-auto flex max-w-[1400px] items-center gap-1.5 overflow-x-auto px-4 py-2.5 sm:px-6 [&::-webkit-scrollbar]:hidden"
+          style={{ scrollbarWidth: 'none' }}
+          role="toolbar"
+          aria-label="Filter notes by tag"
+        >
+          <button
+            onClick={() => setActiveTagId('')}
+            aria-pressed={!activeTag}
+            className={`h-8 shrink-0 rounded-full px-3 text-xs font-medium transition ${
+              !activeTag ? 'bg-navy-700 text-white' : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            All notes
+          </button>
+          {noteTags.tags.map((l) => {
+            const active = activeTag?.id === l.id;
+            const c = tagColor(l.color);
+            const count = noteCountIn(l);
+            return (
+              <button
+                key={l.id}
+                onClick={() => setActiveTagId(active ? '' : String(l.id))}
+                aria-pressed={active}
+                className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full pl-2.5 pr-3 text-xs font-medium ring-1 transition ${
+                  active ? c.active : 'bg-white text-slate-600 ring-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${active ? 'bg-white/90' : c.dot}`} />
+                <span className="max-w-[140px] truncate">{l.name}</span>
+                <span className={`tabular-nums ${active ? 'text-white/80' : 'text-slate-400'}`}>{count}</span>
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setIsTagManagerOpen(true)}
+            className="flex h-8 shrink-0 items-center gap-1 rounded-full px-3 text-xs font-medium text-slate-500 ring-1 ring-dashed ring-slate-300 hover:text-navy-700 hover:ring-slate-400"
+          >
+            {noteTags.tags.length ? <FiTag className="h-3.5 w-3.5" /> : <FiPlus className="h-3.5 w-3.5" />}
+            {noteTags.tags.length ? 'Edit tags' : 'New tag'}
+          </button>
+        </div>
+      </div>
+
+      <TagPickerModal
+        open={!!pickerNote}
+        onClose={() => setPickerNote(null)}
+        itemLabel={pickerNote ? (pickerNote.title && pickerNote.title !== DEFAULT_TITLE ? pickerNote.title : plainText(pickerNote.content).slice(0, 60)) : ''}
+        tags={noteTags.tags}
+        memberOf={new Set((pickerNote ? noteTags.tagsByItem.get(String(pickerNote.id)) || [] : []).map((l) => String(l.id)))}
+        onToggle={(tag, tagged) => noteTags.toggleItem(tag.id, pickerNote.id, tagged)}
+        onCreate={async (name, color) => {
+          const tag = await noteTags.create(name, color);
+          if (tag && pickerNote) await noteTags.toggleItem(tag.id, pickerNote.id, false);
+          return !!tag;
+        }}
+      />
+      <TagManagerModal
+        open={isTagManagerOpen}
+        onClose={() => setIsTagManagerOpen(false)}
+        tags={noteTags.tags}
+        countOf={(l) => (l.conversation_ids?.length || 0) + (l.note_ids?.length || 0)}
+        onCreate={noteTags.create}
+        onUpdate={noteTags.update}
+        onDelete={noteTags.remove}
+        onReorder={noteTags.reorder}
+      />
 
       <div ref={boardRef} className="mx-auto mt-6 max-w-[1400px] px-4 sm:px-6">
         {/* ===== NOTE CREATOR ===== */}
@@ -633,19 +743,27 @@ const NotesPage = () => {
                   <FiEdit3 className="h-6 w-6" />
                 </span>
                 <p className="mt-3 text-sm font-semibold text-slate-900">
-                  {searchQuery.trim() ? 'No notes match your search' : 'No notes yet'}
+                  {searchQuery.trim()
+                    ? 'No notes match your search'
+                    : activeTag
+                    ? `No notes tagged ${activeTag.name}`
+                    : 'No notes yet'}
                 </p>
                 <p className="mt-1 text-sm text-slate-500">
                   {searchQuery.trim()
                     ? 'Try different keywords, or clear the search.'
+                    : activeTag
+                    ? 'Use the tag button on a note to tag it.'
                     : 'Jot down a reminder, tag a colleague with @, or link a note to a service.'}
                 </p>
                 <button
                   type="button"
-                  onClick={() => (searchQuery.trim() ? setSearchQuery('') : setIsCreating(true))}
+                  onClick={() =>
+                    searchQuery.trim() ? setSearchQuery('') : activeTag ? setActiveTagId('') : setIsCreating(true)
+                  }
                   className="mt-4 rounded-lg bg-navy-700 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-navy-800"
                 >
-                  {searchQuery.trim() ? 'Clear search' : 'Write your first note'}
+                  {searchQuery.trim() ? 'Clear search' : activeTag ? 'Show all notes' : 'Write your first note'}
                 </button>
               </div>
             )}
@@ -707,6 +825,7 @@ const Section = ({ title, icon, notes, columns, colWidth, colorOverrides, onColo
 
 const KeepCard = ({
   note, color, onColorChange, onRememberColor, navigate, refreshBoard, currentUserId, currentUserRole, fetchSuggestions,
+  tagsOf, onOpenTags,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(note.title || '');
@@ -908,6 +1027,17 @@ const KeepCard = ({
         <span className="absolute right-3 top-3 text-slate-500/80">{visibilityIcon}</span>
       )}
 
+      {tagsOf && tagsOf(note).length > 0 && (
+        <button
+          type="button"
+          onClick={() => onOpenTags?.(note)}
+          className="mt-1.5 block max-w-full text-left"
+          title="Your tags"
+        >
+          <TagBadges tags={tagsOf(note)} max={3} />
+        </button>
+      )}
+
       {note.linked_service_name && (
         <div className="mt-1.5">
           <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-white/70 px-2 py-0.5 text-[10px] font-medium text-navy-700 ring-1 ring-black/5">
@@ -958,6 +1088,16 @@ const KeepCard = ({
         {/* actions: shown on hover, always on touch screens */}
         <div className="flex shrink-0 items-center gap-0.5 transition-opacity [@media(hover:hover)]:opacity-0 group-hover:opacity-100 group-focus-within:opacity-100">
           <ColorPicker value={color} onChange={(key) => onColorChange(note, key)} />
+          {onOpenTags && (
+            <button
+              onClick={() => onOpenTags(note)}
+              className="rounded-lg p-1.5 text-slate-600 hover:bg-black/5 hover:text-navy-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500"
+              title="Tags"
+              aria-label="Tags"
+            >
+              <FiTag className="h-4 w-4" />
+            </button>
+          )}
           <ShareInChat
             context={noteContext(note)}
             iconOnly

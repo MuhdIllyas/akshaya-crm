@@ -72,6 +72,10 @@ import { useLocation } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
 import { taskContext } from "@/components/staff/staffDirectory";
 import StaffName from '@/components/staff/StaffName';
+import useTags from "@/hooks/useTags";
+import { TagPickerModal, TagManagerModal } from "@/components/tags/TagModals";
+import AddMembersModal from "@/components/chat/AddMembersModal";
+import { hasEditableMembers, isGroupAdmin, getConversationDisplayName } from "@/components/chat/chatUtils";
 
 // Message types that carry an attachment (WhatsApp media + uploads)
 const FILE_TYPES = ['file', 'image', 'audio', 'video', 'document'];
@@ -356,6 +360,13 @@ const MessengerPage = ({ user }) => {
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState({});
   const [staffList, setStaffList] = useState([]);
+  // Tags (like WhatsApp lists) and group members
+  const chatTags = useTags("conversations");
+  const conversationsRef = useRef([]);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  const [isTagPickerOpen, setIsTagPickerOpen] = useState(false);
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [isAddMembersOpen, setIsAddMembersOpen] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -800,7 +811,19 @@ const MessengerPage = ({ user }) => {
       fetchConversations();
     };
 
+    // Members added / removed / renamed: refresh the members and name of that chat
+    const handleMembersUpdated = (full) => {
+      if (!full?.id) return;
+      const patch = { name: full.name, context_name: full.context_name, participants: full.participants || [] };
+      setConversations(prev => prev.map(c => String(c.id) === String(full.id) ? { ...c, ...patch } : c));
+      setActiveConversation(prev => prev && String(prev.id) === String(full.id) ? { ...prev, ...patch } : prev);
+    };
+
     const handleConversationDeleted = (data) => {
+      if (data?.reason === "removed") {
+        const gone = conversationsRef.current.find(c => String(c.id) === String(data.conversationId));
+        if (gone) toast.info(`You were removed from ${gone.name || "a group chat"}`);
+      }
       setConversations(prev => prev.filter(c => String(c.id) !== String(data.conversationId)));
       setActiveConversation(prevActive => {
         if (prevActive && String(prevActive.id) === String(data.conversationId)) return null;
@@ -824,6 +847,7 @@ const MessengerPage = ({ user }) => {
     socket.on("added_to_conversation", handleAddedToConversation);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("conversation_deleted", handleConversationDeleted);
+    socket.on("conversation_members_updated", handleMembersUpdated);
 
     // 🔥 FIX 2: Manually trigger if the global socket is already connected!
     if (socket.connected) {
@@ -847,6 +871,7 @@ const MessengerPage = ({ user }) => {
       socket.off("added_to_conversation", handleAddedToConversation);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("conversation_deleted", handleConversationDeleted);
+      socket.off("conversation_members_updated", handleMembersUpdated);
       
       // Removed disconnectSocket() completely!
     };
@@ -1297,6 +1322,90 @@ const MessengerPage = ({ user }) => {
       toast.error('Failed to delete conversation');
     }
   };
+
+  // ============== GROUP MEMBERS ==============
+  const membersRequest = async (path, method, body) => {
+    const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${activeConversation.id}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Something went wrong');
+    return data;
+  };
+
+  const applyMembers = (full) => {
+    if (!full?.id) return;
+    const patch = { name: full.name, context_name: full.context_name, participants: full.participants || [] };
+    setConversations(prev => prev.map(c => String(c.id) === String(full.id) ? { ...c, ...patch } : c));
+    setActiveConversation(prev => prev && String(prev.id) === String(full.id) ? { ...prev, ...patch } : prev);
+  };
+
+  const handleAddMembers = async (staffIds) => {
+    if (!activeConversation) return false;
+    try {
+      applyMembers(await membersRequest('/participants', 'POST', { staff_ids: staffIds }));
+      toast.success(staffIds.length === 1 ? 'Added to the group' : `${staffIds.length} people added`);
+      return true;
+    } catch (err) {
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!activeConversation) return;
+    if (!window.confirm(`Remove ${member.name} from this group?`)) return;
+    try {
+      applyMembers(await membersRequest(`/participants/${member.staff_id}`, 'DELETE'));
+      toast.success(`${member.name} was removed`);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleSetMemberRole = async (member, memberRole) => {
+    if (!activeConversation) return;
+    try {
+      applyMembers(await membersRequest(`/participants/${member.staff_id}`, 'PATCH', { member_role: memberRole }));
+      toast.success(memberRole === 'owner' ? `${member.name} is now a group admin` : `${member.name} is no longer a group admin`);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!activeConversation) return;
+    const conv = activeConversation;
+    if (!window.confirm(`Leave "${getConversationDisplayName(conv, currentUser.id)}"? You won't get its messages any more.`)) return;
+    try {
+      await membersRequest(`/participants/${currentUser.id}`, 'DELETE');
+      setConversations(prev => prev.filter(c => String(c.id) !== String(conv.id)));
+      setActiveConversation(null);
+      setIsContactPanelOpen(false);
+      setIsDetailsDrawerOpen(false);
+      chatTags.reload();
+      toast.success('You left the group');
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleRenameGroup = async (name) => {
+    if (!activeConversation) return false;
+    try {
+      applyMembers(await membersRequest('/name', 'PATCH', { name }));
+      return true;
+    } catch (err) {
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  const activeConversationTags = activeConversation ? (chatTags.tagsByItem.get(String(activeConversation.id)) || []) : [];
+  const canEditActiveMembers = isGroupAdmin(activeConversation, currentUser);
+  const canLeaveActive = hasEditableMembers(activeConversation);
 
   // ============== ASSIGN CONVERSATION ==============
   const handleAssignChat = async (staffId) => {
@@ -2045,6 +2154,13 @@ const MessengerPage = ({ user }) => {
       onOpenTracking={(id) => navigate(`/dashboard/staff/track_service/${id}`)}
       socketConnected={socketConnected}
       onClose={onClose}
+      conversationTags={activeConversationTags}
+      onOpenTagPicker={() => setIsTagPickerOpen(true)}
+      onAddMembers={canEditActiveMembers ? () => setIsAddMembersOpen(true) : undefined}
+      onRemoveMember={handleRemoveMember}
+      onSetMemberRole={handleSetMemberRole}
+      onLeaveGroup={canLeaveActive ? handleLeaveGroup : undefined}
+      onRenameGroup={handleRenameGroup}
     />
   );
 
@@ -2923,6 +3039,38 @@ const renderTasksView = () => {
         {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
 
+      <TagPickerModal
+        open={isTagPickerOpen && !!activeConversation}
+        onClose={() => setIsTagPickerOpen(false)}
+        itemLabel={activeConversation ? getConversationDisplayName(activeConversation, currentUser.id) : ""}
+        tags={chatTags.tags}
+        memberOf={new Set(activeConversationTags.map((l) => String(l.id)))}
+        onToggle={(tag, tagged) => chatTags.toggleItem(tag.id, activeConversation.id, tagged)}
+        onCreate={async (name, color) => {
+          const tag = await chatTags.create(name, color);
+          if (tag && activeConversation) await chatTags.toggleItem(tag.id, activeConversation.id, false);
+          return !!tag;
+        }}
+      />
+      <TagManagerModal
+        open={isTagManagerOpen}
+        onClose={() => setIsTagManagerOpen(false)}
+        tags={chatTags.tags}
+        countOf={(l) => (l.conversation_ids?.length || 0) + (l.note_ids?.length || 0)}
+        onCreate={chatTags.create}
+        onUpdate={chatTags.update}
+        onDelete={chatTags.remove}
+        onReorder={chatTags.reorder}
+      />
+      <AddMembersModal
+        open={isAddMembersOpen && !!activeConversation}
+        onClose={() => setIsAddMembersOpen(false)}
+        conversationName={activeConversation ? getConversationDisplayName(activeConversation, currentUser.id) : ""}
+        staffList={staffList}
+        memberIds={(activeConversation?.participants || []).map((p) => p.staff_id)}
+        onAdd={handleAddMembers}
+      />
+
       {renderRegularTaskModal()}
       {renderTemplateModal()}
       {renderEventModal()}
@@ -2956,6 +3104,10 @@ const renderTasksView = () => {
                 typingUsers={typingUsers}
                 onSelect={setActiveConversation}
                 onNewChat={() => setIsNewChatModalOpen(true)}
+                tags={chatTags.tags}
+                tagsLoaded={chatTags.loaded}
+                tagsByConversation={chatTags.tagsByItem}
+                onManageTags={() => setIsTagManagerOpen(true)}
               />
             </aside>
 
@@ -2983,6 +3135,10 @@ const renderTasksView = () => {
                 isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
                 initialDraft={pendingDraft}
                 onDraftConsumed={() => setPendingDraft(null)}
+                onAddPeople={canEditActiveMembers ? () => setIsAddMembersOpen(true) : null}
+                onAddTag={() => setIsTagPickerOpen(true)}
+                activeTags={activeConversationTags}
+                onLeaveGroup={canLeaveActive ? handleLeaveGroup : null}
               />
             </section>
 

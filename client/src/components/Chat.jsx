@@ -10,6 +10,8 @@ import {
   FiPlus,
   FiUserPlus,
   FiStar,
+  FiTag,
+  FiLogOut,
   FiInfo,
   FiTrash2,
   FiFile,
@@ -186,6 +188,10 @@ const Chat = ({
   isDetailsOpen = false,
   initialDraft = null,
   onDraftConsumed = null,
+  onAddPeople = null,
+  onAddTag = null,
+  activeTags = [],
+  onLeaveGroup = null,
 }) => {
   const navigate = useNavigate();
   const [newMessage, setNewMessage] = useState("");
@@ -837,12 +843,23 @@ const Chat = ({
                   {hasTasks && (
                     <MenuItem icon={FiList} label="View tasks" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); setShowTasksModal(true); }} />
                   )}
-                  <MenuItem icon={FiUserPlus} label="Add people" onClick={() => setIsMoreMenuOpen(false)} />
-                  <MenuItem icon={FiStar} label="Mark as favourite" onClick={() => setIsMoreMenuOpen(false)} />
+                  {onAddPeople && (
+                    <MenuItem icon={FiUserPlus} label="Add people" onClick={() => { setIsMoreMenuOpen(false); onAddPeople(); }} />
+                  )}
+                  {onAddTag && (
+                    <MenuItem
+                      icon={FiTag}
+                      label={activeTags.length ? `Tags (${activeTags.length})` : "Add tag"}
+                      onClick={() => { setIsMoreMenuOpen(false); onAddTag(); }}
+                    />
+                  )}
                   {onOpenDetails && (
                     <MenuItem icon={FiInfo} label="View details" onClick={() => { setIsMoreMenuOpen(false); onOpenDetails(); }} />
                   )}
                   <div className="my-1 border-t border-slate-100" />
+                  {onLeaveGroup && (
+                    <MenuItem icon={FiLogOut} label="Leave group" danger onClick={() => { setIsMoreMenuOpen(false); onLeaveGroup(); }} />
+                  )}
                   <MenuItem
                     icon={FiTrash2}
                     label="Delete conversation"

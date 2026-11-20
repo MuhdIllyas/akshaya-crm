@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
-import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers, FiChevronLeft, FiChevronRight } from "react-icons/fi";
+import { FiGlobe, FiSearch, FiPlus, FiX, FiMessageSquare, FiSmartphone, FiBriefcase, FiUsers, FiChevronLeft, FiChevronRight, FiTag } from "react-icons/fi";
 import ChatAvatar from "./ChatAvatar";
+import { tagColor } from "@/components/tags/tagColors";
+import { TagBadges } from "@/components/tags/TagModals";
 import {
   CHAT_TABS,
   ALWAYS_VISIBLE_TABS,
@@ -23,6 +25,10 @@ const ConversationList = ({
   typingUsers = {},
   onSelect,
   onNewChat,
+  tags = [],
+  tagsLoaded = false,
+  tagsByConversation = new Map(),
+  onManageTags,
 }) => {
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState(() => {
@@ -59,6 +65,29 @@ const ConversationList = ({
     [conversations]
   );
 
+  // Your tags (like WhatsApp lists) come after the built-in tabs. Tab id: "tag:<id>"
+  const tagTabs = useMemo(
+    () =>
+      tags.map((l) => {
+        const ids = new Set((l.conversation_ids || []).map(String));
+        const tagged = conversations.filter((c) => ids.has(String(c.id)));
+        return {
+          id: `tag:${l.id}`,
+          tag: l,
+          ids,
+          count: tagged.length,
+          unread: tagged.reduce((n, c) => n + (c.unread || 0), 0),
+        };
+      }),
+    [tags, conversations]
+  );
+  const activeTagTab = tagTabs.find((t) => t.id === tab);
+
+  // A tag that was deleted (here or on another device) falls back to "All"
+  useEffect(() => {
+    if (tagsLoaded && String(tab).startsWith("tag:") && !activeTagTab) setTab("all");
+  }, [tagsLoaded, tab, activeTagTab]);
+
   const visibleTabs = CHAT_TABS.filter(
     (t) => ALWAYS_VISIBLE_TABS.includes(t.id) || t.id === tab || (tabStats[t.id]?.count || 0) > 0
   );
@@ -80,7 +109,7 @@ const ConversationList = ({
     const ro = new ResizeObserver(updateTabScroll);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [visibleTabs.length]);
+  }, [visibleTabs.length, tagTabs.length]);
   // a normal (vertical) mouse wheel over the row scrolls it sideways
   useEffect(() => {
     const el = tabsRef.current;
@@ -102,13 +131,15 @@ const ConversationList = ({
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return conversations.filter((c) => {
-      if (tab !== "all" && getConversationCategory(c) !== tab) return false;
+      if (activeTagTab) {
+        if (!activeTagTab.ids.has(String(c.id))) return false;
+      } else if (tab !== "all" && getConversationCategory(c) !== tab) return false;
       if (!q) return true;
       const name = getConversationDisplayName(c, currentUser.id).toLowerCase();
       const last = (c.last_message || c.lastMessage || "").toLowerCase();
       return name.includes(q) || last.includes(q);
     });
-  }, [conversations, tab, search, currentUser.id]);
+  }, [conversations, tab, activeTagTab, search, currentUser.id]);
 
   const getPreview = (c) => {
     const text = c.last_message || c.lastMessage || "";
@@ -122,7 +153,7 @@ const ConversationList = ({
     return text;
   };
 
-  const activeTabLabel = CHAT_TABS.find((t) => t.id === tab)?.label || "All";
+  const activeTabLabel = activeTagTab?.tag.name || CHAT_TABS.find((t) => t.id === tab)?.label || "All";
 
   return (
     <div className="flex flex-col h-full min-h-0 bg-white">
@@ -214,6 +245,46 @@ const ConversationList = ({
               </button>
             );
           })}
+          {(tagTabs.length > 0 || onManageTags) && <span className="mx-0.5 my-1.5 w-px shrink-0 bg-slate-200" aria-hidden="true" />}
+          {tagTabs.map((t) => {
+            const active = tab === t.id;
+            const c = tagColor(t.tag.color);
+            return (
+              <button
+                key={t.id}
+                data-tab={t.id}
+                onClick={() => setTab(active ? "all" : t.id)}
+                title={`${t.tag.name} · ${t.count} chat${t.count === 1 ? "" : "s"}`}
+                className={`shrink-0 flex items-center gap-1.5 h-8 pl-2 pr-2.5 rounded-full text-xs font-medium ring-1 transition ${
+                  active ? c.active : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${active ? "bg-white/90" : c.dot}`} />
+                <span className="max-w-[120px] truncate">{t.tag.name}</span>
+                {t.unread > 0 && (
+                  <span
+                    className={`min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-semibold flex items-center justify-center ${
+                      active ? "bg-white text-slate-800" : "bg-navy-700 text-white"
+                    }`}
+                  >
+                    {t.unread > 99 ? "99+" : t.unread}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+          {onManageTags && (
+            <button
+              type="button"
+              onClick={onManageTags}
+              title={tags.length ? "Edit tags" : "New tag"}
+              aria-label={tags.length ? "Edit tags" : "New tag"}
+              className="shrink-0 flex items-center gap-1 h-8 px-2.5 rounded-full text-xs font-medium text-slate-500 ring-1 ring-dashed ring-slate-300 hover:text-navy-700 hover:ring-slate-400"
+            >
+              {tags.length ? <FiTag size={13} /> : <FiPlus size={13} />}
+              {tags.length ? "" : "Tag"}
+            </button>
+          )}
         </div>
         </div>
       </div>
@@ -276,6 +347,9 @@ const ConversationList = ({
                   </div>
 
                   <div className="flex items-center gap-2 mt-0.5">
+                    {!activeTagTab && tagsByConversation.get(String(c.id))?.length > 0 && (
+                      <TagBadges tags={tagsByConversation.get(String(c.id))} max={1} className="shrink-0" />
+                    )}
                     {typing.length > 0 ? (
                       <p className="flex-1 truncate text-[13px] text-emerald-600 italic">
                         {isGroup ? `${typing.map((u) => u.name).join(", ")} typing…` : "typing…"}
@@ -309,8 +383,13 @@ const ConversationList = ({
                 ? "No chats match your search"
                 : tab === "all"
                 ? "No conversations yet"
+                : activeTagTab
+                ? `No chats tagged ${activeTabLabel}`
                 : `No ${activeTabLabel} chats`}
             </p>
+            {!search && activeTagTab && (
+              <p className="mt-1 text-xs text-slate-500">Open a chat and choose “Tags” from its menu.</p>
+            )}
             {!search && tab === "all" && (
               <button onClick={onNewChat} className="mt-2 text-sm font-medium text-navy-700 hover:underline">
                 Start a new chat
