@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { FiCheckSquare, FiClock, FiUser } from "react-icons/fi";
 import StaffName from "@/components/staff/StaffName";
+import { TaskActionButtons, TaskCloseNote, isServiceTask, isClosedTask, serviceLabel } from "@/components/tasks/ServiceTaskBits";
 
 // Helper to format date for task due dates
 const formatDate = (dateString) => {
@@ -18,7 +19,7 @@ const formatDate = (dateString) => {
    Task cards
    ══════════════════════════════════════════════════════════════ */
 
-export const TaskCardShell = ({ title, completed, meta, onComplete, completing }) => (
+export const TaskCardShell = ({ title, completed, meta, onComplete, completing, footer }) => (
   <div className="w-full max-w-sm bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-3.5">
     <div className="flex items-start gap-3">
       <div className={`mt-0.5 h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${completed ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-navy-700"}`}>
@@ -31,7 +32,7 @@ export const TaskCardShell = ({ title, completed, meta, onComplete, completing }
       </div>
     </div>
     <div className="mt-3 flex justify-end">
-      {completed ? (
+      {footer ? footer : completed ? (
         <span className="text-xs font-medium text-emerald-600">✓ Completed</span>
       ) : (
         <button
@@ -85,7 +86,7 @@ export const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
 };
 
 // Normal task shared into a chat
-export const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
+export const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate, onTaskChanged }) => {
   const [completing, setCompleting] = useState(false);
   const completed = taskData?.status === "completed";
 
@@ -101,14 +102,36 @@ export const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
     }
   };
 
+  // Service tasks are completed by saving the entry; closed tasks show their note.
+  const special = isServiceTask(taskData) || isClosedTask(taskData);
+  const footer = special && !completed ? (
+    <div className="w-full space-y-1.5">
+      <TaskCloseNote task={taskData} />
+      <div className="flex justify-end">
+        <TaskActionButtons
+          task={taskData}
+          currentUser={{ id: localStorage.getItem("id"), role: localStorage.getItem("role")?.trim()?.toLowerCase() }}
+          onChanged={(t) => t && onTaskChanged?.(t)}
+          compact
+        />
+      </div>
+    </div>
+  ) : null;
+
   return (
     <TaskCardShell
       title={taskData.title}
       completed={completed}
       completing={completing}
       onComplete={handleComplete}
+      footer={footer}
       meta={
         <>
+          {isServiceTask(taskData) && (
+            <p className="font-medium text-indigo-700">
+              {[serviceLabel(taskData), taskData.customer_name, taskData.customer_phone].filter(Boolean).join(" · ") || "Service task"}
+            </p>
+          )}
           <p className="capitalize">
             {taskData.priority || "medium"} priority · {String(taskData.status || "pending").replace("_", " ")}
           </p>
@@ -142,7 +165,7 @@ export const LiveTaskCard = ({ task: initial }) => {
     setTask((t) => ({ ...t, status }));
   };
   if (!task) return null;
-  return <NormalTaskMessage taskId={task.id} taskData={task} onStatusUpdate={toggle} />;
+  return <NormalTaskMessage taskId={task.id} taskData={task} onStatusUpdate={toggle} onTaskChanged={setTask} />;
 };
 
 // Shown at the start of a message that replies about a task (a "task" mention).

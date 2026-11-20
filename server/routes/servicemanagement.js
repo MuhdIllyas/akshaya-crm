@@ -11,6 +11,7 @@ import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
 import { linkCustomerToCentre } from '../utils/customerCentres.js';
 import { aadhaarColumns } from '../utils/aadhaar.js';
 import { todayIST, istParts } from '../utils/dates.js';
+import { lockServiceTask, completeServiceTask, afterServiceTaskCompleted } from '../services/serviceTaskLink.js';
 
 const router = express.Router();
 
@@ -1837,7 +1838,8 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
     phone,
     staffId,
     services,
-    payments
+    payments,
+    serviceTaskId
   } = req.body;
 
   if (!customerName || !phone || !services || services.length === 0) {
@@ -1845,9 +1847,13 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
   }
 
   const client = await pool.connect();
+  let completedServiceTask = null;
 
   try {
     await client.query('BEGIN');
+
+    // 0. Service task: check it before any money moves (locked until COMMIT)
+    const serviceTask = serviceTaskId ? await lockServiceTask(client, serviceTaskId, req.user) : null;
 
     // 1. Resolve Team ID
     const resolvedTeamId = await resolveFinancialTeam({
@@ -2016,6 +2022,8 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       // Package data for the frontend to generate Notes/Tasks
       results.push({
         serviceEntryId: newEntryId,
+        categoryId: svc.categoryId,
+        subcategoryId: svc.subcategoryId,
         initialNote: svc.initialNote,
         initialNoteMentions: svc.initialNoteMentions,
         initialNoteVisibility: svc.initialNoteVisibility,
@@ -2045,14 +2053,26 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       }
     }
 
+    // 7. Service task: link the entry and complete the task
+    if (serviceTask) {
+      completedServiceTask = await completeServiceTask(
+        client,
+        serviceTask,
+        results.map((r) => ({ id: r.serviceEntryId, categoryId: r.categoryId, subcategoryId: r.subcategoryId }))
+      );
+    }
+
     io.emit('serviceEntryCreated', { staff_id: staffId, token_id: tokenId, message: `Bulk entries processed` });
 
     await client.query('COMMIT');
-    
+
+    if (completedServiceTask) await afterServiceTaskCompleted(completedServiceTask, req.user);
+
     // Return the array of created services back to React!
-    res.status(201).json({ 
-      message: 'Bulk services created successfully', 
-      createdServices: results 
+    res.status(201).json({
+      message: 'Bulk services created successfully',
+      createdServices: results,
+      serviceTask: completedServiceTask
     });
 
   } catch (err) {

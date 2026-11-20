@@ -4,6 +4,8 @@ import jwt from "jsonwebtoken";
 import { io } from "../../server.js";
 import { logActivity } from "../../utils/activityLogger.js";
 import { createTask } from "../../services/taskService.js";
+import { addStaffToConversation } from "../../utils/conversationService.js";
+import { notificationTemplates } from "../../utils/notificationTemplates.js";
 
 const router = express.Router();
 
@@ -148,6 +150,10 @@ router.post("/add", async (req, res) => {
       related_customer_id: req.body.related_customer_id || null,
       note_id: req.body.note_id || null,
       source: "manual",
+      task_kind: req.body.task_kind === "service" ? "service" : "general",
+      related_subcategory_id: req.body.related_subcategory_id || null,
+      customer_name: req.body.customer_name || null,
+      customer_phone: req.body.customer_phone || null,
     });
 
     res.status(201).json(task);
@@ -192,22 +198,29 @@ router.get("/all", async (req, res) => {
     if (created_by) add("t.assigned_by = ?", created_by);
     if (due_before) add("t.due_date <= ?", due_before);
     if (related_service_entry_id) add("t.related_service_entry_id = ?", related_service_entry_id);
-    if (overdue === "true") conditions.push(`t.due_date < NOW() AND t.status != 'completed'`);
+    if (req.query.task_kind) add("t.task_kind = ?", req.query.task_kind);
+    if (overdue === "true") conditions.push(`t.due_date < NOW() AND t.status NOT IN ('completed', 'cancelled', 'declined')`);
 
     // Service info so the UI can show which service a task belongs to
     // and link straight to its tracking page.
     let query = `
       SELECT t.*,
-             se.customer_name   AS service_customer_name,
-             se.phone           AS service_phone,
+             COALESCE(se.customer_name, t.customer_name) AS service_customer_name,
+             COALESCE(se.phone, t.customer_phone)        AS service_phone,
              srv.name           AS service_name,
              sub.name           AS service_subcategory_name,
              trk.id             AS tracking_id,
-             trk.application_number
+             trk.application_number,
+             closer.name        AS closed_by_name,
+             assigner.name      AS assigned_by_name
       FROM tasks t
       LEFT JOIN service_entries se ON se.id = t.related_service_entry_id
-      LEFT JOIN services srv       ON srv.id = se.category_id
-      LEFT JOIN subcategories sub  ON sub.id = se.subcategory_id
+      -- A service task has no entry until the staff member saves one,
+      -- so fall back to the service the admin picked.
+      LEFT JOIN services srv       ON srv.id = COALESCE(se.category_id, t.related_service_id)
+      LEFT JOIN subcategories sub  ON sub.id = COALESCE(se.subcategory_id, t.related_subcategory_id)
+      LEFT JOIN staff closer       ON closer.id = t.closed_by
+      LEFT JOIN staff assigner     ON assigner.id = t.assigned_by
       LEFT JOIN LATERAL (
         SELECT st.id, st.application_number
         FROM service_tracking st
@@ -328,6 +341,22 @@ router.patch("/:id/status", async (req, res) => {
       return res.status(403).json({ error: "Not allowed" });
     }
 
+    if (!["pending", "in_progress", "completed"].includes(status)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Use decline / cancel (with a note) to close a task" });
+    }
+
+    if (["declined", "cancelled"].includes(task.status)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: `This task was ${task.status}. An admin can reassign it.` });
+    }
+
+    // A service task is completed by saving its service entry, not by ticking it.
+    if (task.task_kind === "service" && status === "completed" && !task.related_service_entry_id) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Save the service entry to complete this service task" });
+    }
+
     const completedAt =
       status === "completed" ? new Date() : null;
 
@@ -393,6 +422,216 @@ router.patch("/:id/status", async (req, res) => {
 
     res.json({ success: true });
 
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/* ================================
+   CLOSE A TASK WITH A NOTE
+   POST /:id/close  { action: "decline" | "cancel", reason }
+   - decline: the assignee hands the task back to the admin (it can be reassigned)
+   - cancel:  the work can't go ahead (e.g. customer has no documents)
+   The note is kept on the task and sent to whoever assigned it.
+================================ */
+router.post("/:id/close", async (req, res) => {
+  const { action } = req.body;
+  const reason = String(req.body.reason || "").trim();
+
+  if (!["decline", "cancel"].includes(action)) return res.status(400).json({ error: "action must be decline or cancel" });
+  if (reason.length < 5) return res.status(400).json({ error: "Please add a note explaining why" });
+  if (reason.length > 1000) return res.status(400).json({ error: "Note is too long (1000 characters max)" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const task = (await client.query(`SELECT * FROM tasks WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!task) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Task not found" });
+    }
+
+    const isAssignee = Number(task.assigned_to) === Number(req.user.id);
+    const isAdmin = req.user.role === "superadmin" ||
+      (req.user.role === "admin" && Number(task.centre_id) === Number(req.user.centre_id));
+
+    if (!isAssignee && !isAdmin) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Not allowed" });
+    }
+    if (action === "decline" && !isAssignee) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Only the assigned staff member can hand a task back" });
+    }
+    if (!["pending", "in_progress"].includes(task.status)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: `This task is already ${task.status}` });
+    }
+
+    const newStatus = action === "decline" ? "declined" : "cancelled";
+    const upd = await client.query(
+      `UPDATE tasks
+          SET status = $1, close_reason = $2, closed_by = $3, closed_at = NOW(),
+              completed_at = NULL, updated_at = NOW()
+        WHERE id = $4
+        RETURNING *`,
+      [newStatus, reason, req.user.id, task.id]
+    );
+    await client.query(`DELETE FROM calendar_events WHERE related_task_id = $1`, [task.id]);
+    await client.query("COMMIT");
+
+    const who = (await pool.query(`SELECT name FROM staff WHERE id = $1`, [req.user.id])).rows[0]?.name || "Staff";
+    const verb = action === "decline" ? "handed back" : "cancelled";
+
+    try {
+      await logActivity({
+        centre_id: task.centre_id,
+        related_type: "task",
+        related_id: task.id,
+        action: action === "decline" ? "Task Declined" : "Task Cancelled",
+        description: `${who} ${verb} the task: ${task.title}. Note: ${reason}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role,
+      });
+    } catch (e) {
+      console.error("Non-fatal: task close activity log failed:", e.message);
+    }
+
+    // Tell whoever assigned it (if that isn't the person closing it).
+    if (task.assigned_by && Number(task.assigned_by) !== Number(req.user.id)) {
+      try {
+        const { default: notificationService } = await import("../../utils/notificationService.js");
+        await notificationService.createNotification({
+          recipientStaffId: task.assigned_by,
+          senderStaffId: req.user.id,
+          centreId: task.centre_id,
+          relatedEntityType: "task",
+          relatedEntityId: task.id,
+          type: action === "decline" ? "task_declined" : "task_cancelled",
+          category: "work",
+          title: action === "decline" ? "Task handed back" : "Task cancelled",
+          message: `${who} ${verb} "${task.title}": ${reason}`,
+          priority: "high",
+          metadata: { taskId: task.id, reason },
+        });
+      } catch (e) {
+        console.error("Non-fatal: task close notification failed:", e.message);
+      }
+    }
+
+    io.to(`centre_${task.centre_id}`).emit("taskUpdated", { id: task.id, status: newStatus, close_reason: reason });
+
+    res.json({ success: true, task: upd.rows[0] });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+/* ================================
+   REASSIGN A TASK (admin / superadmin)
+   PATCH /:id/reassign  { assigned_to }
+   Mostly for a service task a staff member handed back. Re-opens it as pending.
+================================ */
+router.patch("/:id/reassign", async (req, res) => {
+  if (!["admin", "superadmin"].includes(req.user.role)) return res.status(403).json({ error: "Not allowed" });
+
+  const newAssignee = parseInt(req.body.assigned_to, 10);
+  if (!newAssignee) return res.status(400).json({ error: "assigned_to required" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const task = (await client.query(`SELECT * FROM tasks WHERE id = $1 FOR UPDATE`, [req.params.id])).rows[0];
+    if (!task) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Task not found" });
+    }
+    if (req.user.role === "admin" && Number(task.centre_id) !== Number(req.user.centre_id)) {
+      await client.query("ROLLBACK");
+      return res.status(403).json({ error: "Not allowed" });
+    }
+    if (task.status === "completed") {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "This task is already completed" });
+    }
+
+    const staff = (await client.query(`SELECT id, name, centre_id FROM staff WHERE id = $1`, [newAssignee])).rows[0];
+    if (!staff) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Staff not found" });
+    }
+    // The task (and its service chat) belongs to one centre.
+    if (Number(staff.centre_id) !== Number(task.centre_id)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Pick a staff member from the same centre" });
+    }
+
+    const upd = await client.query(
+      `UPDATE tasks
+          SET assigned_to = $1, status = 'pending',
+              close_reason = NULL, closed_by = NULL, closed_at = NULL,
+              updated_at = NOW()
+        WHERE id = $2
+        RETURNING *`,
+      [newAssignee, task.id]
+    );
+
+    if (task.conversation_id) {
+      await addStaffToConversation(task.conversation_id, newAssignee, "collaborator", client);
+    }
+    if (task.due_date) {
+      const has = await client.query(`SELECT 1 FROM calendar_events WHERE related_task_id = $1`, [task.id]);
+      if (!has.rows.length) {
+        await client.query(
+          `INSERT INTO calendar_events (date, title, type, event_type, description, centre_id, related_task_id, created_by, created_at)
+           VALUES ($1, $2, 'task', 'task', $3, $4, $5, $6, NOW())`,
+          [task.due_date, task.title, task.description, task.centre_id, task.id, req.user.id]
+        );
+      }
+    }
+    await client.query("COMMIT");
+
+    try {
+      await logActivity({
+        centre_id: task.centre_id,
+        related_type: "task",
+        related_id: task.id,
+        action: "Task Reassigned",
+        description: `Reassigned task "${task.title}" to ${staff.name}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role,
+      });
+    } catch (e) {
+      console.error("Non-fatal: reassign activity log failed:", e.message);
+    }
+
+    if (newAssignee !== Number(req.user.id)) {
+      try {
+        const { default: notificationService } = await import("../../utils/notificationService.js");
+        await notificationService.createNotification({
+          recipientStaffId: newAssignee,
+          senderStaffId: req.user.id,
+          centreId: task.centre_id,
+          relatedEntityType: "task",
+          relatedEntityId: task.id,
+          ...notificationTemplates.taskAssigned({
+            taskTitle: task.title,
+            metadata: { dueDate: task.due_date || "No due date", assignedBy: req.user.role },
+          }),
+        });
+      } catch (e) {
+        console.error("Non-fatal: reassign notification failed:", e.message);
+      }
+    }
+
+    io.to(`centre_${task.centre_id}`).emit("taskUpdated", { id: task.id, status: "pending", assigned_to: newAssignee });
+    res.json({ success: true, task: upd.rows[0] });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     res.status(500).json({ error: err.message });

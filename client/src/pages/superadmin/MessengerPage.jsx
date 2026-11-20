@@ -63,6 +63,10 @@ import ConversationDetails from "@/components/chat/ConversationDetails";
 import MessengerNav from "@/components/chat/MessengerNav";
 import SchedulesView from "@/components/automations/SchedulesView";
 import ServiceLinkChip from "@/components/automations/ServiceLinkChip";
+import {
+  ServiceTaskFields, ServiceTaskBadge, ServiceTaskSummary, TaskCloseNote, TaskActionButtons,
+  closedStatusStyles, isServiceTask, isClosedTask, fetchServiceTitle,
+} from "@/components/tasks/ServiceTaskBits";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
@@ -428,13 +432,12 @@ const MessengerPage = ({ user }) => {
     return `${safeBase}${safePath}`;
   };
 
-  const [taskForm, setTaskForm] = useState({
-    title: "",
-    description: "",
-    assignee: "",
-    dueDate: "",
-    priority: "medium"
-  });
+  const EMPTY_TASK_FORM = {
+    title: "", description: "", assignee: "", dueDate: "", priority: "medium",
+    // service task (admin / superadmin)
+    isService: false, serviceId: "", subcategoryId: "", customerName: "", customerPhone: "",
+  };
+  const [taskForm, setTaskForm] = useState(EMPTY_TASK_FORM);
 
   const [templateForm, setTemplateForm] = useState({
     title: "",
@@ -1616,7 +1619,14 @@ const MessengerPage = ({ user }) => {
   const handleTemplateFormChange = (e) => setTemplateForm(prev => ({ ...prev, [e.target.name]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const handleEventFormChange = (e) => setEventForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
-  const resetTaskForm = () => setTaskForm({ title: "", description: "", assignee: "", dueDate: "", priority: "medium" });
+  const resetTaskForm = () => setTaskForm(EMPTY_TASK_FORM);
+
+  // Centre of the picked assignee (service tasks list only services set up there)
+  const assigneeCentreId = () => {
+    if (!taskForm.assignee) return null;
+    if (String(taskForm.assignee) === String(currentUser.id)) return currentUser.centreId;
+    return staffList.find(s => String(s.id) === String(taskForm.assignee))?.centre_id || null;
+  };
   const resetTemplateForm = () => {
     setTemplateForm({
       title: "", description: "", priority: "medium", isRecurring: true, recurrenceType: "weekly", recurrenceInterval: 1, recurrenceDay: 1, recurrenceDate: 1, assignmentMode: "centre_admin", specificAssignee: "", dueOffsetDays: 0, isGlobal: false, isActive: true
@@ -1625,17 +1635,35 @@ const MessengerPage = ({ user }) => {
   };
 
   const handleCreateTask = async () => {
-    if (!taskForm.title.trim()) return alert("Please enter a task title");
+    const asService = taskForm.isService && canCreateRecurring();
+    if (!asService && !taskForm.title.trim()) return alert("Please enter a task title");
     if (!taskForm.assignee) return alert("Please select an assignee");
+    if (asService && !taskForm.serviceId) return alert("Please pick the service");
+    if (asService && taskForm.customerPhone && taskForm.customerPhone.replace(/\D/g, "").length < 10) {
+      return alert("Customer phone should be a 10-digit number");
+    }
 
     setLoading(true);
     try {
+      let title = taskForm.title.trim();
+      if (asService && !title) {
+        const svc = await fetchServiceTitle(assigneeCentreId(), taskForm.serviceId, taskForm.subcategoryId);
+        title = [svc || "Service", taskForm.customerName.trim()].filter(Boolean).join(" for ");
+      }
+
       const taskData = {
-        title: taskForm.title,
+        title,
         description: taskForm.description,
         assigned_to: parseInt(taskForm.assignee),
         due_date: taskForm.dueDate || null,
-        priority: taskForm.priority
+        priority: taskForm.priority,
+        ...(asService ? {
+          task_kind: "service",
+          related_service_id: parseInt(taskForm.serviceId),
+          related_subcategory_id: taskForm.subcategoryId ? parseInt(taskForm.subcategoryId) : null,
+          customer_name: taskForm.customerName.trim() || null,
+          customer_phone: taskForm.customerPhone.trim() || null,
+        } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/tasks/add`, {
@@ -1647,12 +1675,12 @@ const MessengerPage = ({ user }) => {
         body: JSON.stringify(taskData)
       });
 
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
-      setTasks(prev => [{
-        ...data,
-        centre_name: centresMap[data.centre_id] || `Centre ${data.centre_id}`
-      }, ...prev]);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `API error: ${res.status}`);
+      }
+      await res.json();
+      await fetchTasks(); // reload so service names / customer show on the new card
 
       await fetchCalendarData();
       resetTaskForm();
@@ -1763,6 +1791,11 @@ const MessengerPage = ({ user }) => {
   };
 
   const toggleTaskCompletion = async (taskId, currentStatus) => {
+    const t = tasks.find(x => String(x.id) === String(taskId));
+    if (t && isClosedTask(t)) return toast.info(`This task was ${t.status}. An admin can reassign it.`);
+    if (t && isServiceTask(t) && !t.related_service_entry_id && currentStatus !== "completed") {
+      return toast.info("Open the task with Start entry; saving the service entry completes it.");
+    }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
       const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
@@ -1838,6 +1871,7 @@ const MessengerPage = ({ user }) => {
       case "pending": return scoped.filter(task => task.status === "pending" || !task.status);
       case "in_progress": return scoped.filter(task => task.status === "in_progress");
       case "completed": return scoped.filter(task => task.status === "completed");
+      case "closed": return scoped.filter(isClosedTask);
       default: return scoped;
     }
   };
@@ -2120,10 +2154,27 @@ const MessengerPage = ({ user }) => {
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                {canCreateRecurring() && (
+                  <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    {[{ v: false, label: "General task" }, { v: true, label: "Service task" }].map(opt => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setTaskForm(prev => ({ ...prev, isService: opt.v }))}
+                        className={`flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                          taskForm.isService === opt.v ? "bg-white shadow-sm text-navy-700" : "text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Title *</label>
-                  <input type="text" name="title" value={taskForm.title} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="What needs to be done?" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Title {taskForm.isService ? "" : "*"}</label>
+                  <input type="text" name="title" value={taskForm.title} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder={taskForm.isService ? "Leave blank to use the service and customer name" : "What needs to be done?"} />
                 </div>
 
                 <div>
@@ -2148,6 +2199,10 @@ const MessengerPage = ({ user }) => {
                     ))}
                   </select>
                 </div>
+
+                {taskForm.isService && canCreateRecurring() && (
+                  <ServiceTaskFields form={taskForm} onChange={handleTaskFormChange} centreId={assigneeCentreId()} />
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -2395,6 +2450,7 @@ const renderTasksView = () => {
     };
 
     const getStatusStyles = (status) => {
+      if (closedStatusStyles(status)) return closedStatusStyles(status);
       switch(status) {
         case 'completed': return 'bg-emerald-100 text-emerald-700';
         case 'in_progress': return 'bg-blue-100 text-blue-700';
@@ -2405,8 +2461,12 @@ const renderTasksView = () => {
     const columns = [
       { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-gray-500 h-4 w-4" /> },
       { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500 h-4 w-4" /> },
-      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> }
+      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> },
+      { id: 'closed', title: 'Handed back / Cancelled', icon: <FiAlertCircle className="text-rose-500 h-4 w-4" /> }
     ];
+    // 'closed' groups the two statuses that need a note
+    const inColumn = (t, columnId) => columnId === 'closed' ? isClosedTask(t) : (t.status || 'pending') === columnId;
+    const onTaskChanged = () => { fetchTasks(); fetchCalendarData(); };
 
     // --- Drag & Drop Handlers ---
     const updateTaskStatus = async (taskId, newStatus) => {
@@ -2442,9 +2502,13 @@ const renderTasksView = () => {
       e.preventDefault();
       const taskId = e.dataTransfer.getData('taskId');
       const task = tasks.find(t => String(t.id) === taskId);
-      if (task && task.status !== status) {
-        updateTaskStatus(taskId, status);
+      if (!task || task.status === status) return;
+      if (status === 'closed') return toast.info("Use Hand back or Cancel on the card, so you can add a note.");
+      if (isClosedTask(task)) return toast.info(`This task was ${task.status}. An admin can reassign it.`);
+      if (status === 'completed' && isServiceTask(task) && !task.related_service_entry_id) {
+        return toast.info("Saving the service entry completes this task. Use Start entry on the card.");
       }
+      updateTaskStatus(taskId, status);
     };
 
     return (
@@ -2526,7 +2590,7 @@ const renderTasksView = () => {
               </div>
               <span className="w-px h-5 bg-gray-200 flex-shrink-0" />
               <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
-              {['all', 'pending', 'in_progress', 'completed'].map(f => (
+              {['all', 'pending', 'in_progress', 'completed', 'closed'].map(f => (
                 <button
                   key={f}
                   onClick={() => setTaskFilter(f)}
@@ -2536,7 +2600,7 @@ const renderTasksView = () => {
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {f.replace('_', ' ')}
+                  {f === 'closed' ? 'Handed back / Cancelled' : f.replace('_', ' ')}
                 </button>
               ))}
             </div>
@@ -2577,7 +2641,7 @@ const renderTasksView = () => {
           ) : taskViewMode === 'board' ? (
             
             /* KANBAN BOARD VIEW */
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
               {columns.map(column => (
                 <div 
                   key={column.id}
@@ -2591,13 +2655,13 @@ const renderTasksView = () => {
                       <h3 className="font-bold text-gray-800 text-sm">{column.title}</h3>
                     </div>
                     <span className="bg-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-gray-200">
-                      {tasks.filter(t => (t.status || 'pending') === column.id).length}
+                      {tasks.filter(t => inColumn(t, column.id)).length}
                     </span>
                   </div>
                   
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
-                      {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
+                      {tasks.filter(t => inColumn(t, column.id)).map(task => {
                         // Safely Map Staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
@@ -2628,11 +2692,26 @@ const renderTasksView = () => {
                               </p>
                             )}
 
+                            {(isServiceTask(task) || isClosedTask(task)) && (
+                              <div className="mb-1.5 flex items-center gap-1.5 min-w-0">
+                                <ServiceTaskBadge task={task} />
+                                {isClosedTask(task) && (
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${getStatusStyles(task.status)}`}>{task.status}</span>
+                                )}
+                              </div>
+                            )}
+                            <ServiceTaskSummary task={task} />
+
                             {task.related_service_entry_id && (
                               <div className="mb-2">
                                 <ServiceLinkChip item={task} compact />
                               </div>
                             )}
+
+                            <TaskCloseNote task={task} />
+                            <div className="mt-2">
+                              <TaskActionButtons task={task} currentUser={currentUser} staffList={staffList} onChanged={onTaskChanged} compact />
+                            </div>
 
                             {/* Board Card Footer: Stacked Date/Priority & User Pill */}
                             <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-50">
@@ -2708,7 +2787,13 @@ const renderTasksView = () => {
                           >
                             <td className="py-3 px-4">
                               <button
-                                onClick={() => updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
+                                onClick={() => {
+                                  if (isClosedTask(task)) return toast.info(`This task was ${task.status}. An admin can reassign it.`);
+                                  if (isServiceTask(task) && !task.related_service_entry_id && task.status !== 'completed') {
+                                    return toast.info("Saving the service entry completes this task. Use Start entry.");
+                                  }
+                                  updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed');
+                                }}
                                 className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
                                   task.status === 'completed'
                                     ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -2728,7 +2813,9 @@ const renderTasksView = () => {
                                     <FiRepeat size={8} /> Recurring
                                   </span>
                                 )}
+                                <ServiceTaskBadge task={task} />
                               </div>
+                              <ServiceTaskSummary task={task} />
                               {task.description && (
                                 <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
                                   {task.description}
@@ -2739,6 +2826,10 @@ const renderTasksView = () => {
                                   <ServiceLinkChip item={task} />
                                 </div>
                               )}
+                              <TaskCloseNote task={task} />
+                              <div className="mt-1.5">
+                                <TaskActionButtons task={task} currentUser={currentUser} staffList={staffList} onChanged={onTaskChanged} compact />
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">

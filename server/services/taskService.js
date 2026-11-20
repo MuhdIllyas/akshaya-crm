@@ -22,6 +22,36 @@ const toId = (v) => {
 };
 
 /**
+ * Throws unless the service (and sub-category, if given) is active and set up
+ * for this centre — the same configuration a service entry needs to save.
+ */
+export async function assertServiceOffered(client, { centreId, serviceId, subcategoryId }) {
+  const svc = await client.query(`SELECT id FROM services WHERE id = $1 AND status = 'active'`, [serviceId]);
+  if (!svc.rows.length) throw new Error("Service not found or inactive");
+
+  if (subcategoryId) {
+    const sub = await client.query(
+      `SELECT 1 FROM subcategories sub
+         JOIN subcategory_configurations conf ON conf.subcategory_id = sub.id AND conf.centre_id = $3
+        WHERE sub.id = $1 AND sub.service_id = $2`,
+      [subcategoryId, serviceId, centreId]
+    );
+    if (!sub.rows.length) throw new Error("This sub-category is not set up for the staff member's centre");
+  } else {
+    const conf = await client.query(
+      `SELECT 1 FROM service_configurations WHERE service_id = $1 AND centre_id = $2
+       UNION ALL
+       SELECT 1 FROM subcategory_configurations conf
+         JOIN subcategories sub ON sub.id = conf.subcategory_id
+        WHERE sub.service_id = $1 AND conf.centre_id = $2
+       LIMIT 1`,
+      [serviceId, centreId]
+    );
+    if (!conf.rows.length) throw new Error("This service is not set up for the staff member's centre");
+  }
+}
+
+/**
  * Create a one-time task.
  *
  * @param {object} input
@@ -47,6 +77,10 @@ export async function createTask(input, externalClient = null) {
     note_id = null,
     source = "manual",
     scheduled_action_id = null,
+    task_kind = "general",
+    related_subcategory_id = null,
+    customer_name = null,
+    customer_phone = null,
   } = input;
 
   if (!actor || !actor.role) throw new Error("actor required");
@@ -54,6 +88,13 @@ export async function createTask(input, externalClient = null) {
   if (!title || !String(title).trim()) throw new Error("Title required");
 
   const isSystem = actor.role === "system";
+  const isServiceTask = task_kind === "service";
+  if (!["general", "service"].includes(task_kind)) throw new Error("Invalid task kind");
+  if (isServiceTask && !["admin", "superadmin"].includes(actor.role)) {
+    throw new Error("Only admin or superadmin can assign a service as a task");
+  }
+  if (isServiceTask && !toId(assigned_to)) throw new Error("Pick the staff member for this service");
+  if (isServiceTask && !toId(related_service_id)) throw new Error("Pick the service for this task");
   const assignedTo = toId(assigned_to);
   const ownTx = !externalClient;
   const client = externalClient || (await pool.connect());
@@ -90,6 +131,15 @@ export async function createTask(input, externalClient = null) {
     }
 
     if (!centreId) throw new Error("Could not resolve centre for task");
+
+    /* ---------- 1b. Service task: the service must be offered at that centre ---------- */
+    if (isServiceTask) {
+      await assertServiceOffered(client, {
+        centreId,
+        serviceId: toId(related_service_id),
+        subcategoryId: toId(related_subcategory_id),
+      });
+    }
 
     /* ---------- 2. Resolve conversation ---------- */
     // System has no staff id, so the assignee "owns" the chat
@@ -133,8 +183,9 @@ export async function createTask(input, externalClient = null) {
           assigned_to, assigned_by, assigned_by_role,
           priority, due_date,
           related_service_id, related_service_entry_id, related_customer_id,
-          conversation_id, note_id, source, scheduled_action_id, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+          conversation_id, note_id, source, scheduled_action_id, status,
+          task_kind, related_subcategory_id, customer_name, customer_phone)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        RETURNING *`,
       [
         centreId,
@@ -153,6 +204,10 @@ export async function createTask(input, externalClient = null) {
         source,
         scheduled_action_id,
         status,
+        isServiceTask ? "service" : "general",
+        isServiceTask ? toId(related_subcategory_id) : null,
+        isServiceTask && customer_name ? String(customer_name).trim() || null : null,
+        isServiceTask && customer_phone ? String(customer_phone).replace(/\D/g, "").slice(-10) || null : null,
       ]
     );
     task = insertRes.rows[0];
