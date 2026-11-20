@@ -2771,13 +2771,13 @@ const renderTasksView = () => {
                       <h3 className="font-bold text-gray-800 text-sm">{column.title}</h3>
                     </div>
                     <span className="bg-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-gray-200">
-                      {tasks.filter(t => inColumn(t, column.id)).length}
+                      {scopedTasks.filter(t => inColumn(t, column.id)).length}
                     </span>
                   </div>
                   
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
-                      {tasks.filter(t => inColumn(t, column.id)).map(task => {
+                      {scopedTasks.filter(t => inColumn(t, column.id)).map(task => {
                         // Safely Map Staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;

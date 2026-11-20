@@ -1432,10 +1432,11 @@ async function loadConversationForClient(conversationId, db = pool) {
   return rows[0] || null;
 }
 
-// Only internal group chats have editable members. Team chats follow their team;
+// Only plain internal group chats have editable members. Team chats follow their team,
+// service / customer chats follow the work they belong to;
 // WhatsApp / portal chats use "Assigned to".
 const hasEditableMembers = (c) =>
-  !!c && c.status !== "deleted" && (c.channel || "internal") === "internal" && c.is_group && c.context_type !== "team";
+  !!c && c.status !== "deleted" && (c.channel || "internal") === "internal" && c.is_group && !c.context_type;
 
 // Group admins: the chat's owners, plus admins and superadmins who are in the chat.
 async function memberAccess(conversationId, user) {
@@ -1502,7 +1503,13 @@ router.post("/conversation/:conversationId/participants", authenticateToken, asy
       [requested, conversationId]
     );
     const added = valid.map((r) => r.id);
-    if (!added.length) return res.status(400).json({ error: "They are already in this chat" });
+    if (!added.length) {
+      const { rows: inChat } = await pool.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = ANY($2::int[]) LIMIT 1`,
+        [conversationId, requested]
+      );
+      return res.status(400).json({ error: inChat.length ? "They are already in this chat" : "Pick active staff members" });
+    }
 
     for (const id of added) {
       await pool.query(

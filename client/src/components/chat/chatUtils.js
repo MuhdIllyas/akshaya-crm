@@ -75,6 +75,9 @@ export const getConversationDisplayName = (conv, currentUserId) => {
   if (conv.name) return conv.name;
   const others = getOtherParticipants(conv, currentUserId);
   if (others.length) return others.map((p) => p.name).filter(Boolean).join(", ");
+  // A chat with only yourself (e.g. tasks you gave yourself), like WhatsApp's "Message yourself"
+  const self = (conv.participants || []).find((p) => String(p.staff_id) === String(currentUserId));
+  if (self?.name) return `${self.name} (You)`;
   return "Unknown Chat";
 };
 
@@ -164,10 +167,10 @@ export const getSenderNameColor = (id) => {
 };
 /* ---------------- Group members ---------------- */
 
-// Internal group chats have editable members. Team chats follow their team,
+// Plain internal group chats have editable members. Team, service and customer chats follow their team / work,
 // WhatsApp / portal chats use "Assigned to" instead.
 export const hasEditableMembers = (conv) =>
-  !!conv && (conv.channel || "internal") === "internal" && !!conv.is_group && conv.context_type !== "team";
+  !!conv && (conv.channel || "internal") === "internal" && !!conv.is_group && !conv.context_type;
 
 // Group admins: the chat's owners, plus admins / superadmins who are in it.
 export const isGroupAdmin = (conv, user) => {
