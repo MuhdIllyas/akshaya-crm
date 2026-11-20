@@ -31,6 +31,8 @@ import {
   API_BASE_URL,
 } from "./chatUtils";
 import StaffName from '@/components/staff/StaffName';
+import { useNavigate } from "react-router-dom";
+import { isServiceTask, isClosedTask, startServiceEntry } from "@/components/tasks/ServiceTaskBits";
 
 /* ---------------- small building blocks ---------------- */
 
@@ -104,6 +106,7 @@ const ConversationDetails = ({
   socketConnected = true,
   onClose,
 }) => {
+  const navigate = useNavigate();
   if (!conversation) return null;
 
   const name = getConversationDisplayName(conversation, currentUser.id);
@@ -374,24 +377,40 @@ const ConversationDetails = ({
               <div className="space-y-2">
                 {relevantTasks.map((task) => {
                   const done = task.status === "completed";
+                  // Handed back / cancelled: closed with a note, can't be ticked
+                  const closed = isClosedTask(task);
+                  const declined = task.status === "declined";
+                  // A service task completes when its entry is saved, not by ticking
+                  const awaitingEntry = !done && !closed && isServiceTask(task) && !task.related_service_entry_id;
+                  const canTick = !done && !closed && !awaitingEntry;
+                  const isMine = String(task.assigned_to) === String(currentUser.id);
                   return (
                     <div key={task.id} className="flex items-start gap-3 rounded-xl ring-1 ring-slate-200 p-3">
                       <button
-                        onClick={() => !done && onCompleteTask && onCompleteTask(task)}
-                        disabled={done}
-                        title={done ? "Completed" : "Mark complete"}
+                        onClick={() => canTick && onCompleteTask && onCompleteTask(task)}
+                        disabled={!canTick}
+                        title={
+                          done ? "Completed"
+                            : closed ? (declined ? "Handed back" : "Cancelled")
+                            : awaitingEntry ? "Completes when the service entry is saved"
+                            : "Mark complete"
+                        }
                         className={`mt-0.5 h-5 w-5 shrink-0 rounded-md flex items-center justify-center transition ${
                           done
                             ? "bg-emerald-500 text-white"
+                            : closed
+                            ? declined ? "bg-amber-100 text-amber-700" : "bg-rose-100 text-rose-600"
+                            : awaitingEntry
+                            ? "ring-1 ring-dashed ring-slate-300 text-transparent cursor-default"
                             : "ring-1 ring-slate-300 text-transparent hover:ring-emerald-500 hover:text-emerald-500"
                         }`}
                       >
-                        <FiCheck size={12} strokeWidth={3} />
+                        {closed ? <FiX size={12} strokeWidth={3} /> : <FiCheck size={12} strokeWidth={3} />}
                       </button>
                       <div className="flex-1 min-w-0">
                         <p
                           className={`text-[13px] font-medium truncate ${
-                            done ? "line-through text-slate-400" : "text-slate-800"
+                            done || closed ? "line-through text-slate-400" : "text-slate-800"
                           }`}
                           title={task.title}
                         >
@@ -415,7 +434,28 @@ const ConversationDetails = ({
                           >
                             {task.priority || "normal"}
                           </span>
+                          {closed && (
+                            <span className={`rounded px-1.5 py-px font-semibold uppercase tracking-wide text-[9px] ${
+                              declined ? "bg-amber-100 text-amber-800" : "bg-rose-100 text-rose-700"
+                            }`}>
+                              {declined ? "Handed back" : "Cancelled"}
+                            </span>
+                          )}
                         </div>
+                        {closed && task.close_reason && (
+                          <p className="mt-1 text-[11px] text-slate-500 line-clamp-2" title={task.close_reason}>
+                            {task.close_reason}
+                          </p>
+                        )}
+                        {awaitingEntry && isMine && (
+                          <button
+                            type="button"
+                            onClick={() => startServiceEntry(navigate, task)}
+                            className="mt-1.5 text-[11px] font-semibold text-indigo-700 hover:underline"
+                          >
+                            Start entry →
+                          </button>
+                        )}
                       </div>
                     </div>
                   );
