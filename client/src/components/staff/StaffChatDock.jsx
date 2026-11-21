@@ -776,6 +776,19 @@ const StaffChatDock = () => {
     const r = stackRef.current?.getBoundingClientRect();
     if (!r) return;
     dragRef.current = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height, moved: false, id: e.pointerId };
+    // Follow the pointer over the whole page: a quick drag leaves the bubble
+    // before its first move event, so listening on the bubbles alone misses it.
+    const move = (ev) => { if (ev.pointerId === e.pointerId) onPointerMove(ev); };
+    const up = (ev) => { if (ev.pointerId !== e.pointerId) return; stop(); onPointerUp(ev); };
+    const cancel = (ev) => { if (ev.pointerId !== e.pointerId) return; stop(); onPointerCancel(); };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
   };
   const onPointerMove = (e) => {
     const d = dragRef.current;
@@ -785,7 +798,6 @@ const StaffChatDock = () => {
     if (!d.moved) {
       if (Math.hypot(dx, dy) < 6) return; // a click, not a drag
       d.moved = true;
-      try { stackRef.current.setPointerCapture(d.id); } catch { /* fine */ }
       hidePreview();
     }
     setDrag({ x: Math.max(0, Math.min(d.ox + dx, view.w - d.w)), y: Math.max(0, Math.min(d.oy + dy, view.h - d.h)) });
@@ -808,9 +820,6 @@ const StaffChatDock = () => {
   const dragProps = {
     ref: stackRef,
     onPointerDown,
-    onPointerMove,
-    onPointerUp,
-    onPointerCancel,
     onDragStart: (e) => e.preventDefault(),
     onClickCapture: (e) => { if (suppressClick.current) { e.stopPropagation(); e.preventDefault(); } },
   };
