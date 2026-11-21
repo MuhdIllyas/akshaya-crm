@@ -186,6 +186,18 @@ const chatName = (c, me) => {
   return getConversationDisplayName(c, me);
 };
 
+// Where the bubbles sit: a side and a distance from the top. Starts at the top
+// right, under the page header, so a new message is seen. Kept per browser.
+const POS_DEFAULT = { side: "right", y: 76 };
+const posKey = () => `chat_bubbles_pos_${currentUserId()}`;
+const readPos = () => {
+  try {
+    const p = JSON.parse(localStorage.getItem(posKey()));
+    if (p && (p.side === "left" || p.side === "right") && Number.isFinite(p.y)) return p;
+  } catch { /* use the default */ }
+  return POS_DEFAULT;
+};
+
 const storageKey = () => `chat_bubbles_${currentUserId()}`;
 const readStoredBubbles = () => {
   try { return JSON.parse(sessionStorage.getItem(storageKey())) || []; } catch { return []; }
@@ -195,7 +207,7 @@ const readStoredBubbles = () => {
 
 const OnlineDot = ({ staffId, children }) => children(useIsOnline(staffId));
 
-const ChatWindow = ({ bubble, conv, context, setContext, onClose, onMinimize, onExpand, canMinimize, withStack }) => {
+const ChatWindow = ({ bubble, conv, context, setContext, onClose, onMinimize, onExpand, canMinimize, style }) => {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState(context?.label ? "Can you check this one?" : "");
@@ -322,8 +334,8 @@ const ChatWindow = ({ bubble, conv, context, setContext, onClose, onMinimize, on
   return (
     <section
       aria-label={`Chat with ${name}`}
-      className={`fixed bottom-4 z-[900] flex h-[min(480px,calc(100dvh-6rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl
-        left-2 sm:left-auto sm:w-[340px] ${withStack ? "right-[76px] sm:right-[84px]" : "right-2 sm:right-4"}`}
+      className="fixed z-[900] flex flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+      style={style}
     >
       <div className="flex items-center gap-2.5 border-b border-slate-200 px-3 py-2.5">
         {directStaffId ? (
@@ -478,7 +490,7 @@ const Switch = ({ checked, onChange, label }) => (
   </button>
 );
 
-const BubbleSettingsPanel = ({ onClose }) => {
+const BubbleSettingsPanel = ({ onClose, style }) => {
   const s = useBubbleSettings();
   const ref = useRef(null);
 
@@ -492,7 +504,7 @@ const BubbleSettingsPanel = ({ onClose }) => {
 
   return (
     <div ref={ref} role="dialog" aria-label="Chat bubble settings"
-      className="fixed bottom-4 right-2 z-[950] w-[min(310px,calc(100vw-1rem))] rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl sm:right-[84px]">
+      className="fixed z-[950] max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl" style={style}>
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-slate-900">Chat bubbles</h3>
@@ -557,6 +569,18 @@ const StaffChatDock = () => {
   const [preview, setPreview] = useState(null);
   const [anim, setAnim] = useState(null); // { id, kind: "pop" | "wiggle", at }
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [pos, setPos] = useState(readPos);
+  const [drag, setDrag] = useState(null); // { x, y } while being dragged
+  const [view, setView] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  const stackRef = useRef(null);
+  const dragRef = useRef(null);
+  const suppressClick = useRef(false);
+
+  useEffect(() => {
+    const onResize = () => setView({ w: window.innerWidth, h: window.innerHeight });
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const convsRef = useRef({});
   const convsAt = useRef(0);
@@ -729,6 +753,68 @@ const StaffChatDock = () => {
     return { name, photo, kind, color: kind === "whatsapp" ? "bg-emerald-600" : getAvatarColor(kind === "staff" ? (getOtherParticipants(c, me)[0]?.staff_id ?? b.staffId) : b.id) };
   };
 
+  /* ----- where things go ----- */
+  const narrow = view.w < 640;
+  const edge = narrow ? 12 : 16;
+  const onLeft = pos.side === "left";
+  const hasStack = showStack || showOffIcon;
+  const beside = hasStack ? (narrow ? 72 : 84) : edge; // panels open next to the bubbles
+  const stackH = showStack ? shown.length * 58 + (pile.length ? 54 : 0) + 32 : 48;
+  const stackTop = Math.max(8, Math.min(pos.y, view.h - stackH - 8));
+  const besideStyle = (width) => (narrow
+    ? { left: onLeft ? beside : 8, right: onLeft ? 8 : beside }
+    : { [onLeft ? "left" : "right"]: beside, width });
+  const topFor = (h) => Math.max(16, Math.min(stackTop, view.h - h - 16));
+  const winH = Math.min(480, view.h - 32);
+  const stackStyle = drag
+    ? { left: drag.x, top: drag.y, cursor: "grabbing", touchAction: "none" }
+    : { top: stackTop, [onLeft ? "left" : "right"]: edge, cursor: "grab", touchAction: "none" };
+
+  /* ----- dragging the bubbles ----- */
+  const onPointerDown = (e) => {
+    if (e.button !== 0) return;
+    const r = stackRef.current?.getBoundingClientRect();
+    if (!r) return;
+    dragRef.current = { sx: e.clientX, sy: e.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height, moved: false, id: e.pointerId };
+  };
+  const onPointerMove = (e) => {
+    const d = dragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    if (!d.moved) {
+      if (Math.hypot(dx, dy) < 6) return; // a click, not a drag
+      d.moved = true;
+      try { stackRef.current.setPointerCapture(d.id); } catch { /* fine */ }
+      hidePreview();
+    }
+    setDrag({ x: Math.max(0, Math.min(d.ox + dx, view.w - d.w)), y: Math.max(0, Math.min(d.oy + dy, view.h - d.h)) });
+  };
+  const onPointerUp = (e) => {
+    const d = dragRef.current;
+    dragRef.current = null;
+    if (!d?.moved) return;
+    const x = d.ox + (e.clientX - d.sx);
+    const y = d.oy + (e.clientY - d.sy);
+    // Snap to the nearer side
+    const next = { side: x + d.w / 2 < view.w / 2 ? "left" : "right", y: Math.round(Math.max(8, Math.min(y, view.h - d.h - 8))) };
+    setPos(next);
+    setDrag(null);
+    try { localStorage.setItem(posKey(), JSON.stringify(next)); } catch { /* private mode */ }
+    suppressClick.current = true; // the click that ends a drag doesn't open a chat
+    setTimeout(() => { suppressClick.current = false; }, 0);
+  };
+  const onPointerCancel = () => { dragRef.current = null; setDrag(null); };
+  const dragProps = {
+    ref: stackRef,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
+    onPointerCancel,
+    onDragStart: (e) => e.preventDefault(),
+    onClickCapture: (e) => { if (suppressClick.current) { e.stopPropagation(); e.preventDefault(); } },
+  };
+
   const previewIndex = preview ? shown.findIndex((b) => b.id === preview.id) : -1;
   const previewFace = preview ? bubbleFace(bubbles.find((b) => b.id === preview.id) || { id: preview.id }) : null;
 
@@ -738,11 +824,13 @@ const StaffChatDock = () => {
         @keyframes bubble-pop{0%{transform:scale(.4);opacity:0}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}
         @keyframes bubble-wiggle{20%{transform:rotate(-10deg)}40%{transform:rotate(9deg)}60%{transform:rotate(-6deg)}80%{transform:rotate(3deg)}}
         @keyframes bubble-slide{from{transform:translateX(12px);opacity:0}to{transform:none;opacity:1}}
+        @keyframes bubble-slide-l{from{transform:translateX(-12px);opacity:0}to{transform:none;opacity:1}}
         @media (prefers-reduced-motion:reduce){.bubble-anim{animation:none!important}}
       `}</style>
 
       {showStack && (
-        <div className="group/stack fixed bottom-4 right-3 z-[901] flex flex-col-reverse items-center gap-2.5 sm:right-4" aria-label="Chat bubbles">
+        <div {...dragProps} style={stackStyle}
+          className="group/stack fixed z-[901] flex select-none flex-col items-center gap-2.5 [&_img]:pointer-events-none" aria-label="Chat bubbles">
           {shown.map((b) => {
             const f = bubbleFace(b);
             const n = unread[b.id] || 0;
@@ -773,8 +861,8 @@ const StaffChatDock = () => {
                   className="absolute -left-1.5 -top-1.5 hidden h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-white shadow group-hover/b:flex group-focus-within/b:flex">
                   <FiX className="h-3 w-3" />
                 </button>
-                <span className="pointer-events-none absolute right-[60px] top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white group-hover/b:block">
-                  {f.name}
+                <span className={`pointer-events-none absolute ${onLeft ? "left-[60px]" : "right-[60px]"} top-1/2 hidden -translate-y-1/2 whitespace-nowrap rounded-md bg-slate-900 px-2 py-1 text-xs text-white ${drag ? "" : "group-hover/b:block"}`}>
+                  {f.name}<span className="ml-1.5 text-slate-400">· drag to move</span>
                 </span>
               </div>
             );
@@ -798,20 +886,22 @@ const StaffChatDock = () => {
       )}
 
       {showOffIcon && (
+        <div {...dragProps} style={stackStyle} className="fixed z-[901] select-none">
         <button type="button" onClick={() => navigate(messengerPath())}
           title="Chat bubbles are off. Open Messenger" aria-label={`Open Messenger, ${totalUnread} unread`}
-          className="fixed bottom-4 right-3 z-[901] flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg hover:bg-slate-50 sm:right-4">
+          className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-lg hover:bg-slate-50">
           <FiMessageCircle className="h-5 w-5" />
           <span className="absolute -right-1 -top-1 flex h-5 min-w-[20px] items-center justify-center rounded-full border-2 border-white bg-red-500 px-1 text-[11px] font-semibold text-white">
             {totalUnread > 99 ? "99+" : totalUnread}
           </span>
         </button>
+        </div>
       )}
 
-      {preview && showStack && previewIndex >= 0 && openId !== preview.id && (
+      {preview && showStack && !drag && previewIndex >= 0 && openId !== preview.id && (
         <div role="status"
-          className="bubble-anim fixed right-[76px] z-[902] w-[min(280px,calc(100vw-90px))] rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-2xl sm:right-[84px]"
-          style={{ bottom: `${16 + previewIndex * 58}px`, animation: "bubble-slide .25s ease-out" }}>
+          className="bubble-anim fixed z-[902] rounded-2xl border border-slate-200 bg-white px-3 py-2.5 shadow-2xl"
+          style={{ top: Math.min(stackTop + previewIndex * 58, view.h - 150), ...besideStyle(280), animation: `${onLeft ? "bubble-slide-l" : "bubble-slide"} .25s ease-out` }}>
           <div className="flex items-center gap-2 text-[13px]">
             <span className="min-w-0 truncate font-semibold text-slate-900">
               {previewFace.name}
@@ -835,7 +925,7 @@ const StaffChatDock = () => {
           conv={convs[openBubbleObj.id]}
           context={context}
           setContext={setContext}
-          withStack={showStack || showOffIcon}
+          style={{ top: topFor(winH), height: winH, ...besideStyle(340) }}
           canMinimize={showStack}
           onMinimize={() => { setOpenId(null); setContext(null); }}
           onClose={() => closeBubble(openBubbleObj.id)}
@@ -843,7 +933,7 @@ const StaffChatDock = () => {
         />
       )}
 
-      {settingsOpen && <BubbleSettingsPanel onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && <BubbleSettingsPanel onClose={() => setSettingsOpen(false)} style={{ top: topFor(440), ...besideStyle(310) }} />}
     </>
   );
 };
