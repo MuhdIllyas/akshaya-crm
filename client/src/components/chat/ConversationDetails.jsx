@@ -36,9 +36,14 @@ import {
   hasEditableMembers,
   isGroupAdmin,
   isCustomerChat,
+  formatPhone,
 } from "./chatUtils";
 import StaffName from '@/components/staff/StaffName';
 import { useNavigate } from "react-router-dom";
+import { customersPath } from "@/utils/customersPath";
+
+// Customer chats show this many of the customer's latest applications
+const RECENT_APPLICATIONS = 5;
 import { isServiceTask, isClosedTask, startServiceEntry } from "@/components/tasks/ServiceTaskBits";
 
 /* ---------------- small building blocks ---------------- */
@@ -124,6 +129,7 @@ const ConversationDetails = ({
   onSetMemberRole,
   onLeaveGroup,
   onRenameGroup,
+  onSaveContactName,
 }) => {
   const navigate = useNavigate();
   const [memberMenu, setMemberMenu] = useState(null); // staff_id whose menu is open
@@ -153,8 +159,16 @@ const ConversationDetails = ({
 
   const editableMembers = hasEditableMembers(conversation);
   const canManageMembers = isGroupAdmin(conversation, currentUser);
+  // WhatsApp chats: staff can save a name for the number (empty clears it)
+  const canNameContact = conversation.channel === "whatsapp" && !!onSaveContactName;
   const saveRename = async () => {
     const value = newName.trim();
+    if (canNameContact) {
+      if (value === (conversation.contact_name || "")) return setRenaming(false);
+      const ok = await onSaveContactName(value);
+      if (ok !== false) setRenaming(false);
+      return;
+    }
     if (!value || value === conversation.name) return setRenaming(false);
     const ok = await onRenameGroup?.(value);
     if (ok !== false) setRenaming(false);
@@ -196,13 +210,13 @@ const ConversationDetails = ({
   const customerLine = summary
     ? [
         summary.customer_since && `Customer since ${monthYear(summary.customer_since)}`,
-        `${summary.service_count} service${summary.service_count === 1 ? "" : "s"}`,
+        `${summary.service_count} application${summary.service_count === 1 ? "" : "s"}`,
       ].filter(Boolean).join(" · ")
     : null;
   const subtitle = customerLine
     ? customerLine
     : isWhatsApp
-    ? conversation.context_identifier || "WhatsApp"
+    ? "" // the number is shown on its own line above
     : isPortal
     ? "Customer portal"
     : isGroup
@@ -254,7 +268,8 @@ const ConversationDetails = ({
                   if (e.key === "Escape") setRenaming(false);
                 }}
                 maxLength={80}
-                aria-label="Group name"
+                placeholder={canNameContact ? "Name for this number" : undefined}
+                aria-label={canNameContact ? "Name for this number" : "Group name"}
                 className="h-9 min-w-0 flex-1 rounded-lg border border-slate-200 px-2.5 text-sm text-slate-800 focus:border-slate-300 focus:outline-none focus:ring-4 focus:ring-blue-50"
               />
               <button onClick={saveRename} className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-navy-700 text-white hover:bg-navy-800" aria-label="Save name">
@@ -267,22 +282,31 @@ const ConversationDetails = ({
           ) : (
             <h3 className="mt-3 flex items-center justify-center gap-1.5 text-base font-semibold text-slate-900 break-words">
               {name}
-              {canManageMembers && onRenameGroup && (
+              {((canManageMembers && onRenameGroup) || canNameContact) && (
                 <button
                   onClick={() => {
-                    setNewName(conversation.name || name);
+                    setNewName(canNameContact ? conversation.contact_name || conversation.customer_name || conversation.wa_profile_name || "" : conversation.name || name);
                     setRenaming(true);
                   }}
                   className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-navy-700"
-                  title="Rename group"
-                  aria-label="Rename group"
+                  title={canNameContact ? "Save a name for this number" : "Rename group"}
+                  aria-label={canNameContact ? "Save a name for this number" : "Rename group"}
                 >
                   <FiEdit2 size={13} />
                 </button>
               )}
             </h3>
           )}
-          <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
+          {renaming && canNameContact && (
+            <p className="mt-1 text-[11px] text-slate-500">Only for this chat. Leave it empty to use their WhatsApp or customer name.</p>
+          )}
+          {!renaming && conversation.channel === "whatsapp" && (
+            <p className="mt-0.5 text-xs text-slate-500">
+              {formatPhone(conversation.context_identifier)}
+              {conversation.wa_profile_name && conversation.wa_profile_name !== name ? ` · on WhatsApp: ${conversation.wa_profile_name}` : ""}
+            </p>
+          )}
+          <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1 empty:hidden">
             {!isGroup && !isExternal && others[0]?.centre_name && <FiMapPin size={11} />}
             {subtitle}
           </p>
@@ -379,12 +403,25 @@ const ConversationDetails = ({
 
         {/* Services (customer chats) */}
         {customerChat && summary && (
-          <Section title="Services" count={summary.service_count}>
+          <Section
+            title="Recent applications"
+            action={
+              summary.customer_id && summary.service_count > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => navigate(customersPath(summary.customer_id))}
+                  className="text-xs font-semibold text-navy-700 hover:underline"
+                >
+                  View all{summary.service_count > RECENT_APPLICATIONS ? ` ${summary.service_count}` : ""}
+                </button>
+              ) : null
+            }
+          >
             {summary.services.length === 0 ? (
-              <EmptyHint icon={FiBriefcase} text="No services for this customer yet" />
+              <EmptyHint icon={FiBriefcase} text="No applications for this customer yet" />
             ) : (
               <div className="space-y-2">
-                {summary.services.map((s) => {
+                {summary.services.slice(0, RECENT_APPLICATIONS).map((s) => {
                   const [label, cls] = trackingPill(s.tracking_status);
                   return (
                     <button
@@ -406,6 +443,11 @@ const ConversationDetails = ({
                     </button>
                   );
                 })}
+                {!summary.customer_id && summary.service_count > RECENT_APPLICATIONS && (
+                  <p className="text-center text-[11px] text-slate-500">
+                    Latest {RECENT_APPLICATIONS} of {summary.service_count} for this number
+                  </p>
+                )}
               </div>
             )}
           </Section>

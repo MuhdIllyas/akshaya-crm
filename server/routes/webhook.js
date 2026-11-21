@@ -168,6 +168,7 @@ router.post('/whatsapp', async (req, res) => {
     let message_id = null;
     let recipientPhone = null;
     let msgObject = null;
+    let profileName = null; // the name the sender set in WhatsApp
 
     // ===============================
     // 🔥 FORMAT 1: META / WHATSAPP CLOUD STYLE
@@ -184,6 +185,8 @@ router.post('/whatsapp', async (req, res) => {
           from = msgObject.from;
           message_id = msgObject.id;
         }
+        const contact = (value?.contacts || []).find((c) => !from || String(c.wa_id) === String(from)) || value?.contacts?.[0];
+        profileName = contact?.profile?.name || null;
       }
     }
     // ===============================
@@ -202,6 +205,20 @@ router.post('/whatsapp', async (req, res) => {
       from = body.from;
       message_id = body.message_id || body.id;
     }
+    // Flat payloads carry the profile name in different places
+    if (!profileName) {
+      profileName =
+        body.contacts?.[0]?.profile?.name ||
+        body.data?.contacts?.[0]?.profile?.name ||
+        body.data?.profile?.name ||
+        body.data?.profile_name ||
+        body.data?.sender_name ||
+        body.profile?.name ||
+        body.profile_name ||
+        body.sender_name ||
+        null;
+    }
+    profileName = profileName ? String(profileName).replace(/\s+/g, " ").trim().slice(0, 80) || null : null;
 
     // ===============================
     // 📸 PARSE NATIVE MEDIA & TEXT
@@ -375,6 +392,15 @@ router.post('/whatsapp', async (req, res) => {
       name: `WhatsApp - ${customerName}`,
       is_group: false,
     });
+
+    // Keep the sender's WhatsApp name, so the chat can show it instead of "WhatsApp - Customer"
+    if (profileName && conversation?.id) {
+      await pool.query(
+        `UPDATE chat_conversations SET wa_profile_name = $1
+          WHERE id = $2 AND wa_profile_name IS DISTINCT FROM $1`,
+        [profileName, conversation.id]
+      ).catch((err) => console.error("Non-fatal: saving WhatsApp profile name failed:", err.message));
+    }
 
     // ===============================
     // 💾 SAVE MESSAGE

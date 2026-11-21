@@ -104,11 +104,35 @@ export const getOtherParticipants = (conv, currentUserId) =>
 export const isGroupConversation = (conv, currentUserId) =>
   !!conv?.is_group || getOtherParticipants(conv, currentUserId).length > 1;
 
+// Placeholder names WhatsApp chats were created with ("WhatsApp - Customer", "WhatsApp +9190…")
+const GENERIC_WHATSAPP_NAME = /^whatsapp(\s*-\s*customer|\s*-?\s*\+?[\d\s]+)?$/i;
+
+// "+919090000000" -> "+91 90900 00000"
+export const formatPhone = (phone) => {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length === 12 && digits.startsWith("91")) return `+91 ${digits.slice(2, 7)} ${digits.slice(7)}`;
+  if (digits.length === 10) return `${digits.slice(0, 5)} ${digits.slice(5)}`;
+  return phone || "";
+};
+
+// WhatsApp chat name, best first: the name staff saved, the customer this number belongs
+// to, the person's own WhatsApp name, a real name the chat was created with, the number.
+export const getWhatsAppName = (conv) => {
+  const created = String(conv.context_name || conv.name || "").trim();
+  const createdName = created && !GENERIC_WHATSAPP_NAME.test(created) ? created.replace(/^whatsapp\s*-\s*/i, "") : "";
+  return (
+    conv.contact_name ||
+    conv.customer_name ||
+    conv.wa_profile_name ||
+    createdName ||
+    formatPhone(conv.context_identifier) ||
+    "WhatsApp user"
+  );
+};
+
 export const getConversationDisplayName = (conv, currentUserId) => {
   if (!conv) return "";
-  if (conv.channel === "whatsapp") {
-    return conv.context_name || conv.context_identifier || "WhatsApp User";
-  }
+  if (conv.channel === "whatsapp") return getWhatsAppName(conv);
   if (conv.name) return conv.name;
   const others = getOtherParticipants(conv, currentUserId);
   if (others.length) return others.map((p) => p.name).filter(Boolean).join(", ");

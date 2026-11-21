@@ -78,6 +78,7 @@ import {
   formatDayLabel,
   isSameDay,
   toDate,
+  formatPhone,
 } from "@/components/chat/chatUtils";
 import StaffName from '@/components/staff/StaffName';
 
@@ -706,6 +707,7 @@ const Chat = ({
   const onlineParticipants = others.filter((p) => isUserOnline(p.staff_id));
   const hasTasks = serviceInfo && serviceInfo.tasks && serviceInfo.tasks.length > 0;
   const showSenderNames = (isFunctionallyGroup && !isWhatsApp) || isPortal;
+  const isCustomerConv = isWhatsApp || isPortal;
   const typingList = typingUsers[activeConversation.id] || [];
   const windowClosed = isWhatsApp && !isWithinWindow;
   const inputDisabled = isUploading || windowClosed;
@@ -728,7 +730,7 @@ const Chat = ({
   } else if (isWhatsApp) {
     subtitle = (
       <span className="truncate">
-        WhatsApp · {activeConversation.context_identifier || "no number"}
+        WhatsApp · {formatPhone(activeConversation.context_identifier) || "no number"}
         {assignedName ? ` · assigned to ${assignedName}` : " · unassigned"}
       </span>
     );
@@ -925,7 +927,11 @@ const Chat = ({
               const messageKey = msg.isOptimistic ? `opt-${msg.tempId || msg.id}-${index}` : `msg-${msg.id}`;
               const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
               const isNewTaskMessage = msg.messageType === "task";
-              const isSystemNote = msg.isSystem && !isTaskMessage && !isNewTaskMessage;
+              // Customer chats (WhatsApp, portal): the customer on the left, the centre's side on the
+              // right — every staff member's reply plus templates and bot messages — so it's clear who said what.
+              const isOutgoingSystem = isCustomerConv && msg.isSystem && msg.direction === "outgoing";
+              const isSystemNote = msg.isSystem && !isTaskMessage && !isNewTaskMessage && !isOutgoingSystem;
+              const isTeamSide = isCustomerConv && !msg.isCurrentUser && (msg.sender_type === "staff" || isOutgoingSystem);
 
               const isFirstInRun =
                 showDaySeparator ||
@@ -935,8 +941,14 @@ const Chat = ({
                 prevMsg.messageType === "task" ||
                 prevMsg.sender_type !== msg.sender_type;
 
-              const isOwn = msg.isCurrentUser;
-              const senderLabel = participantNames[String(msg.senderId)] || msg.sender || "Unknown";
+              const isOwn = msg.isCurrentUser || isTeamSide;
+              // light bubble on the right (another staff member, template, bot) vs your own navy one
+              const darkBubble = isOwn && !isTeamSide;
+              const senderLabel = isOutgoingSystem
+                ? msg.messageType === "template" ? "Template" : "Auto-reply"
+                : msg.sender_type === "customer"
+                ? msg.sender || "Customer"
+                : participantNames[String(msg.senderId)] || msg.sender || "Unknown";
               const senderPhoto = msg.sender_type !== "customer" ? participantPhotos[String(msg.senderId)] : null;
               const selected = selectedMsgId === msg.id;
 
@@ -1028,11 +1040,15 @@ const Chat = ({
                         }}
                         className={`relative min-w-0 px-3.5 py-2 text-[14px] leading-relaxed ${
                           blockCards.length
-                            ? isOwn
+                            ? darkBubble
                               ? "bg-navy-700 text-white"
                               : "border-t border-slate-100 bg-white text-slate-800"
                             : `shadow-sm ${
-                                isOwn
+                                isOutgoingSystem
+                                  ? `bg-emerald-50 text-slate-800 ring-1 ring-emerald-200 rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
+                                  : isTeamSide
+                                  ? `bg-blue-50 text-slate-800 ring-1 ring-blue-200 rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
+                                  : isOwn
                                   ? `bg-navy-700 text-white rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
                                   : `bg-white text-slate-800 ring-1 ring-slate-200/80 rounded-2xl ${isFirstInRun ? "rounded-tl-md" : ""}`
                               } ${selected ? "ring-2 ring-blue-300" : ""}`
@@ -1041,9 +1057,12 @@ const Chat = ({
                         {showSenderNames && !isOwn && isFirstInRun && (
                           <p className={`text-xs font-semibold mb-0.5 ${getSenderNameColor(msg.senderId)}`}>{senderLabel}</p>
                         )}
+                        {isTeamSide && isFirstInRun && (
+                          <p className={`text-xs font-semibold mb-0.5 ${isOutgoingSystem ? "text-emerald-700" : "text-navy-700"}`}>{senderLabel}</p>
+                        )}
 
                         {msg.isDeleted ? (
-                          <p className={`italic ${isOwn ? "text-blue-100" : "text-slate-400"}`}>This message was deleted</p>
+                          <p className={`italic ${darkBubble ? "text-blue-100" : "text-slate-400"}`}>This message was deleted</p>
                         ) : msg.isFile ? (
                           isImage ? (
                             <button
@@ -1096,10 +1115,10 @@ const Chat = ({
                                 if (msg.fileUrl) window.open(fullFileUrl(msg.fileUrl), "_blank");
                               }}
                               className={`flex items-center gap-3 rounded-xl p-2 -mx-1.5 text-left transition ${
-                                isOwn ? "bg-white/10 hover:bg-white/15" : "bg-slate-50 hover:bg-slate-100"
+                                darkBubble ? "bg-white/10 hover:bg-white/15" : "bg-slate-50 hover:bg-slate-100"
                               }`}
                             >
-                              <div className={`h-10 w-10 shrink-0 rounded-lg flex items-center justify-center ${isOwn ? "bg-white/15" : "bg-white ring-1 ring-slate-200 text-slate-500"}`}>
+                              <div className={`h-10 w-10 shrink-0 rounded-lg flex items-center justify-center ${darkBubble ? "bg-white/15" : "bg-white ring-1 ring-slate-200 text-slate-500"}`}>
                                 {msg.messageType === "image" ? <FiImage size={18} /> : <FiFile size={18} />}
                               </div>
                               <div className="min-w-0">
@@ -1112,14 +1131,14 @@ const Chat = ({
                             </button>
                           )
                         ) : (
-                          renderMessageTextWithMentions(msg.text, msg.mentions, isOwn)
+                          renderMessageTextWithMentions(msg.text, msg.mentions, darkBubble)
                         )}
 
                         {caption && !msg.isDeleted && (
                           <p className="mt-1 whitespace-pre-wrap break-words">{caption}</p>
                         )}
 
-                        <div className={`flex items-center justify-end gap-1 mt-0.5 -mb-0.5 text-[10.5px] ${isOwn ? "text-blue-100" : "text-slate-400"}`}>
+                        <div className={`flex items-center justify-end gap-1 mt-0.5 -mb-0.5 text-[10.5px] ${darkBubble ? "text-blue-100" : "text-slate-400"}`}>
                           <span>{msg.time}</span>
                           {renderMessageStatus(msg)}
                         </div>
@@ -1140,7 +1159,7 @@ const Chat = ({
                           <MessageAction onClick={() => { setSelectedMsgId(null); onOpenTaskModal(msg.text); }} title="Create task" hover="hover:text-emerald-600">
                             <FiCheckSquare size={12} />
                           </MessageAction>
-                          {isOwn && (
+                          {msg.isCurrentUser && (
                             <MessageAction onClick={() => { setSelectedMsgId(null); onDeleteMessage(msg.id, activeConversation.id); }} title="Delete" hover="hover:text-rose-500">
                               <FiTrash2 size={12} />
                             </MessageAction>

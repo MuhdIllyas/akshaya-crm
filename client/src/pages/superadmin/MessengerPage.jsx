@@ -678,6 +678,7 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
+          direction: msg.direction,
           live_task_data: msg.live_task_data || null,
           mentions: msg.mentions || []
         };
@@ -871,6 +872,14 @@ const MessengerPage = ({ user }) => {
       setActiveConversation(prev => prev && String(prev.id) === String(full.id) ? { ...prev, ...patch } : prev);
     };
 
+    // Someone saved a name for a WhatsApp number
+    const handleContactNamed = (data) => {
+      if (!data?.conversationId) return;
+      const patch = { contact_name: data.contact_name || null };
+      setConversations(prev => prev.map(c => String(c.id) === String(data.conversationId) ? { ...c, ...patch } : c));
+      setActiveConversation(prev => prev && String(prev.id) === String(data.conversationId) ? { ...prev, ...patch } : prev);
+    };
+
     const handleConversationDeleted = (data) => {
       if (data?.reason === "removed") {
         const gone = conversationsRef.current.find(c => String(c.id) === String(data.conversationId));
@@ -900,6 +909,7 @@ const MessengerPage = ({ user }) => {
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("conversation_deleted", handleConversationDeleted);
     socket.on("conversation_members_updated", handleMembersUpdated);
+    socket.on("conversation_contact_named", handleContactNamed);
 
     // 🔥 FIX 2: Manually trigger if the global socket is already connected!
     if (socket.connected) {
@@ -924,6 +934,7 @@ const MessengerPage = ({ user }) => {
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("conversation_deleted", handleConversationDeleted);
       socket.off("conversation_members_updated", handleMembersUpdated);
+      socket.off("conversation_contact_named", handleContactNamed);
       
       // Removed disconnectSocket() completely!
     };
@@ -1044,6 +1055,7 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
+          direction: msg.direction,
           live_task_data: msg.live_task_data || null,
           mentions: msg.mentions || []
         };
@@ -1448,6 +1460,31 @@ const MessengerPage = ({ user }) => {
     if (!activeConversation) return false;
     try {
       applyMembers(await membersRequest('/name', 'PATCH', { name }));
+      return true;
+    } catch (err) {
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  // ============== NAME A WHATSAPP NUMBER (optional) ==============
+  const applyContactName = (conversationId, contactName) => {
+    setConversations(prev => prev.map(c => String(c.id) === String(conversationId) ? { ...c, contact_name: contactName } : c));
+    setActiveConversation(prev => prev && String(prev.id) === String(conversationId) ? { ...prev, contact_name: contactName } : prev);
+  };
+
+  const handleSaveContactName = async (name) => {
+    if (!activeConversation) return false;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${activeConversation.id}/contact-name`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't save the name");
+      applyContactName(activeConversation.id, data.contact_name || null);
+      toast.success(data.contact_name ? 'Name saved' : 'Name cleared');
       return true;
     } catch (err) {
       toast.error(err.message);
@@ -2253,6 +2290,7 @@ const MessengerPage = ({ user }) => {
       onSetMemberRole={handleSetMemberRole}
       onLeaveGroup={canLeaveActive ? handleLeaveGroup : undefined}
       onRenameGroup={handleRenameGroup}
+      onSaveContactName={handleSaveContactName}
     />
   );
 

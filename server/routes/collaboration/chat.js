@@ -204,6 +204,19 @@ router.get("/conversations", authenticateToken, async (req, res) => {
             ), 'epoch'::timestamp)
         ) END as waiting_since,
         my.pinned_at,
+        c.contact_name,
+        c.wa_profile_name,
+        -- WhatsApp: the customer this number belongs to (linked, or matched on the number)
+        CASE WHEN c.channel = 'whatsapp' THEN (
+          SELECT cu.name FROM customers cu
+           WHERE cu.id = c.customer_id
+              OR cu.primary_phone IN (
+                   RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10),
+                   '91' || RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10),
+                   '+91' || RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10))
+           ORDER BY (cu.id = c.customer_id) DESC NULLS LAST, cu.id
+           LIMIT 1
+        ) END AS customer_name,
         (
           SELECT COALESCE(
             json_agg(
@@ -418,6 +431,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
           m.message as text,
           m.sender_id,
           m.sender_type,
+          m.direction,
           m.message_type as type,
           m.file_url,
           m.file_name,
@@ -470,6 +484,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
           m.message as text,
           m.sender_id,
           m.sender_type,
+          m.direction,
           m.message_type as type,
           m.file_url,
           '' as file_name,
@@ -992,6 +1007,51 @@ router.get("/staff", authenticateToken, async (req, res) => {
   } catch (err) {
     console.error("Fetch staff error:", err);
     res.status(500).json({ error: "Failed to fetch staff", details: err.message });
+  }
+});
+
+/* ================================
+   SAVE A NAME FOR A WHATSAPP NUMBER (optional)
+================================ */
+
+// Body: { name } — an empty name clears it (the chat falls back to the customer's or WhatsApp name)
+router.patch("/conversation/:conversationId/contact-name", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    if (!Number.isInteger(conversationId)) return res.status(400).json({ error: "Invalid chat" });
+    const isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
+    if (!(await checkConversationAccess(conversationId, req.user.id)) && !isAdmin) {
+      return res.status(403).json({ error: "Not a participant in this conversation" });
+    }
+    const { rows: convRows } = await pool.query(`SELECT channel, centre_id FROM chat_conversations WHERE id = $1`, [conversationId]);
+    const conv = convRows[0];
+    if (!conv) return res.status(404).json({ error: "Conversation not found" });
+    if (conv.channel !== "whatsapp") return res.status(400).json({ error: "Only WhatsApp chats can be named this way" });
+    if (req.user.role === "admin" && conv.centre_id && Number(conv.centre_id) !== Number(req.user.centre_id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    const name = String(req.body?.name || "").replace(/\s+/g, " ").trim().slice(0, 80) || null;
+    const { rows } = await pool.query(
+      `UPDATE chat_conversations SET contact_name = $1, updated_at = NOW() WHERE id = $2
+       RETURNING id, contact_name, wa_profile_name`,
+      [name, conversationId]
+    );
+
+    // Everyone in the chat sees the new name
+    if (req.io) {
+      const { rows: people } = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversationId]
+      );
+      for (const p of people) {
+        req.io.to(`user:${p.staff_id}`).emit("conversation_contact_named", { conversationId, contact_name: name });
+      }
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Save contact name error:", err);
+    res.status(500).json({ error: "Couldn't save the name" });
   }
 });
 
