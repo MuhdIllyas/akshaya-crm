@@ -6,8 +6,11 @@ export const socket = io(API_URL, {
   autoConnect: false,
   transports: ["websocket", "polling"],
   reconnection: true,
-  reconnectionAttempts: 5,
+  // Never give up: after a Wi-Fi drop, sleep or server restart the person would
+  // otherwise look offline (and miss messages) until they refresh.
+  reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
+  reconnectionDelayMax: 10000,
 });
 
 let initialized = false;

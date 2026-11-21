@@ -278,11 +278,9 @@ socketServer.on("connection", (socket) => {
      BROADCAST USER ONLINE
   ========================== */
 
-  if (user.centre_id) {
-    socket.to(room(`centre:${user.centre_id}`)).emit("user_online", {
-      userId: user.id
-    });
-  }
+  // Everyone in the organisation hears it (superadmins and other centres too,
+  // like the online_users list above).
+  socket.to(orgRoom(org)).emit("user_online", { userId: user.id });
 
   /* ==========================
      CHAT CONVERSATION ROOMS
@@ -329,10 +327,12 @@ socketServer.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("❌ Client disconnected:", socket.id);
 
-    if (user.centre_id) {
-      socket.to(room(`centre:${user.centre_id}`)).emit("user_offline", {
-        userId: user.id
-      });
+    // Still open in another tab or browser: they're not offline.
+    const stillOnline = Array.from(socketServer.sockets.sockets.values()).some(
+      (s) => s.id !== socket.id && s.org?.slug === org.slug && String(s.user?.id) === String(user.id)
+    );
+    if (!stillOnline) {
+      socket.to(orgRoom(org)).emit("user_offline", { userId: user.id });
     }
   });
 });

@@ -71,7 +71,7 @@ import {
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
-import { taskContext } from "@/components/staff/staffDirectory";
+import { taskContext, useOnlineUsers } from "@/components/staff/staffDirectory";
 import StaffName from '@/components/staff/StaffName';
 import useTags from "@/hooks/useTags";
 import { TagPickerModal, TagManagerModal } from "@/components/tags/TagModals";
@@ -394,7 +394,9 @@ const MessengerPage = ({ user }) => {
   const [typingUsers, setTypingUsers] = useState({});
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  // Shared with the rest of the app; it holds the list sent when the socket
+  // connected, which happened before this page opened.
+  const onlineUsers = useOnlineUsers();
   const [socketConnected, setSocketConnected] = useState(false);
 
   const [serviceDetails, setServiceDetails] = useState(null);
@@ -612,11 +614,6 @@ const MessengerPage = ({ user }) => {
       }
     };
 
-    const handleOnlineUsers = (users) => {
-      const stringUsers = users.map(user => String(user));
-      setOnlineUsers(new Set(stringUsers));
-    };
-
     const handleDisconnect = () => {
       console.log("Socket disconnected");
       setSocketConnected(false);
@@ -811,18 +808,6 @@ const MessengerPage = ({ user }) => {
       }
     };
 
-    const handleUserOnline = (data) => {
-      setOnlineUsers(prev => new Set([...prev, String(data.userId)]));
-    };
-
-    const handleUserOffline = (data) => {
-      setOnlineUsers(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(String(data.userId));
-        return newSet;
-      });
-    };
-
     const handleNewConversation = (newConv) => {
       setConversations(prev => {
         if (!prev.some(c => c.id === newConv.id)) {
@@ -894,7 +879,6 @@ const MessengerPage = ({ user }) => {
 
     // Attach listeners safely
     socket.on("connect", handleConnect);
-    socket.on("online_users", handleOnlineUsers);
     socket.on("disconnect", handleDisconnect);
     socket.on("connect_error", handleConnectError);
     socket.on("new_message", handleNewMessage);
@@ -902,8 +886,6 @@ const MessengerPage = ({ user }) => {
     socket.on("typing", handleTyping);
     socket.on("messages_read", handleMessagesRead);
     socket.on("unread_update", handleUnreadUpdate);
-    socket.on("user_online", handleUserOnline);
-    socket.on("user_offline", handleUserOffline);
     socket.on("new_conversation", handleNewConversation);
     socket.on("added_to_conversation", handleAddedToConversation);
     socket.on("message_deleted", handleMessageDeleted);
@@ -919,7 +901,6 @@ const MessengerPage = ({ user }) => {
     return () => {
       // 🔥 FIX 3: Detach SPECIFIC references so we don't sever global listeners
       socket.off("connect", handleConnect);
-      socket.off("online_users", handleOnlineUsers);
       socket.off("disconnect", handleDisconnect);
       socket.off("connect_error", handleConnectError);
       socket.off("new_message", handleNewMessage);
@@ -927,8 +908,6 @@ const MessengerPage = ({ user }) => {
       socket.off("typing", handleTyping);
       socket.off("messages_read", handleMessagesRead);
       socket.off("unread_update", handleUnreadUpdate);
-      socket.off("user_online", handleUserOnline);
-      socket.off("user_offline", handleUserOffline);
       socket.off("new_conversation", handleNewConversation);
       socket.off("added_to_conversation", handleAddedToConversation);
       socket.off("message_deleted", handleMessageDeleted);

@@ -22,6 +22,9 @@ socket.on("user_offline", ({ userId }) => {
 });
 
 const subscribe = (cb) => { listeners.add(cb); return () => listeners.delete(cb); };
+// Everyone online, as a Set of id strings (a new Set on every change).
+export const useOnlineUsers = () => useSyncExternalStore(subscribe, () => online);
+
 export const useIsOnline = (staffId) =>
   useSyncExternalStore(subscribe, () => staffId != null && online.has(String(staffId)));
 
