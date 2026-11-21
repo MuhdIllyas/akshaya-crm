@@ -916,6 +916,7 @@ router.post("/connect-staff", async (req, res) => {
         lastMessageSenderType: "system",
         time: new Date().toISOString(),
         unread,
+        notify: true, // a chat bubble shows this even though it's a system line
       });
       io.to(`user:${staff.id}`).emit("staff_requested", {
         conversationId: Number(conv.id),
