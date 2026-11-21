@@ -2,6 +2,7 @@
 //   <StaffTargetsPanel centreId={centreId} />
 import React, { useEffect, useState, useCallback } from "react";
 import { FiTarget, FiRefreshCw, FiCheckCircle, FiChevronDown, FiChevronUp } from "react-icons/fi";
+import StaffName from '@/components/staff/StaffName';
 
 const formatINR = (v) => Number(v || 0).toLocaleString("en-IN");
 const thisMonth = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7);
@@ -108,7 +109,7 @@ const StaffTargetsPanel = ({ centreId }) => {
               <button className="w-full text-left" aria-expanded={openId === r.staff_id} onClick={() => toggleHistory(r.staff_id)}>
                 <div className="flex items-center justify-between gap-2">
                   <p className="font-medium text-slate-900">
-                    {r.staff_name}
+                    <StaffName id={r.staff_id} name={r.staff_name} />
                     {r.employment_type === "Probation" && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">Trainee</span>}
                   </p>
                   <span className="text-slate-400">{openId === r.staff_id ? <FiChevronUp /> : <FiChevronDown />}</span>
@@ -155,7 +156,7 @@ const StaffTargetsPanel = ({ centreId }) => {
                 <React.Fragment key={r.id}>
                   <tr className="cursor-pointer border-t border-slate-100 transition-colors hover:bg-slate-50" onClick={() => toggleHistory(r.staff_id)}>
                     <td className="px-4 py-3 font-medium text-slate-900">
-                      {r.staff_name}
+                      <StaffName id={r.staff_id} name={r.staff_name} />
                       {r.employment_type === "Probation" && <span className="ml-2 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">Trainee</span>}
                     </td>
                     <td className="px-4 py-3 text-right text-slate-600">₹{formatINR(r.baseline_amount)}</td>

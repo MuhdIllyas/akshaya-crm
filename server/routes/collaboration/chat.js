@@ -6,7 +6,7 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from 'url';
 import { resolveConversation } from '../../utils/conversationService.js';
-import { sendMessage, getUnreadCount } from '../../utils/messageRouter.js';
+import { sendMessage, getUnreadCount, sendSystemMessage } from '../../utils/messageRouter.js';
 import notificationService from "../../utils/notificationService.js";
 import { notificationTemplates } from "../../utils/notificationTemplates.js";
 
@@ -187,13 +187,44 @@ router.get("/conversations", authenticateToken, async (req, res) => {
           ORDER BY m.created_at DESC LIMIT 1
         ) as last_message_sender_id,
         (
+          SELECT m.sender_type
+          FROM chat_messages m
+          WHERE m.conversation_id = c.id AND m.is_deleted = false
+          ORDER BY m.created_at DESC LIMIT 1
+        ) as last_message_sender_type,
+        -- Customer chats: when the customer's oldest unanswered message came in
+        CASE WHEN c.channel IN ('whatsapp', 'portal') THEN (
+          SELECT MIN(m.created_at)
+          FROM chat_messages m
+          WHERE m.conversation_id = c.id AND m.is_deleted = false AND m.sender_type = 'customer'
+            AND m.created_at > COALESCE((
+              SELECT MAX(r.created_at) FROM chat_messages r
+              WHERE r.conversation_id = c.id AND r.is_deleted = false
+                AND (r.sender_type = 'staff' OR r.direction = 'outgoing')
+            ), 'epoch'::timestamp)
+        ) END as waiting_since,
+        my.pinned_at,
+        c.contact_name,
+        c.wa_profile_name,
+        -- WhatsApp: the customer this number belongs to (linked, or matched on the number)
+        CASE WHEN c.channel = 'whatsapp' THEN (
+          SELECT cu.name FROM customers cu
+           WHERE cu.id = c.customer_id
+              OR cu.primary_phone IN (
+                   RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10),
+                   '91' || RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10),
+                   '+91' || RIGHT(regexp_replace(c.phone_number, '\\D', '', 'g'), 10))
+           ORDER BY (cu.id = c.customer_id) DESC NULLS LAST, cu.id
+           LIMIT 1
+        ) END AS customer_name,
+        (
           SELECT COALESCE(
             json_agg(
               json_build_object(
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
-                'photo', s.photo,
+                'photo', s.photo, 'member_role', p.role,
                 'centre_name', c_staff.name
               )
             ),
@@ -205,8 +236,8 @@ router.get("/conversations", authenticateToken, async (req, res) => {
           WHERE p.conversation_id = c.id AND p.participant_type = 'staff'
         ) as participants
       FROM chat_conversations c
-      INNER JOIN chat_participants p ON c.id = p.conversation_id
-      WHERE p.staff_id = $1 
+      INNER JOIN chat_participants my ON c.id = my.conversation_id
+      WHERE my.staff_id = $1
         AND c.status = $2
         ${role !== "superadmin" ? "AND (c.centre_id = $3 OR c.centre_id IS NULL)" : ""}
       ORDER BY c.last_message_at DESC NULLS LAST
@@ -337,7 +368,7 @@ router.post("/conversation", authenticateToken, async (req, res) => {
                 'staff_id', p.staff_id,
                 'name', s.name,
                 'role', s.role,
-                'photo', s.photo,
+                'photo', s.photo, 'member_role', p.role,
                 'joined_at', p.joined_at,
                 'centre_name', c_staff.name
               )
@@ -400,6 +431,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
           m.message as text,
           m.sender_id,
           m.sender_type,
+          m.direction,
           m.message_type as type,
           m.file_url,
           m.file_name,
@@ -452,6 +484,7 @@ router.get("/messages/:conversationId", authenticateToken, async (req, res) => {
           m.message as text,
           m.sender_id,
           m.sender_type,
+          m.direction,
           m.message_type as type,
           m.file_url,
           '' as file_name,
@@ -978,6 +1011,216 @@ router.get("/staff", authenticateToken, async (req, res) => {
 });
 
 /* ================================
+   SAVE A NAME FOR A WHATSAPP NUMBER (optional)
+================================ */
+
+// Body: { name } — an empty name clears it (the chat falls back to the customer's or WhatsApp name)
+router.patch("/conversation/:conversationId/contact-name", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    if (!Number.isInteger(conversationId)) return res.status(400).json({ error: "Invalid chat" });
+    const isAdmin = req.user.role === "admin" || req.user.role === "superadmin";
+    if (!(await checkConversationAccess(conversationId, req.user.id)) && !isAdmin) {
+      return res.status(403).json({ error: "Not a participant in this conversation" });
+    }
+    const { rows: convRows } = await pool.query(`SELECT channel, centre_id FROM chat_conversations WHERE id = $1`, [conversationId]);
+    const conv = convRows[0];
+    if (!conv) return res.status(404).json({ error: "Conversation not found" });
+    if (conv.channel !== "whatsapp") return res.status(400).json({ error: "Only WhatsApp chats can be named this way" });
+    if (req.user.role === "admin" && conv.centre_id && Number(conv.centre_id) !== Number(req.user.centre_id)) {
+      return res.status(403).json({ error: "Not allowed" });
+    }
+
+    const name = String(req.body?.name || "").replace(/\s+/g, " ").trim().slice(0, 80) || null;
+    const { rows } = await pool.query(
+      `UPDATE chat_conversations SET contact_name = $1, updated_at = NOW() WHERE id = $2
+       RETURNING id, contact_name, wa_profile_name`,
+      [name, conversationId]
+    );
+
+    // Everyone in the chat sees the new name
+    if (req.io) {
+      const { rows: people } = await pool.query(
+        `SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'`,
+        [conversationId]
+      );
+      for (const p of people) {
+        req.io.to(`user:${p.staff_id}`).emit("conversation_contact_named", { conversationId, contact_name: name });
+      }
+    }
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Save contact name error:", err);
+    res.status(500).json({ error: "Couldn't save the name" });
+  }
+});
+
+/* ================================
+   QUICK REPLIES (chips above the message box)
+================================ */
+
+// Your centre's replies plus the ones for every centre
+router.get("/quick-replies", authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, centre_id, title, body, created_by FROM chat_quick_replies
+        WHERE centre_id IS NULL OR centre_id = $1
+        ORDER BY title`,
+      [req.user.centre_id || null]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error("Quick replies error:", err);
+    res.status(500).json({ error: "Couldn't load quick replies" });
+  }
+});
+
+router.post("/quick-replies", authenticateToken, async (req, res) => {
+  try {
+    const title = String(req.body?.title || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    const body = String(req.body?.body || "").trim().slice(0, 2000);
+    if (!title || !body) return res.status(400).json({ error: "Give the reply a name and a message" });
+    // A superadmin without a centre makes replies for every centre
+    const centreId = req.user.centre_id || null;
+    const { rows } = await pool.query(
+      `INSERT INTO chat_quick_replies (centre_id, title, body, created_by) VALUES ($1, $2, $3, $4)
+       RETURNING id, centre_id, title, body, created_by`,
+      [centreId, title, body, req.user.id]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error("Add quick reply error:", err);
+    res.status(500).json({ error: "Couldn't save the quick reply" });
+  }
+});
+
+router.delete("/quick-replies/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { rows } = await pool.query(`SELECT * FROM chat_quick_replies WHERE id = $1`, [id]);
+    const reply = rows[0];
+    if (!reply) return res.status(404).json({ error: "Quick reply not found" });
+    const isAdmin = req.user.role === "superadmin" ||
+      (req.user.role === "admin" && Number(reply.centre_id) === Number(req.user.centre_id));
+    if (!isAdmin && Number(reply.created_by) !== Number(req.user.id)) {
+      return res.status(403).json({ error: "Only the person who made it or an admin can delete it" });
+    }
+    await pool.query(`DELETE FROM chat_quick_replies WHERE id = $1`, [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete quick reply error:", err);
+    res.status(500).json({ error: "Couldn't delete the quick reply" });
+  }
+});
+
+/* ================================
+   CUSTOMER SUMMARY (Details panel of a customer chat)
+================================ */
+
+router.get("/conversation/:conversationId/customer-summary", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    if (!Number.isInteger(conversationId)) return res.status(400).json({ error: "Invalid chat" });
+    if (!(await checkConversationAccess(conversationId, req.user.id)) && req.user.role !== "superadmin") {
+      return res.status(403).json({ error: "Not a participant in this conversation" });
+    }
+    const { rows: convRows } = await pool.query(
+      `SELECT c.customer_id, c.phone_number, c.centre_id, st.name AS assigned_staff_name
+         FROM chat_conversations c LEFT JOIN staff st ON st.id = c.assigned_staff_id
+        WHERE c.id = $1`,
+      [conversationId]
+    );
+    const conv = convRows[0];
+    if (!conv) return res.status(404).json({ error: "Conversation not found" });
+
+    const last10 = String(conv.phone_number || "").replace(/\D/g, "").slice(-10);
+    let customer = null;
+    if (conv.customer_id || last10) {
+      const { rows } = await pool.query(
+        `SELECT id, name, created_at FROM customers
+          WHERE ($1::int IS NOT NULL AND id = $1) OR ($2 <> '' AND RIGHT(regexp_replace(primary_phone, '\\D', '', 'g'), 10) = $2)
+          ORDER BY (id = $1) DESC NULLS LAST, id LIMIT 1`,
+        [conv.customer_id || null, last10]
+      );
+      customer = rows[0] || null;
+    }
+
+    const params = [customer?.id || null, last10];
+    let centreFilter = "";
+    if (req.user.role !== "superadmin") {
+      params.push(req.user.centre_id);
+      centreFilter = `AND sf.centre_id = $${params.length}`;
+    }
+    const { rows: services } = await pool.query(
+      `SELECT DISTINCT ON (se.id)
+              se.id, se.created_at, s.name AS service_name, sc.name AS subcategory_name,
+              st.id AS tracking_id, st.application_number, st.status AS tracking_status,
+              sf.name AS staff_name
+         FROM service_entries se
+         JOIN staff sf ON sf.id = se.staff_id
+         LEFT JOIN services s ON s.id = se.category_id
+         LEFT JOIN subcategories sc ON sc.id = se.subcategory_id
+         LEFT JOIN service_tracking st ON st.service_entry_id = se.id
+        WHERE (($1::int IS NOT NULL AND se.customer_id = $1)
+               OR ($2 <> '' AND RIGHT(regexp_replace(COALESCE(se.phone, ''), '\\D', '', 'g'), 10) = $2))
+          ${centreFilter}
+        ORDER BY se.id DESC, st.id DESC`,
+      params
+    );
+    services.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    res.json({
+      customer_since: customer?.created_at || null,
+      customer_id: customer?.id || null,
+      assigned_staff_name: conv.assigned_staff_name || null,
+      service_count: services.length,
+      services: services.slice(0, 5),
+    });
+  } catch (err) {
+    console.error("Customer summary error:", err);
+    res.status(500).json({ error: "Couldn't load the customer's details" });
+  }
+});
+
+/* ================================
+   PIN / UNPIN A CHAT (for yourself)
+================================ */
+
+const MAX_PINNED = 5;
+
+router.patch("/conversation/:conversationId/pin", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    if (!Number.isInteger(conversationId)) return res.status(400).json({ error: "Invalid chat" });
+    const pinned = req.body?.pinned !== false;
+
+    if (pinned) {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM chat_participants p
+           JOIN chat_conversations c ON c.id = p.conversation_id AND c.status <> 'deleted'
+          WHERE p.staff_id = $1 AND p.pinned_at IS NOT NULL AND p.conversation_id <> $2`,
+        [req.user.id, conversationId]
+      );
+      if (rows[0].n >= MAX_PINNED) {
+        return res.status(400).json({ error: `You can pin up to ${MAX_PINNED} chats. Unpin one first.` });
+      }
+    }
+
+    const { rows } = await pool.query(
+      `UPDATE chat_participants SET pinned_at = ${pinned ? "COALESCE(pinned_at, NOW())" : "NULL"}
+        WHERE conversation_id = $1 AND staff_id = $2
+        RETURNING pinned_at`,
+      [conversationId, req.user.id]
+    );
+    if (!rows.length) return res.status(404).json({ error: "You're not in this chat" });
+    res.json({ conversation_id: conversationId, pinned_at: rows[0].pinned_at });
+  } catch (err) {
+    console.error("Pin chat error:", err);
+    res.status(500).json({ error: "Couldn't pin this chat" });
+  }
+});
+
+/* ================================
    ARCHIVE CONVERSATION
 ================================ */
 
@@ -1022,6 +1265,7 @@ router.get("/unread/all", authenticateToken, async (req, res) => {
           WHERE r.message_id = m.id AND r.staff_id = $1
         )
       WHERE p.staff_id = $1
+        AND c.status <> 'deleted' -- a deleted chat can't be opened, so its messages can't be read
       GROUP BY c.id
       `,
       [userId]
@@ -1193,6 +1437,102 @@ router.get("/mentions/tracking/:id", authenticateToken, async (req, res) => {
   }
 });
 
+// Calendar event card (an "event" mention in a chat message). Uses the same
+// visibility rules as the calendar (routes/events.js), so a card never shows
+// an event to someone who couldn't see it on their own calendar.
+router.get("/mentions/event/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid event id" });
+
+    const result = await pool.query(
+      `SELECT e.id, e.title, e.description, e.date, e.start_datetime, e.end_datetime,
+              e.type, e.event_type, e.priority, e.status, e.visibility,
+              e.centre_id, e.assigned_to,
+              st.name AS assigned_staff_name,
+              c.name  AS centre_name
+         FROM calendar_events e
+         LEFT JOIN staff st  ON st.id = e.assigned_to
+         LEFT JOIN centres c ON c.id = e.centre_id
+        WHERE e.id = $1 AND e.related_task_id IS NULL`,
+      [id]
+    );
+    const ev = result.rows[0];
+    if (!ev) return res.status(404).json({ error: "Event not found" });
+
+    const { role, centre_id: userCentre, id: userId } = req.user;
+    const centreEvent = ev.visibility === "centre" && String(ev.centre_id) === String(userCentre);
+    const canSee =
+      role === "superadmin" ||
+      ev.visibility === "global" ||
+      (role === "admin" && centreEvent) ||
+      (centreEvent && (ev.assigned_to == null || String(ev.assigned_to) === String(userId)));
+    if (!canSee) return res.status(403).json({ code: "NO_ACCESS", error: "You can't see this event" });
+
+    res.json(ev);
+  } catch (err) {
+    console.error("Event mention lookup error:", err);
+    res.status(500).json({ error: "Failed to load event" });
+  }
+});
+
+// Note card (a "note" mention in a chat message). Same rule as the notes list
+// (GET /api/notes/all): the note's creator must be in your centre (unless you're
+// a superadmin), and it must be global/centre, yours, or a non-private note that
+// mentions you. Anyone else gets a locked card, so a chat can't leak a note.
+router.get("/mentions/note/:id", authenticateToken, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "Invalid note id" });
+    const { id: userId, role, centre_id: userCentre } = req.user;
+
+    const result = await pool.query(
+      `SELECT n.id, n.title, n.content, n.visibility, n.color, n.created_at, n.created_by,
+              s.name AS creator_name, s.centre_id AS creator_centre_id,
+              srv.name AS linked_service_name,
+              EXISTS (SELECT 1 FROM note_mentions nm WHERE nm.note_id = n.id AND nm.staff_id = $2) AS mentions_me
+         FROM notes n
+         LEFT JOIN staff s      ON s.id = n.created_by
+         LEFT JOIN services srv ON srv.id = n.related_service_id
+        WHERE n.id = $1`,
+      [id, userId]
+    );
+    const note = result.rows[0];
+    if (!note) return res.status(404).json({ error: "Note not found" });
+
+    const mine = String(note.created_by) === String(userId);
+    const sameCentre = role === "superadmin" || String(note.creator_centre_id) === String(userCentre);
+    const canSee =
+      sameCentre &&
+      (note.visibility === "global" ||
+        note.visibility === "centre" ||
+        mine ||
+        (note.visibility !== "private" && note.mentions_me));
+    if (!canSee) return res.status(403).json({ code: "NO_ACCESS", error: "You can't see this note" });
+
+    // Only what the card shows: a short plain-text preview, not the whole note
+    const preview = String(note.content || "")
+      .replace(/@\[([^\]]+)\]\(\d+\)/g, "@$1")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    res.json({
+      id: note.id,
+      title: note.title,
+      preview: preview.length > 160 ? `${preview.slice(0, 157)}…` : preview,
+      visibility: note.visibility,
+      color: note.color,
+      created_at: note.created_at,
+      created_by: note.created_by,
+      creator_name: note.creator_name,
+      linked_service_name: note.linked_service_name,
+    });
+  } catch (err) {
+    console.error("Note mention lookup error:", err);
+    res.status(500).json({ error: "Failed to load note" });
+  }
+});
+
 /* ================================
    ASSIGN CONVERSATION (The "Baton Pass")
 ================================ */
@@ -1251,7 +1591,7 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
              (
                SELECT COALESCE(
                  json_agg(
-                   json_build_object('staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'centre_name', c_staff.name)
+                   json_build_object('staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'member_role', p.role, 'centre_name', c_staff.name)
                  ), '[]'::json
                )
                FROM chat_participants p
@@ -1310,6 +1650,255 @@ router.patch("/conversation/:conversationId/assign", authenticateToken, async (r
   }
 });
 
+
+/* ================================
+   GROUP MEMBERS (add / remove / leave / group admins / rename)
+================================ */
+
+// The conversation as the Messenger list expects it (same shape as GET /conversations).
+async function loadConversationForClient(conversationId, db = pool) {
+  const { rows } = await db.query(
+    `SELECT c.id, c.name, c.is_group, c.channel, c.context_type, c.context_id,
+            c.phone_number AS context_identifier, c.name AS context_name, c.status,
+            c.assigned_staff_id, c.customer_id, c.centre_id, c.created_by, c.last_message_at,
+            (SELECT COALESCE(json_agg(json_build_object(
+                      'staff_id', p.staff_id, 'name', s.name, 'role', s.role, 'photo', s.photo, 'member_role', p.role,
+                      'member_role', p.role, 'joined_at', p.joined_at, 'centre_name', cs.name)
+                    ORDER BY (p.role = 'owner') DESC, s.name), '[]'::json)
+               FROM chat_participants p
+               JOIN staff s ON s.id = p.staff_id
+               LEFT JOIN centres cs ON cs.id = s.centre_id
+              WHERE p.conversation_id = c.id AND p.participant_type = 'staff') AS participants
+       FROM chat_conversations c
+      WHERE c.id = $1`,
+    [conversationId]
+  );
+  return rows[0] || null;
+}
+
+// Only plain internal group chats have editable members. Team chats follow their team,
+// service / customer chats follow the work they belong to;
+// WhatsApp / portal chats use "Assigned to".
+const hasEditableMembers = (c) =>
+  !!c && c.status !== "deleted" && (c.channel || "internal") === "internal" && c.is_group && !c.context_type;
+
+// Group admins: the chat's owners, plus admins and superadmins who are in the chat.
+async function memberAccess(conversationId, user) {
+  if (!Number.isInteger(conversationId)) return { conversation: null, isMember: false, canManage: false };
+  const { rows: convRows } = await pool.query(`SELECT * FROM chat_conversations WHERE id = $1`, [conversationId]);
+  const { rows } = await pool.query(
+    `SELECT role FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2`,
+    [conversationId, user.id]
+  );
+  const isMember = rows.length > 0;
+  const canManage = isMember && (rows[0].role === "owner" || user.role === "admin" || user.role === "superadmin");
+  return { conversation: convRows[0], isMember, canManage };
+}
+
+const staffNames = async (ids) => {
+  if (!ids.length) return [];
+  const { rows } = await pool.query(`SELECT id, name FROM staff WHERE id = ANY($1::int[])`, [ids]);
+  return ids.map((id) => rows.find((r) => r.id === id)?.name).filter(Boolean);
+};
+
+const actorName = async (req) => (await staffNames([Number(req.user.id)]))[0] || "Someone";
+
+const joinNames = (names) =>
+  names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+
+// Tell everyone in the chat (and anyone just removed) about the new member list.
+async function broadcastMembers(req, conversationId, { added = [], removed = [], reason = "removed" } = {}) {
+  const full = await loadConversationForClient(conversationId);
+  if (!req.io || !full) return full;
+  for (const p of full.participants) {
+    const event = added.includes(p.staff_id) ? "added_to_conversation" : "conversation_members_updated";
+    req.io.to(`user:${p.staff_id}`).emit(event, full);
+  }
+  for (const id of removed) {
+    req.io.to(`user:${id}`).emit("conversation_deleted", { conversationId: Number(conversationId), reason });
+  }
+  return full;
+}
+
+const systemNote = async (req, conversationId, text) => {
+  try {
+    await sendSystemMessage(conversationId, text, req.io);
+    await pool.query(`UPDATE chat_conversations SET last_message_at = NOW() WHERE id = $1`, [conversationId]);
+  } catch (err) {
+    console.error("Non-fatal: member system message failed", err);
+  }
+};
+
+// Add staff. Body: { staff_ids: [..] }
+router.post("/conversation/:conversationId/participants", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const { conversation, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "Members of this chat can't be changed" });
+    if (!canManage) return res.status(403).json({ error: "Only group admins can add people" });
+
+    const requested = [...new Set((req.body?.staff_ids || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+    if (!requested.length) return res.status(400).json({ error: "Pick at least one person" });
+
+    const { rows: valid } = await pool.query(
+      `SELECT s.id FROM staff s
+        WHERE s.id = ANY($1::int[]) AND s.status = 'Active'
+          AND NOT EXISTS (SELECT 1 FROM chat_participants p WHERE p.conversation_id = $2 AND p.staff_id = s.id)`,
+      [requested, conversationId]
+    );
+    const added = valid.map((r) => r.id);
+    if (!added.length) {
+      const { rows: inChat } = await pool.query(
+        `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND staff_id = ANY($2::int[]) LIMIT 1`,
+        [conversationId, requested]
+      );
+      return res.status(400).json({ error: inChat.length ? "They are already in this chat" : "Pick active staff members" });
+    }
+
+    for (const id of added) {
+      await pool.query(
+        `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
+         VALUES ($1, $2, 'staff', 'member', NOW()) ON CONFLICT DO NOTHING`,
+        [conversationId, id]
+      );
+    }
+
+    const actor = await actorName(req);
+    await systemNote(req, conversationId, `${actor} added ${joinNames(await staffNames(added))}`);
+    const full = await broadcastMembers(req, conversationId, { added });
+
+    try {
+      await notificationService.createBulkNotifications({
+        recipientStaffIds: added,
+        senderStaffId: req.user.id,
+        centreId: req.user.centre_id,
+        relatedEntityType: "conversation",
+        relatedEntityId: conversationId,
+        conversationId,
+        type: "system",
+        category: "communication",
+        title: "👥 Added to a group",
+        message: `${actor} added you to ${conversation.name || "a group chat"}.`,
+        priority: "medium",
+      });
+    } catch (notifErr) {
+      console.error("Non-fatal: add member notification failed", notifErr);
+    }
+
+    res.json(full);
+  } catch (err) {
+    console.error("Add members error:", err);
+    res.status(500).json({ error: "Couldn't add people to this chat" });
+  }
+});
+
+// Remove someone, or leave (your own id).
+router.delete("/conversation/:conversationId/participants/:staffId", authenticateToken, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const staffId = Number(req.params.staffId);
+    if (!Number.isInteger(staffId)) return res.status(400).json({ error: "Invalid staff member" });
+    const leaving = staffId === Number(req.user.id);
+    const { conversation, isMember, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "Members of this chat can't be changed" });
+    if (leaving ? !isMember : !canManage) return res.status(403).json({ error: "Only group admins can remove people" });
+
+    const actor = await actorName(req);
+    const [name] = await staffNames([staffId]);
+
+    await client.query("BEGIN");
+    const { rows: gone } = await client.query(
+      `DELETE FROM chat_participants WHERE conversation_id = $1 AND staff_id = $2 RETURNING role`,
+      [conversationId, staffId]
+    );
+    if (!gone.length) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "They are not in this chat" });
+    }
+    // When the last group admin goes, the longest-standing member takes over.
+    const { rows: owners } = await client.query(
+      `SELECT 1 FROM chat_participants WHERE conversation_id = $1 AND role = 'owner' AND participant_type = 'staff'`,
+      [conversationId]
+    );
+    if (gone[0].role === "owner" && !owners.length) {
+      await client.query(
+        `UPDATE chat_participants SET role = 'owner'
+          WHERE conversation_id = $1 AND staff_id = (
+            SELECT staff_id FROM chat_participants WHERE conversation_id = $1 AND participant_type = 'staff'
+             ORDER BY joined_at, staff_id LIMIT 1)`,
+        [conversationId]
+      );
+    }
+    // Their own tags shouldn't stay on a chat they can no longer open.
+    await client.query(
+      `DELETE FROM staff_tag_conversations lc USING staff_tags l
+        WHERE lc.tag_id = l.id AND l.staff_id = $1 AND lc.conversation_id = $2`,
+      [staffId, conversationId]
+    );
+    await client.query("COMMIT");
+
+    await systemNote(req, conversationId, leaving ? `${name || "Someone"} left` : `${actor} removed ${name || "a member"}`);
+    res.json(await broadcastMembers(req, conversationId, { removed: [staffId], reason: leaving ? "left" : "removed" }));
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    console.error("Remove member error:", err);
+    res.status(500).json({ error: "Couldn't remove them from this chat" });
+  } finally {
+    client.release();
+  }
+});
+
+// Make someone a group admin, or a normal member again. Body: { member_role: 'owner' | 'member' }
+router.patch("/conversation/:conversationId/participants/:staffId", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const staffId = Number(req.params.staffId);
+    if (!Number.isInteger(staffId)) return res.status(400).json({ error: "Invalid staff member" });
+    const role = req.body?.member_role === "owner" ? "owner" : "member";
+    const { conversation, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "Members of this chat can't be changed" });
+    if (!canManage) return res.status(403).json({ error: "Only group admins can do this" });
+
+    if (role === "member") {
+      const { rows } = await pool.query(
+        `SELECT COUNT(*)::int AS n FROM chat_participants WHERE conversation_id = $1 AND role = 'owner' AND staff_id <> $2`,
+        [conversationId, staffId]
+      );
+      if (!rows[0].n) return res.status(400).json({ error: "A group needs at least one admin" });
+    }
+
+    const { rowCount } = await pool.query(
+      `UPDATE chat_participants SET role = $1 WHERE conversation_id = $2 AND staff_id = $3`,
+      [role, conversationId, staffId]
+    );
+    if (!rowCount) return res.status(404).json({ error: "They are not in this chat" });
+
+    res.json(await broadcastMembers(req, conversationId));
+  } catch (err) {
+    console.error("Member role error:", err);
+    res.status(500).json({ error: "Couldn't change their role" });
+  }
+});
+
+// Rename a group. Body: { name }
+router.patch("/conversation/:conversationId/name", authenticateToken, async (req, res) => {
+  try {
+    const conversationId = Number(req.params.conversationId);
+    const name = String(req.body?.name || "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (!name) return res.status(400).json({ error: "Give the group a name" });
+    const { conversation, canManage } = await memberAccess(conversationId, req.user);
+    if (!hasEditableMembers(conversation)) return res.status(400).json({ error: "This chat can't be renamed" });
+    if (!canManage) return res.status(403).json({ error: "Only group admins can rename the group" });
+
+    await pool.query(`UPDATE chat_conversations SET name = $1, updated_at = NOW() WHERE id = $2`, [name, conversationId]);
+    await systemNote(req, conversationId, `${await actorName(req)} renamed the group to "${name}"`);
+    res.json(await broadcastMembers(req, conversationId));
+  } catch (err) {
+    console.error("Rename group error:", err);
+    res.status(500).json({ error: "Couldn't rename the group" });
+  }
+});
 
 /* ================================
    CUSTOMER CONVERSATIONS (customer profile → Messages)

@@ -59,13 +59,24 @@ import ActivityPanel from "@/components/ActivityPanel";
 import EmojiPicker from 'emoji-picker-react';
 import Chat from '@/components/Chat';
 import ConversationList from "@/components/chat/ConversationList";
+import ChatFolders from "@/components/chat/ChatFolders";
 import ConversationDetails from "@/components/chat/ConversationDetails";
 import MessengerNav from "@/components/chat/MessengerNav";
 import SchedulesView from "@/components/automations/SchedulesView";
 import ServiceLinkChip from "@/components/automations/ServiceLinkChip";
+import {
+  ServiceTaskFields, ServiceTaskBadge, ServiceTaskSummary, TaskCloseNote, TaskActionButtons,
+  closedStatusStyles, isServiceTask, isClosedTask, fetchServiceTitle,
+} from "@/components/tasks/ServiceTaskBits";
 import { socket } from "@/services/socket";
 import { useLocation } from "react-router-dom";
 import { todayIST, addDays } from "@/utils/dates";
+import { taskContext } from "@/components/staff/staffDirectory";
+import StaffName from '@/components/staff/StaffName';
+import useTags from "@/hooks/useTags";
+import { TagPickerModal, TagManagerModal } from "@/components/tags/TagModals";
+import AddMembersModal from "@/components/chat/AddMembersModal";
+import { hasEditableMembers, isGroupAdmin, getConversationDisplayName } from "@/components/chat/chatUtils";
 
 // Message types that carry an attachment (WhatsApp media + uploads)
 const FILE_TYPES = ['file', 'image', 'audio', 'video', 'document'];
@@ -350,6 +361,35 @@ const MessengerPage = ({ user }) => {
   const [conversations, setConversations] = useState([]);
   const [messages, setMessages] = useState({});
   const [staffList, setStaffList] = useState([]);
+  // Tags (like WhatsApp lists) and group members
+  const chatTags = useTags("conversations");
+  // Folder shown in the chat list (All, Unread, Pinned, Customers, …, "tag:<id>"), remembered per browser
+  const [chatFolder, setChatFolderState] = useState(() => {
+    try {
+      return localStorage.getItem("messenger_folder") || "all";
+    } catch {
+      return "all";
+    }
+  });
+  const setChatFolder = (id) => {
+    setChatFolderState(id);
+    try {
+      localStorage.setItem("messenger_folder", id);
+    } catch {
+      /* storage unavailable */
+    }
+  };
+  // A tag deleted here or on another device: back to All chats
+  useEffect(() => {
+    if (chatTags.loaded && String(chatFolder).startsWith("tag:") && !chatTags.tags.some((t) => `tag:${t.id}` === chatFolder)) {
+      setChatFolder("all");
+    }
+  }, [chatTags.loaded, chatTags.tags, chatFolder]); // eslint-disable-line react-hooks/exhaustive-deps
+  const conversationsRef = useRef([]);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
+  const [isTagPickerOpen, setIsTagPickerOpen] = useState(false);
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [isAddMembersOpen, setIsAddMembersOpen] = useState(false);
   const [loadingChat, setLoadingChat] = useState(false);
   const [typingUsers, setTypingUsers] = useState({});
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -384,6 +424,29 @@ const MessengerPage = ({ user }) => {
     return () => {
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  // Messenger's own width (it changes with the window and with the app sidebar open or
+  // collapsed). The layout is chosen from this, so every screen gets the same design.
+  const [layoutWidth, setLayoutWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1440));
+  const [isPhoneLayout, setIsPhoneLayout] = useState(() => typeof window !== "undefined" && !window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    const el = messengerRootRef.current;
+    const update = () => {
+      if (el) setLayoutWidth(Math.round(el.getBoundingClientRect().width));
+      setIsPhoneLayout(!window.matchMedia("(min-width: 768px)").matches);
+    };
+    update();
+    window.addEventListener("resize", update);
+    let ro = null;
+    if (el && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener("resize", update);
+      ro?.disconnect();
     };
   }, []);
   const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
@@ -426,13 +489,12 @@ const MessengerPage = ({ user }) => {
     return `${safeBase}${safePath}`;
   };
 
-  const [taskForm, setTaskForm] = useState({
-    title: "",
-    description: "",
-    assignee: "",
-    dueDate: "",
-    priority: "medium"
-  });
+  const EMPTY_TASK_FORM = {
+    title: "", description: "", assignee: "", dueDate: "", priority: "medium",
+    // service task (admin / superadmin)
+    isService: false, serviceId: "", subcategoryId: "", customerName: "", customerPhone: "",
+  };
+  const [taskForm, setTaskForm] = useState(EMPTY_TASK_FORM);
 
   const [templateForm, setTemplateForm] = useState({
     title: "",
@@ -616,6 +678,7 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
+          direction: msg.direction,
           live_task_data: msg.live_task_data || null,
           mentions: msg.mentions || []
         };
@@ -666,20 +729,26 @@ const MessengerPage = ({ user }) => {
           return prev;
         }
 
-        const updated = prev.map(conv =>
-          String(conv.id) === String(data.conversationId)
-            ? {
-              ...conv,
-              last_message: data.lastMessage,
-              lastMessage: data.lastMessage,
-              last_message_sender_id: data.lastMessageSenderId,
-              last_message_sender: data.lastMessageSender,
-              last_message_at: data.time,
-              time: data.time,
-              unread: data.unread !== undefined ? data.unread : conv.unread
-            }
-            : conv
-        );
+        // Some updates (e.g. "assigned to") carry no message: keep the last message then
+        const updated = prev.map(conv => {
+          if (String(conv.id) !== String(data.conversationId)) return conv;
+          const next = { ...conv, unread: data.unread !== undefined ? data.unread : conv.unread };
+          if (data.assigned_staff_id !== undefined) next.assigned_staff_id = data.assigned_staff_id;
+          if (data.lastMessage === undefined) return next;
+          Object.assign(next, {
+            last_message: data.lastMessage,
+            lastMessage: data.lastMessage,
+            last_message_sender_id: data.lastMessageSenderId,
+            last_message_sender: data.lastMessageSender,
+            last_message_sender_type: data.lastMessageSenderType,
+            last_message_at: data.time,
+            time: data.time,
+          });
+          // Customer wrote: start (or keep) the "waiting" clock. Staff replied: stop it.
+          if (data.lastMessageSenderType === "customer") next.waiting_since = conv.waiting_since || data.time;
+          else if (data.lastMessageSenderType === "staff") next.waiting_since = null;
+          return next;
+        });
         return updated.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
       });
     };
@@ -795,7 +864,27 @@ const MessengerPage = ({ user }) => {
       fetchConversations();
     };
 
+    // Members added / removed / renamed: refresh the members and name of that chat
+    const handleMembersUpdated = (full) => {
+      if (!full?.id) return;
+      const patch = { name: full.name, context_name: full.context_name, participants: full.participants || [] };
+      setConversations(prev => prev.map(c => String(c.id) === String(full.id) ? { ...c, ...patch } : c));
+      setActiveConversation(prev => prev && String(prev.id) === String(full.id) ? { ...prev, ...patch } : prev);
+    };
+
+    // Someone saved a name for a WhatsApp number
+    const handleContactNamed = (data) => {
+      if (!data?.conversationId) return;
+      const patch = { contact_name: data.contact_name || null };
+      setConversations(prev => prev.map(c => String(c.id) === String(data.conversationId) ? { ...c, ...patch } : c));
+      setActiveConversation(prev => prev && String(prev.id) === String(data.conversationId) ? { ...prev, ...patch } : prev);
+    };
+
     const handleConversationDeleted = (data) => {
+      if (data?.reason === "removed") {
+        const gone = conversationsRef.current.find(c => String(c.id) === String(data.conversationId));
+        if (gone) toast.info(`You were removed from ${gone.name || "a group chat"}`);
+      }
       setConversations(prev => prev.filter(c => String(c.id) !== String(data.conversationId)));
       setActiveConversation(prevActive => {
         if (prevActive && String(prevActive.id) === String(data.conversationId)) return null;
@@ -819,6 +908,8 @@ const MessengerPage = ({ user }) => {
     socket.on("added_to_conversation", handleAddedToConversation);
     socket.on("message_deleted", handleMessageDeleted);
     socket.on("conversation_deleted", handleConversationDeleted);
+    socket.on("conversation_members_updated", handleMembersUpdated);
+    socket.on("conversation_contact_named", handleContactNamed);
 
     // 🔥 FIX 2: Manually trigger if the global socket is already connected!
     if (socket.connected) {
@@ -842,6 +933,8 @@ const MessengerPage = ({ user }) => {
       socket.off("added_to_conversation", handleAddedToConversation);
       socket.off("message_deleted", handleMessageDeleted);
       socket.off("conversation_deleted", handleConversationDeleted);
+      socket.off("conversation_members_updated", handleMembersUpdated);
+      socket.off("conversation_contact_named", handleContactNamed);
       
       // Removed disconnectSocket() completely!
     };
@@ -962,6 +1055,7 @@ const MessengerPage = ({ user }) => {
           isOptimistic: false,
           isSystem: msg.sender_type === 'system',
           sender_type: msg.sender_type,
+          direction: msg.direction,
           live_task_data: msg.live_task_data || null,
           mentions: msg.mentions || []
         };
@@ -1293,6 +1387,138 @@ const MessengerPage = ({ user }) => {
     }
   };
 
+  // ============== GROUP MEMBERS ==============
+  const membersRequest = async (path, method, body) => {
+    const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${activeConversation.id}${path}`, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || 'Something went wrong');
+    return data;
+  };
+
+  const applyMembers = (full) => {
+    if (!full?.id) return;
+    const patch = { name: full.name, context_name: full.context_name, participants: full.participants || [] };
+    setConversations(prev => prev.map(c => String(c.id) === String(full.id) ? { ...c, ...patch } : c));
+    setActiveConversation(prev => prev && String(prev.id) === String(full.id) ? { ...prev, ...patch } : prev);
+  };
+
+  const handleAddMembers = async (staffIds) => {
+    if (!activeConversation) return false;
+    try {
+      applyMembers(await membersRequest('/participants', 'POST', { staff_ids: staffIds }));
+      toast.success(staffIds.length === 1 ? 'Added to the group' : `${staffIds.length} people added`);
+      return true;
+    } catch (err) {
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  const handleRemoveMember = async (member) => {
+    if (!activeConversation) return;
+    if (!window.confirm(`Remove ${member.name} from this group?`)) return;
+    try {
+      applyMembers(await membersRequest(`/participants/${member.staff_id}`, 'DELETE'));
+      toast.success(`${member.name} was removed`);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleSetMemberRole = async (member, memberRole) => {
+    if (!activeConversation) return;
+    try {
+      applyMembers(await membersRequest(`/participants/${member.staff_id}`, 'PATCH', { member_role: memberRole }));
+      toast.success(memberRole === 'owner' ? `${member.name} is now a group admin` : `${member.name} is no longer a group admin`);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleLeaveGroup = async () => {
+    if (!activeConversation) return;
+    const conv = activeConversation;
+    if (!window.confirm(`Leave "${getConversationDisplayName(conv, currentUser.id)}"? You won't get its messages any more.`)) return;
+    try {
+      await membersRequest(`/participants/${currentUser.id}`, 'DELETE');
+      setConversations(prev => prev.filter(c => String(c.id) !== String(conv.id)));
+      setActiveConversation(null);
+      setIsContactPanelOpen(false);
+      setIsDetailsDrawerOpen(false);
+      chatTags.reload();
+      toast.success('You left the group');
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleRenameGroup = async (name) => {
+    if (!activeConversation) return false;
+    try {
+      applyMembers(await membersRequest('/name', 'PATCH', { name }));
+      return true;
+    } catch (err) {
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  // ============== NAME A WHATSAPP NUMBER (optional) ==============
+  const applyContactName = (conversationId, contactName) => {
+    setConversations(prev => prev.map(c => String(c.id) === String(conversationId) ? { ...c, contact_name: contactName } : c));
+    setActiveConversation(prev => prev && String(prev.id) === String(conversationId) ? { ...prev, contact_name: contactName } : prev);
+  };
+
+  const handleSaveContactName = async (name) => {
+    if (!activeConversation) return false;
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${activeConversation.id}/contact-name`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't save the name");
+      applyContactName(activeConversation.id, data.contact_name || null);
+      toast.success(data.contact_name ? 'Name saved' : 'Name cleared');
+      return true;
+    } catch (err) {
+      toast.error(err.message);
+      return false;
+    }
+  };
+
+  // ============== PIN A CHAT (for yourself) ==============
+  const handleTogglePin = async (conv) => {
+    const pinned = !conv.pinned_at;
+    const apply = (value) => {
+      setConversations(prev => prev.map(c => String(c.id) === String(conv.id) ? { ...c, pinned_at: value } : c));
+      setActiveConversation(prev => prev && String(prev.id) === String(conv.id) ? { ...prev, pinned_at: value } : prev);
+    };
+    apply(pinned ? new Date().toISOString() : null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/chat/conversation/${conv.id}/pin`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ pinned }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't pin this chat");
+      apply(data.pinned_at || null);
+    } catch (err) {
+      apply(conv.pinned_at || null);
+      toast.error(err.message);
+    }
+  };
+
+  const activeConversationTags = activeConversation ? (chatTags.tagsByItem.get(String(activeConversation.id)) || []) : [];
+  const canEditActiveMembers = isGroupAdmin(activeConversation, currentUser);
+  const canLeaveActive = hasEditableMembers(activeConversation);
+
   // ============== ASSIGN CONVERSATION ==============
   const handleAssignChat = async (staffId) => {
     if (!activeConversation) return;
@@ -1614,7 +1840,14 @@ const MessengerPage = ({ user }) => {
   const handleTemplateFormChange = (e) => setTemplateForm(prev => ({ ...prev, [e.target.name]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const handleEventFormChange = (e) => setEventForm(prev => ({ ...prev, [e.target.name]: e.target.value }));
 
-  const resetTaskForm = () => setTaskForm({ title: "", description: "", assignee: "", dueDate: "", priority: "medium" });
+  const resetTaskForm = () => setTaskForm(EMPTY_TASK_FORM);
+
+  // Centre of the picked assignee (service tasks list only services set up there)
+  const assigneeCentreId = () => {
+    if (!taskForm.assignee) return null;
+    if (String(taskForm.assignee) === String(currentUser.id)) return currentUser.centreId;
+    return staffList.find(s => String(s.id) === String(taskForm.assignee))?.centre_id || null;
+  };
   const resetTemplateForm = () => {
     setTemplateForm({
       title: "", description: "", priority: "medium", isRecurring: true, recurrenceType: "weekly", recurrenceInterval: 1, recurrenceDay: 1, recurrenceDate: 1, assignmentMode: "centre_admin", specificAssignee: "", dueOffsetDays: 0, isGlobal: false, isActive: true
@@ -1623,17 +1856,35 @@ const MessengerPage = ({ user }) => {
   };
 
   const handleCreateTask = async () => {
-    if (!taskForm.title.trim()) return alert("Please enter a task title");
+    const asService = taskForm.isService && canCreateRecurring();
+    if (!asService && !taskForm.title.trim()) return alert("Please enter a task title");
     if (!taskForm.assignee) return alert("Please select an assignee");
+    if (asService && !taskForm.serviceId) return alert("Please pick the service");
+    if (asService && taskForm.customerPhone && taskForm.customerPhone.replace(/\D/g, "").length < 10) {
+      return alert("Customer phone should be a 10-digit number");
+    }
 
     setLoading(true);
     try {
+      let title = taskForm.title.trim();
+      if (asService && !title) {
+        const svc = await fetchServiceTitle(assigneeCentreId(), taskForm.serviceId, taskForm.subcategoryId);
+        title = [svc || "Service", taskForm.customerName.trim()].filter(Boolean).join(" for ");
+      }
+
       const taskData = {
-        title: taskForm.title,
+        title,
         description: taskForm.description,
         assigned_to: parseInt(taskForm.assignee),
         due_date: taskForm.dueDate || null,
-        priority: taskForm.priority
+        priority: taskForm.priority,
+        ...(asService ? {
+          task_kind: "service",
+          related_service_id: parseInt(taskForm.serviceId),
+          related_subcategory_id: taskForm.subcategoryId ? parseInt(taskForm.subcategoryId) : null,
+          customer_name: taskForm.customerName.trim() || null,
+          customer_phone: taskForm.customerPhone.trim() || null,
+        } : {}),
       };
 
       const res = await fetch(`${API_BASE_URL}/api/tasks/add`, {
@@ -1645,12 +1896,12 @@ const MessengerPage = ({ user }) => {
         body: JSON.stringify(taskData)
       });
 
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
-      setTasks(prev => [{
-        ...data,
-        centre_name: centresMap[data.centre_id] || `Centre ${data.centre_id}`
-      }, ...prev]);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `API error: ${res.status}`);
+      }
+      await res.json();
+      await fetchTasks(); // reload so service names / customer show on the new card
 
       await fetchCalendarData();
       resetTaskForm();
@@ -1761,6 +2012,11 @@ const MessengerPage = ({ user }) => {
   };
 
   const toggleTaskCompletion = async (taskId, currentStatus) => {
+    const t = tasks.find(x => String(x.id) === String(taskId));
+    if (t && isClosedTask(t)) return toast.info(`This task was ${t.status}. An admin can reassign it.`);
+    if (t && isServiceTask(t) && !t.related_service_entry_id && currentStatus !== "completed") {
+      return toast.info("Open the task with Start entry; saving the service entry completes it.");
+    }
     const newStatus = currentStatus === "completed" ? "pending" : "completed";
     try {
       const res = await fetch(`${API_BASE_URL}/api/tasks/${taskId}/status`, {
@@ -1836,6 +2092,7 @@ const MessengerPage = ({ user }) => {
       case "pending": return scoped.filter(task => task.status === "pending" || !task.status);
       case "in_progress": return scoped.filter(task => task.status === "in_progress");
       case "completed": return scoped.filter(task => task.status === "completed");
+      case "closed": return scoped.filter(isClosedTask);
       default: return scoped;
     }
   };
@@ -1959,13 +2216,30 @@ const MessengerPage = ({ user }) => {
   // ============== LAYOUT HELPERS (UI moved into components/chat/*) ==============
 
   const unreadTotal = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
+  // Phones keep the single-pane layout with the folders dropdown and bottom bar (design A
+  // on a phone). Anything with 900px+ of Messenger width gets the folders column.
+  const showFoldersColumn = !isPhoneLayout && layoutWidth >= 900;
+  // The Details column needs room for folders + list + details + a readable chat;
+  // below that it slides in over the chat area.
+  // (folders 208 + list 300 + details 320 + chat 400+)
+  const detailsAsColumn = !isPhoneLayout && layoutWidth >= (showFoldersColumn ? 1240 : 1040);
+  const foldersWidth = layoutWidth >= 1250 ? 232 : 208;
+  const listWidth = layoutWidth >= 1400 ? 340 : 300;
+  // Tasks row in the folders column: admins see what was handed back, staff what is waiting for them
+  const tasksBadge = (() => {
+    if (currentUser.role === "admin" || currentUser.role === "superadmin") {
+      const n = tasks.filter((t) => t.status === "declined").length;
+      return n ? { label: `${n} handed back`, tone: "red" } : null;
+    }
+    const n = tasks.filter((t) => String(t.assigned_to) === String(currentUser.id) && (t.status === "pending" || !t.status)).length;
+    return n ? { label: `${n} to do`, tone: "blue" } : null;
+  })();
   const showChatOnMobile = activeView === "chats" && !!activeConversation;
 
-  // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
+  // Room for it: toggle the Details column. Otherwise: toggle the panel that slides in over the chat.
   const handleOpenDetails = () => {
-    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches;
-    if (isWide) setIsContactPanelOpen(prev => !prev);
-    else setIsDetailsDrawerOpen(true);
+    if (detailsAsColumn) setIsContactPanelOpen(prev => !prev);
+    else setIsDetailsDrawerOpen(prev => !prev);
   };
 
   const handleCompleteTaskFromPanel = (task) => {
@@ -2009,6 +2283,14 @@ const MessengerPage = ({ user }) => {
       onOpenTracking={(id) => navigate(`/dashboard/staff/track_service/${id}`)}
       socketConnected={socketConnected}
       onClose={onClose}
+      conversationTags={activeConversationTags}
+      onOpenTagPicker={() => setIsTagPickerOpen(true)}
+      onAddMembers={canEditActiveMembers ? () => setIsAddMembersOpen(true) : undefined}
+      onRemoveMember={handleRemoveMember}
+      onSetMemberRole={handleSetMemberRole}
+      onLeaveGroup={canLeaveActive ? handleLeaveGroup : undefined}
+      onRenameGroup={handleRenameGroup}
+      onSaveContactName={handleSaveContactName}
     />
   );
 
@@ -2118,10 +2400,27 @@ const MessengerPage = ({ user }) => {
                 </button>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+                {canCreateRecurring() && (
+                  <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    {[{ v: false, label: "General task" }, { v: true, label: "Service task" }].map(opt => (
+                      <button
+                        key={opt.label}
+                        type="button"
+                        onClick={() => setTaskForm(prev => ({ ...prev, isService: opt.v }))}
+                        className={`flex-1 px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                          taskForm.isService === opt.v ? "bg-white shadow-sm text-navy-700" : "text-gray-500 hover:text-gray-700"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Title *</label>
-                  <input type="text" name="title" value={taskForm.title} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder="What needs to be done?" />
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Task Title {taskForm.isService ? "" : "*"}</label>
+                  <input type="text" name="title" value={taskForm.title} onChange={handleTaskFormChange} className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-navy-700 focus:border-transparent" placeholder={taskForm.isService ? "Leave blank to use the service and customer name" : "What needs to be done?"} />
                 </div>
 
                 <div>
@@ -2146,6 +2445,10 @@ const MessengerPage = ({ user }) => {
                     ))}
                   </select>
                 </div>
+
+                {taskForm.isService && canCreateRecurring() && (
+                  <ServiceTaskFields form={taskForm} onChange={handleTaskFormChange} centreId={assigneeCentreId()} />
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -2312,7 +2615,7 @@ const MessengerPage = ({ user }) => {
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap"><h4 className={`font-medium ${task.status === 'completed' ? 'line-through text-gray-500' : 'text-gray-800'}`}>{task.title}</h4>{isFromTemplate && (<span className="text-xs bg-blue-100 text-blue-800 px-2 py-0.5 rounded-full flex items-center gap-1"><FiRepeat size={10} />Recurring</span>)}{task.centre_name && (<span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">{task.centre_name}</span>)}</div>
               {task.description && (<p className="text-sm text-gray-600 mt-1">{task.description}</p>)}
-              <div className="flex flex-wrap items-center gap-3 mt-2"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[task.priority] || priorityColors.medium}`}>{task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}</span>{task.due_date && (<div className="flex items-center gap-1 text-sm text-gray-500"><FiCalendar size={14} /><span className="text-xs">{new Date(task.due_date).toLocaleDateString()}</span></div>)}<div className="flex items-center gap-1 text-sm text-gray-500"><FiUser size={14} /><span className="text-xs">{assignee?.name || `Staff #${task.assigned_to}`}</span></div></div>
+              <div className="flex flex-wrap items-center gap-3 mt-2"><span className={`text-xs px-2 py-1 rounded-full border ${priorityColors[task.priority] || priorityColors.medium}`}>{task.priority?.charAt(0).toUpperCase() + task.priority?.slice(1) || 'Medium'}</span>{task.due_date && (<div className="flex items-center gap-1 text-sm text-gray-500"><FiCalendar size={14} /><span className="text-xs">{new Date(task.due_date).toLocaleDateString()}</span></div>)}<div className="flex items-center gap-1 text-sm text-gray-500"><FiUser size={14} /><span className="text-xs"><StaffName id={task.assigned_to} name={assignee?.name} fallback={`Staff #${task.assigned_to}`} context={taskContext(task)} /></span></div></div>
             </div>
           </div>
           <button onClick={() => deleteTask(task.id)} className="p-1 text-gray-400 hover:text-red-500 transition flex-shrink-0"><FiTrash2 size={16} /></button>
@@ -2393,6 +2696,7 @@ const renderTasksView = () => {
     };
 
     const getStatusStyles = (status) => {
+      if (closedStatusStyles(status)) return closedStatusStyles(status);
       switch(status) {
         case 'completed': return 'bg-emerald-100 text-emerald-700';
         case 'in_progress': return 'bg-blue-100 text-blue-700';
@@ -2403,8 +2707,12 @@ const renderTasksView = () => {
     const columns = [
       { id: 'pending', title: 'To Do', icon: <FiCheckSquare className="text-gray-500 h-4 w-4" /> },
       { id: 'in_progress', title: 'In Progress', icon: <FiPlayCircle className="text-blue-500 h-4 w-4" /> },
-      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> }
+      { id: 'completed', title: 'Completed', icon: <FiCheck className="text-emerald-500 h-4 w-4" /> },
+      { id: 'closed', title: 'Handed back / Cancelled', icon: <FiAlertCircle className="text-rose-500 h-4 w-4" /> }
     ];
+    // 'closed' groups the two statuses that need a note
+    const inColumn = (t, columnId) => columnId === 'closed' ? isClosedTask(t) : (t.status || 'pending') === columnId;
+    const onTaskChanged = () => { fetchTasks(); fetchCalendarData(); };
 
     // --- Drag & Drop Handlers ---
     const updateTaskStatus = async (taskId, newStatus) => {
@@ -2440,9 +2748,13 @@ const renderTasksView = () => {
       e.preventDefault();
       const taskId = e.dataTransfer.getData('taskId');
       const task = tasks.find(t => String(t.id) === taskId);
-      if (task && task.status !== status) {
-        updateTaskStatus(taskId, status);
+      if (!task || task.status === status) return;
+      if (status === 'closed') return toast.info("Use Hand back or Cancel on the card, so you can add a note.");
+      if (isClosedTask(task)) return toast.info(`This task was ${task.status}. An admin can reassign it.`);
+      if (status === 'completed' && isServiceTask(task) && !task.related_service_entry_id) {
+        return toast.info("Saving the service entry completes this task. Use Start entry on the card.");
       }
+      updateTaskStatus(taskId, status);
     };
 
     return (
@@ -2524,7 +2836,7 @@ const renderTasksView = () => {
               </div>
               <span className="w-px h-5 bg-gray-200 flex-shrink-0" />
               <FiFilter className="text-gray-400 ml-1 mr-1 h-4 w-4 flex-shrink-0" />
-              {['all', 'pending', 'in_progress', 'completed'].map(f => (
+              {['all', 'pending', 'in_progress', 'completed', 'closed'].map(f => (
                 <button
                   key={f}
                   onClick={() => setTaskFilter(f)}
@@ -2534,7 +2846,7 @@ const renderTasksView = () => {
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {f.replace('_', ' ')}
+                  {f === 'closed' ? 'Handed back / Cancelled' : f.replace('_', ' ')}
                 </button>
               ))}
             </div>
@@ -2575,7 +2887,7 @@ const renderTasksView = () => {
           ) : taskViewMode === 'board' ? (
             
             /* KANBAN BOARD VIEW */
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5 items-start">
               {columns.map(column => (
                 <div 
                   key={column.id}
@@ -2589,13 +2901,13 @@ const renderTasksView = () => {
                       <h3 className="font-bold text-gray-800 text-sm">{column.title}</h3>
                     </div>
                     <span className="bg-white text-gray-600 text-[10px] font-bold px-2 py-0.5 rounded shadow-sm border border-gray-200">
-                      {tasks.filter(t => (t.status || 'pending') === column.id).length}
+                      {scopedTasks.filter(t => inColumn(t, column.id)).length}
                     </span>
                   </div>
                   
                   <div className="flex-1 space-y-2.5">
                     <AnimatePresence>
-                      {tasks.filter(t => (t.status || 'pending') === column.id).map(task => {
+                      {scopedTasks.filter(t => inColumn(t, column.id)).map(task => {
                         // Safely Map Staff details
                         const assignee = getAssigneeDetails(task);
                         const assigneePhoto = assignee?.photo ? getAvatarUrl(assignee.photo) : null;
@@ -2626,11 +2938,26 @@ const renderTasksView = () => {
                               </p>
                             )}
 
+                            {(isServiceTask(task) || isClosedTask(task)) && (
+                              <div className="mb-1.5 flex items-center gap-1.5 min-w-0">
+                                <ServiceTaskBadge task={task} />
+                                {isClosedTask(task) && (
+                                  <span className={`text-[9px] px-1.5 py-0.5 rounded uppercase font-bold tracking-wider ${getStatusStyles(task.status)}`}>{task.status}</span>
+                                )}
+                              </div>
+                            )}
+                            <ServiceTaskSummary task={task} />
+
                             {task.related_service_entry_id && (
                               <div className="mb-2">
                                 <ServiceLinkChip item={task} compact />
                               </div>
                             )}
+
+                            <TaskCloseNote task={task} />
+                            <div className="mt-2">
+                              <TaskActionButtons task={task} currentUser={currentUser} staffList={staffList} onChanged={onTaskChanged} compact />
+                            </div>
 
                             {/* Board Card Footer: Stacked Date/Priority & User Pill */}
                             <div className="flex items-end justify-between mt-2 pt-2 border-t border-gray-50">
@@ -2657,7 +2984,7 @@ const renderTasksView = () => {
                                   )}
                                 </div>
                                 <span className="text-[10px] font-bold text-gray-700 truncate max-w-[65px]">
-                                  {assignee?.name?.split(' ')[0] || 'Unassigned'}
+                                  <StaffName id={task.assigned_to} name={assignee?.name?.split(' ')[0]} fallback="Unassigned" showDot={false} context={taskContext(task)} />
                                 </span>
                               </div>
 
@@ -2706,7 +3033,13 @@ const renderTasksView = () => {
                           >
                             <td className="py-3 px-4">
                               <button
-                                onClick={() => updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed')}
+                                onClick={() => {
+                                  if (isClosedTask(task)) return toast.info(`This task was ${task.status}. An admin can reassign it.`);
+                                  if (isServiceTask(task) && !task.related_service_entry_id && task.status !== 'completed') {
+                                    return toast.info("Saving the service entry completes this task. Use Start entry.");
+                                  }
+                                  updateTaskStatus(task.id, task.status === 'completed' ? 'pending' : 'completed');
+                                }}
                                 className={`w-5 h-5 rounded flex items-center justify-center transition-colors ${
                                   task.status === 'completed'
                                     ? 'bg-emerald-500 border-emerald-500 text-white'
@@ -2726,7 +3059,9 @@ const renderTasksView = () => {
                                     <FiRepeat size={8} /> Recurring
                                   </span>
                                 )}
+                                <ServiceTaskBadge task={task} />
                               </div>
+                              <ServiceTaskSummary task={task} />
                               {task.description && (
                                 <p className="text-xs text-gray-500 truncate max-w-md mt-0.5">
                                   {task.description}
@@ -2737,6 +3072,10 @@ const renderTasksView = () => {
                                   <ServiceLinkChip item={task} />
                                 </div>
                               )}
+                              <TaskCloseNote task={task} />
+                              <div className="mt-1.5">
+                                <TaskActionButtons task={task} currentUser={currentUser} staffList={staffList} onChanged={onTaskChanged} compact />
+                              </div>
                             </td>
                             <td className="py-3 px-4">
                               <div className="flex items-center gap-2 text-xs text-gray-600 font-medium">
@@ -2747,7 +3086,7 @@ const renderTasksView = () => {
                                     assignee?.name?.charAt(0) || 'U'
                                   )}
                                 </div>
-                                <span className="truncate max-w-[120px]">{assignee?.name || 'Unassigned'}</span>
+                                <span className="truncate max-w-[120px]"><StaffName id={task.assigned_to} name={assignee?.name} fallback="Unassigned" context={taskContext(task)} /></span>
                               </div>
                             </td>
                             <td className="py-3 px-4">
@@ -2824,11 +3163,43 @@ const renderTasksView = () => {
     <div
       ref={messengerRootRef}
       style={{ height: messengerHeight ? `${messengerHeight}px` : "100dvh" }}
-      className="flex flex-col md:flex-row w-full overflow-hidden bg-slate-50"
+      className="relative flex flex-col md:flex-row w-full overflow-hidden bg-slate-50"
     >
       <AnimatePresence mode="wait">
         {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
       </AnimatePresence>
+
+      <TagPickerModal
+        open={isTagPickerOpen && !!activeConversation}
+        onClose={() => setIsTagPickerOpen(false)}
+        itemLabel={activeConversation ? getConversationDisplayName(activeConversation, currentUser.id) : ""}
+        tags={chatTags.tags}
+        memberOf={new Set(activeConversationTags.map((l) => String(l.id)))}
+        onToggle={(tag, tagged) => chatTags.toggleItem(tag.id, activeConversation.id, tagged)}
+        onCreate={async (name, color) => {
+          const tag = await chatTags.create(name, color);
+          if (tag && activeConversation) await chatTags.toggleItem(tag.id, activeConversation.id, false);
+          return !!tag;
+        }}
+      />
+      <TagManagerModal
+        open={isTagManagerOpen}
+        onClose={() => setIsTagManagerOpen(false)}
+        tags={chatTags.tags}
+        countOf={(l) => (l.conversation_ids?.length || 0) + (l.note_ids?.length || 0)}
+        onCreate={chatTags.create}
+        onUpdate={chatTags.update}
+        onDelete={chatTags.remove}
+        onReorder={chatTags.reorder}
+      />
+      <AddMembersModal
+        open={isAddMembersOpen && !!activeConversation}
+        onClose={() => setIsAddMembersOpen(false)}
+        conversationName={activeConversation ? getConversationDisplayName(activeConversation, currentUser.id) : ""}
+        staffList={staffList}
+        memberIds={(activeConversation?.participants || []).map((p) => p.staff_id)}
+        onAdd={handleAddMembers}
+      />
 
       {renderRegularTaskModal()}
       {renderTemplateModal()}
@@ -2848,13 +3219,35 @@ const renderTasksView = () => {
         onChange={setActiveView}
         unreadTotal={unreadTotal}
         hideMobileBar={showChatOnMobile}
+        hideDesktopRail={showFoldersColumn}
       />
 
       <main className="flex-1 min-h-0 min-w-0 flex">
+        {/* Folders column (design A): chat folders on top, the other views at the bottom.
+            Phones get the folders as a dropdown in the list header and the bottom bar. */}
+        {showFoldersColumn && (
+          <aside style={{ width: foldersWidth }} className="flex shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white">
+            <ChatFolders
+              folder={chatFolder}
+              onChange={(id) => { setChatFolder(id); setActiveView("chats"); }}
+              conversations={conversations}
+              tags={chatTags.tags}
+              onManageTags={() => setIsTagManagerOpen(true)}
+              onNewChat={() => setIsNewChatModalOpen(true)}
+              activeView={activeView}
+              onViewChange={setActiveView}
+              tasksBadge={tasksBadge}
+            />
+          </aside>
+        )}
         {activeView === "chats" ? (
           <>
+
             {/* Conversation list: full screen on mobile until a chat is opened */}
-            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[290px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
+            <aside
+              style={showFoldersColumn ? { width: listWidth } : undefined}
+              className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[300px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}
+            >
               <ConversationList
                 conversations={conversations}
                 activeConversationId={activeConversation?.id}
@@ -2863,6 +3256,12 @@ const renderTasksView = () => {
                 typingUsers={typingUsers}
                 onSelect={setActiveConversation}
                 onNewChat={() => setIsNewChatModalOpen(true)}
+                folder={chatFolder}
+                onFolderChange={setChatFolder}
+                tags={chatTags.tags}
+                tagsByConversation={chatTags.tagsByItem}
+                foldersInColumn={showFoldersColumn}
+                onManageTags={() => setIsTagManagerOpen(true)}
               />
             </aside>
 
@@ -2887,15 +3286,27 @@ const renderTasksView = () => {
                 onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
                 onDeleteConversation={handleDeleteConversation}
                 onOpenDetails={handleOpenDetails}
-                isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
+                isDetailsOpen={detailsAsColumn ? isContactPanelOpen : isDetailsDrawerOpen}
                 initialDraft={pendingDraft}
                 onDraftConsumed={() => setPendingDraft(null)}
+                onAddPeople={canEditActiveMembers ? () => setIsAddMembersOpen(true) : null}
+                onAddTag={() => setIsTagPickerOpen(true)}
+                activeTags={activeConversationTags}
+                onLeaveGroup={canLeaveActive ? handleLeaveGroup : null}
+                assignedName={(() => {
+                  const s = activeConversation?.assigned_staff_id
+                    ? detailsStaffList.find((x) => String(x.id) === String(activeConversation.assigned_staff_id))
+                    : null;
+                  return s ? String(s.name).replace(/ \(Me\)$/, "") : null;
+                })()}
+                isPinned={!!activeConversation?.pinned_at}
+                onTogglePin={() => activeConversation && handleTogglePin(activeConversation)}
               />
             </section>
 
-            {/* Details column (wide screens only) */}
-            {activeConversation && isContactPanelOpen && (
-              <aside className="hidden lg:flex w-[300px] 2xl:w-[360px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+            {/* Details column, when Messenger is wide enough for it */}
+            {detailsAsColumn && activeConversation && isContactPanelOpen && (
+              <aside className="flex w-[320px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
                 {renderDetails(() => setIsContactPanelOpen(false))}
               </aside>
             )}
@@ -2919,16 +3330,17 @@ const renderTasksView = () => {
         )}
       </main>
 
-      {/* Details panel below 1024px: slides over the right edge, no backdrop, chat stays usable */}
+      {/* Details when there's no room for the column: slides in over the chat area (inside
+          Messenger, not over the whole page); full screen on phones */}
       <AnimatePresence>
-        {activeView === "chats" && activeConversation && isDetailsDrawerOpen && (
+        {!detailsAsColumn && activeView === "chats" && activeConversation && isDetailsDrawerOpen && (
           <motion.div
             key="details-drawer"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="lg:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
+            className={`${isPhoneLayout ? "fixed" : "absolute"} inset-y-0 right-0 z-40 w-full sm:w-[340px] bg-white shadow-2xl border-l border-slate-200`}
           >
             {renderDetails(() => setIsDetailsDrawerOpen(false))}
           </motion.div>

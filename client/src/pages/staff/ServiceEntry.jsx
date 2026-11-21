@@ -40,6 +40,7 @@ import { getPresets , createAutomations } from '@/services/automationService';
 import { todayIST, addDays } from "@/utils/dates";
 import { printServiceChecklist, collectRequiredDocuments } from '@/utils/pdf/requiredDocumentsPdf';
 import ServiceFilesPopover from '@/components/files/ServiceFilesPopover';
+import StaffName from '@/components/staff/StaffName';
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -415,6 +416,7 @@ const ServiceEntry = () => {
   const submitLock = useRef(false); // a ref, so a fast double click can't slip past a stale closure
   // Lead being converted (opened from the Leads page with "Create service entry")
   const [fromLead, setFromLead] = useState(null);
+  const [fromTask, setFromTask] = useState(null); // service task assigned by an admin
 
   // This centre's wallets, split the way the payment rows use them.
   const splitWallets = (list, centreId) => ({
@@ -1299,6 +1301,36 @@ const ServiceEntry = () => {
     window.history.replaceState({}, document.title); // don't refill on refresh
   }, [location.state, categories.length]);
 
+  // ===== Service task → Service Entry: fill customer and service from the task =====
+  useEffect(() => {
+    const task = location.state?.fromTask;
+    if (!task || categories.length === 0) return;
+
+    setFromTask(task);
+    setFromLead(null);
+    setEditingEntryId(null);
+    const phone10 = String(task.customer_phone || '').replace(/\D/g, '').slice(-10);
+    setFormData(prev => ({
+      ...prev,
+      tokenId: null,
+      customerName: task.customer_name || prev.customerName || '',
+      phone: phone10 || prev.phone || '',
+      services: [createEmptyService()],
+    }));
+
+    const cat = categories.find(c => String(c.id) === String(task.service_id));
+    if (cat) {
+      handleCartChange(0, 'category', String(cat.id));
+      const sub = (cat.subcategories || []).find(sc => String(sc.id) === String(task.subcategory_id));
+      if (sub) handleCartChange(0, 'subcategory', String(sub.id));
+      else if ((cat.subcategories || []).length) toast.info('Please pick the sub-category for this service.');
+    } else {
+      toast.warn('The service on this task is not available at your centre. Please pick it manually.');
+    }
+
+    window.history.replaceState({}, document.title); // don't refill on refresh
+  }, [location.state, categories.length]);
+
   // After the entry is saved: mark the lead converted and link the first new entry to it
   const completeLeadConversion = async (serviceEntryId) => {
     if (!fromLead?.lead_id) return;
@@ -1559,6 +1591,7 @@ const ServiceEntry = () => {
     const payload = {
       tokenId: formData.tokenId || null,
       customerServiceId: customerServiceId || null,
+      serviceTaskId: fromTask?.id || null,
       customerName: formData.customerName.trim(),
       phone: formData.phone.trim(),
       status: formData.status,
@@ -1626,6 +1659,10 @@ const ServiceEntry = () => {
           const createdServices = response.data.createdServices || [];
 
           toast.success('Services successfully created and paid!');
+          if (fromTask) {
+            if (response.data.serviceTask) toast.success(`Task "${fromTask.title}" completed`);
+            setFromTask(null);
+          }
           if (fromLead) {
             const firstEntry = createdServices[0];
             completeLeadConversion(firstEntry ? (firstEntry.serviceEntryId || firstEntry.id) : null);
@@ -1949,6 +1986,22 @@ const ServiceEntry = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {fromTask && (
+            <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200 flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="font-semibold text-indigo-800">Service task: {fromTask.title}</p>
+                <p className="text-sm text-indigo-900 mt-0.5">
+                  {[fromTask.customer_name, fromTask.customer_phone, fromTask.service_label].filter(Boolean).join(' · ')}
+                </p>
+                {fromTask.description && <p className="text-xs text-indigo-800 mt-1 whitespace-pre-line">{fromTask.description}</p>}
+                <p className="text-xs text-indigo-800 mt-1">When you save this entry, the task will be marked completed and linked to it.</p>
+              </div>
+              <button type="button" onClick={() => setFromTask(null)}
+                      className="text-sm font-semibold text-indigo-800 underline underline-offset-2">
+                Not for this task
+              </button>
+            </div>
+          )}
           {fromLead && (
             <div className="bg-green-50 p-4 rounded-lg border border-green-200 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2844,7 +2897,7 @@ const ServiceEntry = () => {
                       </div>
                       <div className="text-xs text-slate-500">{entry.phone}</div>
                       {(userRole === 'admin' || userRole === 'superadmin') && (
-                        <div className="text-xs text-slate-500 mt-0.5">Staff: <span className="font-medium text-slate-700">{entry.staffName || 'Unknown'}</span></div>
+                        <div className="text-xs text-slate-500 mt-0.5">Staff: <span className="font-medium text-slate-700"><StaffName id={entry.staffId} name={entry.staffName} fallback="Unknown" /></span></div>
                       )}
                     </div>
                     <span className={`flex-shrink-0 px-2.5 py-1 text-xs font-medium rounded-full ${statusDisplay.color}`}>
@@ -3003,7 +3056,7 @@ const ServiceEntry = () => {
 
                       {(userRole === 'admin' || userRole === 'superadmin') && (
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-600 font-medium">
-                          {entry.staffName || 'Unknown'}
+                          <StaffName id={entry.staffId} name={entry.staffName} fallback="Unknown" />
                         </td>
                       )}
 

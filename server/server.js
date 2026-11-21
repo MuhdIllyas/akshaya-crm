@@ -70,6 +70,7 @@ import staffperformanceRoutes from "./routes/staffPerformance.js";
 import eventsRoutes from "./routes/events.js";
 
 import notesRoutes from "./routes/notes.js";
+import tagsRoutes from "./routes/tags.js";
 
 import printingRoutes from "./routes/printing.js"
 import printAgentRoutes from "./routes/printAgent.js";
@@ -85,6 +86,8 @@ import knowledgeRoutes from "./routes/knowledge.js";
 
 //Companion Device Routes
 import companionRoutes from "./routes/companion.js";
+import smsRoutes from "./routes/sms.js";
+import { extractOtpCode, looksLikeOtp, OTP_LIVE_MINUTES } from "./utils/smsOtp.js";
 
 //Public Tracking - documents view
 import serviceTrackingDocumentsRoutes from "./routes/serviceTrackingDocuments.js";
@@ -194,95 +197,36 @@ socketServer.on("connection", (socket) => {
     socket.join(room(`centre:${socket.device.centre_id}`));
     socket.join(room(`device:${socket.device.id}`));
 
-    // ---> NEW: Listen for incoming SMS and route to Messenger <---
-    socket.on("incoming_sms", (smsData) => runWithTenant(org, async () => {
-      console.log(`\n📩 SMS Forwarded from Device [${socket.device.id}]:`);
-      console.log(`Sender: ${smsData.sender}`);
-      console.log(`Message: ${smsData.message}`);
-      
+    // Incoming SMS from the companion phone. OTPs are short-lived alerts, not chat:
+    // they are logged, shown live in the top bar / toast for the centre, and listed
+    // on Notifications → OTPs. They never go into the messenger or the bell count.
+    socket.on("incoming_sms", (smsData = {}) => runWithTenant(org, async () => {
       const centreId = socket.device.centre_id;
+      const message = String(smsData.message ?? "");
+      const sender = String(smsData.sender ?? "");
+      const isOtp = looksLikeOtp(message, smsData.isOtp);
+      const code = isOtp ? extractOtpCode(message) : null;
 
       try {
-        // 1. Save to PostgreSQL permanently (Your existing log table)
-        await pool.query(
-          `INSERT INTO companion_sms_logs (centre_id, device_id, sender, message, is_otp) 
-           VALUES ($1, $2, $3, $4, $5)`,
-          [centreId, socket.device.id, smsData.sender, smsData.message, smsData.isOtp]
+        const saved = await pool.query(
+          `INSERT INTO companion_sms_logs (centre_id, device_id, sender, message, is_otp, otp_code, received_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+           RETURNING id, received_at`,
+          [centreId, socket.device.id, sender, message, isOtp, code]
         );
 
-        // ==========================================
-        // 2. MESSENGER INTEGRATION (The Group Chat)
-        // ==========================================
-        
-        // Check if the SMS Gateway conversation already exists for this centre
-        let convRes = await pool.query(
-          `SELECT id FROM chat_conversations WHERE context_type = 'sms_gateway' AND centre_id = $1 LIMIT 1`,
-          [centreId]
-        );
-
-        let conversationId;
-
-        if (convRes.rows.length > 0) {
-          conversationId = convRes.rows[0].id;
-        } else {
-          // Create the dedicated Gateway Room
-          const newConv = await pool.query(
-            `INSERT INTO chat_conversations (name, is_group, channel, context_type, centre_id, status)
-             VALUES ($1, true, 'internal', 'sms_gateway', $2, 'active') RETURNING id`,
-            [`📱 SMS Gateway (OTPs)`, centreId]
-          );
-          conversationId = newConv.rows[0].id;
+        // Only OTPs alert staff; other texts (bank alerts etc.) stay in the history.
+        if (isOtp) {
+          io.to(`centre:${centreId}`).emit("centre_otp", {
+            id: saved.rows[0].id,
+            centre_id: centreId,
+            sender,
+            message,
+            code,
+            received_at: saved.rows[0].received_at,
+            live_minutes: OTP_LIVE_MINUTES,
+          });
         }
-
-        // Auto-Enroll ALL active staff in this centre so everyone sees the OTPs.
-        // The 'ON CONFLICT DO NOTHING' ensures we don't duplicate existing members.
-        await pool.query(
-          `INSERT INTO chat_participants (conversation_id, staff_id, participant_type, role, joined_at)
-           SELECT $1, id, 'staff', 'member', NOW() FROM staff WHERE centre_id = $2 AND status = 'Active'
-           ON CONFLICT DO NOTHING`,
-          [conversationId, centreId]
-        );
-
-        // Format the message so it looks great in the UI
-        const formattedMessage = smsData.isOtp 
-            ? `🚨 OTP RECEIVED 🚨\n\nFrom: ${smsData.sender}\nMessage: ${smsData.message}`
-            : `📩 New Text Message\n\nFrom: ${smsData.sender}\nMessage: ${smsData.message}`;
-
-        // Insert the actual chat message. (sender_id is NULL because it's hardware, not a human)
-        const msgRes = await pool.query(
-          `INSERT INTO chat_messages (conversation_id, sender_id, sender_type, message_type, message, created_at)
-           VALUES ($1, NULL, 'system', 'text', $2, NOW()) RETURNING *`,
-          [conversationId, formattedMessage]
-        );
-
-        const savedMessage = msgRes.rows[0];
-
-        // 3. FIRE WEBSOCKETS TO UPDATE THE REACT UI INSTANTLY
-        
-        // Emit the message to anyone currently looking at the SMS Gateway chat
-        io.to(`conversation:${conversationId}`).emit("new_message", {
-          ...savedMessage,
-          sender_name: "SMS Gateway", 
-          isCurrentUser: false,
-          time: new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit' })
-        });
-
-        // Bump the conversation to the top of the sidebar for everyone in the centre
-        io.to(`centre:${centreId}`).emit("conversation_updated", {
-          conversationId: conversationId,
-          last_message: formattedMessage,
-          last_message_at: savedMessage.created_at,
-          unread_increment: 1 // Tells the frontend to increment the red badge
-        });
-
-        // Keep your original global toast broadcast if you still want the popup alert
-        io.to(`centre:${centreId}`).emit("new_centre_sms", {
-          device_id: socket.device.id,
-          ...smsData
-        });
-
-        console.log(`✅ SMS successfully injected into Messenger (Conv ID: ${conversationId})`);
-
       } catch (error) {
         console.error("❌ Failed to process incoming SMS:", error);
       }
@@ -489,6 +433,7 @@ app.use("/api/events", eventsRoutes);
 
 /* Notes */
 app.use("/api/notes", notesRoutes);
+app.use("/api/tags", tagsRoutes);
 
 /* Printing */
 app.use("/api/printing", printingRoutes);
@@ -505,6 +450,7 @@ app.use("/api/knowledge", knowledgeRoutes);
 
 /* Companion Devices */
 app.use("/api/companion", companionRoutes);
+app.use("/api/sms", smsRoutes);
 
 /* Service Tracking Documents - for public access */
 app.use("/api/servicetracking", serviceTrackingDocumentsRoutes);

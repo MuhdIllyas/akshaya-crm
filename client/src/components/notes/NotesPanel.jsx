@@ -10,6 +10,7 @@ import NoteEditorModal from './NoteEditorModal';
 import { getServiceEntryNotes, getCustomerNotes, deleteNote, updateNote, updateNoteColor } from '@/services/noteService';
 import api from '@/services/serviceService';
 import { colorOf, ColorPicker, loadColors, rememberNoteColor, resolveNoteColor } from './noteColors';
+import StaffName from '@/components/staff/StaffName';
 
 const MENTION_RE = /@\[(.*?)\]\((\w+)\)/g;
 const plainText = (text) => (text || '').replace(MENTION_RE, '@$1');
@@ -441,7 +442,7 @@ const NotesPanel = ({
                                 done ? 'bg-slate-200 text-slate-600' : 'bg-amber-200 text-amber-800'
                               }`}
                             >
-                              {note.task_assigned_to_name || 'Staff'}
+                              <StaffName id={note.task_assigned_to} name={note.task_assigned_to_name} fallback="Staff" />
                             </span>
                           </div>
                         </div>

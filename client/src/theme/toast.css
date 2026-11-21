@@ -154,6 +154,15 @@
   opacity: 0.7;
 }
 
+/* OTP toast: an ordinary toast with the orange dot, laid out like the OTP
+   strip in the top bar (code, then sender and time left) */
+.Toastify .Toastify__toast.otp-toast {
+  align-items: center;
+}
+.Toastify .Toastify__toast.otp-toast .Toastify__toast-icon {
+  margin-top: 0;
+}
+
 @media print {
   .Toastify {
     display: none;

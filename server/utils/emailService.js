@@ -1,12 +1,14 @@
 import { Resend } from 'resend';
 
-// Initialize Resend with your API Key
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Created on first send, so the server still starts when RESEND_API_KEY isn't set
+// (e.g. local development); sending then fails with a clear error instead.
+let resendClient = null;
+const getResend = () => (resendClient ??= new Resend(process.env.RESEND_API_KEY));
 
 export const sendReportEmail = async (recipients, subject, textBody, attachments, htmlBody) => {
   try {
     // 1. Properly destructure the response to catch Resend API errors
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: 'Akshaya Sahayi Reports <admin@akshayasahayi.com>',
       to: ['admin@akshayasahayi.com'],
       bcc: recipients,
@@ -36,7 +38,7 @@ export const sendContactEnquiryEmail = async (formData) => {
   const { name, centreName, phone, email, centres, interest, message } = formData;
 
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResend().emails.send({
       from: 'Akshaya Sahayi Web <admin@akshayasahayi.com>', // Must be your verified domain
       to: ['muhdillyasks@gmail.com'], // Send to your team's support/admin inbox
       reply_to: email || undefined, // Allows you to hit "Reply" directly to the user

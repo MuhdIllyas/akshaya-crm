@@ -159,6 +159,21 @@ export async function sendMessage({
        completeMessage.mentions = typeof mentions === 'string' ? JSON.parse(mentions) : mentions;
     }
 
+    // A task card shared into a chat (message = task id): send the live task row
+    // with it, like task creation does, so everyone can draw the card straight
+    // away (GET /messages adds the same thing as live_task_data).
+    if (message_type === 'task' && /^\d+$/.test(String(message))) {
+      try {
+        const taskRes = await pool.query(`SELECT * FROM tasks WHERE id = $1`, [Number(message)]);
+        if (taskRes.rows[0]) {
+          completeMessage.live_task_data = taskRes.rows[0];
+          completeMessage.data = taskRes.rows[0];
+        }
+      } catch (e) {
+        console.error("Non-fatal: task card lookup failed:", e.message);
+      }
+    }
+
     if (io) {
       io.to(`conversation:${conversation_id}`).emit("new_message", completeMessage);
     }
@@ -191,6 +206,7 @@ export async function sendMessage({
             conversationId: safeConvId,
             lastMessage: message || 'Attachment',
             lastMessageSenderId: sender_id,
+            lastMessageSenderType: sender_type,
             lastMessageSender: completeMessage?.sender_name || 'Customer',
             time: completeMessage.created_at,
             unread: unreadCount

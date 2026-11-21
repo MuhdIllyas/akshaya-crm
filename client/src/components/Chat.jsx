@@ -1,5 +1,8 @@
 import { customersPath } from '@/utils/customersPath';
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { BsPinAngle } from "react-icons/bs";
+import { tagColor } from "@/components/tags/tagColors";
+import QuickReplies from "./chat/QuickReplies";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import {
@@ -10,6 +13,8 @@ import {
   FiPlus,
   FiUserPlus,
   FiStar,
+  FiTag,
+  FiLogOut,
   FiInfo,
   FiTrash2,
   FiFile,
@@ -36,6 +41,32 @@ import EmojiPicker from "emoji-picker-react";
 import { socket } from "@/services/socket";
 import axios from "axios";
 import ChatAvatar from "@/components/chat/ChatAvatar";
+import TrackingMentionCard from "@/components/chat/TrackingMentionCard";
+import { TaskMessage, NormalTaskMessage, TaskReplyChip } from "@/components/chat/TaskCards";
+import EventMentionCard from "@/components/chat/EventMentionCard";
+import NoteMentionCard from "@/components/chat/NoteMentionCard";
+
+// Service, calendar event and note cards are drawn outside the text bubble
+// (like task cards), at a fixed width, so a short message doesn't squeeze them.
+const BLOCK_CARD_TYPES = ["tracking", "event", "note"];
+const cardMentionsOf = (mentions) =>
+  (Array.isArray(mentions) ? mentions : [])
+    .filter((m) => BLOCK_CARD_TYPES.includes(m.mention_type))
+    .sort((a, b) => a.start_index - b.start_index);
+const textWithoutCards = (text = "", mentions) => {
+  let out = "";
+  let last = 0;
+  cardMentionsOf(mentions).forEach((m) => {
+    out += text.slice(last, m.start_index);
+    last = m.end_index;
+  });
+  return out + text.slice(last);
+};
+const BlockCard = ({ m, bare }) =>
+  m.mention_type === "tracking" ? <TrackingMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />
+  : m.mention_type === "event" ? <EventMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />
+  : <NoteMentionCard entityId={m.entity_id} displayText={m.display_text} bare={bare} />;
+import { taskContext } from "@/components/staff/staffDirectory";
 import {
   getAvatarUrl,
   getAvatarColor,
@@ -47,7 +78,9 @@ import {
   formatDayLabel,
   isSameDay,
   toDate,
+  formatPhone,
 } from "@/components/chat/chatUtils";
+import StaffName from '@/components/staff/StaffName';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 
@@ -134,196 +167,6 @@ const ModalShell = ({ title, onClose, children, footer }) => (
 );
 
 /* ══════════════════════════════════════════════════════════════
-   Task cards
-   ══════════════════════════════════════════════════════════════ */
-
-const TaskCardShell = ({ title, completed, meta, onComplete, completing }) => (
-  <div className="w-full max-w-sm bg-white rounded-2xl ring-1 ring-slate-200 shadow-sm p-3.5">
-    <div className="flex items-start gap-3">
-      <div className={`mt-0.5 h-8 w-8 shrink-0 rounded-lg flex items-center justify-center ${completed ? "bg-emerald-50 text-emerald-600" : "bg-blue-50 text-navy-700"}`}>
-        <FiCheckSquare size={16} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Task</p>
-        <h4 className={`text-sm font-semibold leading-snug ${completed ? "line-through text-slate-400" : "text-slate-900"}`}>{title}</h4>
-        <div className="mt-1 space-y-0.5 text-xs text-slate-500">{meta}</div>
-      </div>
-    </div>
-    <div className="mt-3 flex justify-end">
-      {completed ? (
-        <span className="text-xs font-medium text-emerald-600">✓ Completed</span>
-      ) : (
-        <button
-          onClick={onComplete}
-          disabled={completing}
-          className="h-8 px-3 rounded-lg bg-emerald-600 text-white text-xs font-medium hover:bg-emerald-700 transition disabled:opacity-50"
-        >
-          {completing ? "Saving…" : "Mark complete"}
-        </button>
-      )}
-    </div>
-  </div>
-);
-
-// Service task card (system message with task id in fileName)
-const TaskMessage = ({ taskId, text, taskData, onStatusUpdate }) => {
-  const [completing, setCompleting] = useState(false);
-  const completed = taskData?.status === "completed";
-
-  const handleComplete = async () => {
-    if (completing || completed) return;
-    setCompleting(true);
-    try {
-      if (onStatusUpdate) await onStatusUpdate(taskId, "completed");
-    } catch {
-      // Error toast is handled by parent
-    } finally {
-      setCompleting(false);
-    }
-  };
-
-  const match = text.match(/📋 Task created: "(.*?)" assigned to (.*?)\. Due: (.*?)(\.|$)/);
-  const title = match ? match[1] : text.replace(/^📋 Task created: /, "").replace(/\.$/, "");
-  const assignee = match ? match[2] : "";
-  const dueDate = match ? match[3] : "";
-
-  return (
-    <TaskCardShell
-      title={title}
-      completed={completed}
-      completing={completing}
-      onComplete={handleComplete}
-      meta={
-        <>
-          {assignee && <p className="flex items-center gap-1"><FiUser size={11} /> {assignee}</p>}
-          {dueDate && <p className="flex items-center gap-1"><FiClock size={11} /> {dueDate}</p>}
-        </>
-      }
-    />
-  );
-};
-
-// Normal task shared into a chat
-const NormalTaskMessage = ({ taskId, taskData, onStatusUpdate }) => {
-  const [completing, setCompleting] = useState(false);
-  const completed = taskData?.status === "completed";
-
-  const handleComplete = async () => {
-    if (completing || completed) return;
-    setCompleting(true);
-    try {
-      if (onStatusUpdate) await onStatusUpdate(taskId, taskData.status);
-    } catch {
-      // parent handles the error toast
-    } finally {
-      setCompleting(false);
-    }
-  };
-
-  return (
-    <TaskCardShell
-      title={taskData.title}
-      completed={completed}
-      completing={completing}
-      onComplete={handleComplete}
-      meta={
-        <>
-          <p className="capitalize">
-            {taskData.priority || "medium"} priority · {String(taskData.status || "pending").replace("_", " ")}
-          </p>
-          {taskData.due_date && <p className="flex items-center gap-1"><FiClock size={11} /> {formatDate(taskData.due_date)}</p>}
-        </>
-      }
-    />
-  );
-};
-
-/* ══════════════════════════════════════════════════════════════
-   Tracking mention card (@284)
-   ══════════════════════════════════════════════════════════════ */
-
-const TrackingMentionCard = ({ entityId, displayText }) => {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let isMounted = true;
-    axios
-      .get(`${API_BASE_URL}/api/chat/mentions/tracking/${entityId}`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem("token")}` },
-      })
-      .then((res) => { if (isMounted) setData(res.data); })
-      .catch((err) => console.error(err))
-      .finally(() => { if (isMounted) setLoading(false); });
-    return () => { isMounted = false; };
-  }, [entityId]);
-
-  if (loading) return <span className="font-medium opacity-70 animate-pulse">{displayText}</span>;
-  if (!data) return <span className="font-medium line-through opacity-70" title="Tracking not found">{displayText}</span>;
-
-  const priorityCls =
-    data.priority === "High"
-      ? "bg-rose-50 text-rose-600 ring-rose-200"
-      : data.priority === "Medium"
-      ? "bg-amber-50 text-amber-600 ring-amber-200"
-      : "bg-emerald-50 text-emerald-600 ring-emerald-200";
-
-  return (
-    <div
-      onClick={(e) => {
-        e.stopPropagation();
-        window.open(`/dashboard/staff/track_service/${data.tracking_id || entityId}`, "_blank");
-      }}
-      className="my-2 block w-full max-w-[18rem] bg-white text-slate-800 rounded-xl ring-1 ring-slate-200 hover:ring-blue-300 transition cursor-pointer text-left overflow-hidden select-none"
-    >
-      <div className="px-3 py-2 flex items-center justify-between border-b border-slate-100">
-        <span className="flex items-center gap-1.5 text-xs font-semibold text-navy-700">
-          <FiFile size={12} /> App #{data.application_number || data.tracking_id || entityId}
-        </span>
-        <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ring-1 ${priorityCls}`}>
-          {data.priority || "Normal"}
-        </span>
-      </div>
-      <div className="p-3 space-y-2">
-        <p className="flex items-start gap-2 text-sm font-semibold leading-tight">
-          <FiBriefcase className="text-slate-400 mt-0.5 shrink-0" size={13} />
-          {data.service_name || "Unknown Service"}
-        </p>
-        <p className="flex items-center gap-2 text-[13px] text-slate-600 truncate">
-          <FiUser className="text-slate-400 shrink-0" size={13} />
-          {data.customer_name || "No customer attached"}
-        </p>
-        <div className="grid grid-cols-2 gap-2 pt-1 text-[11px]">
-          <div>
-            <p className="text-slate-400">Status</p>
-            <p className="font-semibold capitalize truncate">{data.status || "Pending"}</p>
-          </div>
-          <div>
-            <p className="text-slate-400">Step</p>
-            <p className="font-semibold text-navy-700 truncate" title={data.current_step}>{data.current_step || "Initial phase"}</p>
-          </div>
-          {data.estimated_delivery && (
-            <div>
-              <p className="text-slate-400">Delivery</p>
-              <p className="font-semibold truncate">{data.estimated_delivery}</p>
-            </div>
-          )}
-          <div>
-            <p className="text-slate-400">Assigned</p>
-            <p className="font-semibold truncate">{data.assigned_to || "Unassigned"}</p>
-          </div>
-        </div>
-      </div>
-      <div className="px-3 py-2 border-t border-slate-100 flex justify-end">
-        <span className="text-xs font-medium text-navy-700 flex items-center gap-0.5">
-          Open <FiChevronRight size={12} />
-        </span>
-      </div>
-    </div>
-  );
-};
-
-/* ══════════════════════════════════════════════════════════════
    MAIN CHAT
    ══════════════════════════════════════════════════════════════ */
 
@@ -349,6 +192,13 @@ const Chat = ({
   isDetailsOpen = false,
   initialDraft = null,
   onDraftConsumed = null,
+  onAddPeople = null,
+  onAddTag = null,
+  activeTags = [],
+  onLeaveGroup = null,
+  isPinned = false,
+  onTogglePin = null,
+  assignedName = null,
 }) => {
   const navigate = useNavigate();
   const [newMessage, setNewMessage] = useState("");
@@ -752,11 +602,15 @@ const Chat = ({
     const sorted = [...mentions].sort((a, b) => a.start_index - b.start_index);
     const parts = [];
     let lastIndex = 0;
+    // Cards are blocks, so the line break typed after them would add an empty line
+    let afterCard = false;
+    const pushText = (s) => { parts.push(afterCard ? s.replace(/^\r?\n/, "") : s); afterCard = false; };
 
     sorted.forEach((m, idx) => {
-      if (m.start_index > lastIndex) parts.push(text.slice(lastIndex, m.start_index));
+      if (m.start_index > lastIndex) pushText(text.slice(lastIndex, m.start_index));
       if (m.mention_type === "tracking") {
-        parts.push(<TrackingMentionCard key={`mnt-${idx}`} entityId={m.entity_id} displayText={m.display_text} />);
+        // drawn outside the bubble (see BlockCard)
+        afterCard = true;
       } else if (m.mention_type === "staff") {
         parts.push(
           <span
@@ -766,11 +620,23 @@ const Chat = ({
             {m.display_text}
           </span>
         );
+      } else if (m.mention_type === "note") {
+        // drawn outside the bubble (see BlockCard)
+        afterCard = true;
+      } else if (m.mention_type === "event") {
+        // drawn outside the bubble (see BlockCard)
+        afterCard = true;
+      } else if (m.mention_type === "task") {
+        // A reply about a task whose card is already in this chat
+        parts.push(<TaskReplyChip key={`mnt-${idx}`} text={m.display_text} isOwn={isOwn} />);
+      } else {
+        // Unknown mention types keep their text instead of disappearing
+        parts.push(text.slice(m.start_index, m.end_index));
       }
       lastIndex = m.end_index;
     });
 
-    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    if (lastIndex < text.length) pushText(text.slice(lastIndex));
     return <div className="whitespace-pre-wrap break-words">{parts}</div>;
   };
 
@@ -841,6 +707,7 @@ const Chat = ({
   const onlineParticipants = others.filter((p) => isUserOnline(p.staff_id));
   const hasTasks = serviceInfo && serviceInfo.tasks && serviceInfo.tasks.length > 0;
   const showSenderNames = (isFunctionallyGroup && !isWhatsApp) || isPortal;
+  const isCustomerConv = isWhatsApp || isPortal;
   const typingList = typingUsers[activeConversation.id] || [];
   const windowClosed = isWhatsApp && !isWithinWindow;
   const inputDisabled = isUploading || windowClosed;
@@ -861,12 +728,18 @@ const Chat = ({
       </span>
     );
   } else if (isWhatsApp) {
-    subtitle = <span className="flex items-center gap-1"><FiSmartphone size={11} /> {activeConversation.context_identifier || "WhatsApp"}</span>;
+    subtitle = (
+      <span className="truncate">
+        WhatsApp · {formatPhone(activeConversation.context_identifier) || "no number"}
+        {assignedName ? ` · assigned to ${assignedName}` : " · unassigned"}
+      </span>
+    );
   } else if (isPortal) {
     subtitle = (
       <span className="flex items-center gap-1 truncate">
         <FiGlobe size={11} className="shrink-0" />
         {activeConversation.context_type === "customer_service" ? "Customer portal · about an application" : "Customer portal"}
+        {assignedName ? ` · assigned to ${assignedName}` : ""}
       </span>
     );
   } else if (isFunctionallyGroup) {
@@ -927,8 +800,13 @@ const Chat = ({
                 </span>
               )}
               {activeConversation.context_type === "service_entry" && (
-                <FiBriefcase className="shrink-0 text-violet-600" size={12} title="Service" />
+                <span className="shrink-0 rounded-full bg-violet-100 px-1.5 py-px text-[10px] font-semibold text-violet-800">Service</span>
               )}
+              {activeTags.slice(0, 2).map((t) => (
+                <span key={t.id} className={`hidden sm:inline-flex shrink-0 max-w-[140px] rounded-full px-2 py-px text-[10px] font-semibold ring-1 ${tagColor(t.color).chip}`} title={`Tagged ${t.name}`}>
+                  <span className="truncate">{t.name}</span>
+                </span>
+              ))}
             </div>
             <div className="text-xs text-slate-500 flex items-center gap-2 min-w-0">
               {subtitle}
@@ -956,9 +834,9 @@ const Chat = ({
           <HeaderButton onClick={() => onOpenTaskModal()} title="Create task" className="hidden sm:flex">
             <FiCheckSquare size={17} />
           </HeaderButton>
-          {hasTasks && (
-            <HeaderButton onClick={() => setShowTasksModal(true)} title="View tasks" className="hidden sm:flex">
-              <FiList size={17} />
+          {onAddTag && (
+            <HeaderButton onClick={onAddTag} title={activeTags.length ? "Edit tags" : "Add tag"} className="hidden sm:flex">
+              <FiTag size={17} />
             </HeaderButton>
           )}
           {onOpenDetails && (
@@ -982,14 +860,28 @@ const Chat = ({
                 >
                   <MenuItem icon={FiCheckSquare} label="Create task" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); onOpenTaskModal(); }} />
                   {hasTasks && (
-                    <MenuItem icon={FiList} label="View tasks" className="sm:hidden" onClick={() => { setIsMoreMenuOpen(false); setShowTasksModal(true); }} />
+                    <MenuItem icon={FiList} label="View tasks" onClick={() => { setIsMoreMenuOpen(false); setShowTasksModal(true); }} />
                   )}
-                  <MenuItem icon={FiUserPlus} label="Add people" onClick={() => setIsMoreMenuOpen(false)} />
-                  <MenuItem icon={FiStar} label="Mark as favourite" onClick={() => setIsMoreMenuOpen(false)} />
+                  {onTogglePin && (
+                    <MenuItem icon={BsPinAngle} label={isPinned ? "Unpin chat" : "Pin chat"} onClick={() => { setIsMoreMenuOpen(false); onTogglePin(); }} />
+                  )}
+                  {onAddPeople && (
+                    <MenuItem icon={FiUserPlus} label="Add people" onClick={() => { setIsMoreMenuOpen(false); onAddPeople(); }} />
+                  )}
+                  {onAddTag && (
+                    <MenuItem
+                      icon={FiTag}
+                      label={activeTags.length ? `Tags (${activeTags.length})` : "Add tag"}
+                      onClick={() => { setIsMoreMenuOpen(false); onAddTag(); }}
+                    />
+                  )}
                   {onOpenDetails && (
                     <MenuItem icon={FiInfo} label="View details" onClick={() => { setIsMoreMenuOpen(false); onOpenDetails(); }} />
                   )}
                   <div className="my-1 border-t border-slate-100" />
+                  {onLeaveGroup && (
+                    <MenuItem icon={FiLogOut} label="Leave group" danger onClick={() => { setIsMoreMenuOpen(false); onLeaveGroup(); }} />
+                  )}
                   <MenuItem
                     icon={FiTrash2}
                     label="Delete conversation"
@@ -1035,7 +927,11 @@ const Chat = ({
               const messageKey = msg.isOptimistic ? `opt-${msg.tempId || msg.id}-${index}` : `msg-${msg.id}`;
               const isTaskMessage = msg.isSystem && msg.fileName && !isNaN(Number(msg.fileName)) && serviceEntryId;
               const isNewTaskMessage = msg.messageType === "task";
-              const isSystemNote = msg.isSystem && !isTaskMessage && !isNewTaskMessage;
+              // Customer chats (WhatsApp, portal): the customer on the left, the centre's side on the
+              // right — every staff member's reply plus templates and bot messages — so it's clear who said what.
+              const isOutgoingSystem = isCustomerConv && msg.isSystem && msg.direction === "outgoing";
+              const isSystemNote = msg.isSystem && !isTaskMessage && !isNewTaskMessage && !isOutgoingSystem;
+              const isTeamSide = isCustomerConv && !msg.isCurrentUser && (msg.sender_type === "staff" || isOutgoingSystem);
 
               const isFirstInRun =
                 showDaySeparator ||
@@ -1045,8 +941,14 @@ const Chat = ({
                 prevMsg.messageType === "task" ||
                 prevMsg.sender_type !== msg.sender_type;
 
-              const isOwn = msg.isCurrentUser;
-              const senderLabel = participantNames[String(msg.senderId)] || msg.sender || "Unknown";
+              const isOwn = msg.isCurrentUser || isTeamSide;
+              // light bubble on the right (another staff member, template, bot) vs your own navy one
+              const darkBubble = isOwn && !isTeamSide;
+              const senderLabel = isOutgoingSystem
+                ? msg.messageType === "template" ? "Template" : "Auto-reply"
+                : msg.sender_type === "customer"
+                ? msg.sender || "Customer"
+                : participantNames[String(msg.senderId)] || msg.sender || "Unknown";
               const senderPhoto = msg.sender_type !== "customer" ? participantPhotos[String(msg.senderId)] : null;
               const selected = selectedMsgId === msg.id;
 
@@ -1064,13 +966,22 @@ const Chat = ({
                   </div>
                 );
               } else if (isNewTaskMessage) {
-                const task =
-                  msg.live_task_data || msg.data || allTasks.find((t) => String(t.id) === String(msg.text));
+                const task = msg.isDeleted
+                  ? null
+                  : msg.live_task_data || msg.data || allTasks.find((t) => String(t.id) === String(msg.text));
+                // The task may have been deleted since: say so instead of leaving a gap
                 body = task ? (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"}`}>
                     <NormalTaskMessage taskId={task.id} taskData={task} onStatusUpdate={onNormalTaskStatusUpdate} />
                   </div>
-                ) : null;
+                ) : (
+                  <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"}`}>
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-white/90 px-3 py-1.5 text-xs italic text-slate-500 ring-1 ring-slate-200">
+                      <FiCheckSquare size={12} className="not-italic text-slate-400" aria-hidden="true" />
+                      This task was deleted
+                    </span>
+                  </div>
+                );
               } else if (isSystemNote) {
                 body = (
                   <div className="w-full flex justify-center">
@@ -1085,9 +996,12 @@ const Chat = ({
                 const isVideo = msg.messageType === "video" && msg.fileUrl && !msg.isDeleted;
                 // WhatsApp captions are saved as the message text; show them under the attachment
                 const caption = msg.isFile && msg.text && !msg.text.startsWith("[") ? msg.text : null;
+                const blockCards = !msg.isFile && !msg.isDeleted ? cardMentionsOf(msg.mentions) : [];
+                const cardsOnly = blockCards.length > 0 && !textWithoutCards(msg.text, msg.mentions).trim();
                 body = (
                   <div className={`w-full flex ${isOwn ? "justify-end" : "justify-start"} group`}>
-                    <div className={`relative flex items-end gap-2 max-w-[88%] sm:max-w-[75%] lg:max-w-[65%] ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
+                    {/* Card messages may use the full width, so a narrow chat pane doesn't squeeze the 18rem card */}
+                    <div className={`relative flex items-end gap-2 ${blockCards.length ? "max-w-full" : "max-w-[88%] sm:max-w-[75%] lg:max-w-[65%]"} ${isOwn ? "flex-row-reverse" : "flex-row"}`}>
                       {/* Avatar (groups only, first message of a run) */}
                       {!isOwn && showSenderNames && (
                         <div className="w-8 shrink-0 self-start">
@@ -1103,24 +1017,52 @@ const Chat = ({
                         </div>
                       )}
 
-                      {/* Bubble */}
+                      {/* A card message is one block: the card(s) on top, the text bubble joined below */}
+                      <div className={blockCards.length
+                        ? `w-72 max-w-full min-w-0 overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-slate-200 ${isOwn ? "rounded-tr-md" : "rounded-tl-md"} ${selected ? "ring-2 ring-blue-300" : ""}`
+                        : `flex min-w-0 flex-col ${isOwn ? "items-end" : "items-start"}`}>
+                      {blockCards.map((m, i) => (
+                        <div key={`card-${i}`} className={i > 0 ? "border-t border-slate-100" : ""} onClick={(e) => e.stopPropagation()}>
+                          <BlockCard m={m} bare />
+                        </div>
+                      ))}
+                      {cardsOnly ? (
+                        <div className="flex items-center justify-end gap-1 border-t border-slate-100 px-3 py-1 text-[10.5px] text-slate-400">
+                          <span>{msg.time}</span>
+                          {isOwn && renderMessageStatus(msg)}
+                        </div>
+                      ) : (
+                      /* Bubble */
                       <div
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedMsgId((id) => (id === msg.id ? null : msg.id));
                         }}
-                        className={`relative min-w-0 px-3.5 py-2 text-[14px] leading-relaxed shadow-sm ${
-                          isOwn
-                            ? `bg-navy-700 text-white rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
-                            : `bg-white text-slate-800 ring-1 ring-slate-200/80 rounded-2xl ${isFirstInRun ? "rounded-tl-md" : ""}`
-                        } ${msg.isOptimistic ? "opacity-70" : ""} ${selected ? "ring-2 ring-blue-300" : ""}`}
+                        className={`relative min-w-0 px-3.5 py-2 text-[14px] leading-relaxed ${
+                          blockCards.length
+                            ? darkBubble
+                              ? "bg-navy-700 text-white"
+                              : "border-t border-slate-100 bg-white text-slate-800"
+                            : `shadow-sm ${
+                                isOutgoingSystem
+                                  ? `bg-emerald-50 text-slate-800 ring-1 ring-emerald-200 rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
+                                  : isTeamSide
+                                  ? `bg-blue-50 text-slate-800 ring-1 ring-blue-200 rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
+                                  : isOwn
+                                  ? `bg-navy-700 text-white rounded-2xl ${isFirstInRun ? "rounded-tr-md" : ""}`
+                                  : `bg-white text-slate-800 ring-1 ring-slate-200/80 rounded-2xl ${isFirstInRun ? "rounded-tl-md" : ""}`
+                              } ${selected ? "ring-2 ring-blue-300" : ""}`
+                        } ${msg.isOptimistic ? "opacity-70" : ""}`}
                       >
                         {showSenderNames && !isOwn && isFirstInRun && (
                           <p className={`text-xs font-semibold mb-0.5 ${getSenderNameColor(msg.senderId)}`}>{senderLabel}</p>
                         )}
+                        {isTeamSide && isFirstInRun && (
+                          <p className={`text-xs font-semibold mb-0.5 ${isOutgoingSystem ? "text-emerald-700" : "text-navy-700"}`}>{senderLabel}</p>
+                        )}
 
                         {msg.isDeleted ? (
-                          <p className={`italic ${isOwn ? "text-blue-100" : "text-slate-400"}`}>This message was deleted</p>
+                          <p className={`italic ${darkBubble ? "text-blue-100" : "text-slate-400"}`}>This message was deleted</p>
                         ) : msg.isFile ? (
                           isImage ? (
                             <button
@@ -1173,10 +1115,10 @@ const Chat = ({
                                 if (msg.fileUrl) window.open(fullFileUrl(msg.fileUrl), "_blank");
                               }}
                               className={`flex items-center gap-3 rounded-xl p-2 -mx-1.5 text-left transition ${
-                                isOwn ? "bg-white/10 hover:bg-white/15" : "bg-slate-50 hover:bg-slate-100"
+                                darkBubble ? "bg-white/10 hover:bg-white/15" : "bg-slate-50 hover:bg-slate-100"
                               }`}
                             >
-                              <div className={`h-10 w-10 shrink-0 rounded-lg flex items-center justify-center ${isOwn ? "bg-white/15" : "bg-white ring-1 ring-slate-200 text-slate-500"}`}>
+                              <div className={`h-10 w-10 shrink-0 rounded-lg flex items-center justify-center ${darkBubble ? "bg-white/15" : "bg-white ring-1 ring-slate-200 text-slate-500"}`}>
                                 {msg.messageType === "image" ? <FiImage size={18} /> : <FiFile size={18} />}
                               </div>
                               <div className="min-w-0">
@@ -1189,17 +1131,19 @@ const Chat = ({
                             </button>
                           )
                         ) : (
-                          renderMessageTextWithMentions(msg.text, msg.mentions, isOwn)
+                          renderMessageTextWithMentions(msg.text, msg.mentions, darkBubble)
                         )}
 
                         {caption && !msg.isDeleted && (
                           <p className="mt-1 whitespace-pre-wrap break-words">{caption}</p>
                         )}
 
-                        <div className={`flex items-center justify-end gap-1 mt-0.5 -mb-0.5 text-[10.5px] ${isOwn ? "text-blue-100" : "text-slate-400"}`}>
+                        <div className={`flex items-center justify-end gap-1 mt-0.5 -mb-0.5 text-[10.5px] ${darkBubble ? "text-blue-100" : "text-slate-400"}`}>
                           <span>{msg.time}</span>
                           {renderMessageStatus(msg)}
                         </div>
+                      </div>
+                      )}
                       </div>
 
                       {/* Actions: hover on desktop, tap bubble on mobile */}
@@ -1215,7 +1159,7 @@ const Chat = ({
                           <MessageAction onClick={() => { setSelectedMsgId(null); onOpenTaskModal(msg.text); }} title="Create task" hover="hover:text-emerald-600">
                             <FiCheckSquare size={12} />
                           </MessageAction>
-                          {isOwn && (
+                          {msg.isCurrentUser && (
                             <MessageAction onClick={() => { setSelectedMsgId(null); onDeleteMessage(msg.id, activeConversation.id); }} title="Delete" hover="hover:text-rose-500">
                               <FiTrash2 size={12} />
                             </MessageAction>
@@ -1237,7 +1181,13 @@ const Chat = ({
                     initial={{ opacity: 0, y: 6 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.15 }}
-                    className={isFirstInRun ? "mt-3" : "mt-0.5"}
+                    className={
+                      isFirstInRun ||
+                      (!msg.isFile && cardMentionsOf(msg.mentions).length > 0) ||
+                      (prevMsg && !prevMsg.isFile && cardMentionsOf(prevMsg.mentions).length > 0)
+                        ? "mt-3"
+                        : "mt-0.5"
+                    }
                   >
                     {body}
                   </motion.div>
@@ -1266,7 +1216,7 @@ const Chat = ({
 
       {/* Composer */}
       <div
-        className="shrink-0 relative bg-white border-t border-slate-200 px-2 sm:px-4 pt-2"
+        className="shrink-0 relative bg-white border-t border-slate-200 px-2 sm:px-4 pt-3"
         style={{ paddingBottom: "max(0.5rem, env(safe-area-inset-bottom))" }}
       >
         {windowClosed && (
@@ -1335,10 +1285,20 @@ const Chat = ({
           </div>
         )}
 
-        <div className="flex items-end gap-2">
+        {!windowClosed && (
+          <QuickReplies
+            disabled={inputDisabled}
+            onPick={(text) => {
+              setNewMessage((prev) => (prev.trim() ? `${prev.trimEnd()} ${text}` : text));
+              setTimeout(() => chatInputRef.current?.focus(), 0);
+            }}
+          />
+        )}
+
+        <div className="flex items-end gap-2.5">
           <div
-            className={`flex-1 min-w-0 flex items-end gap-0.5 rounded-3xl px-1.5 py-1 transition ring-1 ${
-              inputDisabled ? "bg-slate-50 ring-slate-100" : "bg-slate-100 ring-transparent focus-within:bg-white focus-within:ring-slate-300"
+            className={`flex-1 min-w-0 flex items-end gap-0.5 rounded-xl px-1.5 py-1 transition ring-1 ${
+              inputDisabled ? "bg-slate-50 ring-slate-100" : "bg-slate-50 ring-slate-200 focus-within:bg-white focus-within:ring-slate-300"
             }`}
           >
             <div className="relative" ref={emojiPickerRef}>
@@ -1401,7 +1361,7 @@ const Chat = ({
             whileTap={{ scale: 0.92 }}
             onClick={handleSendMessage}
             disabled={!canSend}
-            className={`h-11 w-11 shrink-0 rounded-full flex items-center justify-center transition shadow-sm ${
+            className={`h-11 w-11 shrink-0 rounded-xl flex items-center justify-center transition shadow-sm ${
               canSend ? "bg-navy-700 text-white hover:bg-navy-800" : "bg-slate-200 text-slate-400"
             }`}
             title="Send"
@@ -1425,7 +1385,7 @@ const Chat = ({
                   </h4>
                   {task.description && <p className="text-xs text-slate-600 mt-1">{task.description}</p>}
                   <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-slate-500">
-                    {task.assigned_to_name && <span className="flex items-center gap-1"><FiUser size={10} /> {task.assigned_to_name}</span>}
+                    {task.assigned_to_name && <span className="flex items-center gap-1"><FiUser size={10} /> <StaffName id={task.assigned_to} name={task.assigned_to_name} showDot={false} context={taskContext(task)} /></span>}
                     {task.due_date && <span className="flex items-center gap-1"><FiClock size={10} /> {formatDate(task.due_date)}</span>}
                     <span
                       className={`px-1.5 py-0.5 rounded font-medium capitalize ${

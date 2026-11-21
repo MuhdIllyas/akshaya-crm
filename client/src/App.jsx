@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { ToastContainer, toast } from "react-toastify";
-import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo } from "react-icons/fi";
+import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo, FiCopy } from "react-icons/fi";
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
+import { copyOtp, playOtpChime } from "@/utils/otpAlert";
+// Attaches the online-status listeners before the socket connects.
+import "@/components/staff/staffDirectory";
 import DashboardLayout from "./layouts/DashboardLayout";
 import PortalEntry from "./pages/PortalEntry";
 import Logout from "./pages/Logout";
@@ -247,36 +250,44 @@ const toastIcon = ({ type, isLoading }) => {
 const App = () => {
   const { isDark } = useTheme();
 
-  // ---> NEW: Global SMS Listener for Instant OTP Popups <---
+  // OTPs from the companion phone: a toast with the code, a Copy button and a chime.
+  // (They are not chat messages or notifications, so nothing is left unread.)
   useEffect(() => {
     if (!socket) return;
 
-    const handleNewSms = (smsData) => {
-      if (smsData.isOtp) {
-        // High-priority green toast for OTPs (stays open for 15 seconds)
-        toast.success(
-          <div>
-            <strong>🔐 OTP RECEIVED</strong><br />
-            <small>From: {smsData.sender}</small><br />
-            {smsData.message}
-          </div>,
-          { autoClose: 15000 }
-        );
-      } else {
-        // Standard info toast for normal texts
-        toast.info(
-          <div>
-            <strong>📩 Text from {smsData.sender}</strong><br />
-            {smsData.message}
+    const handleOtp = (otp) => {
+      playOtpChime();
+      // Styled like the OTP strip in the top bar: orange dot, code, sender, outline Copy
+      toast.warning(
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline gap-2">
+              <strong className="text-[13px] font-normal text-slate-600">OTP</strong>
+              {otp.code
+                ? <span className="font-mono text-lg font-semibold tracking-wider text-[var(--toast-title)]">{otp.code}</span>
+                : <span className="truncate text-sm text-[var(--toast-title)]">{otp.message}</span>}
+            </div>
+            <div className="truncate text-xs text-[var(--toast-text)]" title={otp.message}>
+              {[otp.sender, `${otp.live_minutes || 10} min left`].filter(Boolean).join(" · ")}
+            </div>
           </div>
-        );
-      }
+          {otp.code && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); copyOtp(otp.code); }}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+            >
+              <FiCopy className="h-3.5 w-3.5" /> Copy
+            </button>
+          )}
+        </div>,
+        { autoClose: 20000, toastId: `otp-${otp.id}`, closeOnClick: false, className: "otp-toast" }
+      );
     };
 
-    socket.on("new_centre_sms", handleNewSms);
-
+    socket.on("centre_otp", handleOtp);
     return () => {
-      socket.off("new_centre_sms", handleNewSms);
+      socket.off("centre_otp", handleOtp);
     };
   }, []);
 

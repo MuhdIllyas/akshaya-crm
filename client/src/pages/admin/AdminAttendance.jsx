@@ -19,6 +19,7 @@ import {
 } from "/src/services/salaryService";
 import { getWalletsForCentre } from "@/services/walletService";
 import CalendarView from "@/components/CalendarView";
+import StaffName from '@/components/staff/StaffName';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, ArcElement, Title, Tooltip, Legend, Filler);
 
@@ -488,7 +489,7 @@ const StaffMonthCard = ({ staff, records, staffList }) => {
       <div className="mb-3 flex items-center gap-3">
         <Avatar staff={staff} />
         <div className="min-w-0">
-          <p className="truncate font-medium text-slate-900">{staff.name}</p>
+          <p className="truncate font-medium text-slate-900"><StaffName id={staff.id} name={staff.name} /></p>
           <p className="truncate text-xs text-slate-500">{staff.position || "—"}{cur ? ` · ${hm(cur.start_time)}–${hm(cur.end_time)}` : ""}</p>
         </div>
       </div>
@@ -517,7 +518,7 @@ const RecordRow = ({ rec, onEdit }) => {
     <div className="px-4 py-3">
       <div className={`grid grid-cols-2 items-center gap-x-3 gap-y-2 ${REC_GRID}`}>
         <div className="col-span-2 min-w-0 md:col-span-1">
-          <p className="truncate text-sm font-semibold text-slate-900">{rec.staff_name}</p>
+          <p className="truncate text-sm font-semibold text-slate-900"><StaffName id={rec.staff_id} name={rec.staff_name} /></p>
           {rec.schedule && <p className="text-xs text-slate-400">Shift {hm(rec.schedule.start_time)}–{hm(rec.schedule.end_time)}</p>}
         </div>
         <div><StatusChip status={rec.status} /></div>
@@ -1086,7 +1087,7 @@ const AdminAttendance = () => {
               {pendingLeaves.slice(0, 4).map((l) => (
                 <div key={l.id} className="flex items-center justify-between gap-3 py-3">
                   <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-900">{l.staff_name}</p>
+                    <p className="truncate text-sm font-medium text-slate-900"><StaffName id={l.staff_id} name={l.staff_name} /></p>
                     <p className="text-xs text-slate-500">{titleCase(l.type)} · {formatDate(l.from_date)} – {formatDate(l.to_date)}</p>
                   </div>
                   <button type="button" onClick={() => setSelectedLeave(l)} className={btnPrimary}>Review</button>
@@ -1163,7 +1164,7 @@ const AdminAttendance = () => {
                 <tbody className="divide-y divide-slate-100">
                   {shownLeaves.map((l) => (
                     <tr key={l.id} className="align-top hover:bg-slate-50">
-                      <td className="px-4 py-3"><p className="text-sm font-medium text-slate-900">{l.staff_name}</p><p className="text-xs text-slate-500">{l.department}</p></td>
+                      <td className="px-4 py-3"><p className="text-sm font-medium text-slate-900"><StaffName id={l.staff_id} name={l.staff_name} /></p><p className="text-xs text-slate-500">{l.department}</p></td>
                       <td className="px-4 py-3"><LeaveType l={l} /></td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(l.from_date)}</td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-slate-700">{formatDate(l.to_date)}</td>
@@ -1180,7 +1181,7 @@ const AdminAttendance = () => {
               {shownLeaves.map((l) => (
                 <div key={l.id} className="space-y-2 p-4">
                   <div className="flex items-start justify-between gap-2">
-                    <div><p className="text-sm font-semibold text-slate-900">{l.staff_name}</p><p className="text-xs text-slate-500">{l.department}</p></div>
+                    <div><p className="text-sm font-semibold text-slate-900"><StaffName id={l.staff_id} name={l.staff_name} /></p><p className="text-xs text-slate-500">{l.department}</p></div>
                     <Chip cls={LEAVE_STATUS[l.status] || LEAVE_STATUS.pending}>{titleCase(l.status)}</Chip>
                   </div>
                   <div><LeaveType l={l} /></div>
@@ -1305,7 +1306,7 @@ const AdminAttendance = () => {
                 return (
                   <tr key={r.id} className={`group ${rowBg} hover:bg-slate-100/70`}>
                     <td className={`sticky left-0 z-10 border-r border-slate-100 px-3 py-2 shadow-[1px_0_0_0_#e2e8f0] ${rowBg} group-hover:bg-slate-100`}>
-                      <div className="max-w-[150px] truncate font-semibold text-slate-900" title={r.staff_name}>{r.staff_name}</div>
+                      <div className="max-w-[150px] truncate font-semibold text-slate-900" title={r.staff_name}><StaffName id={r.staff_id} name={r.staff_name} /></div>
                       <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wide text-navy-700">Shift {dailyHours.toFixed(1)}h/d</div>
                     </td>
                     <td className="bg-sky-50/40 px-2 py-2 font-medium text-sky-800">{perDay.toFixed(0)}</td>

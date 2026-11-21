@@ -6,6 +6,8 @@ import {
 } from "react-icons/fi";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "react-toastify";
+import StaffName from '@/components/staff/StaffName';
+import { taskContext } from '@/components/staff/staffDirectory';
 
 // ==========================================
 // OUTSIDE HELPERS (Prevents Re-renders)
@@ -330,7 +332,7 @@ const DayDetailsModal = ({ day, onClose, onEditEvent, onDeleteEvent, centresMap 
                         </div>
                         <div>
                           <p className="font-semibold text-amber-800">
-                            {item.staff_name || 'Unknown Staff'}
+                            <StaffName id={item.staff_id} name={item.staff_name} fallback="Unknown Staff" />
                           </p>
                           <p className="text-sm text-amber-600 flex items-center gap-1">
                             <FiClock className="h-3 w-3" />
@@ -852,7 +854,7 @@ const CalendarView = ({
                               )}
                               <div className="flex items-center gap-2">
                                 <span className="text-xs font-medium text-slate-700">
-                                  {ev.staff_name}
+                                  <StaffName id={ev.staff_id} name={ev.staff_name} context={taskContext(null, ev.related_task_id || ev.task_id)} />
                                 </span>
                                 {ev.staff_role && (
                                   <span className="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded-full">

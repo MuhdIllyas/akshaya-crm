@@ -13,6 +13,7 @@ import { formatWhen, toLocalInput } from '@/utils/automations/automationUtils';
 import {
   listSchedules, cancelAutomation, runAutomationNow, rescheduleAutomation,
 } from '/src/services/automationService';
+import StaffName from '@/components/staff/StaffName';
 
 const PAGE_SIZE = 50;
 const AUTO_REFRESH_MS = 60 * 1000;
@@ -393,7 +394,7 @@ function ScheduleRow({ a, tab, showCentre, busy, editing, setEditing, act }) {
               </a>
             )}
             {!whatsapp && a.assignee_name && (
-              <span className="inline-flex items-center gap-1"><FiUserCheck className="h-3 w-3 text-gray-400" />{a.assignee_name}</span>
+              <span className="inline-flex items-center gap-1"><FiUserCheck className="h-3 w-3 text-gray-400" /><StaffName id={a.assignee_id} name={a.assignee_name} /></span>
             )}
           </div>
 

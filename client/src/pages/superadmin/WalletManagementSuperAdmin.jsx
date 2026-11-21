@@ -21,6 +21,7 @@ import {
   getAuditLogs,
   getWalletTodayBalance,
 } from "@/services/walletService";
+import StaffName from '@/components/staff/StaffName';
 
 // Old transfers were saved as "Transfer from wallet 91 to wallet 82".
 // Show "Transfer from HDFC Bank (#91) to Cash (#82)" instead — display only, the database is untouched.
@@ -778,7 +779,7 @@ const WalletManagementSuperAdmin = () => {
                         {staff ? (
                           <>
                             <Avatar name={staff.name} photo={staff.photo || staff.photoUrl} size="w-6 h-6" text="text-[10px]" />
-                            <span className="truncate">Assigned to <span className="font-medium text-gray-900">{staff.name}</span></span>
+                            <span className="truncate">Assigned to <span className="font-medium text-gray-900"><StaffName id={staff.id} name={staff.name} /></span></span>
                           </>
                         ) : (
                           <span className="flex items-center gap-1.5 text-amber-600"><FiAlertCircle size={14} /> Not assigned to anyone</span>

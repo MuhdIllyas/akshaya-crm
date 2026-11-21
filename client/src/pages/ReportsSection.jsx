@@ -22,6 +22,7 @@ import * as XLSX from 'xlsx';
 import autoTable from 'jspdf-autotable';
 import { toast } from 'react-toastify'; 
 import { todayIST, addDays } from "@/utils/dates";
+import StaffName from '@/components/staff/StaffName';
 
 // ─── StatCard Component (matching existing design) ───
 const StatCard = ({ title, value, icon: Icon, color, subtitle, onClick, trend }) => (
@@ -2017,7 +2018,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                             {salaryAdvanceData.length > 0 ? (
                                                 salaryAdvanceData.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-4 py-3 text-sm font-bold text-slate-900">{row.staff_name}</td>
+                                                        <td className="px-4 py-3 text-sm font-bold text-slate-900"><StaffName id={row.staff_id} name={row.staff_name} /></td>
                                                         <td className="px-4 py-3 text-sm text-slate-600">{new Date(row.date_given).toLocaleDateString('en-IN')}</td>
                                                         <td className="px-4 py-3 text-sm font-medium text-slate-900 text-right">₹{row.amount_given.toLocaleString('en-IN')}</td>
                                                         <td className="px-4 py-3 text-sm font-medium text-emerald-600 text-right">₹{row.amount_recovered.toLocaleString('en-IN')}</td>
@@ -2297,7 +2298,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                                             <div className="flex items-center">
                                                                                 {idx === 0 && row.gross_profit > 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" title="Top Earner for this Team!" />}
                                                                                 <div>
-                                                                                    <p className="text-sm font-bold text-slate-900">{row.staff_name}</p>
+                                                                                    <p className="text-sm font-bold text-slate-900"><StaffName id={row.staff_id} name={row.staff_name} /></p>
                                                                                     <p className="text-xs text-slate-500 capitalize">{row.role}</p>
                                                                                 </div>
                                                                             </div>
@@ -2521,7 +2522,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <p className="text-sm text-slate-800 max-w-[200px] truncate" title={row.service_name}>{row.service_name}</p>
-                                                            <p className="text-xs text-slate-400">By: {row.staff_name}</p>
+                                                            <p className="text-xs text-slate-400">By: <StaffName id={row.staff_id} name={row.staff_name} /></p>
                                                         </td>
                                                         <td className="px-4 py-3 text-center">
                                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wider ${
@@ -3012,7 +3013,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                 leaveData.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                                         <td className="px-4 py-3">
-                                                            <p className="text-sm font-bold text-slate-900">{row.staff_name}</p>
+                                                            <p className="text-sm font-bold text-slate-900"><StaffName id={row.staff_id} name={row.staff_name} /></p>
                                                             <p className="text-xs text-slate-500 capitalize">{row.role}</p>
                                                         </td>
                                                         <td className="px-4 py-3">
@@ -3081,7 +3082,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                         </td>
                                                         <td className="px-4 py-3">
                                                             <p className="text-sm font-medium text-slate-900 truncate max-w-[180px]">{row.service_name}</p>
-                                                            <p className="text-xs text-slate-500">by {row.staff_name}</p>
+                                                            <p className="text-xs text-slate-500">by <StaffName id={row.staff_id} name={row.staff_name} /></p>
                                                         </td>
                                                         <td className="px-4 py-3 text-center">
                                                             <div className="flex items-center justify-center text-amber-500 font-bold text-sm">
@@ -3127,7 +3128,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                             {incentiveData.length > 0 ? (
                                                 incentiveData.map((row, idx) => (
                                                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                                        <td className="px-4 py-3 text-sm text-slate-900 font-bold">{row.staff_name}</td>
+                                                        <td className="px-4 py-3 text-sm text-slate-900 font-bold"><StaffName id={row.staff_id} name={row.staff_name} /></td>
                                                         <td className="px-4 py-3 text-sm text-slate-600 text-center">{row.services_completed}</td>
                                                         <td className="px-4 py-3 text-sm text-emerald-600 text-right font-medium">₹{row.service_charge_earned.toLocaleString('en-IN')}</td>
                                                         <td className="px-4 py-3 text-sm text-slate-600 text-center">
@@ -3185,7 +3186,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                                                         <td className="px-4 py-3 text-sm text-slate-900 font-bold">{row.month}</td>
                                                         <td className="px-4 py-3 text-sm text-slate-900 font-medium">
-                                                            {row.staff_name}
+                                                            <StaffName id={row.staff_id} name={row.staff_name} />
                                                             <div className="text-xs text-slate-400 capitalize font-normal mt-0.5">{row.role}</div>
                                                         </td>
                                                         <td className="px-4 py-3 text-sm text-slate-600 text-center">
@@ -3245,7 +3246,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                             <div className="flex items-center">
                                                                 {/* Optional: Add a little trophy to #1! */}
                                                                 {idx === 0 && row.total_services > 0 && <FiAward className="h-4 w-4 text-amber-500 mr-2" />}
-                                                                {row.staff_name}
+                                                                <StaffName id={row.staff_id} name={row.staff_name} />
                                                                 <span className="ml-2 text-xs text-slate-400 capitalize font-normal">({row.role})</span>
                                                             </div>
                                                         </td>
@@ -3312,7 +3313,7 @@ const ReportPreviewPanel = ({ report, previewData, onClose, onLogExport }) => {
                                                                 {records.map((row, idx) => (
                                                                     <tr key={`${groupIdx}-${idx}`} className="hover:bg-slate-50 transition-colors">
                                                                         <td className="px-4 py-3 text-sm text-slate-900 font-medium pl-6">
-                                                                            {row.staff_name}
+                                                                            <StaffName id={row.staff_id} name={row.staff_name} />
                                                                             <span className="ml-2 text-xs text-slate-400 capitalize font-normal">({row.role})</span>
                                                                         </td>
                                                                         <td className="px-4 py-3 text-sm">

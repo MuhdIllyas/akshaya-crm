@@ -7,6 +7,7 @@ import {
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import StaffName from '@/components/staff/StaffName';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 const getToken = () => (localStorage.getItem('token') || '').trim();
@@ -722,7 +723,7 @@ const CampaignTokenManagementStaff = () => {
                           </td>
                           <td className="hidden px-4 py-3 text-sm text-slate-600 md:table-cell">{token.campaignName}</td>
                           <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-slate-600 lg:table-cell">
-                            <span className="inline-flex items-center gap-1.5"><FiUser className="h-3 w-3 text-slate-400" />{token.staffName || 'Unassigned'}</span>
+                            <span className="inline-flex items-center gap-1.5"><FiUser className="h-3 w-3 text-slate-400" /><StaffName id={token.staffId} name={token.staffName} fallback="Unassigned" /></span>
                           </td>
                           <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell"><StatusBadge status={token.status} /></td>
                           <td className="hidden whitespace-nowrap px-4 py-3 text-sm text-slate-500 lg:table-cell">{formatDate(token.created_at)}</td>
@@ -767,7 +768,7 @@ const CampaignTokenManagementStaff = () => {
                             <td colSpan="8" className="px-4 py-4">
                               <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm md:grid-cols-4">
                                 <div className="md:hidden"><dt className="text-xs text-slate-500">Campaign</dt><dd className="text-slate-800">{token.campaignName || '-'}</dd></div>
-                                <div className="lg:hidden"><dt className="text-xs text-slate-500">Staff</dt><dd className="text-slate-800">{token.staffName || 'Unassigned'}</dd></div>
+                                <div className="lg:hidden"><dt className="text-xs text-slate-500">Staff</dt><dd className="text-slate-800"><StaffName id={token.staffId} name={token.staffName} fallback="Unassigned" /></dd></div>
                                 <div className="lg:hidden"><dt className="text-xs text-slate-500">Created</dt><dd className="text-slate-800">{formatDate(token.created_at)}</dd></div>
                                 <div><dt className="text-xs text-slate-500">Service</dt><dd className="text-slate-800">{token.serviceName || '-'}</dd></div>
                                 <div><dt className="text-xs text-slate-500">Subcategory</dt><dd className="text-slate-800">{token.subcategoryName || '-'}</dd></div>

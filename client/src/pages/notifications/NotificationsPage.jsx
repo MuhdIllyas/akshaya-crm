@@ -12,7 +12,7 @@ import {
   FiMapPin
 } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 
 import { socket } from '@/services/socket'; 
@@ -22,6 +22,8 @@ import { getNotificationLink } from '@/utils/notificationLinks';
 import PaymentReceiptDrawer from '@/components/PaymentReceiptDrawer';
 
 import ReviewDetailsDrawer from '@/components/ReviewDetailsDrawer';
+import OtpHistory from '@/components/otp/OtpHistory';
+import useLiveOtps from '@/hooks/useLiveOtps';
 
 const timeAgo = (dateString) => {
   if (!dateString) return 'Just now';
@@ -406,7 +408,11 @@ const NotificationsPage = () => {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  const [activeTab, setActiveTab] = useState('all');
+  const location = useLocation();
+  const tabFromUrl = () => new URLSearchParams(location.search).get('tab');
+  const [activeTab, setActiveTab] = useState(() => (tabFromUrl() === 'otps' ? 'otps' : 'all'));
+  // The top-bar OTP strip links here with ?tab=otps
+  useEffect(() => { if (tabFromUrl() === 'otps') setActiveTab('otps'); }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const [viewMode, setViewMode] = useState('notifications');
   const [searchQuery, setSearchQuery] = useState('');
   const [timeFilter, setTimeFilter] = useState('all');
@@ -491,9 +497,12 @@ const NotificationsPage = () => {
     { id: 'leads', label: 'Leads', icon: FiFilter },
     { id: 'hub', label: 'Knowledge Hub', icon: FiBookOpen },
     { id: 'system', label: 'System', icon: FiActivity },
+    { id: 'otps', label: 'OTPs', icon: FiTag },
   ];
 
-  const getTabCount = (tabId) => notifications.filter(n => matchesTab(n, tabId)).length;
+  // OTPs are not notifications: the tab count is only the ones still live
+  const { otps: liveOtps } = useLiveOtps({ token, apiBase: API_BASE_URL });
+  const getTabCount = (tabId) => (tabId === 'otps' ? liveOtps.length : notifications.filter(n => matchesTab(n, tabId)).length);
 
   // Filter logic
   const filtered = useMemo(() => {
@@ -791,7 +800,7 @@ const NotificationsPage = () => {
       {/* Inbox card: filters + list + details */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         {/* Search and time filter */}
-        <div className="flex flex-wrap items-center gap-3 px-4 md:px-5 py-3 border-b border-slate-200">
+        <div className={`${activeTab === 'otps' ? 'hidden' : 'flex'} flex-wrap items-center gap-3 px-4 md:px-5 py-3 border-b border-slate-200`}>
           <div className="flex-1 min-w-[200px] relative">
             <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 h-4 w-4" />
             <input
@@ -846,7 +855,9 @@ const NotificationsPage = () => {
           })}
         </div>
 
-        {filtered.length === 0 ? (
+        {activeTab === 'otps' ? (
+          <OtpHistory />
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16 px-4">
             <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-4">
               {viewMode === 'notifications' ? (

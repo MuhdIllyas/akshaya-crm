@@ -7,6 +7,7 @@ import {
   FiCheckCircle, FiClock, FiPercent, FiBarChart2, FiUser, FiFile, FiChevronDown,
 } from "react-icons/fi";
 import { getPendingPayments, getPendingPaymentsHistory, receiveServicePayment, getWallets } from "@/services/serviceService";
+import StaffName from '@/components/staff/StaffName';
 
 /* ---------- Helpers ---------- */
 const IST = "Asia/Kolkata";
@@ -860,7 +861,7 @@ const PendingPaymentsSection = ({
                         </div>
                         <PaidBar paid={p.paid} total={p.total} />
                       </div>
-                      <p className="mt-2 text-xs text-slate-500">Staff: <span className="font-medium text-slate-700">{p.staff?.name || "—"}</span></p>
+                      <p className="mt-2 text-xs text-slate-500">Staff: <span className="font-medium text-slate-700"><StaffName id={p.staff?.id} name={p.staff?.name} /></span></p>
                       <div className="mt-3 flex items-center justify-between">
                         <span className={`inline-flex items-center gap-1.5 text-xs ${overdue ? "text-rose-600" : "text-slate-500"}`}>
                           <FiCalendar className="h-3.5 w-3.5" /> {formatDate(p.createdAt)} · {daysSince(p.createdAt)}d
@@ -917,7 +918,7 @@ const PendingPaymentsSection = ({
                             <p className="text-slate-700">{formatDate(p.createdAt)}</p>
                             <p className="mt-0.5"><StatusChip payment={p} /></p>
                           </td>
-                          <td className="px-4 py-3 text-slate-700">{p.staff?.name || "—"}</td>
+                          <td className="px-4 py-3 text-slate-700"><StaffName id={p.staff?.id} name={p.staff?.name} /></td>
                           <td className="px-4 py-3">{renderActions(p)}</td>
                         </tr>
                       );

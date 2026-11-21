@@ -10,6 +10,15 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import StaffName from '@/components/staff/StaffName';
+
+const staffNameProps = (service) => ({
+  id: service.assignedToId ?? null,
+  name: service.staffName,
+  profilePath: service.assignedToId ? `/dashboard/admin/staff/${service.assignedToId}` : null,
+  // Sent as an @<tracking id> mention, so the chat shows the live service card.
+  context: { type: 'tracking', id: service.id, label: `${service.applicationNumber} · ${service.serviceName}`, short: service.applicationNumber },
+});
 import { getTrackingEntries, updateTrackingStatus, notifyCustomer, getTrackingStats, getStaff, getCategories } from '/src/services/serviceService';
 
 // ==========================================
@@ -350,7 +359,7 @@ const ServiceRow = ({ service, onOpen, isAdmin, onAdminEdit }) => (
       <p className="max-w-[130px] truncate text-sm text-slate-800" title={service.serviceType}>{service.serviceType}</p>
       <p className="max-w-[130px] truncate text-xs text-slate-400" title={service.subcategoryName}>{service.subcategoryName}</p>
     </td>
-    <td className="px-3 py-3"><p className="max-w-[120px] truncate text-sm text-slate-700" title={service.staffName}>{service.staffName}</p></td>
+    <td className="px-3 py-3"><div className="max-w-[130px] text-sm text-slate-700"><StaffName {...staffNameProps(service)} /></div></td>
     <td className="whitespace-nowrap px-3 py-3">
       <p className="text-sm text-slate-700">{formatYmd(service.date)}</p>
       <p className="text-xs text-slate-400">{service.time}</p>
@@ -396,7 +405,7 @@ const ServiceCard = ({ service, onOpen }) => (
       <StatusChip status={service.status} />
     </div>
     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1"><FiUser className="h-3 w-3" />{service.staffName}</span>
+            <span className="inline-flex items-center gap-1"><FiUser className="h-3 w-3" /><StaffName {...staffNameProps(service)} showDot={false} /></span>
       <span className="inline-flex items-center gap-1"><FiCalendar className="h-3 w-3" />{formatYmd(service.date)}</span>
     </div>
     <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -465,7 +474,7 @@ const OverviewTab = ({ service }) => (
     </InfoCard>
 
     <InfoCard icon={FiUser} title="Staff">
-      <DetailRow label="Name">{service.staffName}</DetailRow>
+      <DetailRow label="Name"><StaffName {...staffNameProps(service)} /></DetailRow>
       <DetailRow label="Staff ID">{service.staffId}</DetailRow>
     </InfoCard>
   </div>

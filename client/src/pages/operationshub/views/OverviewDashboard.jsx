@@ -7,6 +7,7 @@ import { toast } from 'react-toastify';
 import { can } from '@/utils/knowledgePermissions';
 import { removeContributor } from '@/services/knowledge';
 import AddContributorModal from './AddContributorModal';
+import StaffName from '@/components/staff/StaffName';
 
 const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents = [], setActiveTab, onUpdate, contributorRole = null }) => {
   const [showAddContributor, setShowAddContributor] = useState(false);
@@ -175,7 +176,7 @@ const OverviewDashboard = ({ stats = {}, contributors = [], workspace, documents
                       {c.staff_name ? c.staff_name.charAt(0).toUpperCase() : 'U'}
                     </div>
                     <div>
-                      <div className="text-sm font-bold text-slate-900">{c.staff_name || 'Unknown Staff'}</div>
+                      <div className="text-sm font-bold text-slate-900"><StaffName id={c.staff_id} name={c.staff_name} fallback="Unknown Staff" /></div>
                       <div className="text-[11px] font-semibold text-navy-700 uppercase tracking-wider">{c.role}</div>
                     </div>
                   </div>

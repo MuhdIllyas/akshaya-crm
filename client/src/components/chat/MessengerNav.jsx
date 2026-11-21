@@ -30,9 +30,10 @@ const Badge = ({ count }) =>
  * Mobile: bottom tab bar (hidden while a chat is open, like WhatsApp).
  * Render it as a direct child of the page's flex container.
  */
-const MessengerNav = ({ activeView, onChange, unreadTotal = 0, hideMobileBar = false }) => (
+const MessengerNav = ({ activeView, onChange, unreadTotal = 0, hideMobileBar = false, hideDesktopRail = false }) => (
   <>
-    {/* Desktop rail */}
+    {/* Desktop rail (wide screens put these views at the bottom of the folders column instead) */}
+    {!hideDesktopRail && (
     <nav className="hidden md:flex order-first w-[72px] shrink-0 flex-col items-center gap-1 py-4 bg-white border-r border-slate-200">
       <div className="h-10 w-10 rounded-xl bg-navy-700 flex items-center justify-center mb-4 shadow-sm">
         <FiSend className="text-white" size={18} />
@@ -57,6 +58,7 @@ const MessengerNav = ({ activeView, onChange, unreadTotal = 0, hideMobileBar = f
         );
       })}
     </nav>
+    )}
 
     {/* Mobile bottom bar */}
     {!hideMobileBar && (
