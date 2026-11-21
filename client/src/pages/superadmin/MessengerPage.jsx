@@ -340,14 +340,6 @@ const MessengerPage = ({ user }) => {
   useEffect(() => {
     try { localStorage.setItem("messenger_details_open", String(isContactPanelOpen)); } catch { /* storage unavailable */ }
   }, [isContactPanelOpen]);
-  // Screen width buckets for the folders column (see showFoldersColumn below)
-  const widthQuery = (q) => typeof window !== "undefined" && window.matchMedia(q).matches;
-  const [screen, setScreen] = useState(() => ({ wide: widthQuery("(min-width: 1536px)"), xwide: widthQuery("(min-width: 1800px)") }));
-  useEffect(() => {
-    const onResize = () => setScreen({ wide: widthQuery("(min-width: 1536px)"), xwide: widthQuery("(min-width: 1800px)") });
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
   const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
 
@@ -432,6 +424,29 @@ const MessengerPage = ({ user }) => {
     return () => {
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  // Messenger's own width (it changes with the window and with the app sidebar open or
+  // collapsed). The layout is chosen from this, so every screen gets the same design.
+  const [layoutWidth, setLayoutWidth] = useState(() => (typeof window !== "undefined" ? window.innerWidth : 1440));
+  const [isPhoneLayout, setIsPhoneLayout] = useState(() => typeof window !== "undefined" && !window.matchMedia("(min-width: 768px)").matches);
+  useEffect(() => {
+    const el = messengerRootRef.current;
+    const update = () => {
+      if (el) setLayoutWidth(Math.round(el.getBoundingClientRect().width));
+      setIsPhoneLayout(!window.matchMedia("(min-width: 768px)").matches);
+    };
+    update();
+    window.addEventListener("resize", update);
+    let ro = null;
+    if (el && typeof ResizeObserver !== "undefined") {
+      ro = new ResizeObserver(update);
+      ro.observe(el);
+    }
+    return () => {
+      window.removeEventListener("resize", update);
+      ro?.disconnect();
     };
   }, []);
   const [loadingServiceDetails, setLoadingServiceDetails] = useState(false);
@@ -2164,9 +2179,15 @@ const MessengerPage = ({ user }) => {
   // ============== LAYOUT HELPERS (UI moved into components/chat/*) ==============
 
   const unreadTotal = conversations.reduce((acc, c) => acc + (c.unread || 0), 0);
-  // Wide screens (1536px+) get the folders column; the Details panel sits beside the chat
-  // only from 1800px and slides in below that, so the chat keeps its room.
-  const showFoldersColumn = screen.wide;
+  // Phones keep the single-pane layout with the folders dropdown and bottom bar (design A
+  // on a phone). Anything with 900px+ of Messenger width gets the folders column.
+  const showFoldersColumn = !isPhoneLayout && layoutWidth >= 900;
+  // The Details column needs room for folders + list + details + a readable chat;
+  // below that it slides in over the chat area.
+  // (folders 208 + list 300 + details 320 + chat 400+)
+  const detailsAsColumn = !isPhoneLayout && layoutWidth >= (showFoldersColumn ? 1240 : 1040);
+  const foldersWidth = layoutWidth >= 1250 ? 232 : 208;
+  const listWidth = layoutWidth >= 1400 ? 340 : 300;
   // Tasks row in the folders column: admins see what was handed back, staff what is waiting for them
   const tasksBadge = (() => {
     if (currentUser.role === "admin" || currentUser.role === "superadmin") {
@@ -2178,11 +2199,10 @@ const MessengerPage = ({ user }) => {
   })();
   const showChatOnMobile = activeView === "chats" && !!activeConversation;
 
-  // Wide screens: toggle the right column. Smaller screens: slide-over drawer.
+  // Room for it: toggle the Details column. Otherwise: toggle the panel that slides in over the chat.
   const handleOpenDetails = () => {
-    const isWide = typeof window !== "undefined" && window.matchMedia("(min-width: 1800px)").matches;
-    if (isWide) setIsContactPanelOpen(prev => !prev);
-    else setIsDetailsDrawerOpen(true);
+    if (detailsAsColumn) setIsContactPanelOpen(prev => !prev);
+    else setIsDetailsDrawerOpen(prev => !prev);
   };
 
   const handleCompleteTaskFromPanel = (task) => {
@@ -3105,7 +3125,7 @@ const renderTasksView = () => {
     <div
       ref={messengerRootRef}
       style={{ height: messengerHeight ? `${messengerHeight}px` : "100dvh" }}
-      className="flex flex-col md:flex-row w-full overflow-hidden bg-slate-50"
+      className="relative flex flex-col md:flex-row w-full overflow-hidden bg-slate-50"
     >
       <AnimatePresence mode="wait">
         {isNewChatModalOpen && (<NewChatModal key="new-chat-modal" isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} onCreate={handleCreateConversation} staffList={staffList} centresMap={centresMap} />)}
@@ -3165,10 +3185,10 @@ const renderTasksView = () => {
       />
 
       <main className="flex-1 min-h-0 min-w-0 flex">
-        {/* Folders column on wide screens: chat folders on top, the other views at the bottom.
-            Smaller screens get the folders as a dropdown in the list header and the icon rail. */}
+        {/* Folders column (design A): chat folders on top, the other views at the bottom.
+            Phones get the folders as a dropdown in the list header and the bottom bar. */}
         {showFoldersColumn && (
-          <aside className="flex w-[232px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white">
+          <aside style={{ width: foldersWidth }} className="flex shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white">
             <ChatFolders
               folder={chatFolder}
               onChange={(id) => { setChatFolder(id); setActiveView("chats"); }}
@@ -3186,7 +3206,10 @@ const renderTasksView = () => {
           <>
 
             {/* Conversation list: full screen on mobile until a chat is opened */}
-            <aside className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[300px] 2xl:w-[340px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}>
+            <aside
+              style={showFoldersColumn ? { width: listWidth } : undefined}
+              className={`${showChatOnMobile ? "hidden" : "flex"} md:flex w-full md:w-72 lg:w-[300px] shrink-0 flex-col min-h-0 border-r border-slate-200 bg-white`}
+            >
               <ConversationList
                 conversations={conversations}
                 activeConversationId={activeConversation?.id}
@@ -3225,7 +3248,7 @@ const renderTasksView = () => {
                 onNormalTaskStatusUpdate={handleNormalTaskStatusUpdate}
                 onDeleteConversation={handleDeleteConversation}
                 onOpenDetails={handleOpenDetails}
-                isDetailsOpen={isDetailsDrawerOpen || isContactPanelOpen}
+                isDetailsOpen={detailsAsColumn ? isContactPanelOpen : isDetailsDrawerOpen}
                 initialDraft={pendingDraft}
                 onDraftConsumed={() => setPendingDraft(null)}
                 onAddPeople={canEditActiveMembers ? () => setIsAddMembersOpen(true) : null}
@@ -3243,9 +3266,9 @@ const renderTasksView = () => {
               />
             </section>
 
-            {/* Details column (wide screens only) */}
-            {activeConversation && isContactPanelOpen && (
-              <aside className="hidden min-[1800px]:flex w-[320px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
+            {/* Details column, when Messenger is wide enough for it */}
+            {detailsAsColumn && activeConversation && isContactPanelOpen && (
+              <aside className="flex w-[320px] shrink-0 flex-col min-h-0 border-l border-slate-200 bg-white">
                 {renderDetails(() => setIsContactPanelOpen(false))}
               </aside>
             )}
@@ -3269,16 +3292,17 @@ const renderTasksView = () => {
         )}
       </main>
 
-      {/* Details panel below 1024px: slides over the right edge, no backdrop, chat stays usable */}
+      {/* Details when there's no room for the column: slides in over the chat area (inside
+          Messenger, not over the whole page); full screen on phones */}
       <AnimatePresence>
-        {activeView === "chats" && activeConversation && isDetailsDrawerOpen && (
+        {!detailsAsColumn && activeView === "chats" && activeConversation && isDetailsDrawerOpen && (
           <motion.div
             key="details-drawer"
             initial={{ x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", damping: 30, stiffness: 300 }}
-            className="min-[1800px]:hidden fixed inset-y-0 right-0 z-40 w-full sm:w-[360px] bg-white shadow-2xl border-l border-slate-200"
+            className={`${isPhoneLayout ? "fixed" : "absolute"} inset-y-0 right-0 z-40 w-full sm:w-[340px] bg-white shadow-2xl border-l border-slate-200`}
           >
             {renderDetails(() => setIsDetailsDrawerOpen(false))}
           </motion.div>
