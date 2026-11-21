@@ -1056,6 +1056,50 @@ router.patch("/conversation/:conversationId/contact-name", authenticateToken, as
 });
 
 /* ================================
+   CHAT BUBBLES (each person's own settings)
+================================ */
+
+const BUBBLE_DEFAULTS = {
+  on: true,
+  preview: true,
+  sound: true,
+  kinds: { staff: true, group: true, whatsapp: true, portal: false },
+};
+const BUBBLE_KINDS = Object.keys(BUBBLE_DEFAULTS.kinds);
+
+// Saved settings over the defaults, keeping only the keys we know
+const cleanBubbleSettings = (raw) => {
+  const s = raw && typeof raw === "object" ? raw : {};
+  const out = { ...BUBBLE_DEFAULTS, kinds: { ...BUBBLE_DEFAULTS.kinds } };
+  ["on", "preview", "sound"].forEach((k) => { if (typeof s[k] === "boolean") out[k] = s[k]; });
+  BUBBLE_KINDS.forEach((k) => { if (typeof s.kinds?.[k] === "boolean") out.kinds[k] = s.kinds[k]; });
+  return out;
+};
+
+router.get("/bubble-settings", authenticateToken, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT chat_bubble_settings FROM staff WHERE id = $1`, [req.user.id]);
+    res.json(cleanBubbleSettings(rows[0]?.chat_bubble_settings));
+  } catch (err) {
+    console.error("Bubble settings error:", err);
+    res.json(cleanBubbleSettings(null)); // never block chat over this
+  }
+});
+
+router.put("/bubble-settings", authenticateToken, async (req, res) => {
+  try {
+    const settings = cleanBubbleSettings(req.body);
+    await pool.query(`UPDATE staff SET chat_bubble_settings = $1 WHERE id = $2`, [JSON.stringify(settings), req.user.id]);
+    // Other tabs and devices of the same person follow along
+    req.io?.to(`user:${req.user.id}`).emit("bubble_settings_updated", settings);
+    res.json(settings);
+  } catch (err) {
+    console.error("Save bubble settings error:", err);
+    res.status(500).json({ error: "Couldn't save your bubble settings" });
+  }
+});
+
+/* ================================
    QUICK REPLIES (chips above the message box)
 ================================ */
 

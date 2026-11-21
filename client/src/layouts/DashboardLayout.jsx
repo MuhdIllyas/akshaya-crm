@@ -4,7 +4,7 @@ import { socket } from '@/services/socket';
 import { useNotifications } from '../context/NotificationContext';
 import ThemeToggle from '../components/ThemeToggle';
 import QuickServiceModal from '@/components/QuickServiceModal';
-import StaffChatDock from '@/components/staff/StaffChatDock';
+import StaffChatDock, { ChatBubblesButton } from '@/components/staff/StaffChatDock';
 import { getWalletsForCentre } from '@/services/walletService';
 import { toast } from 'react-toastify';
 import { customerAuthHeaders } from '@/tenancy/centres';
@@ -725,6 +725,7 @@ const DashboardLayout = () => {
         <div className={`rounded-2xl border border-slate-200 bg-white py-2 shadow-sm ${isCollapsed ? "px-2" : "px-3"}`}>
           <nav className="space-y-1">
             <ThemeToggle collapsed={isCollapsed} />
+            {role?.toLowerCase() !== "customer" && <ChatBubblesButton collapsed={isCollapsed} />}
             <Link
               to="/dashboard/my-profile"   // Changed from "/dashboard/profile" to the unified profile route
               onClick={() => handleNavigation("/dashboard/my-profile")}
@@ -921,7 +922,7 @@ const DashboardLayout = () => {
         </main>
       </div>
 
-      <StaffChatDock />
+      {role?.toLowerCase() !== "customer" && <StaffChatDock />}
 
       {quickEnabled && (
         <QuickServiceModal open={quickOpen} onClose={() => setQuickOpen(false)} wallets={quickWallets} />
