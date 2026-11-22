@@ -72,7 +72,6 @@ const readUpiSettings = (body, current = {}) => {
   if (!sources.includes('sms')) last4 = ''; // only bank SMS uses the account digits
   return { sources: sources.length ? sources : null, last4: last4 || null };
 };
-};
 
 /* Can this user touch this wallet? Superadmin: any. Others: own centre only.
    Returns the wallet row, or sends 400/403/404 and returns null. */

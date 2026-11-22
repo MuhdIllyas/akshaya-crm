@@ -102,6 +102,22 @@ const NOT_A_CREDIT =
 
 // ---------- Parsers ----------
 
+// A UPI app paying out the day's collections in one lump (GPay / Paytm /
+// PhonePe settlement). Not a customer payment: kept as source "settlement"
+// for checking against the day's app notifications, never shown as "received".
+// A customer paying from the Paytm app shows "98xxxx@paytm" in the SMS, so
+// UPI ids are removed first, and a company name only counts on a bank
+// transfer (NEFT/IMPS/RTGS), which is how settlements arrive.
+const SETTLEMENT_WORD = /\b(settlement|settled|merchant\s*payout)\b/i;
+const AGGREGATOR = /(google\s*india|google\s*pay|gpay|paytm|one\s*97|phonepe|bharatpe|razorpay|cashfree|pine\s*labs)/i;
+const BANK_TRANSFER = /\b(neft|imps|rtgs)\b/i;
+
+export function isSettlementSms(text) {
+  const t = String(text || "").replace(new RegExp(VPA.source, "gi"), " ");
+  if (SETTLEMENT_WORD.test(t)) return true;
+  return AGGREGATOR.test(t) && BANK_TRANSFER.test(t);
+}
+
 /** A bank's "account credited" SMS → payment, or null. */
 export function parseBankCreditSms(sender, text) {
   const body = String(text || "");
@@ -113,7 +129,7 @@ export function parseBankCreditSms(sender, text) {
   const amount = extractAmount(body);
   if (!amount) return null;
   return {
-    source: "sms",
+    source: isSettlementSms(body) ? "settlement" : "sms",
     amount,
     utr: extractUtr(body),
     account_last4: extractAccountLast4(body),
