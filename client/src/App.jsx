@@ -53,6 +53,7 @@ import ServiceRequirementsPrint from './pages/staff/ServiceRequirementsPrint';
 import ExpenseEntry from "./pages/staff/ExpenseEntry";
 import StaffTeamDashboard from "./pages/staff/StaffTeamDashboard";
 import PendingPayments from './pages/staff/PendingPayments';
+import UpiPayments from './pages/UpiPayments';
 import TrackService from "./pages/staff/TrackServicePage";
 import MyProfile from "./pages/staff/MyProfile";
 import AllEntries from './pages/AllEntries';
@@ -370,6 +371,10 @@ const App = () => {
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><EditStaffForm /></ProtectedRoute>}
             />
             <Route
+              path="admin/upi_payments"
+              element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><UpiPayments /></ProtectedRoute>}
+            />
+            <Route
               path="admin/wallets"
               element={<ProtectedRoute allowedRoles={["admin", "superadmin"]}><WalletManagement /></ProtectedRoute>}
             />
@@ -452,6 +457,10 @@ const App = () => {
             <Route
               path="superadmin/staffmanagement"
               element={<ProtectedRoute allowedRoles={["superadmin"]}><SuperadminStaffManagement /></ProtectedRoute>}
+            />
+            <Route
+              path="superadmin/upi_payments"
+              element={<ProtectedRoute allowedRoles={["superadmin"]}><UpiPayments /></ProtectedRoute>}
             />
             <Route
               path="superadmin/walletmanagement"
@@ -574,6 +583,10 @@ const App = () => {
             <Route
               path="staff/expense_entry"
               element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><ExpenseEntry /></ProtectedRoute>}
+            />
+            <Route
+              path="staff/upi_payments"
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><UpiPayments /></ProtectedRoute>}
             />
             <Route
               path="staff/pending_payments"

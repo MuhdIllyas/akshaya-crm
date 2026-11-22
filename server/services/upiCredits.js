@@ -2,6 +2,7 @@
 // belongs to, and tells the centre's staff live ("₹100 received – SBI").
 import pool from "../db.js";
 import { io } from "../tenancy/io.js";
+import { scheduleUpiMatch } from "./upiMatcher.js";
 
 /**
  * The wallet a payment belongs to: the centre's wallet that reads payments
@@ -55,6 +56,9 @@ export async function recordUpiCredit({ centreId, deviceId, credit, creditedAt, 
   if (!rows.length) return null; // same payment reported twice
 
   const saved = { ...rows[0], wallet_name: wallet?.name ?? null };
+
+  // A save may already be waiting for this payment (staff entered it first).
+  if (saved.wallet_id) scheduleUpiMatch();
 
   // Only payments that landed on a set-up wallet are shown. Otherwise a GPay QR
   // payment would pop up twice: once from the bank SMS, once from the GPay app.

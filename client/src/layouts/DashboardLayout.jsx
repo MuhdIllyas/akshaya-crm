@@ -322,6 +322,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/superadmin/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/superadmin/staffmanagement", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/superadmin/walletmanagement", label: "Wallets", icon: WalletIcon },
+      { path: "/dashboard/superadmin/upi_payments", label: "UPI Payments", icon: UpiIcon },
       { path: "/dashboard/superadmin/servicemanagement", label: "Service Management", icon: ServicesIcon },
       { path: "/dashboard/superadmin/documenttypes", label: "Document Types", icon: DocumentTypesIcon },
       { path: "/dashboard/superadmin/servicelogs", label: "Service Logs", icon: ServiceLogsIcon },
@@ -345,6 +346,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/admin/notes", label: "Notes", icon: NotesIconWithBadge },
       { path: "/dashboard/admin/staff", label: "Staff Management", icon: UsersIcon },
       { path: "/dashboard/admin/wallets", label: "Wallets", icon: WalletIcon },
+      { path: "/dashboard/admin/upi_payments", label: "UPI Payments", icon: UpiIcon },
       { path: "/dashboard/admin/services", label: "Service Management", icon: ServicesIcon },
       { path: "/dashboard/admin/servicelogs", label: "Service Logs", icon: ServiceLogsIcon },
       { path: "/dashboard/admin/customers", label: "Customers", icon: CustomersIcon },
@@ -372,6 +374,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/leads", label: "Leads", icon: LeadsIconWithBadge },
       { path: "/dashboard/staff/expense_entry", label: "Expense Entry", icon: ExpenseEntryIcon },
       { path: "/dashboard/staff/pending_payments", label: "Pending Payments", icon: PendingPaymentIcon },
+      { path: "/dashboard/staff/upi_payments", label: "UPI Payments", icon: UpiIcon },
       { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIconWithBadge }, 
       { path: "/dashboard/staff/teams", label: "My Team", icon: TeamIcon },
       { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
@@ -1273,6 +1276,7 @@ const DashboardIcon = createIcon("M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10
 const EventsIcon = createIcon(`M8 7V3m8 4V3m-9 8h10 M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z M12 16h.01 M12 12h.01 M12 20h.01`);
 const CentreIcon = createIcon("M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 8v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4");
 const UsersIcon = createIcon("M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z");
+const UpiIcon = createIcon("M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z");
 const WalletIcon = createIcon("M3 10h18M7 15h1m2 0h1m-1 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z");
 const DocumentTypesIcon = createIcon("M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z");
 const ServicesIcon = createIcon("M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z");
