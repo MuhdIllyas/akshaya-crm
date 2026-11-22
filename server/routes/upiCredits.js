@@ -7,7 +7,7 @@ import pool from "../db.js";
 import { io } from "../tenancy/io.js";
 import { scheduleForEachOrg } from "../tenancy/jobs.js";
 import {
-  runUpiMatch, openSaves, allocate, insertLinks, cents, EFFECTIVE_PAYMENT,
+  runUpiMatch, scheduleUpiMatch, openSaves, allocate, insertLinks, cents, EFFECTIVE_PAYMENT,
 } from "../services/upiMatcher.js";
 
 const router = express.Router();
@@ -410,6 +410,146 @@ router.post("/:id/unlink", async (req, res) => {
     await client.query("ROLLBACK").catch(() => {});
     if (!err.status) console.error("UPI unlink error:", err.message);
     res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to unlink payment" });
+  } finally {
+    client.release();
+  }
+});
+
+/**
+ * GET /api/upi-credits/unclaimed?wallet_id=62[&hours=3]
+ * For the Service Entry picker: this wallet's UPI payments not linked to any
+ * entry yet, newest first.
+ */
+router.get("/unclaimed", async (req, res) => {
+  const walletId = parseInt(req.query.wallet_id, 10);
+  if (Number.isNaN(walletId)) return res.status(400).json({ error: "wallet_id is required" });
+  const hours = Math.min(Math.max(parseInt(req.query.hours, 10) || 3, 1), 48);
+  try {
+    const params = [walletId, hours];
+    const scope = centreFilter(req, params, "u");
+    const { rows } = await pool.query(
+      `SELECT u.id, u.amount::float AS amount, u.payer, u.source, u.utr, u.credited_at
+         FROM upi_credits u
+        WHERE u.wallet_id = $1 AND u.status = 'unclaimed'
+          AND u.credited_at > NOW() - ($2 || ' hours')::interval
+          AND NOT EXISTS (SELECT 1 FROM upi_credit_links l WHERE l.credit_id = u.id)${scope}
+        ORDER BY u.credited_at DESC
+        LIMIT 20`,
+      params
+    );
+    res.json({ credits: rows });
+  } catch (err) {
+    console.error("UPI unclaimed error:", err.message);
+    res.status(500).json({ error: "Failed to load UPI payments" });
+  }
+});
+
+/**
+ * POST /api/upi-credits/link-entry  { credit_ids: [..], entry_ids: [..], wallet_id }
+ * Used right after Service Entry saves, with the payments the staff ticked.
+ * Finds that save's payment rows in the wallet and links the ticked payments.
+ * If the automatic matcher already linked other payments to the same save a
+ * moment earlier, those are put back (staff's choice wins over the automatic one).
+ */
+router.post("/link-entry", async (req, res) => {
+  const creditIds = [...new Set((req.body?.credit_ids || []).map((v) => parseInt(v, 10)).filter(Number.isInteger))];
+  const entryIds = [...new Set((req.body?.entry_ids || []).map((v) => parseInt(v, 10)).filter(Number.isInteger))];
+  const walletId = parseInt(req.body?.wallet_id, 10);
+  if (!creditIds.length || !entryIds.length || Number.isNaN(walletId)) {
+    return res.status(400).json({ error: "Choose the UPI payment(s) and the entry to link" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await lockMatcher(client);
+
+    // The save = the newest group of this entry's payment rows in that wallet
+    const { rows: saveRows } = await client.query(
+      `SELECT p.created_at::text AS save_key
+         FROM payments p
+         JOIN wallets w ON w.id = p.wallet_id
+        WHERE p.service_entry_id = ANY($1::int[]) AND p.wallet_id = $2 AND ${EFFECTIVE_PAYMENT}
+        ORDER BY p.created_at DESC
+        LIMIT 1`,
+      [entryIds, walletId]
+    );
+    if (!saveRows.length) throw Object.assign(new Error("This entry has no payment in that wallet"), { status: 404 });
+    const saveKey = saveRows[0].save_key;
+
+    // Payments the matcher linked to this save on its own: put them back
+    const { rows: existing } = await client.query(
+      `SELECT DISTINCT l.credit_id, bool_or(l.linked_by IS NOT NULL) AS manual
+         FROM upi_credit_links l JOIN payments p ON p.id = l.payment_id
+        WHERE p.wallet_id = $1 AND p.created_at::text = $2
+        GROUP BY l.credit_id`,
+      [walletId, saveKey]
+    );
+    const already = existing.map((e) => Number(e.credit_id));
+    if (already.length && already.every((id) => creditIds.includes(id)) && creditIds.every((id) => already.includes(id))) {
+      await client.query("COMMIT");
+      return res.json({ ok: true, already: true });
+    }
+    if (existing.some((e) => e.manual)) {
+      throw Object.assign(new Error("Someone already linked a payment to this entry by hand"), { status: 409 });
+    }
+    if (already.length) {
+      await client.query(`DELETE FROM upi_credit_links WHERE credit_id = ANY($1::bigint[])`, [already]);
+      await client.query(
+        `UPDATE upi_credits SET status = 'unclaimed', matched_at = NULL, matched_by = NULL, matched_payment_id = NULL
+          WHERE id = ANY($1::bigint[])`,
+        [already]
+      );
+    }
+
+    const params = [creditIds];
+    const scope = centreFilter(req, params, "u");
+    const { rows: credits } = await client.query(
+      `SELECT u.id, u.centre_id, u.wallet_id, u.amount, u.status,
+              (extract(epoch FROM u.credited_at) * 1000)::float8 AS t
+         FROM upi_credits u
+        WHERE u.id = ANY($1::int[])${scope}
+          AND NOT EXISTS (SELECT 1 FROM upi_credit_links l WHERE l.credit_id = u.id)
+        FOR UPDATE`,
+      params
+    );
+    if (credits.length !== creditIds.length || credits.some((c) => c.status !== "unclaimed")) {
+      throw Object.assign(new Error("One of these UPI payments was just linked to another entry"), { status: 409 });
+    }
+    if (credits.some((c) => Number(c.wallet_id) !== walletId)) {
+      throw Object.assign(new Error("The UPI payment and the entry are in different wallets"), { status: 400 });
+    }
+
+    const [save] = await openSaves(client, walletId, { sinceSql: `NOW() - INTERVAL '60 days'`, key: saveKey });
+    if (!save) throw Object.assign(new Error("This entry has nothing left to link in that wallet"), { status: 409 });
+    const total = credits.reduce((t, c) => t + cents(c.amount), 0);
+    if (total !== save.openCents) {
+      throw Object.assign(
+        new Error(`The UPI payments add up to ₹${(total / 100).toFixed(2)}, but the entry has ₹${(save.openCents / 100).toFixed(2)} in this wallet`),
+        { status: 400 }
+      );
+    }
+
+    await insertLinks(
+      client,
+      allocate(save.rows, credits.map((c) => ({ id: c.id, amountCents: cents(c.amount), t: Number(c.t) }))),
+      req.user.id
+    );
+    await client.query(
+      `UPDATE upi_credits SET status = 'matched', matched_at = NOW(), matched_by = $2,
+              matched_payment_id = $3, no_auto = FALSE
+        WHERE id = ANY($1::int[])`,
+      [creditIds, req.user.id, save.rows[0].id]
+    );
+    await client.query("COMMIT");
+
+    io.to(`centre:${credits[0].centre_id}`).emit("upi_links_updated", { centre_id: credits[0].centre_id });
+    if (already.length) scheduleUpiMatch(); // the put-back payments may fit another entry
+    res.json({ ok: true, replaced: already.length });
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    if (!err.status) console.error("UPI link-entry error:", err.message);
+    res.status(err.status || 500).json({ error: err.status ? err.message : "Failed to link payment" });
   } finally {
     client.release();
   }

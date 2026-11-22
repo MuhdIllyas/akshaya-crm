@@ -41,6 +41,10 @@ import { todayIST, addDays } from "@/utils/dates";
 import { printServiceChecklist, collectRequiredDocuments } from '@/utils/pdf/requiredDocumentsPdf';
 import ServiceFilesPopover from '@/components/files/ServiceFilesPopover';
 import StaffName from '@/components/staff/StaffName';
+import { linkToEntries, isUpiWallet } from '@/components/upi/upiApi';
+
+// UPI payments picker: loaded only when a payment uses a wallet with UPI check on
+const UpiPaymentPicker = React.lazy(() => import('@/components/upi/UpiPaymentPicker'));
 
 // 🔥 FIX: Automatically fetch the logged-in staff ID for the default assignee
 const createEmptyService = () => {
@@ -1471,6 +1475,8 @@ const ServiceEntry = () => {
   const updatePaymentState = (index, field, value) => {
     const updatedPayments = [...formData.payments];
     updatedPayments[index] = { ...updatedPayments[index], [field]: value };
+    // Ticked UPI payments belong to the wallet they came in on
+    if (field === 'wallet' || field === 'method' || field === 'status') updatedPayments[index].upiCreditIds = [];
 
     if (field === 'method') {
       const availableWallets = value === 'cash' ? wallets.offline : wallets.online;
@@ -1654,9 +1660,27 @@ const ServiceEntry = () => {
           
         } else {
           const submittedServicesData = [...formData.services];
+          const submittedPayments = [...formData.payments];
 
           const response = await api.post('/entry/bulk', payload);
           const createdServices = response.data.createdServices || [];
+
+          // Link the UPI payments the staff ticked to the new entries (one call per wallet)
+          const upiByWallet = {};
+          submittedPayments.forEach(p => {
+            if (p.status === 'received' && p.upiCreditIds?.length) {
+              upiByWallet[p.wallet] = [...(upiByWallet[p.wallet] || []), ...p.upiCreditIds];
+            }
+          });
+          const newEntryIds = createdServices.map(svc => svc.serviceEntryId || svc.id).filter(Boolean);
+          Object.entries(upiByWallet).forEach(([walletId, ids]) => {
+            linkToEntries([...new Set(ids)], newEntryIds, walletId)
+              .then(() => toast.success('UPI payment linked — entry verified'))
+              .catch(err => toast.warn(
+                err?.response?.data?.error || 'Saved, but the UPI payment could not be linked. Link it from the UPI chip.',
+                { autoClose: 8000 }
+              ));
+          });
 
           toast.success('Services successfully created and paid!');
           if (fromTask) {
@@ -2718,6 +2742,31 @@ const ServiceEntry = () => {
                             </select>
                           </div>
                         </div>
+
+                        {/* UPI payments the companion phone caught in this wallet */}
+                        {!isEditMode && payment.status === 'received' && (() => {
+                          const w = [...wallets.offline, ...wallets.online].find(x => String(x.id) === String(payment.wallet));
+                          if (!isUpiWallet(w)) return null;
+                          return (
+                            <React.Suspense fallback={null}>
+                              <UpiPaymentPicker
+                                walletId={w.id}
+                                walletName={w.name}
+                                amount={payment.amount}
+                                selected={payment.upiCreditIds || []}
+                                onChange={(ids, total) => setFormData(prev => {
+                                  const list = [...prev.payments];
+                                  const cur = list[index];
+                                  if (!cur) return prev;
+                                  const next = { ...cur, upiCreditIds: ids };
+                                  if (ids.length && !(parseFloat(cur.amount) > 0)) next.amount = String(total);
+                                  list[index] = next;
+                                  return { ...prev, payments: list };
+                                })}
+                              />
+                            </React.Suspense>
+                          );
+                        })()}
                       </div>
                     ))
                   )}

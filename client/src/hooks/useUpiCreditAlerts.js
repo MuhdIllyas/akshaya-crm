@@ -25,7 +25,12 @@ export default function useUpiCreditAlerts({ enabled = true } = {}) {
       toast.success(
         `${rupees(c.amount)} received in ${c.wallet_name || "wallet"}${from}` +
           ` (${SOURCE_LABEL[c.source] || c.source}${ref})`,
-        { toastId: `upi-${c.id}`, autoClose: 10000 }
+        {
+          toastId: `upi-${c.id}`,
+          autoClose: 10000,
+          // Opens the top-bar UPI chip's list
+          onClick: () => window.dispatchEvent(new Event("upi-chip-open")),
+        }
       );
     };
 
