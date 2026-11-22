@@ -83,6 +83,20 @@ export default function UpiCheckSection({ date, centreId, isSuperAdmin = false, 
     return <p className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-500">Choose a centre to see its UPI payments.</p>;
   }
 
+  if (data?.cleared) {
+    return (
+      <div className="rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="flex items-center text-lg font-bold text-slate-900">
+          <FiCheckCircle className="mr-2 h-5 w-5 text-navy-700" />
+          UPI Check
+        </h2>
+        <p className="mt-2 text-sm text-slate-600">
+          UPI payments are kept for the same day only and cleared at midnight. Choose today's date to check payments.
+        </p>
+      </div>
+    );
+  }
+
   const s = data?.summary;
   const credits = data?.credits || [];
   const notVerified = data?.not_verified || [];

@@ -183,6 +183,19 @@ const describeSave = (rows) => ({
  */
 router.get("/board", async (req, res) => {
   try {
+    // UPI payments are deleted at the end of each day (see the cleanup job
+    // below), so an earlier day has nothing to show — and its entries must
+    // not be listed as "not verified" just because their payments are gone.
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const asked = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || "")) ? req.query.date : today;
+    if (asked < today) {
+      return res.json({
+        cleared: true,
+        credits: [],
+        not_verified: [],
+        summary: { received: 0, count: 0, linked: 0, unclaimed: 0, unclaimed_total: 0, not_verified: 0, not_verified_total: 0 },
+      });
+    }
     const { start, end } = dayBounds(req.query.date);
 
     const cParams = [];
@@ -561,9 +574,44 @@ scheduleForEachOrg("* * * * *", async () => {
   await runUpiMatch();
 }, { timezone: "Asia/Kolkata" });
 
-// Raw UPI app notifications are only kept to check the parser: 30 days.
-scheduleForEachOrg("27 3 * * *", async () => {
-  await pool.query(`DELETE FROM companion_notification_logs WHERE received_at < NOW() - INTERVAL '30 days'`);
-}, { timezone: "Asia/Kolkata" });
+// UPI payments are kept for the day only, like OTPs. Everything from before
+// today (IST) is deleted: the payments, their links to entries, the bank SMS
+// they came from and the raw app notifications. The service entries and
+// their payment rows are not touched. Runs every hour (from 00:05), so a
+// server that was down at midnight still clears yesterday on its next run.
+const TODAY_START = `(date_trunc('day', NOW() AT TIME ZONE 'Asia/Kolkata') AT TIME ZONE 'Asia/Kolkata')`;
+
+export async function clearOldUpiData() {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Wait for a matcher run in progress, so it doesn't link a payment being deleted.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('upi_matcher'))`);
+    const { rows: old } = await client.query(
+      `SELECT id, sms_log_id FROM upi_credits WHERE created_at < ${TODAY_START}`
+    );
+    const ids = old.map((r) => r.id);
+    const smsIds = old.map((r) => r.sms_log_id).filter(Boolean);
+    if (ids.length) {
+      await client.query(`DELETE FROM upi_credit_links WHERE credit_id = ANY($1::bigint[])`, [ids]);
+      await client.query(`DELETE FROM upi_credits WHERE id = ANY($1::bigint[])`, [ids]);
+    }
+    if (smsIds.length) {
+      await client.query(`DELETE FROM companion_sms_logs WHERE id = ANY($1::bigint[]) AND is_otp = FALSE`, [smsIds]);
+    }
+    const notes = await client.query(`DELETE FROM companion_notification_logs WHERE received_at < ${TODAY_START}`);
+    await client.query("COMMIT");
+    if (ids.length || notes.rowCount) {
+      console.log(`[upi] cleared ${ids.length} UPI payment(s), ${smsIds.length} bank SMS, ${notes.rowCount} notification(s) from earlier days`);
+    }
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+scheduleForEachOrg("5 * * * *", clearOldUpiData, { timezone: "Asia/Kolkata" });
 
 export default router;
