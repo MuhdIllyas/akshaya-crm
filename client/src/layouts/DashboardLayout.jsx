@@ -9,6 +9,7 @@ import { getWalletsForCentre } from '@/services/walletService';
 import { toast } from 'react-toastify';
 import { customerAuthHeaders } from '@/tenancy/centres';
 import useLiveOtps from '@/hooks/useLiveOtps';
+import useUpiCreditAlerts from '@/hooks/useUpiCreditAlerts';
 import { copyOtp, otpTimeLeft } from '@/utils/otpAlert';
 import { FiCopy } from 'react-icons/fi';
 
@@ -456,6 +457,8 @@ const DashboardLayout = () => {
   // OTPs from the companion phone: shown live in the top bar, never counted as unread
   const otpsPath = notificationsItem ? `${notificationsItem.path}?tab=otps` : null;
   const { otps: liveOtps } = useLiveOtps({ token, apiBase: API_BASE_URL, enabled: showTicker });
+  // UPI payments caught by the companion phone: a live "₹100 received" toast
+  useUpiCreditAlerts({ enabled: showTicker });
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 

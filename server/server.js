@@ -88,6 +88,9 @@ import knowledgeRoutes from "./routes/knowledge.js";
 import companionRoutes from "./routes/companion.js";
 import smsRoutes from "./routes/sms.js";
 import { extractOtpCode, looksLikeOtp, OTP_LIVE_MINUTES } from "./utils/smsOtp.js";
+import upiCreditRoutes from "./routes/upiCredits.js";
+import { parseBankCreditSms, parseAppNotification, UPI_APP_PACKAGES } from "./utils/upiCredit.js";
+import { recordUpiCredit, phoneTime } from "./services/upiCredits.js";
 
 //Public Tracking - documents view
 import serviceTrackingDocumentsRoutes from "./routes/serviceTrackingDocuments.js";
@@ -201,20 +204,43 @@ socketServer.on("connection", (socket) => {
     // Incoming SMS from the companion phone. OTPs are short-lived alerts, not chat:
     // they are logged, shown live in the top bar / toast for the centre, and listed
     // on Notifications → OTPs. They never go into the messenger or the bell count.
-    socket.on("incoming_sms", (smsData = {}) => runWithTenant(org, async () => {
+    // The phone sends a callback (ack) and keeps the SMS in its offline queue
+    // until it is called, so nothing is lost while the connection is down.
+    // A resent SMS carries the same clientRef and is saved only once.
+    socket.on("incoming_sms", (smsData = {}, ack) => runWithTenant(org, async () => {
+      const reply = typeof ack === "function" ? ack : () => {};
       const centreId = socket.device.centre_id;
       const message = String(smsData.message ?? "");
       const sender = String(smsData.sender ?? "");
-      const isOtp = looksLikeOtp(message, smsData.isOtp);
+      const clientRef = smsData.clientRef ? String(smsData.clientRef).slice(0, 100) : null;
+      const upi = parseBankCreditSms(sender, message);
+      // A bank credit SMS has digits (amount, reference) that look like an OTP.
+      const isOtp = !upi && looksLikeOtp(message, smsData.isOtp);
       const code = isOtp ? extractOtpCode(message) : null;
+      // An OTP that waited in the phone's queue is shown from when it arrived.
+      const smsTime = phoneTime(smsData.timestamp);
 
       try {
         const saved = await pool.query(
-          `INSERT INTO companion_sms_logs (centre_id, device_id, sender, message, is_otp, otp_code, received_at)
-           VALUES ($1, $2, $3, $4, $5, $6, NOW())
+          `INSERT INTO companion_sms_logs (centre_id, device_id, sender, message, is_otp, otp_code, received_at, client_ref)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (device_id, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
            RETURNING id, received_at`,
-          [centreId, socket.device.id, sender, message, isOtp, code]
+          [centreId, socket.device.id, sender, message, isOtp, code, smsTime, clientRef]
         );
+        if (!saved.rows.length) return reply({ ok: true, duplicate: true });
+        reply({ ok: true });
+
+        if (upi) {
+          await recordUpiCredit({
+            centreId,
+            deviceId: socket.device.id,
+            credit: upi,
+            creditedAt: smsTime,
+            rawText: message,
+            smsLogId: saved.rows[0].id,
+          });
+        }
 
         // Only OTPs alert staff; other texts (bank alerts etc.) stay in the history.
         if (isOtp) {
@@ -230,6 +256,48 @@ socketServer.on("connection", (socket) => {
         }
       } catch (error) {
         console.error("❌ Failed to process incoming SMS:", error);
+        reply({ ok: false });
+      }
+    }));
+
+    // "Payment received" notifications from UPI apps on the phone (GPay, Paytm…).
+    socket.on("incoming_notification", (data = {}, ack) => runWithTenant(org, async () => {
+      const reply = typeof ack === "function" ? ack : () => {};
+      const centreId = socket.device.centre_id;
+      const pkg = String(data.package ?? "").slice(0, 200);
+      const title = String(data.title ?? "").slice(0, 500);
+      const body = String(data.text ?? "").slice(0, 2000);
+      const clientRef = data.clientRef ? String(data.clientRef).slice(0, 100) : null;
+      const postedAt = phoneTime(data.postedAt);
+
+      // The phone only forwards UPI apps; anything else is dropped here too.
+      if (!UPI_APP_PACKAGES[pkg]) return reply({ ok: true, ignored: true });
+
+      try {
+        const saved = await pool.query(
+          `INSERT INTO companion_notification_logs (centre_id, device_id, package, title, body, posted_at, client_ref)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (device_id, client_ref) WHERE client_ref IS NOT NULL DO NOTHING
+           RETURNING id`,
+          [centreId, socket.device.id, pkg, title, body, postedAt, clientRef]
+        );
+        if (!saved.rows.length) return reply({ ok: true, duplicate: true });
+        reply({ ok: true });
+
+        const upi = parseAppNotification(pkg, title, body);
+        if (upi) {
+          await recordUpiCredit({
+            centreId,
+            deviceId: socket.device.id,
+            credit: upi,
+            creditedAt: postedAt,
+            rawText: [title, body].filter(Boolean).join(" — "),
+            notificationLogId: saved.rows[0].id,
+          });
+        }
+      } catch (error) {
+        console.error("❌ Failed to process incoming notification:", error);
+        reply({ ok: false });
       }
     }));
 
@@ -452,6 +520,7 @@ app.use("/api/knowledge", knowledgeRoutes);
 /* Companion Devices */
 app.use("/api/companion", companionRoutes);
 app.use("/api/sms", smsRoutes);
+app.use("/api/upi-credits", upiCreditRoutes);
 
 /* Service Tracking Documents - for public access */
 app.use("/api/servicetracking", serviceTrackingDocumentsRoutes);
