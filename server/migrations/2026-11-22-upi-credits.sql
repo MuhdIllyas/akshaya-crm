@@ -22,7 +22,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS companion_sms_logs_client_ref_uidx
 CREATE TABLE IF NOT EXISTS companion_notification_logs (
   id           BIGSERIAL PRIMARY KEY,
   centre_id    INTEGER,
-  device_id    INTEGER,
+  device_id    TEXT,           -- companion device id (UUID)
   package      TEXT,
   title        TEXT,
   body         TEXT,
@@ -39,7 +39,7 @@ CREATE INDEX IF NOT EXISTS companion_notification_logs_centre_idx
 CREATE TABLE IF NOT EXISTS upi_credits (
   id                  BIGSERIAL PRIMARY KEY,
   centre_id           INTEGER NOT NULL,
-  device_id           INTEGER,
+  device_id           TEXT,                       -- companion device id (UUID)
   wallet_id           INTEGER REFERENCES wallets(id) ON DELETE SET NULL,
   source              TEXT NOT NULL,              -- sms | gpay | paytm | phonepe | sbi
   amount              NUMERIC(12,2) NOT NULL,
