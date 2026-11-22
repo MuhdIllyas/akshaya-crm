@@ -18,6 +18,7 @@ import { toast } from 'react-toastify';
 import AdminExpenseEntry from './AdminExpenseEntry';
 import WalletReconciliation from './WalletReconciliation';
 import BankStatementSection from './BankStatementSection';
+import UpiCheckSection from './UpiCheckSection';
 import StaffName from '@/components/staff/StaffName';
 
 // Today's date in IST (YYYY-MM-DD)
@@ -2801,6 +2802,7 @@ const AccountingSection = ({
     { id: 'expenses', label: 'Expenses', icon: FiTrendingDown },
     { id: 'wallets', label: 'Wallet Recon', icon: FiSmartphone },
     { id: 'bank', label: 'Bank Statement', icon: FiCreditCard },
+    { id: 'upi', label: 'UPI Check', icon: FiCheckCircle },
     { id: 'reports', label: 'Reports', icon: FiFileText }
   ];
 
@@ -3622,6 +3624,16 @@ const handleExportExcel = () => {
               <BankStatementSection
                 wallets={derivedWallets}
                 readOnly={readOnly || isSuperAdmin}
+              />
+            )}
+
+            {/* UPI payments caught by the companion phone vs the entries */}
+            {activeAccountingTab === 'upi' && (
+              <UpiCheckSection
+                date={date}
+                centreId={centreId}
+                isSuperAdmin={isSuperAdmin}
+                readOnly={readOnly}
               />
             )}
 

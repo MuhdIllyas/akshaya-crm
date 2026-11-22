@@ -135,7 +135,17 @@ const PrimaryBtn = ({ children, ...props }) => (
   </button>
 );
 
-const EMPTY_WALLET = { name: "", balance: "", type: "personal", isOnline: true, staffId: "", walletType: "bank" };
+const EMPTY_WALLET = { name: "", balance: "", type: "personal", isOnline: true, staffId: "", walletType: "bank", upiSources: [], upiLast4: "" };
+
+// Where the companion phone reads this wallet's UPI payments from
+// (a wallet can use several, e.g. Bank SMS for the SBI QR + GPay app for a GPay QR that settles in the evening)
+const UPI_SOURCES = [
+  ["sms", "Bank SMS"],
+  ["gpay", "GPay app"],
+  ["paytm", "Paytm app"],
+  ["phonepe", "PhonePe app"],
+  ["sbi", "SBI app"],
+];
 const PER_PAGE = 8;
 
 /* ───────────── page ───────────── */
@@ -319,6 +329,8 @@ const WalletManagement = () => {
         isOnline: w.status === "online",
         staffId: w.assigned_staff_id ? String(w.assigned_staff_id) : "",
         walletType: w.wallet_type || "bank",
+        upiSources: Array.isArray(w.upi_match_sources) ? w.upi_match_sources : [],
+        upiLast4: w.upi_account_last4 || "",
       },
     });
   const setFormField = (k, v) => setWalletForm((f) => ({ ...f, data: { ...f.data, [k]: v } }));
@@ -333,7 +345,12 @@ const WalletManagement = () => {
       assigned_staff_id: d.type === "personal" && d.staffId ? Number(d.staffId) : null,
       wallet_type: d.walletType,
       status: d.isOnline ? "online" : "offline",
+      upi_match_sources: d.upiSources,
+      upi_account_last4: d.upiSources.includes("sms") ? (d.upiLast4 || null) : null,
     };
+    if (payload.upi_account_last4 && !/^\d{4}$/.test(payload.upi_account_last4)) {
+      return toast.error("Account number: enter the last 4 digits.");
+    }
     setBusy(true);
     try {
       if (walletForm.mode === "add") {
@@ -795,6 +812,51 @@ const WalletManagement = () => {
               <Segmented options={[["personal", "Personal"], ["shared", "Shared"]]} value={walletForm.data.type} onChange={(v) => setFormField("type", v)} />
             </Field>
           </div>
+          <Field
+            label="UPI payment check"
+            hint={
+              walletForm.data.upiSources.length === 0
+                ? "Staff get a live “₹ received” alert when a customer pays into this wallet. Choose where the centre's companion phone reads payments from — you can pick more than one."
+                : [
+                    walletForm.data.upiSources.includes("sms") &&
+                      "Bank SMS: SBI QR payments, and any QR that pays straight into this account.",
+                    walletForm.data.upiSources.some((v) => v !== "sms") &&
+                      "App: for QRs whose money comes as one lump settlement later (e.g. GPay in the evening). Turn on “UPI Payment Alerts” in the companion app. Don't pick an app whose payments already come into this account one by one, or each payment shows twice.",
+                  ].filter(Boolean).join(" ")
+            }
+          >
+            <div className="flex flex-wrap gap-2">
+              {UPI_SOURCES.map(([id, label]) => {
+                const on = walletForm.data.upiSources.includes(id);
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() =>
+                      setFormField(
+                        "upiSources",
+                        on ? walletForm.data.upiSources.filter((v) => v !== id) : [...walletForm.data.upiSources, id]
+                      )
+                    }
+                    className={`px-3 py-1.5 rounded-full border text-xs font-medium transition-colors ${
+                      on ? "bg-emerald-50 border-emerald-300 text-emerald-700" : "border-slate-200 text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    {on ? "✓ " : ""}{label}
+                  </button>
+                );
+              })}
+            </div>
+            {walletForm.data.upiSources.includes("sms") && (
+              <input
+                value={walletForm.data.upiLast4}
+                onChange={(e) => setFormField("upiLast4", e.target.value.replace(/\D/g, "").slice(0, 4))}
+                className={`${inputCls} mt-2 sm:max-w-[220px]`}
+                inputMode="numeric"
+                placeholder="Account last 4 digits"
+              />
+            )}
+          </Field>
           {walletForm.data.type === "personal" && (
             <Field label="Assign to staff">
               <select value={walletForm.data.staffId} onChange={(e) => setFormField("staffId", e.target.value)} className={inputCls}>

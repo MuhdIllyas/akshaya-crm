@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { getTodayBalance, getDailyBalances } from "../controllers/walletDailyBalanceController.js";
 import { logActivity } from "../utils/activityLogger.js";
+import { UPI_SOURCES } from "../utils/upiCredit.js";
 
 const router = express.Router();
 
@@ -47,6 +48,30 @@ const requireManager = (req, res, next) => {
 };
 
 const httpError = (status, message) => Object.assign(new Error(message), { status });
+
+/* UPI payment check settings (see routes/upiCredits.js).
+   A wallet can read payments from several places, e.g. ['sms', 'gpay'] for an
+   SBI account with an SBI QR and a GPay QR that settles in the evening.
+   Accepts upi_match_sources (array) or the older upi_match_source (one value).
+   Returns { sources, last4 }, keeping `current` for fields not sent;
+   throws 400 for bad values. */
+const readUpiSettings = (body, current = {}) => {
+  const has = (k) => Object.prototype.hasOwnProperty.call(body, k);
+  let sources;
+  if (has('upi_match_sources')) sources = body.upi_match_sources;
+  else if (has('upi_match_source')) sources = body.upi_match_source ? [body.upi_match_source] : [];
+  else sources = current.upi_match_sources ?? [];
+  if (!Array.isArray(sources)) sources = sources ? [sources] : [];
+  sources = [...new Set(sources.map((v) => String(v).trim()).filter((v) => v && v !== 'none'))];
+  const bad = sources.find((v) => !UPI_SOURCES.includes(v));
+  if (bad) throw httpError(400, `UPI check must be one of: ${UPI_SOURCES.join(', ')}`);
+
+  let last4 = has('upi_account_last4') ? body.upi_account_last4 : current.upi_account_last4 ?? null;
+  last4 = last4 === null || last4 === undefined ? '' : String(last4).replace(/\D/g, '');
+  if (last4 && last4.length !== 4) throw httpError(400, 'Account number: enter the last 4 digits');
+  if (!sources.includes('sms')) last4 = ''; // only bank SMS uses the account digits
+  return { sources: sources.length ? sources : null, last4: last4 || null };
+};
 
 /* Can this user touch this wallet? Superadmin: any. Others: own centre only.
    Returns the wallet row, or sends 400/403/404 and returns null. */
@@ -151,7 +176,7 @@ router.get('/', async (req, res) => {
   try {
     const centreId = listCentre(req);
     const result = await req.db.query(`
-      SELECT id, name, balance, wallet_type, status, centre_id, assigned_staff_id
+      SELECT id, name, balance, wallet_type, status, centre_id, assigned_staff_id, upi_match_sources, upi_account_last4
       FROM wallets
       WHERE ($1::int IS NULL OR centre_id = $1)
       ORDER BY name ASC
@@ -192,7 +217,7 @@ router.get('/my-centre-wallets', async (req, res) => {
     }
     const centreId = req.user.centre_id;
     const result = await req.db.query(`
-      SELECT id, name, balance, wallet_type, status, is_shared, assigned_staff_id
+      SELECT id, name, balance, wallet_type, status, is_shared, assigned_staff_id, upi_match_sources, upi_account_last4
       FROM wallets
       WHERE centre_id = $1
       ORDER BY name ASC
@@ -240,14 +265,22 @@ router.post('/create', requireManager, async (req, res) => {
   if (!Number.isFinite(balance) || balance < 0) {
     return res.status(400).json({ error: 'Opening balance must be 0 or more' });
   }
+  let upi;
+  try {
+    upi = readUpiSettings(req.body);
+  } catch (e) {
+    return res.status(e.status || 400).json({ error: e.message });
+  }
 
   const client = await req.db.connect();
   try {
     await client.query('BEGIN');
     const walletResult = await client.query(
-      `INSERT INTO wallets (name, balance, wallet_type, is_shared, assigned_staff_id, status, centre_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), NOW()) RETURNING *`,
-      [String(name).trim(), balance, wallet_type, is_shared, assigned_staff_id || null, status, finalCentreId]
+      `INSERT INTO wallets (name, balance, wallet_type, is_shared, assigned_staff_id, status, centre_id,
+                            upi_match_sources, upi_account_last4, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW()) RETURNING *`,
+      [String(name).trim(), balance, wallet_type, is_shared, assigned_staff_id || null, status, finalCentreId,
+       upi.sources, upi.last4]
     );
     const wallet = walletResult.rows[0];
     if (balance > 0) {
@@ -313,10 +346,12 @@ router.put('/:id', requireManager, async (req, res) => {
     const centreId = current.centre_id;
     const oldBalance = Number(current.balance);
     const balance = balanceSent ? Math.round(Number(req.body.balance) * 100) / 100 : oldBalance; // not sent = keep
+    const upi = readUpiSettings(req.body, current); // not sent = keep
     const result = await client.query(
-      `UPDATE wallets SET name=$1, balance=$2, wallet_type=$3, is_shared=$4, assigned_staff_id=$5, status=$6, updated_at=NOW()
+      `UPDATE wallets SET name=$1, balance=$2, wallet_type=$3, is_shared=$4, assigned_staff_id=$5, status=$6,
+              upi_match_sources=$8, upi_account_last4=$9, updated_at=NOW()
        WHERE id=$7 RETURNING *`,
-      [name, balance, wallet_type, is_shared, assigned_staff_id || null, status, id]
+      [name, balance, wallet_type, is_shared, assigned_staff_id || null, status, id, upi.sources, upi.last4]
     );
     const centreResult = await client.query('SELECT name FROM centres WHERE id = $1', [centreId]);
     const centreName = centreResult.rows[0]?.name || 'Unknown Centre';
@@ -325,6 +360,14 @@ router.put('/:id', requireManager, async (req, res) => {
     if (name !== current.name) changes.push(`name changed to "${name}"`);
     if (balance !== oldBalance) changes.push(`balance changed from ₹${oldBalance} to ₹${balance}`);
     if (status !== current.status) changes.push(`status changed to "${status}"`);
+    const oldSources = (current.upi_match_sources || []).join(', ');
+    const newSources = (upi.sources || []).join(', ');
+    if (oldSources !== newSources) {
+      changes.push(`UPI check set to "${newSources || 'off'}"`);
+    }
+    if ((upi.last4 || null) !== (current.upi_account_last4 || null)) {
+      changes.push(`UPI account set to "${upi.last4 ? 'XX' + upi.last4 : 'any'}"`);
+    }
 
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)

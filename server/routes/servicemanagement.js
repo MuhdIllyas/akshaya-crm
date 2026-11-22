@@ -12,6 +12,7 @@ import { linkCustomerToCentre } from '../utils/customerCentres.js';
 import { aadhaarColumns } from '../utils/aadhaar.js';
 import { todayIST, istParts } from '../utils/dates.js';
 import { lockServiceTask, completeServiceTask, afterServiceTaskCompleted } from '../services/serviceTaskLink.js';
+import { scheduleUpiMatch } from "../services/upiMatcher.js";
 
 const router = express.Router();
 
@@ -1802,6 +1803,7 @@ router.post('/entry', authenticateToken, async (req, res) => {
     io.emit('serviceEntryCreated', { service_entry_id: serviceEntryId, staff_id: staffId, token_id: tokenId, message: `New service entry created for token ${tokenId}` });
 
     await client.query('COMMIT');
+    scheduleUpiMatch(); // link UPI payments to this save (POST /entry)
 
     if (status === 'completed') {
       await logActivity({
@@ -2065,6 +2067,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
     io.emit('serviceEntryCreated', { staff_id: staffId, token_id: tokenId, message: `Bulk entries processed` });
 
     await client.query('COMMIT');
+    scheduleUpiMatch(); // link UPI payments to this save (POST /entry/bulk)
 
     if (completedServiceTask) await afterServiceTaskCompleted(completedServiceTask, req.user);
 
@@ -2322,6 +2325,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     `, [id]);
 
     await client.query('COMMIT');
+    scheduleUpiMatch(); // link UPI payments to this save (PUT /entry/:id)
 
     if (status === 'completed' && existingEntry.status !== 'completed') {
       await logActivity({
@@ -2522,6 +2526,7 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
     ]);
 
     await client.query('COMMIT');
+    scheduleUpiMatch(); // link UPI payments to this save (DELETE /entry/:id/force)
     
     res.json({ 
       success: true, 
@@ -2970,6 +2975,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     });
 
     await client.query('COMMIT');
+    scheduleUpiMatch(); // link UPI payments to this save (PUT /transactions/:id/correct)
 
     console.log(`✅ Correction successful. New transaction ID: ${newTx.rows[0].id}`);
 
@@ -4762,6 +4768,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
     }
     // ====================================================================
     await client.query("COMMIT");
+    scheduleUpiMatch(); // link UPI payments to this save (receive-payment)
 
     // 🔥 NOTIFICATION ENGINE TRIGGER (Notify Admins of collected payment)
     try {
