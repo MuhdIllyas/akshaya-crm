@@ -5,6 +5,7 @@ import { FiAlertCircle, FiAlertTriangle, FiCheck, FiInfo, FiCopy } from "react-i
 import "react-toastify/dist/ReactToastify.css";
 import { socket , connectSocket, disconnectSocket } from "@/services/socket";
 import { copyOtp, playOtpChime } from "@/utils/otpAlert";
+import { getAlertSettings } from "@/utils/alertSettings";
 // Attaches the online-status listeners before the socket connects.
 import "@/components/staff/staffDirectory";
 import DashboardLayout from "./layouts/DashboardLayout";
@@ -252,11 +253,23 @@ const App = () => {
 
   // OTPs from the companion phone: a toast with the code, a Copy button and a chime.
   // (They are not chat messages or notifications, so nothing is left unread.)
+  // Only the latest OTP is shown: a new one replaces the old toast instead of
+  // stacking (the top-bar OTP strip lists all of them). My Profile → Alerts
+  // can switch the pop-up or the chime off.
   useEffect(() => {
     if (!socket) return;
+    let shownId = null;
+    let recent = []; // arrival times, for "+2 more"
 
     const handleOtp = (otp) => {
-      playOtpChime();
+      const alerts = getAlertSettings();
+      if (alerts.sound) playOtpChime();
+      if (!alerts.otpPopup) return;
+      const now = Date.now();
+      recent = [...recent.filter((t) => now - t < (otp.live_minutes || 10) * 60000), now];
+      const more = recent.length - 1;
+      if (shownId) toast.dismiss(shownId);
+      shownId = `otp-${otp.id}`;
       // Styled like the OTP strip in the top bar: orange dot, code, sender, outline Copy
       toast.warning(
         <div className="flex items-center gap-3">
@@ -268,7 +281,7 @@ const App = () => {
                 : <span className="truncate text-sm text-[var(--toast-title)]">{otp.message}</span>}
             </div>
             <div className="truncate text-xs text-[var(--toast-text)]" title={otp.message}>
-              {[otp.sender, `${otp.live_minutes || 10} min left`].filter(Boolean).join(" · ")}
+              {[otp.sender, `${otp.live_minutes || 10} min left`, more > 0 && `+${more} more`].filter(Boolean).join(" · ")}
             </div>
           </div>
           {otp.code && (
@@ -281,7 +294,7 @@ const App = () => {
             </button>
           )}
         </div>,
-        { autoClose: 20000, toastId: `otp-${otp.id}`, closeOnClick: false, className: "otp-toast" }
+        { autoClose: 8000, toastId: shownId, closeOnClick: false, className: "otp-toast" }
       );
     };
 

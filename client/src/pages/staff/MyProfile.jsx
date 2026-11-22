@@ -4,6 +4,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { FiUser, FiMail, FiPhone, FiCalendar, FiBriefcase, FiLock, FiEdit2, FiSave, FiX, FiPlus } from "react-icons/fi";
 import ChangePasswordModal from "../../components/ChangePasswordModal"; // we'll create this
+import AlertSettingsCard from "../../components/AlertSettingsCard";
 
 const MyProfile = () => {
   const [profile, setProfile] = useState(null);
@@ -372,6 +373,8 @@ const MyProfile = () => {
           </div>
         </div>
       </div>
+
+      <AlertSettingsCard />
 
       {/* Change Password Modal */}
       {showPasswordModal && (

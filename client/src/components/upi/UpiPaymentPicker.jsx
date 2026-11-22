@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { FiSmartphone, FiCheckCircle, FiAlertCircle } from "react-icons/fi";
 import { socket } from "@/services/socket";
-import { getUnclaimed, rupees, SOURCE, sameAmount } from "./upiApi";
+import { getUnclaimed, rupees, SOURCE, sameAmount, pickerOpened, pickerClosed } from "./upiApi";
 
 // Shown under a Service Entry payment whose wallet has "UPI payment check" on.
 // Lists that wallet's UPI payments from the last 3 hours that no entry has
@@ -22,6 +22,11 @@ export default function UpiPaymentPicker({ walletId, walletName, amount, selecte
     getUnclaimed(walletId, 3)
       .then(setCredits)
       .catch(() => setCredits([]));
+  }, [walletId]);
+
+  useEffect(() => {
+    pickerOpened(walletId);
+    return () => pickerClosed(walletId);
   }, [walletId]);
 
   useEffect(() => {

@@ -7,18 +7,51 @@ import { LinkPaymentsModal, PickEntryModal } from "./UpiLinkModals";
 // Top-bar chip: today's UPI payments caught by the centre's companion phone.
 // Amber when a payment has no entry, red when an entry has no payment.
 // The dropdown links them (payment → entry, or entry → payment).
-// Opens itself when the "₹ received" toast is clicked (window event "upi-chip-open").
+// Opens itself when a UPI pop-up is clicked (window event "upi-chip-open").
+// Instead of a pop-up per payment: a short pulse when a payment needs an entry
+// (window event "upi-chip-pulse") and "+2 ✓" when payments link themselves.
 
 export default function UpiChip() {
   const [data, setData] = useState(null);
   const [open, setOpen] = useState(false);
   const [pickFor, setPickFor] = useState(null); // credit → choose entry
   const [linkSave, setLinkSave] = useState(null); // entry → choose payment(s)
+  const [pulse, setPulse] = useState(false);
+  const [gained, setGained] = useState(0); // payments that just linked themselves
   const ref = useRef(null);
+  const lastLinked = useRef(null);
+  const gainedTimer = useRef(null);
 
   const load = useCallback(() => {
-    getBoard(todayIST()).then(setData).catch(() => {});
+    getBoard(todayIST())
+      .then((d) => {
+        const linkedNow = (d.credits || []).filter((c) => c.status === "matched").length;
+        if (lastLinked.current !== null && linkedNow > lastLinked.current) {
+          setGained((g) => g + linkedNow - lastLinked.current);
+          clearTimeout(gainedTimer.current);
+          gainedTimer.current = setTimeout(() => setGained(0), 6000);
+        }
+        lastLinked.current = linkedNow;
+        setData(d);
+      })
+      .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    let t;
+    const onPulse = () => {
+      load();
+      setPulse(true);
+      clearTimeout(t);
+      t = setTimeout(() => setPulse(false), 4000);
+    };
+    window.addEventListener("upi-chip-pulse", onPulse);
+    return () => {
+      window.removeEventListener("upi-chip-pulse", onPulse);
+      clearTimeout(t);
+      clearTimeout(gainedTimer.current);
+    };
+  }, [load]);
 
   useEffect(() => {
     load();
@@ -76,9 +109,14 @@ export default function UpiChip() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors ${tone[0]}`}
+        className={`relative inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-all ${tone[0]} ${pulse ? "animate-pulse ring-4 ring-amber-300/60" : ""}`}
         title="Today's UPI payments"
       >
+        {gained > 0 && (
+          <span className="absolute -right-2 -top-2 rounded-full bg-emerald-500 px-1.5 py-0.5 text-[10px] font-bold leading-none text-white shadow">
+            +{gained} ✓
+          </span>
+        )}
         <span className={`grid h-5 w-5 place-items-center rounded-full text-[11px] font-bold text-white ${tone[1]}`}>₹</span>
         <span className="hidden sm:inline">{tone[2]}</span>
         <FiChevronDown className="h-3.5 w-3.5" />

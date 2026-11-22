@@ -16,6 +16,16 @@ export const sameAmount = (a, b) => Math.round(Number(a) * 100) === Math.round(N
 export const errorText = (e, fallback) => e?.response?.data?.error || fallback;
 
 /** Wallets whose UPI payments are checked (from the wallets list). */
+// Wallets whose payment picker is on screen right now (Service Entry): a new
+// payment for them needs no chime, the staff member is already looking at it.
+const openPickers = new Map();
+export const pickerOpened = (walletId) => openPickers.set(Number(walletId), (openPickers.get(Number(walletId)) || 0) + 1);
+export const pickerClosed = (walletId) => {
+  const n = (openPickers.get(Number(walletId)) || 1) - 1;
+  if (n > 0) openPickers.set(Number(walletId), n); else openPickers.delete(Number(walletId));
+};
+export const isPickerOpenFor = (walletId) => (openPickers.get(Number(walletId)) || 0) > 0;
+
 export const isUpiWallet = (w) => Array.isArray(w?.upi_match_sources) && w.upi_match_sources.length > 0;
 
 export const getBoard = (date, centreId) =>
