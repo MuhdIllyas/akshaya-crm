@@ -82,7 +82,26 @@ export function extractAccountLast4(text) {
 
 const VPA = /\b([a-z0-9][a-z0-9._-]{1,60}@[a-z]{2,20})\b/i;
 
+// GPay for Business: "₹90.00 received from RASHID A at 5:09 PM". The name is
+// everything between "from" and the time: digits ("Yahkoob0799 Y"), dots
+// ("SHAMSUDHEEN. K") and GPay's hidden names ("R••••••") included.
+const MERCHANT_LINE = /received from\s+(.+?)\s+at\s+(\d{1,2})[:.](\d{2})\s*([ap])\.?m\b/i;
+
+/**
+ * GPay for Business sometimes posts the same payment twice, in two wordings
+ * ("₹90.00 received from RASHID A at 5:09 PM" + "₹90 received from RASHID A at
+ * 5:09 pm"). Same payer and same minute (with the same amount) = same payment.
+ * Null for messages without a payer and time.
+ */
+export function repeatKey(text) {
+  const m = String(text || "").match(MERCHANT_LINE);
+  if (!m) return null;
+  return `${m[1].trim().toLowerCase().replace(/\s+/g, " ")}|${Number(m[2])}:${m[3]}${m[4].toLowerCase()}`;
+}
+
 function extractPayer(text) {
+  const merchant = String(text).match(MERCHANT_LINE);
+  if (merchant) return merchant[1].trim();
   const vpa = String(text).match(VPA);
   // "Ramesh Kumar paid you ₹100" / "Ramesh sent you ₹100"
   const subject = String(text).match(/(?:^|—\s*)([A-Za-z][A-Za-z .']{1,40}?)\s+(?:paid|sent)\s+you\b/i);

@@ -307,15 +307,19 @@ router.get("/board", async (req, res) => {
 const lockMatcher = (client) => client.query(`SELECT pg_advisory_xact_lock(hashtext('upi_matcher'))`);
 
 /**
- * POST /api/upi-credits/link  { credit_ids: [..], wallet_id, save_key }
- * Link UPI payment(s) to a save by hand. They must add up to exactly what
- * that save still has open in that wallet.
+ * POST /api/upi-credits/link  { credit_ids: [..], wallet_id, save_key | save_keys: [..] }
+ * Link UPI payment(s) to one save, or one payment to several saves, by hand.
+ * They must add up to exactly what the save(s) still have open in that wallet.
  */
 router.post("/link", async (req, res) => {
   const creditIds = [...new Set((req.body?.credit_ids || []).map((v) => parseInt(v, 10)).filter(Number.isInteger))];
   const walletId = parseInt(req.body?.wallet_id, 10);
-  const saveKey = String(req.body?.save_key || "");
-  if (!creditIds.length || Number.isNaN(walletId) || !saveKey) {
+  // One entry (save_key), or several (save_keys) when one payment covers
+  // entries two staff saved separately for the same customer.
+  const saveKeys = [...new Set(
+    (Array.isArray(req.body?.save_keys) ? req.body.save_keys : [req.body?.save_key]).map((k) => String(k || "")).filter(Boolean)
+  )];
+  if (!creditIds.length || Number.isNaN(walletId) || !saveKeys.length || saveKeys.length > 5) {
     return res.status(400).json({ error: "Choose the UPI payment(s) and the entry to link" });
   }
 
@@ -342,27 +346,40 @@ router.post("/link", async (req, res) => {
       throw Object.assign(new Error("The UPI payment and the entry are in different wallets"), { status: 400 });
     }
 
-    const [save] = await openSaves(client, walletId, { sinceSql: `NOW() - INTERVAL '60 days'`, key: saveKey });
-    if (!save) throw Object.assign(new Error("This entry has nothing left to link in that wallet"), { status: 409 });
+    const saves = [];
+    for (const key of saveKeys) {
+      const [save] = await openSaves(client, walletId, { sinceSql: `NOW() - INTERVAL '60 days'`, key });
+      if (!save) {
+        throw Object.assign(
+          new Error(saveKeys.length > 1 ? "One of these entries has nothing left to link in that wallet" : "This entry has nothing left to link in that wallet"),
+          { status: 409 }
+        );
+      }
+      saves.push(save);
+    }
+    saves.sort((a, b) => a.t - b.t);
+    const open = saves.reduce((t, s) => t + s.openCents, 0);
+    const rows = saves.flatMap((s) => s.rows);
 
     const total = credits.reduce((t, c) => t + cents(c.amount), 0);
-    if (total !== save.openCents) {
+    if (total !== open) {
+      const what = saves.length > 1 ? "these entries have" : "the entry has";
       throw Object.assign(
-        new Error(`The UPI payments add up to ₹${(total / 100).toFixed(2)}, but the entry has ₹${(save.openCents / 100).toFixed(2)} in this wallet. Fix the entry's amount first.`),
+        new Error(`The UPI payments add up to ₹${(total / 100).toFixed(2)}, but ${what} ₹${(open / 100).toFixed(2)} in this wallet. Fix the entry's amount first.`),
         { status: 400 }
       );
     }
 
     await insertLinks(
       client,
-      allocate(save.rows, credits.map((c) => ({ id: c.id, amountCents: cents(c.amount), t: Number(c.t) }))),
+      allocate(rows, credits.map((c) => ({ id: c.id, amountCents: cents(c.amount), t: Number(c.t) }))),
       req.user.id
     );
     await client.query(
       `UPDATE upi_credits SET status = 'matched', matched_at = NOW(), matched_by = $2,
               matched_payment_id = $3, no_auto = FALSE
         WHERE id = ANY($1::int[])`,
-      [creditIds, req.user.id, save.rows[0].id]
+      [creditIds, req.user.id, rows[0].id]
     );
     await client.query("COMMIT");
 

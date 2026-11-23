@@ -3,6 +3,7 @@
 import pool from "../db.js";
 import { io } from "../tenancy/io.js";
 import { scheduleUpiMatch } from "./upiMatcher.js";
+import { repeatKey } from "../utils/upiCredit.js";
 
 /**
  * The wallet a payment belongs to: the centre's wallet that reads payments
@@ -33,11 +34,40 @@ export async function findWalletFor(centreId, credit) {
   return rows.length === 1 ? rows[0] : null;
 }
 
+// One centre's payments are saved one at a time, so two notifications for the
+// same payment arriving together can't both slip past the repeat check.
+const queues = new Map();
+
 /**
  * Save one payment. Returns the saved row (with wallet_name) or null when it
- * was already saved (same UPI reference) or could not be saved.
+ * was already saved (same UPI reference, or the same app notification posted
+ * twice) or could not be saved.
  */
-export async function recordUpiCredit({ centreId, deviceId, credit, creditedAt, rawText, smsLogId = null, notificationLogId = null, quiet = false }) {
+export function recordUpiCredit(args) {
+  const key = String(args.centreId);
+  const run = (queues.get(key) || Promise.resolve()).catch(() => {}).then(() => saveCredit(args));
+  queues.set(key, run);
+  const done = () => { if (queues.get(key) === run) queues.delete(key); };
+  run.then(done, done);
+  return run;
+}
+
+async function saveCredit({ centreId, deviceId, credit, creditedAt, rawText, smsLogId = null, notificationLogId = null, quiet = false }) {
+  // No UPI reference in app notifications: the same payer, minute and amount
+  // within a few minutes is the same payment told twice.
+  if (!credit.utr) {
+    const k = repeatKey(rawText);
+    if (k) {
+      const { rows: near } = await pool.query(
+        `SELECT raw_text FROM upi_credits
+          WHERE centre_id = $1 AND source = $2 AND amount = $3 AND utr IS NULL
+            AND credited_at BETWEEN $4::timestamptz - INTERVAL '10 minutes' AND $4::timestamptz + INTERVAL '10 minutes'`,
+        [centreId, credit.source, credit.amount, creditedAt]
+      );
+      if (near.some((r) => repeatKey(r.raw_text) === k)) return null;
+    }
+  }
+
   const wallet = await findWalletFor(centreId, credit);
 
   const { rows } = await pool.query(
