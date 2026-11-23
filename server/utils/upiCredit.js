@@ -87,11 +87,15 @@ function extractPayer(text) {
   // "Ramesh Kumar paid you ₹100" / "Ramesh sent you ₹100"
   const subject = String(text).match(/(?:^|—\s*)([A-Za-z][A-Za-z .']{1,40}?)\s+(?:paid|sent)\s+you\b/i);
   if (subject) return subject[1].trim();
-  const name = String(text).match(
-    /(?:\bfrom|\bby|received from|paid by|transfer from)\s+([A-Za-z][A-Za-z .']{1,40}?)(?=\s+(?:on|ref|via|to|upi|with|at|in)\b|\s*[(.,\-]|$)/i
-  );
-  const n = name && !/^(rs|inr|upi|a\/c|ac|transfer|neft|imps|your|ur)\b/i.test(name[1].trim())
-    ? name[1].trim() : null;
+  // Every "from / by …" phrase in turn: "credited by Rs.1.00 … transfer from
+  // RAMESH K Ref…" has an amount after the first "by", the name after "from".
+  // A name ends at a following word (on, ref…), punctuation or a dash ("—").
+  const NAME = /(?:received from|paid by|transfer from|\bfrom|\bby)\s+([A-Za-z][A-Za-z .']{1,40}?)(?=\s+(?:on|ref|via|to|upi|with|at|in|deposited|from|by)\b|\s*[(.,\-\u2013\u2014|:]|$)/gi;
+  let n = null;
+  for (const m of String(text).matchAll(NAME)) {
+    const candidate = m[1].trim();
+    if (!/^(rs|inr|upi|a\/c|ac|transfer|neft|imps|your|ur)\b/i.test(candidate)) { n = candidate; break; }
+  }
   if (n && vpa) return `${n} (${vpa[1]})`;
   return n || (vpa ? vpa[1] : null);
 }
@@ -143,7 +147,13 @@ export function parseAppNotification(pkg, title, body) {
   if (!source) return null;
   const text = [title, body].filter(Boolean).join(" — ");
   if (!/(received|paid you|credited|got ₹|payment of ₹[\d,.]+ received|sent you)/i.test(text)) return null;
-  if (NOT_A_CREDIT.test(text)) return null;
+  // Merchant apps add where the money goes next ("The amount will be sent to
+  // your bank account." — GPay for Business). That is not a payment going out.
+  const checked = text.replace(
+    /(?:the\s+)?(?:amount|money)\s+will\s+be\s+(?:sent|credited|transferred|settled|deposited)\s+(?:to|in|into)\s+your\s+(?:bank\s+)?(?:account|a\/c)\.?/gi,
+    " "
+  );
+  if (NOT_A_CREDIT.test(checked)) return null;
   const amount = extractAmount(text);
   if (!amount) return null;
   return {

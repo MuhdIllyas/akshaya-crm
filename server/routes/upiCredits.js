@@ -5,7 +5,9 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import pool from "../db.js";
 import { io } from "../tenancy/io.js";
-import { scheduleForEachOrg } from "../tenancy/jobs.js";
+import { scheduleForEachOrg, forEachOrg } from "../tenancy/jobs.js";
+import { recordUpiCredit } from "../services/upiCredits.js";
+import { parseAppNotification, parseBankCreditSms } from "../utils/upiCredit.js";
 import {
   runUpiMatch, scheduleUpiMatch, openSaves, allocate, insertLinks, cents, EFFECTIVE_PAYMENT,
 } from "../services/upiMatcher.js";
@@ -613,5 +615,52 @@ export async function clearOldUpiData() {
 }
 
 scheduleForEachOrg("5 * * * *", clearOldUpiData, { timezone: "Asia/Kolkata" });
+
+// Today's phone messages that did not become a payment are read again when the
+// server starts. After a fix to how a message is read (e.g. a new wording from
+// a UPI app), the day's missed payments then still turn up and link to their
+// entries. Old payments are saved without a live alert.
+export async function catchUpTodaysMessages() {
+  let found = 0;
+  const { rows: notes } = await pool.query(
+    `SELECT n.id, n.centre_id, n.device_id, n.package, n.title, n.body,
+            COALESCE(n.posted_at, n.received_at) AS at
+       FROM companion_notification_logs n
+      WHERE n.received_at >= ${TODAY_START}
+        AND NOT EXISTS (SELECT 1 FROM upi_credits u WHERE u.notification_log_id = n.id)
+      ORDER BY n.id`
+  );
+  for (const n of notes) {
+    const credit = parseAppNotification(n.package, n.title, n.body);
+    if (!credit) continue;
+    const saved = await recordUpiCredit({
+      centreId: n.centre_id, deviceId: n.device_id, credit, creditedAt: n.at,
+      rawText: [n.title, n.body].filter(Boolean).join(" — "), notificationLogId: n.id, quiet: true,
+    });
+    if (saved) found++;
+  }
+  const { rows: sms } = await pool.query(
+    `SELECT s.id, s.centre_id, s.device_id, s.sender, s.message, s.received_at AS at
+       FROM companion_sms_logs s
+      WHERE s.received_at >= ${TODAY_START} AND s.is_otp = FALSE
+        AND NOT EXISTS (SELECT 1 FROM upi_credits u WHERE u.sms_log_id = s.id)
+      ORDER BY s.id`
+  );
+  for (const s of sms) {
+    const credit = parseBankCreditSms(s.sender, s.message);
+    if (!credit) continue;
+    const saved = await recordUpiCredit({
+      centreId: s.centre_id, deviceId: s.device_id, credit, creditedAt: s.at,
+      rawText: s.message, smsLogId: s.id, quiet: true,
+    });
+    if (saved) found++;
+  }
+  if (found) {
+    console.log(`[upi] read ${found} earlier message(s) from today as UPI payments`);
+    await runUpiMatch(); // links them and tells the centres
+  }
+}
+
+setTimeout(() => forEachOrg("upi catch-up", catchUpTodaysMessages), 15000);
 
 export default router;
