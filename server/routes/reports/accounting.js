@@ -878,6 +878,84 @@ router.get('/wallet-ledger-balances', requireAccounting, async (req, res) => {
   }
 });
 
+/* ========== BOOKS CHECK ==========
+   Every wallet's stored balance must equal
+     its last closed day's closing + every transaction since then.
+   Normal entries change both sides, so they never show up here. A row with
+   diff ≠ 0 means the balance moved with no transaction behind it (e.g. the
+   wallet edit form saving a stale balance on 23 Nov 2026: SBI +₹13,877).
+   Run this BEFORE tallying SBI against the bank, or the gap gets pushed
+   into Counter Cash and looks like a cash shortage. */
+const BOOKS_CHECK_SQL = `
+  WITH last_close AS (
+    SELECT DISTINCT ON (d.wallet_id) d.wallet_id, d.date, d.closing_balance
+    FROM wallet_daily_balances d
+    JOIN wallets w ON w.id = d.wallet_id
+    WHERE w.centre_id = $1 AND d.date < $2::date
+    ORDER BY d.wallet_id, d.date DESC
+  )
+  SELECT w.id, w.name, w.wallet_type,
+         w.balance::numeric                    AS balance,
+         lc.date                               AS last_close_date,
+         lc.closing_balance::numeric           AS last_close_balance,
+         COALESCE(SUM(CASE WHEN t.type = 'credit' THEN t.amount
+                           WHEN t.type = 'debit'  THEN -t.amount
+                           ELSE 0 END), 0)     AS movement
+  FROM wallets w
+  LEFT JOIN last_close lc ON lc.wallet_id = w.id
+  LEFT JOIN wallet_transactions t
+         ON t.wallet_id = w.id
+        AND lc.date IS NOT NULL
+        AND t.created_at >= (lc.date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+  WHERE w.centre_id = $1 AND COALESCE(w.status, '') != 'deleted'
+  GROUP BY w.id, w.name, w.wallet_type, w.balance, lc.date, lc.closing_balance
+  ORDER BY w.name
+`;
+
+const round2 = (n) => Math.round(Number(n) * 100) / 100;
+
+async function runBooksCheck(db, centreId) {
+  const { rows } = await db.query(BOOKS_CHECK_SQL, [centreId, todayIST()]);
+  const wallets = rows.map((r) => {
+    if (r.last_close_date === null) {
+      // brand-new wallet, no closed day yet: nothing to compare against
+      return { id: r.id, name: r.name, wallet_type: r.wallet_type, balance: round2(r.balance),
+               last_close_date: null, expected: null, diff: null, ok: true };
+    }
+    const expected = round2(Number(r.last_close_balance) + Number(r.movement));
+    const diff = round2(Number(r.balance) - expected);
+    return {
+      id: r.id,
+      name: r.name,
+      wallet_type: r.wallet_type,
+      balance: round2(r.balance),
+      last_close_date: r.last_close_date,
+      last_close_balance: round2(r.last_close_balance),
+      movement: round2(r.movement),
+      expected,
+      diff,
+      ok: Math.abs(diff) < 0.01,
+    };
+  });
+  const mismatches = wallets.filter((w) => !w.ok);
+  return { date: todayIST(), ok: mismatches.length === 0, mismatches, wallets };
+}
+
+router.get('/books-check', requireAccounting, async (req, res) => {
+  const isSuperAdmin = req.user.role === "superadmin";
+  let centreId = req.user.centre_id;
+  if (isSuperAdmin && req.query.centreId) centreId = Number(req.query.centreId);
+  if (!centreId) {
+    return res.status(400).json({ error: "centreId is required" });
+  }
+  try {
+    res.json(await runBooksCheck(req.db, centreId));
+  } catch (err) {
+    console.error('Books check error:', err);
+    res.status(500).json({ error: 'Failed to run books check' });
+  }
+});
+
 //Accounting Nighty Closing
 router.post('/nightly-close', requireAccounting, async (req, res) => {
   const centreId = req.user.centre_id;
@@ -897,6 +975,32 @@ router.post('/nightly-close', requireAccounting, async (req, res) => {
   for (const [k, v] of Object.entries({ opening_balance, closing_balance, actual_cash, cash_variance })) {
     if (v !== undefined && v !== null && v !== '' && !Number.isFinite(Number(v))) {
       return res.status(400).json({ error: `${k} must be a number` });
+    }
+  }
+
+  // Closing today with a wallet whose balance doesn't match its transactions
+  // would carry the error into tomorrow. Allowed only with a written reason,
+  // which is saved in the close notes.
+  let closeNotes = notes;
+  if (date === todayIST()) {
+    try {
+      const books = await runBooksCheck(req.db, centreId);
+      const reason = String(req.body.books_override_reason || '').trim();
+      if (!books.ok && reason.length < 10) {
+        return res.status(409).json({
+          error: 'Books check failed: ' + books.mismatches
+            .map((m) => `${m.name} balance ₹${m.balance} vs transactions ₹${m.expected} (diff ₹${m.diff})`)
+            .join('; ') + '. Fix it first, or close with a reason.',
+          books,
+        });
+      }
+      if (!books.ok) {
+        const summary = books.mismatches.map((m) => `${m.name} diff ₹${m.diff}`).join(', ');
+        closeNotes = [notes, `Closed with books mismatch (${summary}): ${reason}`].filter(Boolean).join('\n');
+      }
+    } catch (err) {
+      console.error('Books check during nightly close failed:', err);
+      return res.status(500).json({ error: 'Could not run the books check' });
     }
   }
 
@@ -920,7 +1024,7 @@ router.post('/nightly-close', requireAccounting, async (req, res) => {
         closed_by = EXCLUDED.closed_by,
         closed_at = NOW()
       `,
-      [ centreId, date, opening_balance, closing_balance, actual_cash, cash_variance, checklist, notes, userId ]
+      [ centreId, date, opening_balance, closing_balance, actual_cash, cash_variance, checklist, closeNotes, userId ]
     );
 
     res.json({ success: true });

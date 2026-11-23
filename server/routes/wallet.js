@@ -320,18 +320,18 @@ router.post('/create', requireManager, async (req, res) => {
   }
 });
 
-// Update a wallet — admin (own centre) / superadmin
-// NOTE: changing `balance` here is not recorded as a transaction, so the
-// daily-close snapshots will show it as drift (that's what happened on staging).
+// Update a wallet's settings — admin (own centre) / superadmin
+// The balance is NEVER changed here, even if the request sends one.
+// Edit forms used to send back the balance they loaded when opened; saving
+// later wiped out every entry made in between (23 Nov 2026: SBI +₹10,000 at
+// 12:55 and +₹3,877 at 13:23, with no transaction behind either).
+// To correct a balance, record a transaction (POST /transactions) so it
+// shows in the ledger, the bank check and the books check.
 router.put('/:id', requireManager, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid wallet id' });
 
   const { name, wallet_type, is_shared, assigned_staff_id, status } = req.body;
-  const balanceSent = req.body.balance !== undefined && req.body.balance !== null && req.body.balance !== '';
-  if (balanceSent && !Number.isFinite(Number(req.body.balance))) {
-    return res.status(400).json({ error: 'Balance must be a number' });
-  }
 
   const client = await req.db.connect();
   try {
@@ -344,21 +344,19 @@ router.put('/:id', requireManager, async (req, res) => {
     }
 
     const centreId = current.centre_id;
-    const oldBalance = Number(current.balance);
-    const balance = balanceSent ? Math.round(Number(req.body.balance) * 100) / 100 : oldBalance; // not sent = keep
     const upi = readUpiSettings(req.body, current); // not sent = keep
+    // balance is deliberately not in this UPDATE (see note above the route)
     const result = await client.query(
-      `UPDATE wallets SET name=$1, balance=$2, wallet_type=$3, is_shared=$4, assigned_staff_id=$5, status=$6,
-              upi_match_sources=$8, upi_account_last4=$9, updated_at=NOW()
-       WHERE id=$7 RETURNING *`,
-      [name, balance, wallet_type, is_shared, assigned_staff_id || null, status, id, upi.sources, upi.last4]
+      `UPDATE wallets SET name=$1, wallet_type=$2, is_shared=$3, assigned_staff_id=$4, status=$5,
+              upi_match_sources=$7, upi_account_last4=$8, updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [name, wallet_type, is_shared, assigned_staff_id || null, status, id, upi.sources, upi.last4]
     );
     const centreResult = await client.query('SELECT name FROM centres WHERE id = $1', [centreId]);
     const centreName = centreResult.rows[0]?.name || 'Unknown Centre';
 
     const changes = [];
     if (name !== current.name) changes.push(`name changed to "${name}"`);
-    if (balance !== oldBalance) changes.push(`balance changed from ₹${oldBalance} to ₹${balance}`);
     if (status !== current.status) changes.push(`status changed to "${status}"`);
     const oldSources = (current.upi_match_sources || []).join(', ');
     const newSources = (upi.sources || []).join(', ');

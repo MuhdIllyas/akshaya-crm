@@ -385,7 +385,8 @@ const WalletManagementSuperAdmin = () => {
 
   const saveWallet = async () => {
     const d = walletForm.data;
-    if (!d.name.trim() || d.balance === "") return toast.error("Wallet name and balance are required.");
+    if (!d.name.trim()) return toast.error("Wallet name is required.");
+    if (walletForm.mode === "add" && d.balance === "") return toast.error("Opening balance is required.");
     if (walletForm.mode === "add" && !d.centreId) return toast.error("Please choose a centre.");
     setBusy(true);
     try {
@@ -402,9 +403,10 @@ const WalletManagementSuperAdmin = () => {
         });
         toast.success("Wallet added");
       } else {
+        // never send balance when editing: the value loaded when the form opened
+        // goes stale as staff keep working, and saving it would wipe their entries
         await updateWallet(walletForm.id, {
           name: d.name.trim(),
-          balance: Number(d.balance),
           is_shared: d.type === "shared",
           assigned_staff_id: d.type === "personal" ? d.staffId : null,
           wallet_type: d.walletType,
@@ -968,13 +970,20 @@ const WalletManagementSuperAdmin = () => {
           <Field label="Wallet name" required>
             <input value={walletForm.data.name} onChange={(e) => setFormField("name", e.target.value)} className={inputCls} placeholder="e.g. HDFC Bank" />
           </Field>
-          <Field
-            label={walletForm.mode === "add" ? "Opening balance" : "Balance"}
-            required
-            hint={walletForm.mode === "edit" ? "To add money, use “Add money” instead so it's recorded as a transaction." : undefined}
-          >
-            <AmountInput value={walletForm.data.balance} onChange={(v) => setFormField("balance", v)} />
-          </Field>
+          {walletForm.mode === "add" ? (
+            <Field label="Opening balance" required>
+              <AmountInput value={walletForm.data.balance} onChange={(v) => setFormField("balance", v)} />
+            </Field>
+          ) : (
+            <Field
+              label="Current balance"
+              hint="Balance can't be edited here. Use “Add money”, a transfer or an expense so every change is recorded as a transaction."
+            >
+              <p className="text-lg font-semibold text-gray-900">
+                {formatAmount(walletById[String(walletForm.id)]?.balance)}
+              </p>
+            </Field>
+          )}
           <Field label="Wallet type">
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {WALLET_TYPES.map((t) => {
