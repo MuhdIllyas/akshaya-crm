@@ -884,8 +884,8 @@ router.get('/wallet-ledger-balances', requireAccounting, async (req, res) => {
    Normal entries change both sides, so they never show up here. A row with
    diff ≠ 0 means the balance moved with no transaction behind it (e.g. the
    wallet edit form saving a stale balance on 23 Nov 2026: SBI +₹13,877).
-   Run this BEFORE tallying SBI against the bank, or the gap gets pushed
-   into Counter Cash and looks like a cash shortage. */
+   Run this BEFORE tallying any bank account against its statement, or
+   the gap gets pushed into a cash wallet and looks like a cash shortage. */
 const BOOKS_CHECK_SQL = `
   WITH last_close AS (
     SELECT DISTINCT ON (d.wallet_id) d.wallet_id, d.date, d.closing_balance

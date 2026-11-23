@@ -772,7 +772,9 @@ const WalletManagementSuperAdmin = () => {
                       </div>
                       <div className="rounded-xl bg-gray-50 border border-gray-100 px-3 py-2">
                         <p className="text-[11px] text-gray-500">Today closing</p>
-                        <p className="text-sm font-semibold text-gray-800">{today?.closing_balance != null ? formatAmount(today.closing_balance) : "—"}</p>
+                        {today?.closing_balance != null
+                          ? <p className="text-sm font-semibold text-gray-800">{formatAmount(today.closing_balance)}</p>
+                          : <p className="text-sm font-medium text-gray-400" title="Filled in when the day is closed">Not closed yet</p>}
                       </div>
                     </div>
 

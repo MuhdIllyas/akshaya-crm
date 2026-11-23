@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { getTodayBalance, getDailyBalances } from "../controllers/walletDailyBalanceController.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { UPI_SOURCES } from "../utils/upiCredit.js";
+import { todayIST } from "../utils/dates.js";
 
 const router = express.Router();
 
@@ -139,23 +140,41 @@ router.post('/today-balances', async (req, res) => {
       }
     }
 
+    /* Today opening = the last closed day's closing (yesterday, or the last day
+         that was closed if the close was missed).
+       Today closing = only once TODAY has been closed (the scheduler's close, or
+         "Re-run Close"); until then it is null and the card says "Not closed yet".
+       Before: both read today's snapshot row, which only exists after the close,
+       so the cards showed "—" all day. Also used the DB's CURRENT_DATE, not IST. */
     const result = await client.query(
-      `SELECT wallet_id, opening_balance, closing_balance, date
-       FROM wallet_daily_balances
-       WHERE wallet_id = ANY($1::int[]) AND date = CURRENT_DATE`,
-      [ids]
+      `SELECT w.id AS wallet_id,
+              COALESCE(cur.opening_balance, prev.closing_balance) AS opening_balance,
+              prev.date                                            AS opening_from,
+              cur.closing_balance                                  AS closing_balance,
+              cur.date                                             AS closed_date
+       FROM unnest($1::int[]) AS w(id)
+       LEFT JOIN LATERAL (
+         SELECT d.closing_balance, d.date
+         FROM wallet_daily_balances d
+         WHERE d.wallet_id = w.id AND d.date < $2::date
+         ORDER BY d.date DESC
+         LIMIT 1
+       ) prev ON true
+       LEFT JOIN wallet_daily_balances cur
+              ON cur.wallet_id = w.id AND cur.date = $2::date`,
+      [ids, todayIST()]
     );
 
+    const num = (v) => (v === null || v === undefined ? null : parseFloat(v));
     const balancesMap = {};
     result.rows.forEach(row => {
       balancesMap[row.wallet_id] = {
-        opening_balance: parseFloat(row.opening_balance),
-        closing_balance: parseFloat(row.closing_balance),
-        date: row.date
+        date: todayIST(),
+        opening_balance: num(row.opening_balance),
+        opening_from: row.opening_from,
+        closing_balance: num(row.closing_balance),
+        closed: row.closed_date !== null,
       };
-    });
-    ids.forEach(id => {
-      if (!balancesMap[id]) balancesMap[id] = null;
     });
 
     res.json(balancesMap);

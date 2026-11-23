@@ -581,7 +581,9 @@ const WalletManagement = () => {
                       </div>
                       <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
                         <p className="text-[11px] text-slate-500">Today closing</p>
-                        <p className="text-sm font-semibold text-slate-800">{today?.closing_balance != null ? formatAmount(today.closing_balance) : "—"}</p>
+                        {today?.closing_balance != null
+                          ? <p className="text-sm font-semibold text-slate-800">{formatAmount(today.closing_balance)}</p>
+                          : <p className="text-sm font-medium text-slate-400" title="Filled in when the day is closed">Not closed yet</p>}
                       </div>
                     </div>
 

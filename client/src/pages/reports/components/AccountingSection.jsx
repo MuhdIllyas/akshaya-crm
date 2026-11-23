@@ -70,8 +70,8 @@ const inr2 = (v) => {
 /* Books check: every wallet's balance must equal its last closed day's closing
    plus every transaction since. A mismatch means a balance changed with no
    transaction behind it (23 Nov 2026: a wallet edit saved a stale SBI balance,
-   +₹13,877). Run it BEFORE tallying SBI to the bank — otherwise the gap is
-   pushed into Counter Cash and looks like a cash shortage. */
+   +₹13,877). Run it BEFORE tallying bank accounts with their statements — otherwise
+   the gap is moved into a cash wallet and looks like a cash shortage. */
 const BooksCheckCard = ({ queryString, onResult }) => {
   const [state, setState] = useState({ loading: true, data: null, error: null });
 
@@ -114,8 +114,8 @@ const BooksCheckCard = ({ queryString, onResult }) => {
           <p className="mt-0.5 text-xs text-slate-600">
             {loading ? 'Checking every wallet balance against its transactions…'
               : error ? `Could not run the check: ${error}`
-              : ok ? 'Every wallet balance matches its transactions. Safe to tally SBI with the bank.'
-              : 'A wallet balance changed without a transaction. Fix this BEFORE tallying SBI — otherwise the gap moves into Counter Cash and looks like a cash shortage.'}
+              : ok ? 'Every wallet balance matches its transactions. Safe to tally your bank accounts with their statements.'
+              : 'A wallet balance changed without a transaction. Fix this BEFORE tallying any bank account with its statement — otherwise the gap gets moved into a cash wallet and looks like a cash shortage.'}
           </p>
         </div>
         <button

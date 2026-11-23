@@ -10,6 +10,7 @@ export async function getTodayBalance(req, res) {
 });
 
   try {
+    // Today's own snapshot only exists once today has been closed.
     const { rows } = await pool.query(
       `
       SELECT
@@ -26,16 +27,27 @@ export async function getTodayBalance(req, res) {
     );
 
     if (rows.length === 0) {
+      // Not closed yet: opening = the last closed day's closing, closing unknown.
+      const prev = await pool.query(
+        `SELECT closing_balance, date
+         FROM wallet_daily_balances
+         WHERE wallet_id = $1 AND date < $2
+         ORDER BY date DESC
+         LIMIT 1`,
+        [walletId, today]
+      );
       return res.json({
         date: today,
-        opening_balance: null,
+        opening_balance: prev.rows[0]?.closing_balance ?? null,
+        opening_from: prev.rows[0]?.date ?? null,
         total_credit: 0,
         total_debit: 0,
         closing_balance: null,
+        closed: false,
       });
     }
 
-    res.json(rows[0]);
+    res.json({ ...rows[0], closed: true });
   } catch (err) {
     console.error("getTodayBalance error:", err);
     res.status(500).json({ error: "Failed to fetch today's balance" });
