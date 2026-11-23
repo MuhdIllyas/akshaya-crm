@@ -32,8 +32,15 @@ export const getBoard = (date, centreId) =>
   axios.get(`${API}/board`, { ...auth(), params: { date, ...(centreId ? { centre_id: centreId } : {}) } }).then((r) => r.data);
 export const getUnclaimed = (walletId, hours = 3) =>
   axios.get(`${API}/unclaimed`, { ...auth(), params: { wallet_id: walletId, hours } }).then((r) => r.data.credits);
+/** saveKey: one entry's key, or an array of keys (one payment for several entries). */
 export const linkToSave = (creditIds, walletId, saveKey) =>
-  axios.post(`${API}/link`, { credit_ids: creditIds, wallet_id: walletId, save_key: saveKey }, auth());
+  axios.post(
+    `${API}/link`,
+    Array.isArray(saveKey)
+      ? { credit_ids: creditIds, wallet_id: walletId, save_keys: saveKey }
+      : { credit_ids: creditIds, wallet_id: walletId, save_key: saveKey },
+    auth()
+  );
 export const linkToEntries = (creditIds, entryIds, walletId) =>
   axios.post(`${API}/link-entry`, { credit_ids: creditIds, entry_ids: entryIds, wallet_id: walletId }, auth());
 export const unlinkCredit = (id) => axios.post(`${API}/${id}/unlink`, {}, auth());

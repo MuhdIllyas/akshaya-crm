@@ -5,7 +5,7 @@ import { socket } from "@/services/socket";
 import {
   getBoard, unlinkCredit, ignoreCredit, rupees, timeOf, SOURCE, servicesText, customersText, errorText,
 } from "@/components/upi/upiApi";
-import { LinkPaymentsModal } from "@/components/upi/UpiLinkModals";
+import { LinkPaymentsModal, PickEntryModal } from "@/components/upi/UpiLinkModals";
 
 // Reports → Accounting → UPI Check
 // UPI payments the centre's companion phone caught on `date`, checked against
@@ -31,6 +31,7 @@ export default function UpiCheckSection({ date, centreId, isSuperAdmin = false, 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [linking, setLinking] = useState(null);
+  const [pickFor, setPickFor] = useState(null); // a payment → choose its entries
   const needsCentre = isSuperAdmin && !centreId && !localStorage.getItem("centre_id");
 
   const load = useCallback(async () => {
@@ -202,14 +203,23 @@ export default function UpiCheckSection({ date, centreId, isSuperAdmin = false, 
                         Undo ignore
                       </button>
                     ) : (
-                      <button
-                        type="button"
-                        onClick={() => ignore(c, true)}
-                        title="Not a customer payment (own transfer, refund…)"
-                        className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200"
-                      >
-                        <FiSlash className="h-3.5 w-3.5" /> Ignore
-                      </button>
+                      <span className="flex gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPickFor(c)}
+                          className="inline-flex items-center gap-1 rounded-xl bg-navy-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-navy-800"
+                        >
+                          <FiLink className="h-3.5 w-3.5" /> Link
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => ignore(c, true)}
+                          title="Not a customer payment (own transfer, refund…)"
+                          className="inline-flex items-center gap-1 rounded-xl bg-slate-100 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-200"
+                        >
+                          <FiSlash className="h-3.5 w-3.5" /> Ignore
+                        </button>
+                      </span>
                     ))}
                 </li>
               ))}
@@ -279,6 +289,19 @@ export default function UpiCheckSection({ date, centreId, isSuperAdmin = false, 
           </div>
         )}
       </section>
+
+      {pickFor && (
+        <PickEntryModal
+          credit={pickFor}
+          saves={notVerified}
+          credits={credits}
+          onClose={() => setPickFor(null)}
+          onLinked={() => {
+            setPickFor(null);
+            load();
+          }}
+        />
+      )}
 
       {linking && (
         <LinkPaymentsModal

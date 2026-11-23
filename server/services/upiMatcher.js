@@ -12,6 +12,12 @@
 // UPI payments from 3 hours before to 3 hours after the save are considered;
 // if several fit, the closest in time wins.
 //
+// One payment can also cover several saves, e.g. two staff each entered part
+// of one customer's services and the customer paid the total once. That is
+// only linked on its own when it is clearly the same customer: 2–3 saves with
+// the same phone (or name, without a phone), saved within 30 minutes of each
+// other and of the payment, adding up exactly — and no other set fits.
+//
 // runUpiMatch() is safe to call any time (after a save, when a payment
 // arrives, every minute): only one run works at a time per organization.
 import pool from "../db.js";
@@ -19,6 +25,7 @@ import { io } from "../tenancy/io.js";
 import { currentTenant, runWithTenant } from "../tenancy/context.js";
 
 export const WINDOW_MS = 3 * 60 * 60 * 1000;
+export const MULTI_SAVE_WINDOW_MS = 30 * 60 * 1000;
 const LOOKBACK = "2 days";
 const MAX_CANDIDATES = 25; // per save, closest in time first
 const LOCK_KEY = "upi_matcher";
@@ -72,6 +79,51 @@ export function findCombo(candidates, targetCents, saveTime) {
   return best;
 }
 
+/** Who a save is for: the customer's phone (last 10 digits), else the name; null if mixed or unknown. */
+export function customerKey(rows) {
+  const keys = new Set(
+    rows.map((r) => {
+      const digits = String(r.phone || "").replace(/\D/g, "").slice(-10);
+      if (digits.length === 10) return `p:${digits}`;
+      const name = String(r.customer_name || "").trim().toLowerCase().replace(/\s+/g, " ");
+      return name && !/^walk-?in/.test(name) ? `n:${name}` : null;
+    })
+  );
+  if (keys.size !== 1) return null;
+  return [...keys][0];
+}
+
+/**
+ * One payment covering 2–3 saves of the same customer (see top of file).
+ * saves: [{ key, t, openCents, customer }], credit: { amountCents, t }.
+ * Returns the saves to link, or null when none fits or more than one set fits.
+ */
+export function findMultiSave(saves, credit) {
+  const near = saves.filter((s) => s.customer && Math.abs(s.t - credit.t) <= MULTI_SAVE_WINDOW_MS);
+  const groups = new Map();
+  for (const s of near) {
+    if (!groups.has(s.customer)) groups.set(s.customer, []);
+    groups.get(s.customer).push(s);
+  }
+  const fits = [];
+  const ok = (combo) => {
+    const ts = combo.map((s) => s.t);
+    return combo.reduce((t, s) => t + s.openCents, 0) === credit.amountCents &&
+      Math.max(...ts) - Math.min(...ts) <= MULTI_SAVE_WINDOW_MS;
+  };
+  for (const list of groups.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        if (ok([list[i], list[j]])) fits.push([list[i], list[j]]);
+        for (let k = j + 1; k < list.length; k++) {
+          if (ok([list[i], list[j], list[k]])) fits.push([list[i], list[j], list[k]]);
+        }
+      }
+    }
+  }
+  return fits.length === 1 ? fits[0] : null;
+}
+
 /**
  * Spread credits over the save's open payment rows, oldest credit first.
  * rows: [{ id, openCents }], credits: [{ id, amountCents, t }]
@@ -118,8 +170,10 @@ export async function openSaves(client, walletId, { sinceSql = `NOW() - INTERVAL
   const { rows } = await client.query(
     `SELECT p.id, p.amount, p.created_at::text AS save_key,
             (extract(epoch FROM p.created_at::timestamptz) * 1000)::float8 AS t,
-            p.amount - COALESCE((SELECT SUM(l.amount) FROM upi_credit_links l WHERE l.payment_id = p.id), 0) AS open
+            p.amount - COALESCE((SELECT SUM(l.amount) FROM upi_credit_links l WHERE l.payment_id = p.id), 0) AS open,
+            se.phone, se.customer_name
        FROM payments p
+       LEFT JOIN service_entries se ON se.id = p.service_entry_id
       WHERE p.wallet_id = $1
         AND p.created_at::timestamptz > ${sinceSql}
         AND ${EFFECTIVE_PAYMENT}${keyFilter}
@@ -130,12 +184,13 @@ export async function openSaves(client, walletId, { sinceSql = `NOW() - INTERVAL
   for (const r of rows) {
     const openCents = cents(r.open);
     if (openCents <= 0) continue;
-    if (!byKey.has(r.save_key)) byKey.set(r.save_key, { key: r.save_key, t: Number(r.t), rows: [], openCents: 0 });
+    if (!byKey.has(r.save_key)) byKey.set(r.save_key, { key: r.save_key, t: Number(r.t), rows: [], openCents: 0, people: [] });
     const s = byKey.get(r.save_key);
     s.rows.push({ id: r.id, openCents });
     s.openCents += openCents;
+    s.people.push({ phone: r.phone, customer_name: r.customer_name });
   }
-  return [...byKey.values()];
+  return [...byKey.values()].map(({ people, ...s }) => ({ ...s, customer: customerKey(people) }));
 }
 
 /** Undo links that no longer hold (payment corrected/deleted), and fix statuses. */
@@ -218,6 +273,26 @@ export async function runUpiMatch() {
         );
         credits = credits.filter((c) => !ids.includes(c.id));
         changedCentres.add(wallet.centre_id);
+      }
+
+      // Payments still open: one payment for several saves of the same customer
+      if (credits.length) {
+        let left = await openSaves(client, wallet.id);
+        for (const credit of credits) {
+          const set = findMultiSave(left, credit);
+          if (!set) continue;
+          const rows = [...set].sort((a, b) => a.t - b.t).flatMap((s) => s.rows);
+          await insertLinks(client, allocate(rows, [credit]));
+          await client.query(
+            `UPDATE upi_credits SET status = 'matched', matched_at = NOW(), matched_by = NULL,
+                    matched_payment_id = $2
+              WHERE id = $1`,
+            [credit.id, rows[0].id]
+          );
+          const used = new Set(set.map((s) => s.key));
+          left = left.filter((s) => !used.has(s.key));
+          changedCentres.add(wallet.centre_id);
+        }
       }
     }
 

@@ -112,14 +112,20 @@ export function LinkPaymentsModal({ save, credits, preselect = [], onClose, onLi
   );
 }
 
+const sameCustomer = (a, b) =>
+  (a.phones || []).some((p) => (b.phones || []).includes(p)) ||
+  (!(a.phones || []).length && (a.customers || []).some((n) => (b.customers || []).includes(n)));
+
 /**
- * Start from a payment: pick which entry it belongs to (entries in the same
- * wallet that are not verified yet). An entry for exactly this amount links
- * straight away; otherwise the payments picker opens with this one ticked.
+ * Start from a payment: tick the entry, or entries, it was for (entries in the
+ * same wallet that are not verified yet). Several entries can share one
+ * payment, e.g. two staff each saved part of one customer's services and the
+ * customer paid the total once. The ticked entries must add up to the payment.
+ * One entry for more than the payment: "Add another payment" opens the
+ * payments picker with this one ticked (customer paid in parts).
  */
 export function PickEntryModal({ credit, saves, credits, onClose, onLinked }) {
-  const [busy, setBusy] = useState(null);
-  const [more, setMore] = useState(null);
+  const keyOf = (s) => `${s.wallet_id}|${s.save_key}`;
   const list = useMemo(
     () =>
       saves
@@ -131,30 +137,73 @@ export function PickEntryModal({ credit, saves, credits, onClose, onLinked }) {
         }),
     [saves, credit]
   );
+  const [picked, setPicked] = useState(() => {
+    const exact = list.find((s) => sameAmount(s.open, credit.amount));
+    return exact ? [keyOf(exact)] : [];
+  });
+  const [busy, setBusy] = useState(false);
+  const [more, setMore] = useState(null);
 
   if (more) {
     return <LinkPaymentsModal save={more} credits={credits} preselect={[credit.id]} onClose={onClose} onLinked={onLinked} />;
   }
 
-  const choose = async (s) => {
-    if (!sameAmount(s.open, credit.amount)) return setMore(s);
-    setBusy(s.save_key);
+  const chosen = list.filter((s) => picked.includes(keyOf(s)));
+  const total = chosen.reduce((t, s) => t + Number(s.open), 0);
+  const exact = chosen.length > 0 && sameAmount(total, credit.amount);
+  const toggle = (s) => setPicked((p) => (p.includes(keyOf(s)) ? p.filter((k) => k !== keyOf(s)) : [...p, keyOf(s)]));
+  // One entry for more than this payment: the customer paid the rest separately
+  const partOf = chosen.length === 1 && Number(chosen[0].open) > Number(credit.amount) ? chosen[0] : null;
+
+  const submit = async () => {
+    setBusy(true);
     try {
-      await linkToSave([credit.id], s.wallet_id, s.save_key);
-      toast.success("Payment linked");
+      const keys = chosen.map((s) => s.save_key);
+      await linkToSave([credit.id], credit.wallet_id, keys.length === 1 ? keys[0] : keys);
+      toast.success(chosen.length > 1 ? `Payment linked to ${chosen.length} entries` : "Payment linked");
       onLinked?.();
     } catch (e) {
       toast.error(errorText(e, "Could not link"));
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
   return (
     <Shell
-      title="Which entry is this payment for?"
+      title="Which entries is this payment for?"
       subtitle={`${rupees(credit.amount)} · ${credit.payer || "Unknown payer"} · ${SOURCE[credit.source] || credit.source} ${timeOf(credit.credited_at)}`}
       onClose={onClose}
+      footer={
+        list.length > 0 && (
+          <>
+            <p className={`text-sm ${exact ? "font-semibold text-emerald-700" : "text-slate-500"}`}>
+              {rupees(total)} of {rupees(credit.amount)}
+              {chosen.length > 1 ? ` · ${chosen.length} entries` : ""}
+              {chosen.length > 0 && !exact ? " · must be equal" : ""}
+            </p>
+            <div className="flex gap-2">
+              {partOf && (
+                <button
+                  type="button"
+                  onClick={() => setMore(partOf)}
+                  className="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Add another payment…
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={submit}
+                disabled={!exact || busy}
+                className="rounded-xl bg-navy-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-navy-800 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy ? "Linking…" : "Link"}
+              </button>
+            </div>
+          </>
+        )
+      }
     >
       {list.length === 0 ? (
         <p className="px-6 py-8 text-center text-sm text-slate-500">
@@ -163,15 +212,13 @@ export function PickEntryModal({ credit, saves, credits, onClose, onLinked }) {
       ) : (
         <ul className="divide-y divide-slate-100">
           {list.map((s) => {
-            const exact = sameAmount(s.open, credit.amount);
+            const on = picked.includes(keyOf(s));
+            const same = sameAmount(s.open, credit.amount);
+            const together = !on && chosen.some((c) => sameCustomer(c, s));
             return (
-              <li key={`${s.wallet_id}|${s.save_key}`}>
-                <button
-                  type="button"
-                  disabled={!!busy}
-                  onClick={() => choose(s)}
-                  className="flex w-full items-center gap-3 px-6 py-3 text-left text-sm hover:bg-slate-50 disabled:opacity-60"
-                >
+              <li key={keyOf(s)}>
+                <label className={`flex cursor-pointer items-center gap-3 px-6 py-3 text-sm ${on ? "bg-emerald-50" : "hover:bg-slate-50"}`}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(s)} className="h-4 w-4 accent-emerald-600" />
                   <span className="w-14 text-slate-500">{timeOf(s.saved_at)}</span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold text-slate-900">{customersText(s)}</span>
@@ -180,14 +227,15 @@ export function PickEntryModal({ credit, saves, credits, onClose, onLinked }) {
                     </span>
                   </span>
                   <span className="font-bold text-slate-900">{rupees(s.open)}</span>
-                  {exact ? (
+                  {same && (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
                       <FiCheck /> Same amount
                     </span>
-                  ) : (
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-500">Add more…</span>
                   )}
-                </button>
+                  {together && (
+                    <span className="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700">Same customer</span>
+                  )}
+                </label>
               </li>
             );
           })}
