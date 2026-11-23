@@ -304,10 +304,10 @@ const WalletManagement = () => {
   // Wallets grouped like the design: Cash, Bank accounts, Department wallets, Other
   const walletGroups = useMemo(() => {
     const defs = [
-      { id: "cash", label: "Cash", types: ["cash"], compact: false },
-      { id: "bank", label: "Bank accounts", types: ["bank"], compact: false },
-      { id: "dept", label: "Department wallets", types: ["digital"], compact: true },
-      { id: "other", label: "Other", types: null, compact: false },
+      { id: "cash", label: "Cash", types: ["cash"] },
+      { id: "bank", label: "Bank accounts", types: ["bank"] },
+      { id: "dept", label: "Department wallets", types: ["digital"] },
+      { id: "other", label: "Other", types: null },
     ];
     const known = ["cash", "bank", "digital"];
     return defs
@@ -573,11 +573,9 @@ const WalletManagement = () => {
                   <span className="text-sm font-semibold text-slate-500">{formatAmount(g.total)}</span>
                   <span className="text-xs text-slate-400">· {g.items.length} {g.items.length === 1 ? "wallet" : "wallets"}</span>
                 </div>
-                <div className={g.compact
-                  ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4"
-                  : "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5"}>
+                {/* One card size and one grid for every group, so all wallets line up */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                   {g.items.map((w) => {
-                    const compact = g.compact;
                     const type = getType(w.wallet_type);
                     const color = walletColor(w);
                     const TypeIcon = type.icon;
@@ -590,7 +588,7 @@ const WalletManagement = () => {
                     return (
                 <div key={w.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden">
                   <div className="h-1" style={{ background: color }} />
-                  <div className={`${compact ? "p-4" : "p-5"} flex-1`}>
+                  <div className="p-4 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-3 min-w-0">
                         <div
@@ -612,8 +610,8 @@ const WalletManagement = () => {
                       </span>
                     </div>
 
-                    <p className={`text-xs text-slate-500 ${compact ? "mt-4" : "mt-5"}`}>Current balance</p>
-                    <p className={`${compact ? "text-xl" : "text-2xl"} font-bold text-slate-900`}>{formatAmount(w.balance)}</p>
+                    <p className="text-xs text-slate-500 mt-4">Current balance</p>
+                    <p className="text-xl font-bold text-slate-900">{formatAmount(w.balance)}</p>
 
                     <div className="grid grid-cols-2 gap-2 mt-4">
                       <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
