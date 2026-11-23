@@ -37,7 +37,7 @@ export async function findWalletFor(centreId, credit) {
  * Save one payment. Returns the saved row (with wallet_name) or null when it
  * was already saved (same UPI reference) or could not be saved.
  */
-export async function recordUpiCredit({ centreId, deviceId, credit, creditedAt, rawText, smsLogId = null, notificationLogId = null }) {
+export async function recordUpiCredit({ centreId, deviceId, credit, creditedAt, rawText, smsLogId = null, notificationLogId = null, quiet = false }) {
   const wallet = await findWalletFor(centreId, credit);
 
   const { rows } = await pool.query(
@@ -62,7 +62,8 @@ export async function recordUpiCredit({ centreId, deviceId, credit, creditedAt, 
 
   // Only payments that landed on a set-up wallet are shown. Otherwise a GPay QR
   // payment would pop up twice: once from the bank SMS, once from the GPay app.
-  if (saved.wallet_id) {
+  // quiet: an earlier message read again later (no live alert for old payments).
+  if (saved.wallet_id && !quiet) {
     io.to(`centre:${centreId}`).emit("centre_upi_credit", {
       id: saved.id,
       centre_id: centreId,
