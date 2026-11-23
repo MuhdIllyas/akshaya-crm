@@ -151,8 +151,18 @@ router.post('/today-balances', async (req, res) => {
               COALESCE(cur.opening_balance, prev.closing_balance) AS opening_balance,
               prev.date                                            AS opening_from,
               cur.closing_balance                                  AS closing_balance,
-              cur.date                                             AS closed_date
+              cur.date                                             AS closed_date,
+              mv.today_in,
+              mv.today_out
        FROM unnest($1::int[]) AS w(id)
+       LEFT JOIN LATERAL (
+         -- money in / out of this wallet since IST midnight (all entries, not just the last 100)
+         SELECT COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'credit'), 0) AS today_in,
+                COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'debit'),  0) AS today_out
+         FROM wallet_transactions t
+         WHERE t.wallet_id = w.id
+           AND t.created_at >= ($2::date)::timestamp AT TIME ZONE 'Asia/Kolkata'
+       ) mv ON true
        LEFT JOIN LATERAL (
          SELECT d.closing_balance, d.date
          FROM wallet_daily_balances d
@@ -174,6 +184,8 @@ router.post('/today-balances', async (req, res) => {
         opening_from: row.opening_from,
         closing_balance: num(row.closing_balance),
         closed: row.closed_date !== null,
+        today_in: num(row.today_in) ?? 0,
+        today_out: num(row.today_out) ?? 0,
       };
     });
 
