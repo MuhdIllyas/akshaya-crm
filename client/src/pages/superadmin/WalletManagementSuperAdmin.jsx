@@ -758,8 +758,8 @@ const WalletManagementSuperAdmin = () => {
                   <span className="text-sm font-semibold text-gray-500">{formatAmount(g.total)}</span>
                   <span className="text-xs text-gray-400">· {g.items.length} {g.items.length === 1 ? "wallet" : "wallets"}</span>
                 </div>
-                {/* One card size and one grid for every group: landscape cards */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-4">
+                {/* One card size and one grid for every group, so all wallets line up */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                   {g.items.map((w) => {
                     const type = getType(w.wallet_type);
                     const TypeIcon = type.icon;
@@ -774,22 +774,12 @@ const WalletManagementSuperAdmin = () => {
                     return (
                       <div
                         key={w.id}
-                        className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-shadow flex overflow-hidden ${checked ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"}`}
+                        className={`bg-white rounded-2xl border shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden ${checked ? "border-red-300 ring-2 ring-red-100" : "border-gray-200"}`}
                       >
-                        {/* landscape card: colour strip on the left, content beside it */}
-                        <div className="w-1.5 shrink-0" style={{ background: color }} />
-                        <div className="flex-1 min-w-0 px-4 py-3">
-                          {/* Row 1: select, wallet name + centre, quick actions */}
+                        <div className="h-1" style={{ background: color }} />
+                        <div className="px-4 pt-3 pb-3 flex-1">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex items-center gap-2.5 min-w-0">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleSelect(w.id)}
-                                className="h-4 w-4 shrink-0 rounded border-gray-300 text-red-600 focus:ring-red-500"
-                                title="Select for bulk delete"
-                                aria-label={`Select ${w.name}`}
-                              />
                               <div
                                 className="w-9 h-9 rounded-lg border flex items-center justify-center shrink-0"
                                 style={{ background: tint(color), borderColor: tint(color, "33"), color }}
@@ -798,45 +788,38 @@ const WalletManagementSuperAdmin = () => {
                               </div>
                               <div className="min-w-0">
                                 <h3 className="font-semibold text-gray-900 truncate leading-tight" title={w.name}>{w.name}</h3>
-                                <p className="text-xs text-gray-500 flex items-center gap-1.5 truncate">
-                                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${online ? "bg-emerald-500" : "bg-gray-400"}`} />
-                                  <FiMapPin size={11} className="shrink-0" />
-                                  <span className="truncate">{w.centre_name || centreNameById(w.centre_id)} · {w.is_shared ? "Shared" : "Personal"}</span>
+                                <p className="text-xs text-gray-500 flex items-center gap-1.5">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-gray-400"}`} />
+                                  {online ? "Online" : "Offline"} · {type.name}
                                 </p>
                               </div>
                             </div>
-                            <div className="flex items-center shrink-0 -mr-1.5">
-                              <Link to={`/dashboard/admin/wallets/${w.id}`} className="p-2 rounded-lg text-gray-500 hover:text-navy-700 hover:bg-gray-100" title="Activity" aria-label={`${w.name} activity`}>
-                                <FiActivity size={16} />
-                              </Link>
-                              <button onClick={() => setRecharge({ walletId: w.id, amount: "", description: "" })} className="p-2 rounded-lg text-gray-500 hover:text-emerald-600 hover:bg-emerald-50" title="Add money" aria-label={`Add money to ${w.name}`}>
-                                <FiArrowDownLeft size={16} />
-                              </button>
-                              <button
-                                onClick={() => setTransfer({ from: String(w.id), to: "", amount: "", description: "" })}
-                                disabled={wallets.length < 2}
-                                className="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-40"
-                                title="Transfer"
-                                aria-label={`Transfer from ${w.name}`}
-                              >
-                                <FiRepeat size={16} />
-                              </button>
-                              <button onClick={() => openEdit(w)} className="p-2 rounded-lg text-gray-500 hover:text-navy-700 hover:bg-gray-100" title="Edit" aria-label={`Edit ${w.name}`}>
-                                <FiEdit2 size={16} />
-                              </button>
-                              <button onClick={() => setConfirmDelete({ ids: [w.id], label: w.name })} className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50" title="Delete" aria-label={`Delete ${w.name}`}>
-                                <FiTrash2 size={16} />
-                              </button>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${w.is_shared ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-gray-50 text-gray-600 border-gray-200"}`}>
+                                {w.is_shared ? "Shared" : "Personal"}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleSelect(w.id)}
+                                className="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                                title="Select for bulk delete"
+                                aria-label={`Select ${w.name}`}
+                              />
                             </div>
                           </div>
 
-                          {/* Row 2: balance on the left, today's opening / closing on the right */}
-                          <div className="mt-3 flex items-end justify-between gap-4">
+                          <p className="mt-2 text-xs text-gray-500 flex items-center gap-1 truncate">
+                            <FiMapPin size={11} className="shrink-0" /> <span className="truncate">{w.centre_name || centreNameById(w.centre_id)}</span>
+                          </p>
+
+                          {/* Balance on the left, today's opening / closing on the right — one row */}
+                          <div className="mt-2.5 flex items-end justify-between gap-4">
                             <div className="min-w-0">
                               <p className="text-[11px] text-gray-500">Current balance</p>
-                              <p className="text-2xl font-bold text-gray-900 truncate leading-tight">{formatAmount(w.balance)}</p>
+                              <p className="text-xl font-bold text-gray-900 truncate">{formatAmount(w.balance)}</p>
                             </div>
-                            <div className="flex gap-5 text-right shrink-0">
+                            <div className="flex gap-4 text-right shrink-0">
                               <div>
                                 <p className="text-[11px] text-gray-500">Today opening</p>
                                 <p className="text-sm font-semibold text-gray-800">{today?.opening_balance != null ? formatAmount(today.opening_balance) : "—"}</p>
@@ -850,30 +833,58 @@ const WalletManagementSuperAdmin = () => {
                             </div>
                           </div>
 
-                          {/* Row 3: today's movement — green = in, red = out */}
+                          {/* Today's movement: green = in, red = out, as shares of this wallet's movement today */}
                           {today?.today_in != null && (
-                            <div className="mt-2.5 flex items-center gap-3">
-                              <div className="flex-1 flex h-1.5 rounded-full overflow-hidden bg-gray-100" aria-hidden="true">
+                            <div className="mt-2.5">
+                              <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100" aria-hidden="true">
                                 {moved > 0 && <div className="bg-emerald-500" style={{ width: `${(inAmt / moved) * 100}%` }} />}
                                 {moved > 0 && <div className="bg-rose-500" style={{ width: `${(outAmt / moved) * 100}%` }} />}
                               </div>
-                              <span className={`text-[11px] font-semibold whitespace-nowrap ${inAmt ? "text-emerald-700" : "text-gray-400"}`}>In {inAmt ? `+${formatAmount(inAmt)}` : "₹0"}</span>
-                              <span className={`text-[11px] font-semibold whitespace-nowrap ${outAmt ? "text-rose-700" : "text-gray-400"}`}>Out {outAmt ? `−${formatAmount(outAmt)}` : "₹0"}</span>
+                              <div className="flex justify-between mt-1 text-[11px] font-semibold">
+                                <span className={inAmt ? "text-emerald-700" : "text-gray-400"}>In {inAmt ? `+${formatAmount(inAmt)}` : "₹0"}</span>
+                                <span className={outAmt ? "text-rose-700" : "text-gray-400"}>Out {outAmt ? `−${formatAmount(outAmt)}` : "₹0"}</span>
+                              </div>
                             </div>
                           )}
 
                           {!w.is_shared && (
-                            <div className="mt-2 flex items-center gap-2 text-xs text-gray-600">
+                            <div className="mt-2.5 flex items-center gap-2 text-sm text-gray-600">
                               {staff ? (
                                 <>
-                                  <Avatar name={staff.name} photo={staff.photo || staff.photoUrl} size="w-5 h-5" text="text-[9px]" />
+                                  <Avatar name={staff.name} photo={staff.photo || staff.photoUrl} size="w-6 h-6" text="text-[10px]" />
                                   <span className="truncate">Assigned to <span className="font-medium text-gray-900"><StaffName id={staff.id} name={staff.name} /></span></span>
                                 </>
                               ) : (
-                                <span className="flex items-center gap-1.5 text-amber-600"><FiAlertCircle size={13} /> Not assigned to anyone</span>
+                                <span className="flex items-center gap-1.5 text-amber-600"><FiAlertCircle size={14} /> Not assigned to anyone</span>
                               )}
                             </div>
                           )}
+                        </div>
+
+                        <div className="flex items-center justify-between px-3 py-1 border-t border-gray-100">
+                          <Link to={`/dashboard/admin/wallets/${w.id}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-800 px-2 py-1.5 rounded-lg hover:bg-gray-100">
+                            <FiActivity size={14} /> Activity
+                          </Link>
+                          <div className="flex gap-1">
+                            <button onClick={() => setRecharge({ walletId: w.id, amount: "", description: "" })} className="p-2 rounded-lg text-gray-500 hover:text-emerald-600 hover:bg-emerald-50" title="Add money" aria-label={`Add money to ${w.name}`}>
+                              <FiArrowDownLeft size={16} />
+                            </button>
+                            <button
+                              onClick={() => setTransfer({ from: String(w.id), to: "", amount: "", description: "" })}
+                              disabled={wallets.length < 2}
+                              className="p-2 rounded-lg text-gray-500 hover:text-amber-600 hover:bg-amber-50 disabled:opacity-40"
+                              title="Transfer"
+                              aria-label={`Transfer from ${w.name}`}
+                            >
+                              <FiRepeat size={16} />
+                            </button>
+                            <button onClick={() => openEdit(w)} className="p-2 rounded-lg text-gray-500 hover:text-navy-700 hover:bg-gray-100" title="Edit" aria-label={`Edit ${w.name}`}>
+                              <FiEdit2 size={16} />
+                            </button>
+                            <button onClick={() => setConfirmDelete({ ids: [w.id], label: w.name })} className="p-2 rounded-lg text-gray-500 hover:text-red-600 hover:bg-red-50" title="Delete" aria-label={`Delete ${w.name}`}>
+                              <FiTrash2 size={16} />
+                            </button>
+                          </div>
                         </div>
                       </div>
                     );
