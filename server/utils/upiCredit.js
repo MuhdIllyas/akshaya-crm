@@ -99,6 +99,17 @@ export function repeatKey(text) {
   return `${m[1].trim().toLowerCase().replace(/\s+/g, " ")}|${Number(m[2])}:${m[3]}${m[4].toLowerCase()}`;
 }
 
+/**
+ * The clock time a merchant notification states ("… at 4:42 PM"), as minutes
+ * after midnight; null when it states none.
+ */
+export function statedMinutes(text) {
+  const m = String(text || "").match(MERCHANT_LINE);
+  if (!m) return null;
+  const h = Number(m[2]) % 12 + (m[4].toLowerCase() === "p" ? 12 : 0);
+  return h * 60 + Number(m[3]);
+}
+
 function extractPayer(text) {
   const merchant = String(text).match(MERCHANT_LINE);
   if (merchant) return merchant[1].trim();

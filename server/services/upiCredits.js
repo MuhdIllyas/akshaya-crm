@@ -3,7 +3,7 @@
 import pool from "../db.js";
 import { io } from "../tenancy/io.js";
 import { scheduleUpiMatch } from "./upiMatcher.js";
-import { repeatKey } from "../utils/upiCredit.js";
+import { repeatKey, statedMinutes } from "../utils/upiCredit.js";
 
 /**
  * The wallet a payment belongs to: the centre's wallet that reads payments
@@ -52,7 +52,28 @@ export function recordUpiCredit(args) {
   return run;
 }
 
+// Midnight today in India, as a Date
+const todayStartIST = () => {
+  const ymd = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  return new Date(`${ymd}T00:00:00+05:30`);
+};
+
 async function saveCredit({ centreId, deviceId, credit, creditedAt, rawText, smsLogId = null, notificationLogId = null, quiet = false }) {
+  // UPI payments are kept for the day only. A payment from an earlier day is
+  // never saved again: when the companion app restarts, Android hands it every
+  // notification still in the phone's notification bar, yesterday's included.
+  if (creditedAt && new Date(creditedAt) < todayStartIST()) return null;
+  // Some phones re-post an old notification with the restart time, but GPay for
+  // Business states the real time in its text ("… at 4:42 PM"). A stated time
+  // later in the day than its arrival means it was yesterday's.
+  const stated = statedMinutes(rawText);
+  if (stated !== null && creditedAt) {
+    const [h, m] = new Date(creditedAt)
+      .toLocaleTimeString("en-GB", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false })
+      .split(":").map(Number);
+    if (stated > h * 60 + m + 10) return null;
+  }
+
   // No UPI reference in app notifications: the same payer, minute and amount
   // within a few minutes is the same payment told twice.
   if (!credit.utr) {
