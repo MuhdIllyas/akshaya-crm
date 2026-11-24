@@ -67,7 +67,104 @@ const inr2 = (v) => {
   return `${n < 0 ? '−' : ''}₹${s}`;
 };
 
-const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCash, readOnly = false }) => {
+/* Books check: every wallet's balance must equal its last closed day's closing
+   plus every transaction since. A mismatch means a balance changed with no
+   transaction behind it (23 Nov 2026: a wallet edit saved a stale SBI balance,
+   +₹13,877). Run it BEFORE tallying bank accounts with their statements — otherwise
+   the gap is moved into a cash wallet and looks like a cash shortage. */
+const BooksCheckCard = ({ queryString, onResult }) => {
+  const [state, setState] = useState({ loading: true, data: null, error: null });
+
+  const load = async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/api/accounting/books-check?${queryString}`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || 'Books check failed');
+      setState({ loading: false, data: body, error: null });
+      onResult?.(body);
+    } catch (err) {
+      setState({ loading: false, data: null, error: err.message });
+      onResult?.(null);
+    }
+  };
+
+  useEffect(() => { load(); }, [queryString]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { loading, data, error } = state;
+  const ok = data?.ok;
+
+  return (
+    <div className={`rounded-xl border p-3 ${
+      loading ? 'border-slate-200 bg-slate-50'
+        : error ? 'border-amber-200 bg-amber-50'
+        : ok ? 'border-emerald-200 bg-emerald-50/60'
+        : 'border-rose-300 bg-rose-50'
+    }`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center text-sm font-semibold text-slate-900">
+            {loading ? <FiClock className="mr-2 h-4 w-4 text-slate-500" />
+              : ok ? <FiCheckCircle className="mr-2 h-4 w-4 text-emerald-600" />
+              : <FiAlertTriangle className="mr-2 h-4 w-4 text-rose-600" />}
+            Books check
+          </p>
+          <p className="mt-0.5 text-xs text-slate-600">
+            {loading ? 'Checking every wallet balance against its transactions…'
+              : error ? `Could not run the check: ${error}`
+              : ok ? 'Every wallet balance matches its transactions. Safe to tally your bank accounts with their statements.'
+              : 'A wallet balance changed without a transaction. Fix this BEFORE tallying any bank account with its statement — otherwise the gap gets moved into a cash wallet and looks like a cash shortage.'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={load}
+          disabled={loading}
+          className="inline-flex shrink-0 items-center rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+        >
+          <FiRefreshCw className={`mr-1 h-3 w-3 ${loading ? 'animate-spin' : ''}`} /> Re-check
+        </button>
+      </div>
+
+      {!loading && data && !ok && (
+        <div className="mt-3 overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-slate-500">
+                <th className="py-1 pr-3 font-medium">Wallet</th>
+                <th className="py-1 pr-3 font-medium text-right">Balance</th>
+                <th className="py-1 pr-3 font-medium text-right">Per transactions</th>
+                <th className="py-1 font-medium text-right">Difference</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.mismatches.map((m) => (
+                <tr key={m.id} className="border-t border-rose-200">
+                  <td className="py-1.5 pr-3 font-medium text-slate-900">{m.name}</td>
+                  <td className="py-1.5 pr-3 text-right">{inr2(m.balance)}</td>
+                  <td className="py-1.5 pr-3 text-right">{inr2(m.expected)}</td>
+                  <td className="py-1.5 text-right font-semibold text-rose-700">{m.diff > 0 ? '+' : ''}{inr2(m.diff)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="mt-2 text-xs text-slate-600">
+            "Per transactions" = last closed day's closing + every entry since. Check the audit log for
+            "Wallet Updated … balance changed" around the time it went wrong.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCash, readOnly = false, queryString = '' }) => {
+  const isToday = date === todayIST();
+  const [books, setBooks] = useState(null); // result of the books check (today only)
+  const [booksReason, setBooksReason] = useState('');
+  const booksMismatch = isToday && books && !books.ok;
   const [checklist, setChecklist] = useState(
     existingData?.checklist || {
       incomeEntryVerified: false,
@@ -129,6 +226,11 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCa
       return;
     }
 
+    if (booksMismatch && booksReason.trim().length < 10) {
+      toast.error('Books check failed — fix the wallet balance first, or write why you are closing anyway');
+      return;
+    }
+
     // + = cash short, − = cash excess
     const variance = Math.round((parseFloat(closingCash) - parseFloat(actualCashCount)) * 100) / 100;
 
@@ -139,7 +241,8 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCa
       actual_cash: parseFloat(actualCashCount),
       cash_variance: variance,
       checklist: checklist,
-      notes: notes
+      notes: notes,
+      ...(booksMismatch ? { books_override_reason: booksReason.trim() } : {})
     };
     
     try {
@@ -175,6 +278,26 @@ const NightlyAccountingChecklist = ({ date, onComplete, existingData, expectedCa
       </div>
 
       <div className="space-y-5">
+        {/* Books check — today only (it compares against the live balances) */}
+        {isToday && !readOnly && (
+          <div className="space-y-2">
+            <BooksCheckCard queryString={queryString} onResult={setBooks} />
+            {booksMismatch && (
+              <div>
+                <label className="mb-1 block text-xs font-medium text-slate-600">
+                  Closing anyway? Write why <span className="font-normal text-slate-400">(saved with the close)</span>
+                </label>
+                <input
+                  value={booksReason}
+                  onChange={(e) => setBooksReason(e.target.value)}
+                  className={inputCls}
+                  placeholder="e.g. SBI corrected in DB, Counter Cash adjusted"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Checklist Items */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {[
@@ -3038,7 +3161,8 @@ const handleApproveExpense = async (expenseId) => {
       });
 
       if (!saveRes.ok) {
-        throw new Error('Failed to save nightly accounting closure');
+        const body = await saveRes.json().catch(() => ({}));
+        throw new Error(body.error || 'Failed to save nightly accounting closure');
       }
 
       const result = await saveRes.json();
@@ -3060,7 +3184,7 @@ const handleApproveExpense = async (expenseId) => {
       
     } catch (error) {
       console.error('Error completing nightly accounting:', error);
-      toast.error('Failed to save nightly accounting closure');
+      toast.error(error.message || 'Failed to save nightly accounting closure');
     }
   };
 
@@ -3426,6 +3550,7 @@ const handleExportExcel = () => {
                   existingData={accountingData.nightlyAccounting?.[date]}
                   expectedCash={expectedCashForClose}
                   readOnly={readOnly}
+                  queryString={buildQueryString()}
                 />
 
                 <ShortageExcessCard

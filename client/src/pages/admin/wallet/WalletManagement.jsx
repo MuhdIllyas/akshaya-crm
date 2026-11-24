@@ -282,8 +282,16 @@ const WalletManagement = () => {
     });
   }, [transactions, walletById]);
 
-  const todayIn = todaysTransactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount || 0), 0);
-  const todayOut = todaysTransactions.filter((t) => t.type !== "credit").reduce((s, t) => s + Number(t.amount || 0), 0);
+  // Today In / Out: from the server's per-wallet totals (every entry since IST midnight).
+  // The transactions list below only holds the latest 100, so it's only a fallback.
+  const serverMoves = wallets.map((w) => todayBalances[w.id]).filter((b) => b && b.today_in != null);
+  const hasServerMoves = wallets.length > 0 && serverMoves.length === wallets.length;
+  const todayIn = hasServerMoves
+    ? serverMoves.reduce((s, b) => s + Number(b.today_in || 0), 0)
+    : todaysTransactions.filter((t) => t.type === "credit").reduce((s, t) => s + Number(t.amount || 0), 0);
+  const todayOut = hasServerMoves
+    ? serverMoves.reduce((s, b) => s + Number(b.today_out || 0), 0)
+    : todaysTransactions.filter((t) => t.type !== "credit").reduce((s, t) => s + Number(t.amount || 0), 0);
 
   const filteredWallets = useMemo(() => {
     if (!search) return wallets;
@@ -292,6 +300,25 @@ const WalletManagement = () => {
       return [w.name, getType(w.wallet_type).name, staff?.name, `#${w.id}`].some((f) => String(f || "").toLowerCase().includes(search));
     });
   }, [wallets, search, staffById]);
+
+  // Wallets grouped like the design: Cash, Bank accounts, Department wallets, Other
+  const walletGroups = useMemo(() => {
+    const defs = [
+      { id: "cash", label: "Cash", types: ["cash"] },
+      { id: "bank", label: "Bank accounts", types: ["bank"] },
+      { id: "dept", label: "Department wallets", types: ["digital"] },
+      { id: "other", label: "Other", types: null },
+    ];
+    const known = ["cash", "bank", "digital"];
+    return defs
+      .map((d) => {
+        const items = filteredWallets
+          .filter((w) => (d.types ? d.types.includes(w.wallet_type) : !known.includes(w.wallet_type)))
+          .sort((a, b) => Number(b.balance || 0) - Number(a.balance || 0));
+        return { ...d, items, total: items.reduce((s, w) => s + (Number(w.balance) || 0), 0) };
+      })
+      .filter((g) => g.items.length);
+  }, [filteredWallets]);
 
   const filteredTransactions = useMemo(() => {
     if (!search) return todaysTransactions;
@@ -337,10 +364,15 @@ const WalletManagement = () => {
 
   const saveWallet = async () => {
     const d = walletForm.data;
-    if (!d.name.trim() || d.balance === "") return toast.error("Wallet name and balance are required.");
+    const adding = walletForm.mode === "add";
+    if (!d.name.trim()) return toast.error("Wallet name is required.");
+    if (adding && d.balance === "") return toast.error("Opening balance is required.");
     const payload = {
       name: d.name.trim(),
-      balance: Number(d.balance),
+      // Balance is only set when a wallet is created. Editing must never send it:
+      // the value loaded when the form opened goes stale as staff keep working,
+      // and saving it would wipe out their entries.
+      ...(adding ? { balance: Number(d.balance) } : {}),
       is_shared: d.type === "shared",
       assigned_staff_id: d.type === "personal" && d.staffId ? Number(d.staffId) : null,
       wallet_type: d.walletType,
@@ -533,28 +565,40 @@ const WalletManagement = () => {
         ) : filteredWallets.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 text-center text-slate-500 mb-8">No wallets match “{searchInput}”.</div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 mb-8">
-            {filteredWallets.map((w) => {
-              const type = getType(w.wallet_type);
-              const color = walletColor(w);
-              const TypeIcon = type.icon;
-              const staff = staffById[String(w.assigned_staff_id)];
-              const today = todayBalances[w.id];
-              const online = w.status === "online";
-              return (
+          <div className="space-y-7 mb-8">
+            {walletGroups.map((g) => (
+              <section key={g.id}>
+                <div className="flex items-baseline gap-2.5 mb-3">
+                  <h3 className="text-sm font-bold uppercase tracking-wide text-navy-700">{g.label}</h3>
+                  <span className="text-sm font-semibold text-slate-500">{formatAmount(g.total)}</span>
+                  <span className="text-xs text-slate-400">· {g.items.length} {g.items.length === 1 ? "wallet" : "wallets"}</span>
+                </div>
+                {/* One card size and one grid for every group, so all wallets line up */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                  {g.items.map((w) => {
+                    const type = getType(w.wallet_type);
+                    const color = walletColor(w);
+                    const TypeIcon = type.icon;
+                    const staff = staffById[String(w.assigned_staff_id)];
+                    const today = todayBalances[w.id];
+                    const online = w.status === "online";
+                    const inAmt = Number(today?.today_in || 0);
+                    const outAmt = Number(today?.today_out || 0);
+                    const moved = inAmt + outAmt;
+                    return (
                 <div key={w.id} className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden">
                   <div className="h-1" style={{ background: color }} />
-                  <div className="p-5 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
+                  <div className="px-4 pt-3 pb-3 flex-1">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
                         <div
-                          className="w-11 h-11 rounded-xl border flex items-center justify-center shrink-0"
+                          className="w-9 h-9 rounded-lg border flex items-center justify-center shrink-0"
                           style={{ background: tint(color), borderColor: tint(color, "33"), color }}
                         >
-                          <TypeIcon size={20} />
+                          <TypeIcon size={17} />
                         </div>
                         <div className="min-w-0">
-                          <h3 className="font-semibold text-slate-900 truncate">{w.name}</h3>
+                          <h3 className="font-semibold text-slate-900 truncate leading-tight">{w.name}</h3>
                           <p className="text-xs text-slate-500 flex items-center gap-1.5">
                             <span className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-500" : "bg-slate-400"}`} />
                             {online ? "Online" : "Offline"} · {type.name}
@@ -566,22 +610,42 @@ const WalletManagement = () => {
                       </span>
                     </div>
 
-                    <p className="text-xs text-slate-500 mt-5">Current balance</p>
-                    <p className="text-2xl font-bold text-slate-900">{formatAmount(w.balance)}</p>
-
-                    <div className="grid grid-cols-2 gap-2 mt-4">
-                      <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">Today opening</p>
-                        <p className="text-sm font-semibold text-slate-800">{today?.opening_balance != null ? formatAmount(today.opening_balance) : "—"}</p>
+                    {/* Balance on the left, today's opening / closing on the right — one row */}
+                    <div className="mt-3 flex items-end justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="text-[11px] text-slate-500">Current balance</p>
+                        <p className="text-xl font-bold text-slate-900 truncate">{formatAmount(w.balance)}</p>
                       </div>
-                      <div className="rounded-xl bg-slate-50 border border-slate-100 px-3 py-2">
-                        <p className="text-[11px] text-slate-500">Today closing</p>
-                        <p className="text-sm font-semibold text-slate-800">{today?.closing_balance != null ? formatAmount(today.closing_balance) : "—"}</p>
+                      <div className="flex gap-4 text-right shrink-0">
+                        <div>
+                          <p className="text-[11px] text-slate-500">Today opening</p>
+                          <p className="text-sm font-semibold text-slate-800">{today?.opening_balance != null ? formatAmount(today.opening_balance) : "—"}</p>
+                        </div>
+                        <div>
+                          <p className="text-[11px] text-slate-500">Today closing</p>
+                          {today?.closing_balance != null
+                            ? <p className="text-sm font-semibold text-slate-800">{formatAmount(today.closing_balance)}</p>
+                            : <p className="text-sm font-medium text-slate-400" title="Filled in when the day is closed">Not closed yet</p>}
+                        </div>
                       </div>
                     </div>
 
+                    {/* Today's movement: green = in, red = out, as shares of this wallet's movement today */}
+                    {today?.today_in != null && (
+                      <div className="mt-2.5">
+                        <div className="flex h-1.5 rounded-full overflow-hidden bg-slate-100" aria-hidden="true">
+                          {moved > 0 && <div className="bg-emerald-500" style={{ width: `${(inAmt / moved) * 100}%` }} />}
+                          {moved > 0 && <div className="bg-rose-500" style={{ width: `${(outAmt / moved) * 100}%` }} />}
+                        </div>
+                        <div className="flex justify-between mt-1 text-[11px] font-semibold">
+                          <span className={inAmt ? "text-emerald-700" : "text-slate-400"}>In {inAmt ? `+${formatAmount(inAmt)}` : "₹0"}</span>
+                          <span className={outAmt ? "text-rose-700" : "text-slate-400"}>Out {outAmt ? `−${formatAmount(outAmt)}` : "₹0"}</span>
+                        </div>
+                      </div>
+                    )}
+
                     {!w.is_shared && (
-                      <div className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+                      <div className="mt-2.5 flex items-center gap-2 text-sm text-slate-600">
                         {staff ? (
                           <>
                             <Avatar name={staff.name} photo={staff.photo} size="w-6 h-6" text="text-[10px]" />
@@ -594,7 +658,7 @@ const WalletManagement = () => {
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between px-3 py-2 border-t border-slate-100">
+                  <div className="flex items-center justify-between px-3 py-1 border-t border-slate-100">
                     <Link to={`/dashboard/admin/wallets/${w.id}`} className="inline-flex items-center gap-1.5 text-sm font-medium text-navy-700 hover:text-navy-800 px-2 py-1.5 rounded-xl hover:bg-slate-100">
                       <FiActivity size={14} /> Activity
                     </Link>
@@ -616,8 +680,11 @@ const WalletManagement = () => {
                     </div>
                   </div>
                 </div>
-              );
-            })}
+                    );
+                  })}
+                </div>
+              </section>
+            ))}
           </div>
         )}
 
@@ -775,13 +842,20 @@ const WalletManagement = () => {
           <Field label="Wallet name" required>
             <input value={walletForm.data.name} onChange={(e) => setFormField("name", e.target.value)} className={inputCls} placeholder="e.g. HDFC Bank" autoFocus />
           </Field>
-          <Field
-            label={walletForm.mode === "add" ? "Opening balance" : "Balance"}
-            required
-            hint={walletForm.mode === "edit" ? "To add money, use “Add money” instead so it's recorded as a transaction." : undefined}
-          >
-            <AmountInput value={walletForm.data.balance} onChange={(v) => setFormField("balance", v)} />
-          </Field>
+          {walletForm.mode === "add" ? (
+            <Field label="Opening balance" required>
+              <AmountInput value={walletForm.data.balance} onChange={(v) => setFormField("balance", v)} />
+            </Field>
+          ) : (
+            <Field
+              label="Current balance"
+              hint="Balance can't be edited here. Use “Add money”, a transfer or an expense so every change is recorded as a transaction."
+            >
+              <p className="text-lg font-semibold text-slate-900">
+                {formatAmount(walletById[String(walletForm.id)]?.balance)}
+              </p>
+            </Field>
+          )}
           <Field label="Wallet type">
             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
               {WALLET_TYPES.map((t) => {

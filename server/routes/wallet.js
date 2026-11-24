@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { getTodayBalance, getDailyBalances } from "../controllers/walletDailyBalanceController.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { UPI_SOURCES } from "../utils/upiCredit.js";
+import { todayIST } from "../utils/dates.js";
 
 const router = express.Router();
 
@@ -139,23 +140,53 @@ router.post('/today-balances', async (req, res) => {
       }
     }
 
+    /* Today opening = the last closed day's closing (yesterday, or the last day
+         that was closed if the close was missed).
+       Today closing = only once TODAY has been closed (the scheduler's close, or
+         "Re-run Close"); until then it is null and the card says "Not closed yet".
+       Before: both read today's snapshot row, which only exists after the close,
+       so the cards showed "—" all day. Also used the DB's CURRENT_DATE, not IST. */
     const result = await client.query(
-      `SELECT wallet_id, opening_balance, closing_balance, date
-       FROM wallet_daily_balances
-       WHERE wallet_id = ANY($1::int[]) AND date = CURRENT_DATE`,
-      [ids]
+      `SELECT w.id AS wallet_id,
+              COALESCE(cur.opening_balance, prev.closing_balance) AS opening_balance,
+              prev.date                                            AS opening_from,
+              cur.closing_balance                                  AS closing_balance,
+              cur.date                                             AS closed_date,
+              mv.today_in,
+              mv.today_out
+       FROM unnest($1::int[]) AS w(id)
+       LEFT JOIN LATERAL (
+         -- money in / out of this wallet since IST midnight (all entries, not just the last 100)
+         SELECT COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'credit'), 0) AS today_in,
+                COALESCE(SUM(t.amount) FILTER (WHERE t.type = 'debit'),  0) AS today_out
+         FROM wallet_transactions t
+         WHERE t.wallet_id = w.id
+           AND t.created_at >= ($2::date)::timestamp AT TIME ZONE 'Asia/Kolkata'
+       ) mv ON true
+       LEFT JOIN LATERAL (
+         SELECT d.closing_balance, d.date
+         FROM wallet_daily_balances d
+         WHERE d.wallet_id = w.id AND d.date < $2::date
+         ORDER BY d.date DESC
+         LIMIT 1
+       ) prev ON true
+       LEFT JOIN wallet_daily_balances cur
+              ON cur.wallet_id = w.id AND cur.date = $2::date`,
+      [ids, todayIST()]
     );
 
+    const num = (v) => (v === null || v === undefined ? null : parseFloat(v));
     const balancesMap = {};
     result.rows.forEach(row => {
       balancesMap[row.wallet_id] = {
-        opening_balance: parseFloat(row.opening_balance),
-        closing_balance: parseFloat(row.closing_balance),
-        date: row.date
+        date: todayIST(),
+        opening_balance: num(row.opening_balance),
+        opening_from: row.opening_from,
+        closing_balance: num(row.closing_balance),
+        closed: row.closed_date !== null,
+        today_in: num(row.today_in) ?? 0,
+        today_out: num(row.today_out) ?? 0,
       };
-    });
-    ids.forEach(id => {
-      if (!balancesMap[id]) balancesMap[id] = null;
     });
 
     res.json(balancesMap);
@@ -320,18 +351,18 @@ router.post('/create', requireManager, async (req, res) => {
   }
 });
 
-// Update a wallet — admin (own centre) / superadmin
-// NOTE: changing `balance` here is not recorded as a transaction, so the
-// daily-close snapshots will show it as drift (that's what happened on staging).
+// Update a wallet's settings — admin (own centre) / superadmin
+// The balance is NEVER changed here, even if the request sends one.
+// Edit forms used to send back the balance they loaded when opened; saving
+// later wiped out every entry made in between (23 Nov 2026: SBI +₹10,000 at
+// 12:55 and +₹3,877 at 13:23, with no transaction behind either).
+// To correct a balance, record a transaction (POST /transactions) so it
+// shows in the ledger, the bank check and the books check.
 router.put('/:id', requireManager, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid wallet id' });
 
   const { name, wallet_type, is_shared, assigned_staff_id, status } = req.body;
-  const balanceSent = req.body.balance !== undefined && req.body.balance !== null && req.body.balance !== '';
-  if (balanceSent && !Number.isFinite(Number(req.body.balance))) {
-    return res.status(400).json({ error: 'Balance must be a number' });
-  }
 
   const client = await req.db.connect();
   try {
@@ -344,21 +375,19 @@ router.put('/:id', requireManager, async (req, res) => {
     }
 
     const centreId = current.centre_id;
-    const oldBalance = Number(current.balance);
-    const balance = balanceSent ? Math.round(Number(req.body.balance) * 100) / 100 : oldBalance; // not sent = keep
     const upi = readUpiSettings(req.body, current); // not sent = keep
+    // balance is deliberately not in this UPDATE (see note above the route)
     const result = await client.query(
-      `UPDATE wallets SET name=$1, balance=$2, wallet_type=$3, is_shared=$4, assigned_staff_id=$5, status=$6,
-              upi_match_sources=$8, upi_account_last4=$9, updated_at=NOW()
-       WHERE id=$7 RETURNING *`,
-      [name, balance, wallet_type, is_shared, assigned_staff_id || null, status, id, upi.sources, upi.last4]
+      `UPDATE wallets SET name=$1, wallet_type=$2, is_shared=$3, assigned_staff_id=$4, status=$5,
+              upi_match_sources=$7, upi_account_last4=$8, updated_at=NOW()
+       WHERE id=$6 RETURNING *`,
+      [name, wallet_type, is_shared, assigned_staff_id || null, status, id, upi.sources, upi.last4]
     );
     const centreResult = await client.query('SELECT name FROM centres WHERE id = $1', [centreId]);
     const centreName = centreResult.rows[0]?.name || 'Unknown Centre';
 
     const changes = [];
     if (name !== current.name) changes.push(`name changed to "${name}"`);
-    if (balance !== oldBalance) changes.push(`balance changed from ₹${oldBalance} to ₹${balance}`);
     if (status !== current.status) changes.push(`status changed to "${status}"`);
     const oldSources = (current.upi_match_sources || []).join(', ');
     const newSources = (upi.sources || []).join(', ');

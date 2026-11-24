@@ -486,7 +486,9 @@ const WalletActivity = () => {
           </div>
           <div>
             <p className="text-sm text-slate-500">Today closing</p>
-            <p className="text-lg font-semibold text-slate-800">{todayBalance?.closing_balance != null ? formatAmount(todayBalance.closing_balance) : "—"}</p>
+            {todayBalance?.closing_balance != null
+                          ? <p className="text-lg font-semibold text-slate-800">{formatAmount(todayBalance.closing_balance)}</p>
+                          : <p className="text-lg font-medium text-slate-400" title="Filled in when the day is closed">Not closed yet</p>}
           </div>
           <div>
             <p className="text-sm text-slate-500">Last activity</p>
