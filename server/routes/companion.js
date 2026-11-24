@@ -129,14 +129,28 @@ router.post('/pair', async (req, res) => {
 router.post('/heartbeat', deviceAuth, async (req, res) => {
     try {
         const { batteryLevel, networkStatus } = req.body;
-        
+        // App 1.2+ also reports its version and whether it can read UPI app
+        // notifications. Missing values (older app, dashboard screen) keep what was there.
+        const flag = (v) => (typeof v === "boolean" ? v : null);
+        const time = (ms) => (Number(ms) > 0 ? new Date(Number(ms)) : null);
+        const version = typeof req.body.appVersion === "string" ? req.body.appVersion.slice(0, 20) : null;
+
         await pool.query(
             `
             UPDATE companion_devices 
-            SET battery_level = $1, network_status = $2, last_seen = CURRENT_TIMESTAMP, is_online = TRUE
+            SET battery_level = $1, network_status = $2, last_seen = CURRENT_TIMESTAMP, is_online = TRUE,
+                app_version = COALESCE($4, app_version),
+                notification_access = COALESCE($5, notification_access),
+                reader_connected = COALESCE($6, reader_connected),
+                last_payment_notification_at = COALESCE($7, last_payment_notification_at),
+                last_any_notification_at = COALESCE($8, last_any_notification_at)
             WHERE id = $3
             `,
-            [batteryLevel, networkStatus, req.device.id]
+            [
+                batteryLevel, networkStatus, req.device.id,
+                version, flag(req.body.notificationAccess), flag(req.body.readerConnected),
+                time(req.body.lastPaymentNotificationAt), time(req.body.lastAnyNotificationAt),
+            ]
         );
         
         res.status(200).json({ message: "Heartbeat acknowledged" });
@@ -177,7 +191,8 @@ router.post('/unpair', deviceAuth, async (req, res) => {
 router.get("/devices", authMiddleware(["admin", "superadmin"]), async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT id, device_name, app_version, battery_level, network_status, last_seen, is_active 
+            `SELECT id, device_name, app_version, battery_level, network_status, last_seen, is_active,
+                    notification_access, reader_connected, last_payment_notification_at, last_any_notification_at
              FROM companion_devices 
              WHERE centre_id = $1 
              ORDER BY last_seen DESC`,
