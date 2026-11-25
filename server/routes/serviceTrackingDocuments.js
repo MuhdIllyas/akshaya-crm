@@ -8,6 +8,7 @@ import pool from "../db.js";
 import { logActivity } from "../utils/activityLogger.js";
 import { triggerNotification } from "../utils/communication/notificationEngine.js";
 import { orgUploadPath } from '../tenancy/uploads.js';
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -60,8 +61,7 @@ const checkTrackingAccess = async (req, trackingId) => {
 
   if (req.user.role === "superadmin") return row;
   if (req.user.role === "admin") return row.centre_id === req.user.centre_id ? row : null;
-  if (req.user.role === "supervisor") return row.reports_to === req.user.id ? row : null;
-  if (req.user.role === "staff") return row.assigned_to === req.user.id ? row : null;
+  if (isStaffLike(req.user.role)) return row.assigned_to === req.user.id ? row : null;
   return null;
 };
 

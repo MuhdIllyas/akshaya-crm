@@ -349,7 +349,7 @@ const MessengerPage = ({ user }) => {
 
   const [taskFilter, setTaskFilter] = useState("all");
   // "mine" = assigned to me or created by me; "all" = everyone in the centre
-  const [taskScope, setTaskScope] = useState(currentUser.role === "staff" ? "mine" : "all");
+  const [taskScope, setTaskScope] = useState(currentUser.role === "staff" || currentUser.role === "supervisor" ? "mine" : "all");
   const [taskViewMode, setTaskViewMode] = useState("board");
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);

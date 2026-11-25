@@ -11,6 +11,7 @@ import { createReviewRequest } from './reviews.js';
 import { aadhaarColumns, hashAadhaar, digitsOnly, linkEntryToCustomerByAadhaar } from '../utils/aadhaar.js';
 import { staffCustomerCentre, isCustomerAtCentre, bookingInCentreSql } from '../utils/customerCentres.js';
 import { triggerNotification } from '../utils/communication/notificationEngine.js';
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -1137,7 +1138,7 @@ router.post('/entries/:id/notify', authenticateToken, async (req, res) => {
     }
     const centreId = entryStaffResult.rows[0].centre_id;
 
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       const assignedCheck = await client.query(
         'SELECT id FROM service_tracking WHERE id = $1 AND assigned_to = $2',
         [parseInt(id), parseInt(req.user.id)]
@@ -1145,15 +1146,6 @@ router.post('/entries/:id/notify', authenticateToken, async (req, res) => {
       if (assignedCheck.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(403).json({ error: 'Unauthorized: You can only notify for entries assigned to you' });
-      }
-    } else if (req.user.role === 'supervisor') {
-      const supervisorCheck = await client.query(
-        'SELECT se_staff.reports_to FROM service_entries se JOIN staff se_staff ON se.staff_id = se_staff.id WHERE se.id = $1',
-        [entry.service_entry_id]
-      );
-      if (supervisorCheck.rows.length === 0 || supervisorCheck.rows[0].reports_to !== parseInt(req.user.id)) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'Unauthorized: You can only notify for entries of staff reporting to you' });
       }
     } else if (req.user.role === 'admin' && centreId !== parseInt(req.user.centre_id)) {
       await client.query('ROLLBACK');
@@ -2068,7 +2060,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
     const centreId = entryStaffResult.rows[0].centre_id;
     const customerServiceId = serviceEntry.rows[0].customer_service_id;
 
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       const assignedCheck = await client.query(
         'SELECT id FROM service_tracking WHERE id = $1 AND assigned_to = $2',
         [parseInt(id), parseInt(req.user.id)]
@@ -2076,15 +2068,6 @@ router.put('/:id', authenticateToken, async (req, res) => {
       if (assignedCheck.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(403).json({ error: 'Unauthorized: You can only update entries assigned to you' });
-      }
-    } else if (req.user.role === 'supervisor') {
-      const supervisorCheck = await client.query(
-        'SELECT se_staff.reports_to FROM service_entries se JOIN staff se_staff ON se.staff_id = se_staff.id WHERE se.id = $1',
-        [existingEntry.service_entry_id]
-      );
-      if (supervisorCheck.rows.length === 0 || supervisorCheck.rows[0].reports_to !== parseInt(req.user.id)) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'Unauthorized: You can only update entries for staff reporting to you' });
       }
     } else if (req.user.role === 'admin' && centreId !== parseInt(req.user.centre_id)) {
       await client.query('ROLLBACK');
@@ -2149,7 +2132,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
       updateFields.push(`status = $${paramIndex++}`);
       updateValues.push(status);
     }
-    if (assignedTo !== undefined && (assignedTo || req.user.role !== 'staff')) {
+    if (assignedTo !== undefined && (assignedTo || !isStaffLike(req.user.role))) {
       // null / '' = Unassigned (admins only, so staff can't lock themselves out)
       updateFields.push(`assigned_to = $${paramIndex++}`);
       updateValues.push(assignedTo ? parseInt(assignedTo) : null);
@@ -2498,7 +2481,7 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
     const centreId = entryStaffResult.rows[0].centre_id;
     const customerServiceId = serviceEntry.rows[0].customer_service_id;
 
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       const assignedCheck = await client.query(
         'SELECT id FROM service_tracking WHERE id = $1 AND assigned_to = $2',
         [parseInt(id), parseInt(req.user.id)]
@@ -2506,15 +2489,6 @@ router.put('/entries/:id/update-status', authenticateToken, async (req, res) => 
       if (assignedCheck.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(403).json({ error: 'Unauthorized: You can only update entries assigned to you' });
-      }
-    } else if (req.user.role === 'supervisor') {
-      const supervisorCheck = await client.query(
-        'SELECT se_staff.reports_to FROM service_entries se JOIN staff se_staff ON se.staff_id = se_staff.id WHERE se.id = $1',
-        [existingEntry.service_entry_id]
-      );
-      if (supervisorCheck.rows.length === 0 || supervisorCheck.rows[0].reports_to !== parseInt(req.user.id)) {
-        await client.query('ROLLBACK');
-        return res.status(403).json({ error: 'Unauthorized: You can only update entries for staff reporting to you' });
       }
     } else if (req.user.role === 'admin' && centreId !== parseInt(req.user.centre_id)) {
       await client.query('ROLLBACK');
@@ -2770,12 +2744,9 @@ router.get('/', authenticateToken, async (req, res) => {
       conditions.push(`st.updated_at::date = CURRENT_DATE`);
     }
 
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       conditions.push(`st.assigned_to = $${values.length + 1}`);
       values.push(parseInt(req.user.id));
-    } else if (req.user.role === 'supervisor') {
-      conditions.push(`se_staff.centre_id = $${values.length + 1} AND se_staff.reports_to = $${values.length + 2}`);
-      values.push(parseInt(req.user.centre_id), parseInt(req.user.id));
     } else if (req.user.role === 'admin') {
       conditions.push(`se_staff.centre_id = $${values.length + 1}`);
       values.push(parseInt(req.user.centre_id));

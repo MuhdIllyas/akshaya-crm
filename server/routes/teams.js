@@ -8,6 +8,7 @@ import {
   archiveTeamChat,
   safely,
 } from "../utils/teamChatService.js";
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -76,7 +77,7 @@ router.get("/", async (req, res) => {
     const values = [];
 
     // STAFF
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       query += `
         JOIN team_members stm
           ON stm.team_id = t.id
@@ -520,7 +521,7 @@ router.get("/analytics/summary", async (req, res) => {
       paramIndex++;
     }
 
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       teamWhere += `
         AND EXISTS (
           SELECT 1

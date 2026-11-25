@@ -43,7 +43,7 @@ export const ensureTargets = (db, { month = null, centreId = null, staffId = nul
         GROUP BY date_trunc('month', se.created_at)
       ) x
     ) b ON true
-    WHERE s.role = 'staff'                                   -- add AND s.is_active if you have such a column
+    WHERE s.role IN ('staff', 'supervisor')                                   -- add AND s.is_active if you have such a column
       AND ($2::int  IS NULL OR s.centre_id = $2::int)
       AND ($3::text IS NULL OR s.id::text = $3::text)
       AND NOT EXISTS (

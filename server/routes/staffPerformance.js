@@ -6,6 +6,7 @@ import { logActivity } from '../utils/activityLogger.js';
 import { ensureTargets, refreshActive } from '../utils/staffTargets.js';
 import { todayIST, addDays } from '../utils/dates.js';
 import { BOOKING_MODES, getBookingMode } from '../utils/orgSettings.js';
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ const authenticateToken = (req, res, next) => {
 
 // Middleware to restrict to staff role
 const requireStaff = (req, res, next) => {
-  if (req.user.role !== 'staff') {
+  if (!isStaffLike(req.user.role)) {
     return res.status(403).json({ error: 'Staff access required' });
   }
   next();

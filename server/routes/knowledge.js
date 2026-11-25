@@ -42,7 +42,7 @@ const authorizeRoles = (allowedRoles) => {
 };
 
 // Role definitions 
-const ALL_STAFF = ['staff', 'admin', 'superadmin'];
+const ALL_STAFF = ['staff', 'supervisor', 'admin', 'superadmin'];
 const ADMIN_ONLY = ['admin', 'superadmin'];
 const SUPERADMIN_ONLY = ['superadmin'];
 

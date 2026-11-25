@@ -2,6 +2,7 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 import notificationService from "../utils/notificationService.js"; 
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -717,7 +718,7 @@ router.put("/:id/correct", async (req, res) => {
       `SELECT COUNT(*)::int AS n FROM expenses WHERE correction_group_id = $1 AND COALESCE(is_reversal, FALSE) = FALSE`,
       [groupId]
     );
-    if (countRes.rows[0].n >= 3 && req.user.role === "staff") {
+    if (countRes.rows[0].n >= 3 && isStaffLike(req.user.role)) {
       throw httpErr(400, "Maximum correction limit reached. Please contact an admin.");
     }
  

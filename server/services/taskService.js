@@ -14,7 +14,7 @@ import { notificationTemplates } from "../utils/notificationTemplates.js";
 
 export const SYSTEM_ACTOR = Object.freeze({ id: null, role: "system", centre_id: null });
 
-const ALLOWED_ROLES = ["admin", "superadmin", "staff", "system"];
+const ALLOWED_ROLES = ["admin", "superadmin", "staff", "supervisor", "system"];
 
 const toId = (v) => {
   const n = parseInt(v, 10);

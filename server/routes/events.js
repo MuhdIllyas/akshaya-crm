@@ -3,6 +3,7 @@
 import express from "express";
 import pool from "../db.js";
 import jwt from "jsonwebtoken";
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ const buildRoleFilter = (user, requestedCentreId) => {
     };
   }
 
-  if (user.role === "staff") {
+  if (isStaffLike(user.role)) {
     return {
       query: `AND (e.visibility = 'global' OR (e.visibility = 'centre' AND e.centre_id = $1 AND (e.assigned_to IS NULL OR e.assigned_to = $2)))`,
       values: [user.centre_id, user.id],
@@ -187,7 +188,7 @@ router.get("/", async (req, res) => {
     let taskFilter = "";
     let taskValues = [];
 
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       taskFilter = `AND t.assigned_to = $1`;
       taskValues.push(req.user.id);
     } else if (req.user.role === "admin") {
@@ -265,7 +266,7 @@ router.get("/", async (req, res) => {
     let expiryFilter = "";
     let expiryValues = [];
 
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       expiryFilter = `WHERE se.staff_id = $1 AND se.expiry_date IS NOT NULL AND se.is_expiry_dismissed = FALSE`;
       expiryValues.push(req.user.id);
     } else if (req.user.role === "admin") {
@@ -352,7 +353,7 @@ router.get("/", async (req, res) => {
       let deliveryFilter = "WHERE tr.status NOT IN ('completed', 'paid', 'delivered')";
       let deliveryValues = [];
 
-      if (req.user.role === "staff") {
+      if (isStaffLike(req.user.role)) {
         deliveryFilter += ` AND tr.assigned_to = $1`;
         deliveryValues.push(req.user.id);
       } else if (req.user.role === "admin") {

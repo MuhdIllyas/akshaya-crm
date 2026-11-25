@@ -173,7 +173,7 @@ router.get("/staff-performance", async (req, res) => {
       LEFT JOIN payment_agg pa ON pa.staff_id = s.id
       LEFT JOIN review_agg ra  ON ra.staff_id = s.id
 
-      WHERE s.role = 'staff'
+      WHERE s.role IN ('staff', 'supervisor')
       ${centreFilter}
 
       ORDER BY collected_amount DESC;
@@ -325,7 +325,7 @@ router.get("/trainee-performance", async (req, res) => {
       LEFT JOIN payment_agg pa ON pa.staff_id = s.id
       LEFT JOIN review_agg ra  ON ra.staff_id = s.id
 
-      WHERE s.role = 'staff'
+      WHERE s.role IN ('staff', 'supervisor')
         -- 🔥 CRITICAL: ONLY FETCH PROBATION/TRAINEE STAFF
         AND s.employment_type = 'Probation'
       ${centreFilter}

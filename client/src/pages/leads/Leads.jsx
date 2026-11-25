@@ -15,7 +15,7 @@ import StaffName from '@/components/staff/StaffName';
 ------------------------------------------------------------------- */
 const MESSENGER_PATH = (role) => `/dashboard/${role}/messenger`;
 // Service Entry exists only for staff
-const SERVICE_ENTRY_PATH = (role) => (role === "staff" ? "/dashboard/staff/service_entry" : null);
+const SERVICE_ENTRY_PATH = (role) => (role === "staff" || role === "supervisor" ? "/dashboard/staff/service_entry" : null);
 
 const API_BASE_URL = import.meta.env.VITE_API_URL;
 

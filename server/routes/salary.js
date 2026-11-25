@@ -5,6 +5,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { notificationTemplates } from '../utils/notificationTemplates.js';
 import notificationService from '../utils/notificationService.js'; 
 import { todayIST, addDays } from '../utils/dates.js';
+import { isStaffLike } from "../utils/roles.js";
 
 // A Postgres DATE arrives as local midnight of whatever zone Node runs in, so its local
 // parts are the stored day. (toISOString() would shift it a day back if Node ever ran in IST.)
@@ -23,7 +24,7 @@ router.use(authMiddleware(['admin', 'superadmin', 'staff']));
 router.get('/staff', async (req, res) => {
   const client = await pool.connect();
   try {
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       const result = await client.query(
         `SELECT id, username, name, role, department, email, phone, status,
          join_date AS "joinDate", photo, employee_id AS "employeeId",
@@ -114,7 +115,7 @@ router.get('/staff/:id/schedules', authMiddleware(['admin', 'superadmin', 'staff
   const { id } = req.params;
   const client = await pool.connect();
   try {
-    if (req.user.role === 'staff' && req.user.id != id) {
+    if (isStaffLike(req.user.role) && req.user.id != id) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
     if (req.user.role === 'admin') {
@@ -146,7 +147,7 @@ router.get('/attendance', async (req, res) => {
   try {
     if (!month) return res.status(400).json({ error: 'Month parameter is required' });
 
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       const result = await client.query(
         `SELECT a.id, a.staff_id, TO_CHAR(a.date, 'YYYY-MM-DD') AS date, a.punch_in, a.punch_out, 
                 a.breaks, a.hours, a.status, a.late_minutes, a.extra_minutes, s.name AS staff_name
@@ -707,7 +708,7 @@ router.get('/leaves', async (req, res) => {
     // --- Dynamic WHERE Clause Logic ---
     let whereClause = '';
     
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       whereClause = `l.staff_id = $${paramIndex++}`;
       params.push(req.user.id);
     } else {
@@ -1165,7 +1166,7 @@ router.post('/runs/:id/generate', authMiddleware(['admin', 'superadmin']), async
           WHERE s.centre_id = $1 
             AND ss.status = 'active'
             AND s.status = 'Active'   
-            AND s.role = 'staff'      
+            AND s.role IN ('staff', 'supervisor')      
             -- 🔥 NEW: Ensure staff joined on or before the payroll month
             AND DATE_TRUNC('month', s.join_date::date) <= DATE_TRUNC('month', $2::date)
       `, [run.centre_id, run.payroll_month])).rows; // 🔥 Added run.payroll_month as the 2nd parameter
@@ -1300,7 +1301,7 @@ router.get('/runs/:id/records', authMiddleware(['admin', 'superadmin']), async (
           JOIN staff s ON sr.staff_id = s.id
           WHERE sr.salary_run_id = $1
             AND s.status = 'Active'   -- 🔥 ONLY SHOW ACTIVE STAFF
-            AND s.role = 'staff'      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
+            AND s.role IN ('staff', 'supervisor')      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
           ORDER BY s.name ASC
       `, [req.params.id]);
       res.json(result.rows);
@@ -1482,7 +1483,7 @@ router.post('/records/:id/pay', authMiddleware(['admin', 'superadmin']), async (
 
 // GET /api/salary/calendar - Get calendar events (staff sees their centre's events)
 router.get('/calendar', async (req, res) => {
-  const centreId = req.user.role === 'staff' ? req.user.centre_id : (req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id);
+  const centreId = isStaffLike(req.user.role) ? req.user.centre_id : (req.user.role === 'admin' ? req.user.centre_id : req.query.centre_id);
   const client = await pool.connect();
   try {
     if (!centreId) {
@@ -1678,7 +1679,7 @@ router.get("/schedule/:id", authMiddleware(["admin", "superadmin", "staff"]), as
 
   const client = await pool.connect();
   try {
-    if (req.user.role === 'staff' && req.user.id != id) {
+    if (isStaffLike(req.user.role) && req.user.id != id) {
       return res.status(403).json({ error: 'Unauthorized to access this staff member' });
     }
     
@@ -2333,7 +2334,7 @@ router.get('/structures', authMiddleware(['admin', 'superadmin']), async (req, r
           WHERE s.centre_id = $1 
             AND ss.status = 'active'
             AND s.status = 'Active'   -- 🔥 ONLY SHOW ACTIVE STAFF
-            AND s.role = 'staff'      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
+            AND s.role IN ('staff', 'supervisor')      -- 🔥 EXCLUDE ADMINS & SUPERADMINS
           ORDER BY s.name ASC
       `, [centreId]);
       res.json(result.rows);

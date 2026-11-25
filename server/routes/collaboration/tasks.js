@@ -6,6 +6,7 @@ import { logActivity } from "../../utils/activityLogger.js";
 import { createTask } from "../../services/taskService.js";
 import { addStaffToConversation } from "../../utils/conversationService.js";
 import { notificationTemplates } from "../../utils/notificationTemplates.js";
+import { isStaffLike } from "../../utils/roles.js";
 
 const router = express.Router();
 
@@ -334,7 +335,7 @@ router.patch("/:id/status", async (req, res) => {
     }
 
     if (
-      req.user.role === "staff" &&
+      isStaffLike(req.user.role) &&
       task.assigned_to !== req.user.id
     ) {
       await client.query("ROLLBACK");
@@ -799,7 +800,7 @@ router.patch("/template/:id", async (req, res) => {
       return res.status(403).json({ error: "Not allowed" });
     }
 
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       await client.query("ROLLBACK");
       return res.status(403).json({ error: "Not allowed" });
     }
@@ -876,7 +877,7 @@ router.patch("/template/:id/toggle", async (req, res) => {
       return res.status(403).json({ error: "Not allowed" });
     }
 
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       return res.status(403).json({ error: "Not allowed" });
     }
 
@@ -936,7 +937,7 @@ router.delete("/template/:id", async (req, res) => {
       throw new Error("Not allowed");
     }
 
-    if (req.user.role === "staff") {
+    if (isStaffLike(req.user.role)) {
       throw new Error("Not allowed");
     }
 

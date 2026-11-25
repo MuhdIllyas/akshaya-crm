@@ -16,7 +16,6 @@ import PlatformLogin from "./pages/platform/PlatformLogin";
 import PlatformAdmin from "./pages/platform/PlatformAdmin";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
-import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
 import CalendarPage from "./pages/CalendarPage";
 import StaffManagement from "./pages/admin/StaffManagement";
@@ -352,7 +351,8 @@ const App = () => {
             <Route path="superadmin" element={<ProtectedRoute allowedRoles={["superadmin"]}><SuperadminDashboard /></ProtectedRoute>} />
             <Route path="admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="staff" element={<ProtectedRoute allowedRoles={["staff"]}><StaffDashboard /></ProtectedRoute>} />
-            <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorDashboard /></ProtectedRoute>} />
+            {/* Supervisor = staff work + the centre accounts. Uses the staff dashboard until the supervisor home is built. */}
+            <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><StaffDashboard /></ProtectedRoute>} />
 
             {/* Unified My Profile route for staff, admin, superadmin */}
             <Route
@@ -566,7 +566,7 @@ const App = () => {
             />
             <Route
               path="staff/leads"
-              element={<ProtectedRoute allowedRoles={["staff"]}><Leads /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><Leads /></ProtectedRoute>}
             />
             <Route
               path="staff/service_checklist"
@@ -574,11 +574,11 @@ const App = () => {
             />
             <Route
               path="staff/token/:tokenId/service"
-              element={<ProtectedRoute allowedRoles={["staff"]}><ServiceEntry /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><ServiceEntry /></ProtectedRoute>}
             />
             <Route
               path="staff/online-service/:customerServiceId"
-              element={<ProtectedRoute allowedRoles={["staff"]}><ServiceEntry /></ProtectedRoute>}
+              element={<ProtectedRoute allowedRoles={["staff", "supervisor"]}><ServiceEntry /></ProtectedRoute>}
             />
             <Route
               path="staff/all-entries"

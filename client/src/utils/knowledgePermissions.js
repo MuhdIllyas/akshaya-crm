@@ -8,7 +8,7 @@
 const STAFF = 'staff';
 const ADMIN = 'admin';
 const SUPERADMIN = 'superadmin';
-const EVERYONE = [STAFF, ADMIN, SUPERADMIN];
+const EVERYONE = [STAFF, 'supervisor', ADMIN, SUPERADMIN];
 const MANAGERS = [ADMIN, SUPERADMIN];
 
 export const PERMISSIONS = {

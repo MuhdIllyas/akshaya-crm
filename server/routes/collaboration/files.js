@@ -5,6 +5,7 @@ import path from "path";
 import jwt from "jsonwebtoken";
 import pool from "../../db.js";
 import { orgUploadPath } from '../../tenancy/uploads.js';
+import { isStaffLike } from "../../utils/roles.js";
 
 const router = express.Router();
 
@@ -35,7 +36,7 @@ const storage = multer.diskStorage({
 
     if (isGlobal) {
       // 🔥 SECURITY: Prevent staff from uploading to the global folder
-      if (req.user.role === "staff") {
+      if (isStaffLike(req.user.role)) {
         return cb(new Error("Staff members are not allowed to upload global files"));
       }
       uploadPath = path.join(base, "global");
@@ -119,7 +120,7 @@ router.post("/upload", authenticateToken, upload.single("file"), async (req, res
     } else if (req.user.role === "admin") {
       // Admin can upload globally OR to their own centre
       finalCentreId = isGlobalBool ? null : req.user.centre_id;
-    } else if (req.user.role === "staff") {
+    } else if (isStaffLike(req.user.role)) {
       // 🔥 SECURITY: Block staff from creating global files in the database
       if (isGlobalBool) {
         throw new Error("Staff members are not allowed to upload global files");
@@ -265,7 +266,7 @@ router.get("/", authenticateToken, async (req, res) => {
     if (req.user.role === "admin") {
       query += ` AND (f.is_global = true OR f.centre_id = $1)`;
       params.push(req.user.centre_id);
-    } else if (req.user.role === "staff") {
+    } else if (isStaffLike(req.user.role)) {
       query += ` AND (f.is_global = true OR f.centre_id = $1)`;
       params.push(req.user.centre_id);
     }
@@ -400,7 +401,7 @@ router.get("/version/:id", authenticateToken, async (req, res) => {
       file.centre_id === req.user.centre_id || 
       req.user.role === "superadmin" ||
       (req.user.role === "admin" && file.centre_id === req.user.centre_id) ||
-      (req.user.role === "staff" && file.centre_id === req.user.centre_id);
+      (isStaffLike(req.user.role) && file.centre_id === req.user.centre_id);
 
     if (!hasAccess) {
       return res.status(403).json({ error: "Access denied" });
@@ -463,7 +464,7 @@ router.get("/version/:id/download", async (req, res) => {
         file.centre_id === user.centre_id || 
         user.role === "superadmin" ||
         (user.role === "admin" && file.centre_id === user.centre_id) ||
-        (user.role === "staff" && file.centre_id === user.centre_id);
+        (isStaffLike(user.role) && file.centre_id === user.centre_id);
 
       if (!hasAccess) {
         return res.status(403).json({ error: "Access denied" });
@@ -507,7 +508,7 @@ router.get("/stats/summary", authenticateToken, async (req, res) => {
 
     const params = [];
 
-    if (req.user.role === "admin" || req.user.role === "staff") {
+    if (req.user.role === "admin" || isStaffLike(req.user.role)) {
       query += ` AND (f.is_global = true OR f.centre_id = $1)`;
       params.push(req.user.centre_id);
     }

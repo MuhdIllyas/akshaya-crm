@@ -7,6 +7,7 @@ import { logActivity } from "../utils/activityLogger.js";
 import { orgUploadPath } from '../tenancy/uploads.js';
 import { checkCountLimit } from '../tenancy/limits.js';
 import fs from 'fs';
+import { roleAllowed } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ export const authMiddleware = (allowedRoles) => async (req, res, next) => {
 
     // Normalize role to lowercase for comparison
     const userRole = result.rows[0].role.toLowerCase();
-    if (!allowedRoles.includes(userRole)) {
+    if (!roleAllowed(userRole, allowedRoles)) {
       console.log(`Auth middleware: Role ${userRole} not allowed. Required: ${allowedRoles}`);
       return res.status(403).json({ error: "Unauthorized access" });
     }

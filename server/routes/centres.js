@@ -6,6 +6,7 @@ import path from "path";
 import { orgUploadPath } from '../tenancy/uploads.js';
 import { checkCountLimit } from '../tenancy/limits.js';
 import fs from 'fs';
+import { roleAllowed } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -30,7 +31,7 @@ const authMiddleware = (allowedRoles) => async (req, res, next) => {
     }
 
     const userRole = result.rows[0].role;
-    if (!allowedRoles.includes(userRole)) {
+    if (!roleAllowed(userRole, allowedRoles)) {
       return res.status(403).json({ error: "Unauthorized access" });
     }
 

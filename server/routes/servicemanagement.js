@@ -13,6 +13,7 @@ import { aadhaarColumns } from '../utils/aadhaar.js';
 import { todayIST, istParts } from '../utils/dates.js';
 import { lockServiceTask, completeServiceTask, afterServiceTaskCompleted } from '../services/serviceTaskLink.js';
 import { scheduleUpiMatch } from "../services/upiMatcher.js";
+import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -1210,7 +1211,7 @@ router.get('/entries', authenticateToken, async (req, res) => {
     }
 
     // 1. Staff can ONLY ever see their own entries (highest security)
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
       conditions.push(`se.staff_id = $${values.length + 1}`);
       values.push(parseInt(req.user.id));
     } 
@@ -2139,7 +2140,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     if (subcategoryId !== undefined && parseInt(subcategoryId) !== parseInt(existingEntry.subcategory_id)) isFinancialEdit = true;
 
     // Block if they are trying to do a financial edit but have already used their 1 allowed edit
-    if (req.user.role === 'staff' && isFinancialEdit && existingEntry.is_edited) {
+    if (isStaffLike(req.user.role) && isFinancialEdit && existingEntry.is_edited) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'You have already used your one-time edit for financial details. You can only edit name, phone, and expiry dates.' });
     }
@@ -2237,7 +2238,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     
     // Only lock the entry if they actually changed financial data
-    if (req.user.role === 'staff' && isFinancialEdit && !existingEntry.is_edited) {
+    if (isStaffLike(req.user.role) && isFinancialEdit && !existingEntry.is_edited) {
       updateFields.push(`is_edited = true`);
     }
     
@@ -2412,7 +2413,7 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
     const entry = entryRes.rows[0];
 
     // 2. Security Check: Only Admins/Superadmins can force delete
-    if (req.user.role === 'staff') {
+    if (isStaffLike(req.user.role)) {
        await client.query('ROLLBACK');
        return res.status(403).json({ 
          error: 'Staff are not authorized to hard-delete entries. Please contact an admin.' 
@@ -2592,7 +2593,7 @@ router.get('/transactions/:id/correction-status', authenticateToken, async (req,
     );
     const correctionCount = parseInt(countRes.rows[0].correction_count);
     const correctionsUsed = correctionCount - 1;
-    const canCorrect = req.user.role === 'staff' ? correctionsUsed < 2 : true;
+    const canCorrect = isStaffLike(req.user.role) ? correctionsUsed < 2 : true;
     
     res.json({ transaction_id: tx.id, correction_group_id: groupId, total_entries: correctionCount, corrections_used: correctionsUsed, max_corrections_staff: 2, can_correct: canCorrect, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
   } catch (err) {
@@ -2777,7 +2778,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     }
 
     // 🔥 STAFF LIMIT
-    if (user.role === 'staff') {
+    if (isStaffLike(user.role)) {
       const countRes = await client.query(
         `SELECT COUNT(*) FROM wallet_transactions 
          WHERE correction_group_id = $1 
@@ -3600,7 +3601,7 @@ router.get('/staff/campaign-tokens', authenticateToken, async (req, res) => {
   
   try {
     // Only staff and admin/superadmin can access
-    if (req.user.role !== 'staff' && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
+    if (!isStaffLike(req.user.role) && req.user.role !== 'admin' && req.user.role !== 'superadmin') {
       return res.status(403).json({ error: 'Access denied' });
     }
 
@@ -4052,7 +4053,7 @@ router.put('/tokens/:tokenId/cancel', authenticateToken, async (req, res) => {
     let isAuthorised = false;
     if (user.role === 'superadmin') isAuthorised = true;
     else if (user.role === 'admin' && centreId === user.centre_id) isAuthorised = true;
-    else if (user.role === 'staff' && centreId === user.centre_id) isAuthorised = true;
+    else if (isStaffLike(user.role) && centreId === user.centre_id) isAuthorised = true;
 
     if (!isAuthorised) {
       return res.status(403).json({ error: 'Not authorised to cancel this token' });
@@ -4493,7 +4494,7 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
     let values = [];
     let idx = 1;
 
-    if (role === "staff") {
+    if (isStaffLike(role)) {
       conditions.push(`se.staff_id = $${idx++}`);
       values.push(userId);
     }
@@ -4928,7 +4929,7 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
     let values = [];
     let idx = 1;
 
-    if (role === "staff") {
+    if (isStaffLike(role)) {
       conditions.push(`se.staff_id = $${idx++}`);
       values.push(userId);
     }
@@ -5081,7 +5082,7 @@ router.post("/pending-payments/:id/send-whatsapp",
 
       // Staff → only own entries
       if (
-        req.user.role === "staff" &&
+        isStaffLike(req.user.role) &&
         Number(access.staff_id) !== Number(req.user.id)
       ) {
         return res.status(403).json({

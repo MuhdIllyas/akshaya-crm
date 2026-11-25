@@ -1,6 +1,7 @@
 import express from "express";
 import pool from "../../db.js";
 import { authMiddleware } from "../staff.js";
+import { isStaffLike } from "../../utils/roles.js";
 
 const router = express.Router();
 
@@ -26,7 +27,7 @@ router.get("/", async (req, res) => {
     } else if (req.user.role === "admin") {
       centreFilter += " AND (ce.centre_id = $1 OR ce.visibility = 'global')";
       values.push(req.user.centre_id);
-    } else if (req.user.role === "staff") {
+    } else if (isStaffLike(req.user.role)) {
       centreFilter += " AND (ce.visibility = 'global' OR (ce.centre_id = $1 AND (ce.assigned_to IS NULL OR ce.assigned_to = $2)))";
       values.push(req.user.centre_id, req.user.id);
     }
@@ -64,7 +65,7 @@ router.get("/", async (req, res) => {
     } else if (req.user.role === "admin") {
       taskFilter = "AND t.centre_id = $1";
       taskValues.push(req.user.centre_id);
-    } else if (req.user.role === "staff") {
+    } else if (isStaffLike(req.user.role)) {
       taskFilter = "AND t.centre_id = $1 AND t.assigned_to = $2";
       taskValues.push(req.user.centre_id, req.user.id);
     }

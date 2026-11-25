@@ -382,12 +382,26 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
       { path: "/dashboard/staff/customers", label: "Customers Profile", icon: CustomersIcon }
     ],
+    // Same as staff for now; the Accounts section is added in the next step.
     supervisor: [
-      { path: "/dashboard/supervisor", label: "Team Overview", icon: DashboardIcon },
-      { path: "/dashboard/supervisor/team", label: "My Team", icon: TeamIcon },
-      { path: "/dashboard/supervisor/approvals", label: "Approvals", icon: ApprovalIcon },
-      { path: "/dashboard/supervisor/reports", label: "Reports", icon: ReportsIcon },
-      { path: "/dashboard/supervisor/analytics", label: "Analytics", icon: AnalyticsIcon }
+      { path: "/dashboard/supervisor", label: "My Dashboard", icon: DashboardIcon },
+      { path: "/dashboard/staff/calendar", label: "Calendar", icon: CalendarIcon },
+      { path: "/dashboard/staff/tasks", label: "My Tasks", icon: TasksIcon },
+      { path: "/dashboard/staff/notes", label: "Notes", icon: NotesIconWithBadge },
+      { path: "/dashboard/staff/performance", label: "Performance", icon: ChartIcon },
+      { path: "/dashboard/staff/attendance", label: "Salary & Attendance", icon: SalaryAttendanceIcon },
+      { path: "/dashboard/staff/service_entry", label: "Service Entry", icon: ServiceEntryIcon },
+      { path: "/dashboard/staff/leads", label: "Leads", icon: LeadsIconWithBadge },
+      { path: "/dashboard/staff/expense_entry", label: "Expense Entry", icon: ExpenseEntryIcon },
+      { path: "/dashboard/staff/pending_payments", label: "Pending Payments", icon: PendingPaymentIcon },
+      { path: "/dashboard/staff/notifications", label: "Notifications", icon: NotificationsIconWithBadge }, 
+      { path: "/dashboard/staff/teams", label: "My Team", icon: TeamIcon },
+      { path: "/dashboard/staff/messenger", label: "Messenger", icon: MessengerIconWithBadge },
+      { path: "/dashboard/staff/operationshub", label: "Knowledge Hub", icon: KnowledgeHubIcon },
+      { path: "/dashboard/staff/token", label: "Token Generator", icon: TokenGeneratorIcon },
+      { path: "/dashboard/staff/campaigns", label: "Campaigns", icon: CampaignIcon },
+      { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
+      { path: "/dashboard/staff/customers", label: "Customers Profile", icon: CustomersIcon }
     ],
     customer: [
       { path: "/customer/dashboard", label: "Home", icon: DashboardIcon },
@@ -471,7 +485,7 @@ const DashboardLayout = () => {
       : "";
 
   // Quick Service Entry is a pop-up (not a page): the layout owns it so "Q" works from any page (staff only)
-  const quickEnabled = role === "staff";
+  const quickEnabled = role === "staff" || role === "supervisor";
   const [quickOpen, setQuickOpen] = useState(false);
   const [quickWallets, setQuickWallets] = useState([]);
   const quickWalletsLoaded = useRef(false);
@@ -875,7 +889,7 @@ const DashboardLayout = () => {
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
-            {(role === "staff" || role === "admin") && <UpiChip />}
+            {(role === "staff" || role === "supervisor" || role === "admin") && <UpiChip />}
             {showTicker && liveOtps.length > 0 && (
               <OtpPill otp={liveOtps[0]} count={liveOtps.length} onOpen={() => otpsPath && navigate(otpsPath)} />
             )}

@@ -44,7 +44,7 @@ const fetchStaffAnalytics = async (client, centreId, dates) => {
       SELECT s.name as staff_name, COUNT(se.id) as service_count, COALESCE(SUM(se.service_charges), 0) as total_revenue
       FROM staff s 
       LEFT JOIN service_entries se ON s.id = se.staff_id AND se.created_at::date >= $2 AND se.created_at::date <= $3
-      WHERE s.centre_id = $1 AND s.role = 'staff'
+      WHERE s.centre_id = $1 AND s.role IN ('staff', 'supervisor')
       GROUP BY s.id, s.name ORDER BY total_revenue DESC LIMIT 5
     `, [centreId, dates.periodFrom || dates.firstDayOfMonth, dates.periodTo || dates.today])
   ]);
@@ -987,7 +987,7 @@ const fetchIncentiveAnalytics = async (client, centreId, dates) => {
       LEFT JOIN service_agg sa ON sa.staff_id = s.id
       LEFT JOIN payment_agg pa ON pa.staff_id = s.id
       LEFT JOIN review_agg ra ON ra.staff_id = s.id
-      WHERE s.role = 'staff' AND s.centre_id = $1
+      WHERE s.role IN ('staff', 'supervisor') AND s.centre_id = $1
       ORDER BY incentive_score DESC NULLS LAST
     `, [centreId, dates.fromDate, dates.toDate]);
 
