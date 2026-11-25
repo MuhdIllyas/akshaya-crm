@@ -51,7 +51,9 @@ const StatCard = ({ title, value, icon: Icon, color, subtitle, loading }) => (
   </motion.div>
 );
 
-const StaffDashboard = () => {
+// bannerSlot: extra content shown inside the welcome banner, above Quick Actions
+// (the supervisor home puts its centre accounts chips there)
+const StaffDashboard = ({ bannerSlot = null } = {}) => {
   const navigate = useNavigate();
   const [tokens, setTokens] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -858,6 +860,7 @@ const StaffDashboard = () => {
                   View Profile
                 </button>
               </div>
+              {bannerSlot}
               <div>
                 <p className="text-xs uppercase tracking-wider text-white/70 mb-2 font-semibold">Quick Actions</p>
                 <div className="flex flex-wrap gap-2">

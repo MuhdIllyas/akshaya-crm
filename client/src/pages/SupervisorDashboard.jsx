@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { FiAlertTriangle, FiCheckCircle, FiClock, FiCreditCard, FiFileText, FiRefreshCw } from "react-icons/fi";
+import { FiAlertTriangle, FiCheck, FiClock, FiCreditCard, FiFileText, FiRefreshCw } from "react-icons/fi";
 import StaffDashboard from "./StaffDashboard";
 import { todayIST, addDays } from "../utils/dates";
 
-/* Supervisor home: what's waiting in the centre's accounts, then the normal
-   staff dashboard below (a supervisor does staff work too).
-   Every number here comes from the same server routes the Accounts and
-   Expense Approvals pages use, so it is limited to the supervisor's centre. */
+/* Supervisor home: the normal staff dashboard (a supervisor does staff work
+   too) with the centre's accounts shown as chips inside its welcome banner.
+   Every number comes from the same server routes the Accounts and Expense
+   Approvals pages use, so it is limited to the supervisor's centre. */
 
 const API = import.meta.env.VITE_API_URL;
 const ACCOUNTS = "/dashboard/supervisor/accounts";
@@ -31,16 +31,13 @@ const rupees = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`
 const shortDate = (ymd) =>
   new Date(`${ymd}T00:00:00+05:30`).toLocaleDateString("en-IN", { day: "numeric", month: "short", timeZone: "Asia/Kolkata" });
 
-const CLOSE_LABEL = { closed: "Closed", incomplete: "Cash counted, checklist not done", not_closed: "Not closed" };
-
 async function loadSummary() {
   const today = todayIST();
   const yesterday = addDays(today, -1);
   const me = Number(myId());
 
-  const [yClose, tClose, expenses, upi, wallets] = await Promise.allSettled([
+  const [yClose, expenses, upi, wallets] = await Promise.allSettled([
     getJson(`/api/accounting/closing-status?date=${yesterday}`),
-    getJson(`/api/accounting/closing-status?date=${today}`),
     getJson(`/api/expense`),
     getJson(`/api/upi-credits?status=unclaimed&window=7d`),
     getJson(`/api/wallet/my-centre-wallets`),
@@ -63,45 +60,83 @@ async function loadSummary() {
   return {
     yesterday,
     yClose: val(yClose),
-    tClose: val(tClose),
     toApprove: val(expenses) ? toApprove.length : null,
     toApproveTotal: toApprove.reduce((s, e) => s + Number(e.amount || 0), 0),
     oldestToApprove: oldest ? { id: oldest.id, date: String(oldest.expense_date).slice(0, 10) } : null,
-    ownWaiting: pending.length - toApprove.length,
     upiUnclaimed: val(upi)?.summary ? val(upi).summary.unclaimed : null,
-    upiUnclaimedTotal: val(upi)?.summary?.unclaimed_total || 0,
     bankOpen,
     // bankOpen is also null when there are no bank wallets; this tells the two apart
     walletsLoaded: wallets.status === "fulfilled",
   };
 }
 
+// Light chips on the navy banner. "unknown" = that number couldn't be loaded.
 const TONES = {
-  ok: "border-emerald-200 bg-emerald-50/60 text-emerald-700",
-  warn: "border-amber-200 bg-amber-50/70 text-amber-700",
-  bad: "border-rose-200 bg-rose-50/70 text-rose-700",
-  idle: "border-slate-200 bg-white text-slate-600",
+  bad: "bg-red-50 text-red-800 hover:bg-red-100",
+  warn: "bg-amber-50 text-amber-800 hover:bg-amber-100",
+  ok: "bg-emerald-50 text-emerald-800 hover:bg-emerald-100",
+  unknown: "bg-white/15 text-white hover:bg-white/25",
 };
+const TONE_ORDER = { bad: 0, warn: 1, unknown: 2, ok: 3 };
 
-const Tile = ({ to, state, icon, tone, label, value, sub }) => {
-  const TileIcon = icon;
-  return (
-  <Link
-    to={to}
-    state={state}
-    className={`flex min-h-[112px] flex-col justify-between rounded-2xl border p-4 transition hover:shadow-md ${TONES[tone]}`}
-  >
-    <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
-      <TileIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
-      {label}
-    </span>
-    <span className="mt-2 text-lg font-bold text-slate-900 leading-tight">{value}</span>
-    {sub && <span className="mt-1 text-xs text-slate-600">{sub}</span>}
-  </Link>
-  );
-};
+function buildChips(d) {
+  const chips = [];
+  const day = shortDate(d.yesterday);
 
-const AccountsToday = () => {
+  // Yesterday's close
+  const y = d.yClose;
+  if (!y) chips.push({ key: "close", to: ACCOUNTS, icon: FiClock, tone: "unknown", text: `${day} close: couldn't load` });
+  else if (y.status === "closed") {
+    const diff = Number(y.cash_variance || 0);
+    chips.push({
+      key: "close", to: ACCOUNTS, icon: diff ? FiAlertTriangle : FiCheck, tone: diff ? "warn" : "ok",
+      text: diff ? `${day} closed · cash off by ${rupees(Math.abs(diff))}` : `${day} closed`,
+    });
+  } else {
+    chips.push({
+      key: "close", to: ACCOUNTS, icon: FiClock, tone: "bad",
+      text: y.status === "incomplete" ? `${day} checklist not done` : `${day} not closed`,
+    });
+  }
+
+  // Wallet differences still to settle
+  if (y) {
+    const open = Number(y.open_short || 0) + Number(y.open_excess || 0);
+    chips.push(
+      open > 0
+        ? { key: "diff", to: ACCOUNTS, icon: FiAlertTriangle, tone: "warn", text: `${rupees(open)} wallet differences` }
+        : { key: "diff", to: ACCOUNTS, icon: FiCheck, tone: "ok", text: "No wallet differences" }
+    );
+  }
+
+  // Expenses waiting for this supervisor
+  if (d.toApprove === null) chips.push({ key: "exp", to: EXPENSES, icon: FiFileText, tone: "unknown", text: "Expenses: couldn't load" });
+  else if (d.toApprove > 0) {
+    const old = d.oldestToApprove && d.oldestToApprove.date.slice(0, 7) !== todayIST().slice(0, 7);
+    chips.push({
+      key: "exp", to: EXPENSES, icon: FiFileText, tone: "warn",
+      state: d.oldestToApprove ? { openExpenseId: d.oldestToApprove.id } : undefined,
+      text: `${d.toApprove} expense${d.toApprove > 1 ? "s" : ""} · ${rupees(d.toApproveTotal)}${old ? ` · since ${shortDate(d.oldestToApprove.date)}` : ""}`,
+    });
+  } else chips.push({ key: "exp", to: EXPENSES, icon: FiCheck, tone: "ok", text: "No expenses to approve" });
+
+  // Payments to match (UPI from the last 7 days + open bank lines)
+  if (d.upiUnclaimed === null && !d.walletsLoaded) {
+    chips.push({ key: "match", to: ACCOUNTS, icon: FiCreditCard, tone: "unknown", text: "Payments: couldn't load" });
+  } else {
+    const open = (d.upiUnclaimed || 0) + (d.bankOpen || 0);
+    chips.push(
+      open > 0
+        ? { key: "match", to: ACCOUNTS, icon: FiCreditCard, tone: "warn", text: `${open} payment${open > 1 ? "s" : ""} to match` }
+        : { key: "match", to: ACCOUNTS, icon: FiCheck, tone: "ok", text: "All payments matched" }
+    );
+  }
+
+  // Things to do first, the all-clear ones last
+  return chips.sort((a, b) => TONE_ORDER[a.tone] - TONE_ORDER[b.tone]);
+}
+
+const AccountsChips = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -122,119 +157,60 @@ const AccountsToday = () => {
     refresh();
   }, [refresh]);
 
-  let tiles = null;
-  if (data) {
-    const y = data.yClose;
-    const yStatus = y?.status || "not_closed";
-    const variance = Number(y?.cash_variance || 0);
-    const openDiff = Number(y?.open_short || 0) + Number(y?.open_excess || 0);
-    const todayClosed = data.tClose?.status === "closed";
-    const toMatch = (data.upiUnclaimed || 0) + (data.bankOpen || 0);
-    const matchUnknown = data.upiUnclaimed === null && !data.walletsLoaded;
-
-    tiles = [
-      {
-        to: ACCOUNTS,
-        icon: yStatus === "closed" ? FiCheckCircle : FiClock,
-        tone: !y ? "idle" : yStatus === "closed" ? (variance !== 0 ? "warn" : "ok") : "bad",
-        label: `Close · ${shortDate(data.yesterday)}`,
-        value: !y ? "Couldn't load" : CLOSE_LABEL[yStatus],
-        sub:
-          yStatus === "closed"
-            ? `${y.closed_by_name ? `By ${y.closed_by_name}. ` : ""}${variance ? `Cash difference ${rupees(variance)}` : "No cash difference"}`
-            : `Today: ${todayClosed ? "closed" : "not closed yet"}`,
-      },
-      {
-        to: ACCOUNTS,
-        icon: FiAlertTriangle,
-        tone: !y ? "idle" : openDiff > 0 ? "warn" : "ok",
-        label: "Wallet differences",
-        value: !y ? "Couldn't load" : openDiff > 0 ? `${rupees(openDiff)} open` : "None open",
-        sub:
-          openDiff > 0
-            ? `Short ${rupees(y?.open_short)} · Excess ${rupees(y?.open_excess)}`
-            : `${y?.wallets_counted || 0} wallets counted`,
-      },
-      {
-        to: EXPENSES,
-        state: data.oldestToApprove ? { openExpenseId: data.oldestToApprove.id } : undefined,
-        icon: FiFileText,
-        tone: data.toApprove === null ? "idle" : data.toApprove > 0 ? "warn" : "ok",
-        label: "Expenses to approve",
-        value: data.toApprove === null ? "Couldn't load" : data.toApprove > 0 ? `${data.toApprove} waiting` : "All done",
-        sub:
-          data.toApprove > 0
-            ? `${rupees(data.toApproveTotal)} in total${
-                data.oldestToApprove && data.oldestToApprove.date.slice(0, 7) !== todayIST().slice(0, 7)
-                  ? ` · oldest from ${shortDate(data.oldestToApprove.date)}`
-                  : ""
-              }`
-            : data.ownWaiting > 0
-              ? `${data.ownWaiting} of yours waiting for admin`
-              : null,
-      },
-      {
-        to: ACCOUNTS,
-        icon: FiCreditCard,
-        tone: matchUnknown ? "idle" : toMatch > 0 ? "warn" : "ok",
-        label: "Payments to match",
-        value: matchUnknown ? "Couldn't load" : toMatch > 0 ? `${toMatch} open` : "All matched",
-        sub: [
-          data.upiUnclaimed !== null && `UPI (7 days): ${data.upiUnclaimed}${data.upiUnclaimed ? ` · ${rupees(data.upiUnclaimedTotal)}` : ""}`,
-          data.bankOpen !== null && `Bank lines: ${data.bankOpen}`,
-        ]
-          .filter(Boolean)
-          .join(" · ") || null,
-      },
-    ];
-  }
+  const chips = data ? buildChips(data) : [];
 
   return (
-    <section aria-labelledby="sv-accounts-title" className="px-4 pt-4 sm:px-6 sm:pt-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 id="sv-accounts-title" className="text-lg font-bold text-slate-900">
+    <section aria-labelledby="sv-accounts-title" className="mb-5 border-t border-white/15 pt-4">
+      <div className="mb-2 flex items-center gap-2">
+        <h3 id="sv-accounts-title" className="text-xs font-semibold uppercase tracking-wider text-white/70">
           Centre accounts
-        </h2>
+        </h3>
         <button
           type="button"
           onClick={refresh}
           disabled={loading}
-          className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+          aria-label="Refresh centre accounts"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-white/70 hover:bg-white/15 hover:text-white disabled:opacity-50"
         >
-          <FiRefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
-          Refresh
+          <FiRefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
         </button>
       </div>
       {failed ? (
-        <p className="rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
-          Couldn&apos;t load the accounts summary. Try Refresh, or open{" "}
+        <p className="text-sm text-white/90">
+          Couldn&apos;t load the accounts.{" "}
           <Link to={ACCOUNTS} className="font-semibold underline">
-            Accounts
+            Open Accounts
           </Link>
-          .
         </p>
-      ) : !tiles ? (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-busy="true">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-[112px] animate-pulse rounded-2xl border border-slate-200 bg-white" />
+      ) : !data ? (
+        <div className="flex flex-wrap gap-2" aria-busy="true">
+          {[150, 170, 140, 160].map((w) => (
+            <span key={w} className="h-9 animate-pulse rounded-full bg-white/15" style={{ width: w }} />
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {tiles.map((t) => (
-            <Tile key={t.label} {...t} />
-          ))}
-        </div>
+        <ul className="flex flex-wrap gap-2">
+          {chips.map((c) => {
+            const ChipIcon = c.icon;
+            return (
+              <li key={c.key}>
+                <Link
+                  to={c.to}
+                  state={c.state}
+                  className={`inline-flex min-h-[36px] items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-semibold transition ${TONES[c.tone]}`}
+                >
+                  <ChipIcon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                  {c.text}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </section>
   );
 };
 
-const SupervisorDashboard = () => (
-  <div className="bg-slate-50">
-    <AccountsToday />
-    <StaffDashboard />
-  </div>
-);
+const SupervisorDashboard = () => <StaffDashboard bannerSlot={<AccountsChips />} />;
 
 export default SupervisorDashboard;
