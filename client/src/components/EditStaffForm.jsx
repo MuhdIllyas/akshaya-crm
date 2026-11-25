@@ -363,7 +363,7 @@ const EditStaffForm = ({ staff, onUpdate, onClose }) => {
           <Field label="Role" required>
             <select name="role" value={formData.role} onChange={handleChange} disabled={userRole !== "superadmin"} className={inputCls}>
               <option value="staff">Staff</option>
-              <option value="supervisor">Supervisor</option>
+              <option value="supervisor">Supervisor (accounts)</option>
               <option value="admin">Admin</option>
               <option value="superadmin">Superadmin</option>
             </select>

@@ -299,7 +299,7 @@ const SuperadminStaffManagement = () => {
                 <option value="">All roles</option>
                 <option value="superadmin">Superadmin</option>
                 <option value="admin">Admin</option>
-                <option value="supervisor">Supervisor</option>
+                <option value="supervisor">Supervisor (accounts)</option>
                 <option value="staff">Staff</option>
               </select>
               <select name="status" value={filters.status} onChange={handleFilterChange} className={selectCls}>

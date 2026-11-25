@@ -324,7 +324,7 @@ const AddAdminForm = ({ onAdd, onClose, centreId }) => {
               className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-100 focus:border-blue-500 transition"
               disabled={loading}
             >
-              <option value="">Select a supervisor</option>
+              <option value="">Select a manager</option>
               {reportsToOptions.map((option) => (
                 <option key={option.id} value={option.id}>
                   {option.name} ({option.role})

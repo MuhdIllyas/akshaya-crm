@@ -206,7 +206,7 @@ const AddStaffForm = ({ onAdd, onClose }) => {
           <Field label="Role" required>
             <select name="role" value={formData.role} onChange={handleChange} className={inputCls}>
               <option value="staff">Staff</option>
-              <option value="supervisor">Supervisor</option>
+              <option value="supervisor">Supervisor (accounts)</option>
               <option value="admin">Admin</option>
               {isSuperadmin && <option value="superadmin">Superadmin</option>}
             </select>

@@ -17,6 +17,7 @@ import PlatformAdmin from "./pages/platform/PlatformAdmin";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorAccounts from "./pages/supervisor/SupervisorAccounts";
+import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
 import CalendarPage from "./pages/CalendarPage";
 import StaffManagement from "./pages/admin/StaffManagement";
@@ -352,8 +353,8 @@ const App = () => {
             <Route path="superadmin" element={<ProtectedRoute allowedRoles={["superadmin"]}><SuperadminDashboard /></ProtectedRoute>} />
             <Route path="admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="staff" element={<ProtectedRoute allowedRoles={["staff"]}><StaffDashboard /></ProtectedRoute>} />
-            {/* Supervisor = staff work + the centre accounts. Uses the staff dashboard until the supervisor home is built. */}
-            <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><StaffDashboard /></ProtectedRoute>} />
+            {/* Supervisor = staff work + the centre accounts: accounts summary on top of the staff dashboard */}
+            <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorDashboard /></ProtectedRoute>} />
             <Route path="supervisor/accounts" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorAccounts /></ProtectedRoute>} />
             <Route path="supervisor/expenses" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminExpenseManagement /></ProtectedRoute>} />
             <Route path="supervisor/settings" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminSettings /></ProtectedRoute>} />

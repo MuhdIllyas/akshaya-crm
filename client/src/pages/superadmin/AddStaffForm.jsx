@@ -242,7 +242,7 @@ const AddStaffForm = ({ onAdd, onClose, centres = [] }) => {
             <select name="role" value={formData.role} onChange={handleChange} className={cls("role")} disabled={loading}>
               <option value="">Select role</option>
               <option value="staff">Staff</option>
-              <option value="supervisor">Supervisor</option>
+              <option value="supervisor">Supervisor (accounts)</option>
               <option value="admin">Admin</option>
               <option value="superadmin">Superadmin</option>
             </select>
