@@ -811,8 +811,9 @@ const StaffDashboard = ({ bannerSlot = null } = {}) => {
     </div>
   );
 
-  // Find the wallet assigned to the logged-in staff member
-  const myWallet = wallets.find(w => String(w.assigned_staff_id) === String(staffId));
+  // Wallets assigned to the logged-in staff member (there can be more than one)
+  const myWallets = wallets.filter(w => String(w.assigned_staff_id) === String(staffId));
+  const myWalletsTotal = myWallets.reduce((sum, w) => sum + (Number(w.balance) || 0), 0);
 
   return (
     <div className="min-h-screen bg-slate-50 sd-root">
@@ -885,9 +886,44 @@ const StaffDashboard = ({ bannerSlot = null } = {}) => {
                 </div>
               </div>
             </div>
-            <div className="md:text-right">
-              <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
-              <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
+            <div className="flex flex-col gap-4 md:items-end md:text-right">
+              <div>
+                <p className="text-3xl font-light tracking-tight">{formatCurrentTime(currentTime)}</p>
+                <p className="text-white/80 text-sm mt-1">{formatCurrentDate(currentTime)}</p>
+              </div>
+              {/* The staff member's own wallets (only when some are assigned to them) */}
+              {myWallets.length === 1 && (
+                <div className="inline-flex items-center gap-3 self-start md:self-end rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-3 text-left">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15">
+                    <FiBriefcase className="h-4 w-4" aria-hidden="true" />
+                  </span>
+                  <span className="flex flex-col">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-white/70">My wallet · {myWallets[0].name}</span>
+                    <span className="text-xl font-bold leading-tight">{formatCurrency(myWallets[0].balance)}</span>
+                  </span>
+                </div>
+              )}
+              {myWallets.length > 1 && (
+                <div className="flex flex-col gap-2 self-start md:self-end min-w-[240px] rounded-xl bg-white/10 ring-1 ring-white/20 px-4 py-3 text-left">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/15">
+                      <FiBriefcase className="h-4 w-4" aria-hidden="true" />
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="text-xs font-semibold uppercase tracking-wider text-white/70">My wallets · {myWallets.length}</span>
+                      <span className="text-xl font-bold leading-tight">{formatCurrency(myWalletsTotal)}</span>
+                    </span>
+                  </div>
+                  <ul className="flex flex-col gap-1 border-t border-white/15 pt-2 text-sm">
+                    {myWallets.map(w => (
+                      <li key={w.id} className="flex items-center justify-between gap-4">
+                        <span className="text-white/80 truncate">{w.name}</span>
+                        <span className="font-semibold">{formatCurrency(w.balance)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
           <div className="mt-5 pt-5 border-t border-white/20 text-sm text-white/70 italic">
@@ -1297,7 +1333,7 @@ const StaffDashboard = ({ bannerSlot = null } = {}) => {
                 <FiPlus className="h-6 w-6" />
               </button>
 
-              {/* Search & Filter Bar + Wallet Pill */}
+              {/* Search & Filter Bar */}
               <div className="flex flex-wrap gap-4 mb-6 items-center">
                 <div className="relative flex-1 max-w-md">
                   <FiSearch className="absolute left-3 top-1/2 transform -translate-y-1/2 text-slate-500" />
@@ -1316,24 +1352,7 @@ const StaffDashboard = ({ bannerSlot = null } = {}) => {
                   <option value="week">This Week</option>
                   <option value="all">All Time</option>
                 </select>
-
-                {/* ----- Ultra‑Compact Wallet Pill ----- */}
-                {myWallet && (
-                  <motion.div
-                    whileHover={{ y: -1 }}
-                    className="inline-flex items-center gap-2 bg-white border border-slate-300 rounded-full px-3 py-2 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                  >
-                    <div className="p-1 bg-slate-200 rounded-full">
-                      <FiBriefcase className="h-3.5 w-3.5 text-navy-700" />
-                    </div>
-                    <span className="text-sm font-medium text-slate-700">
-                      {myWallet.name}
-                    </span>
-                    <span className="text-sm font-bold text-slate-900">
-                      {formatCurrency(myWallet.balance)}
-                    </span>
-                  </motion.div>
-                )}
+                {/* The staff member's own wallet is shown in the welcome banner */}
               </div>
 
               <div className="flex flex-col gap-6">
