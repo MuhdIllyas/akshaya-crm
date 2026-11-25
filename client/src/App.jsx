@@ -353,9 +353,11 @@ const App = () => {
             <Route path="superadmin" element={<ProtectedRoute allowedRoles={["superadmin"]}><SuperadminDashboard /></ProtectedRoute>} />
             <Route path="admin" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
             <Route path="staff" element={<ProtectedRoute allowedRoles={["staff"]}><StaffDashboard /></ProtectedRoute>} />
-            {/* Supervisor = staff work + the centre accounts: accounts summary on top of the staff dashboard */}
+            {/* Supervisor home: centre accounts first, then their own work */}
             <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorDashboard /></ProtectedRoute>} />
             <Route path="supervisor/accounts" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorAccounts /></ProtectedRoute>} />
+            {/* The supervisor's own staff dashboard (token queue, online work, punch in) */}
+            <Route path="supervisor/mywork" element={<ProtectedRoute allowedRoles={["supervisor"]}><StaffDashboard /></ProtectedRoute>} />
             <Route path="supervisor/expenses" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminExpenseManagement /></ProtectedRoute>} />
             <Route path="supervisor/settings" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminSettings /></ProtectedRoute>} />
             <Route path="supervisor/servicelogs" element={<ProtectedRoute allowedRoles={["supervisor"]}><ServiceLogs /></ProtectedRoute>} />

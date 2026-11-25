@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { FiBook, FiClock } from "react-icons/fi";
 import AccountingSection from "../reports/components/AccountingSection";
 import PendingPaymentsSection from "../reports/components/PendingPaymentsSection";
@@ -19,7 +20,9 @@ const TABS = [
 ];
 
 const SupervisorAccounts = () => {
-  const [tab, setTab] = useState("accounting");
+  // The dashboard's pending-payment links open this page on the Pending payments tab
+  const location = useLocation();
+  const [tab, setTab] = useState(location.state?.tab === "pending" ? "pending" : "accounting");
   const [wallets, setWallets] = useState([]);
   const [staff, setStaff] = useState([]);
   const [accountingData, setAccountingData] = useState({
