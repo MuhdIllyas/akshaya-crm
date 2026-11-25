@@ -57,6 +57,8 @@ async function loadSummary() {
 
   const pending = (val(expenses) || []).filter((e) => e.status === "pending");
   const toApprove = pending.filter((e) => Number(e.staff_id) !== me);
+  // The expense page opens on the current month; link to the oldest one so older months aren't missed
+  const oldest = [...toApprove].sort((a, b) => String(a.expense_date).localeCompare(String(b.expense_date)))[0];
 
   return {
     yesterday,
@@ -64,6 +66,7 @@ async function loadSummary() {
     tClose: val(tClose),
     toApprove: val(expenses) ? toApprove.length : null,
     toApproveTotal: toApprove.reduce((s, e) => s + Number(e.amount || 0), 0),
+    oldestToApprove: oldest ? { id: oldest.id, date: String(oldest.expense_date).slice(0, 10) } : null,
     ownWaiting: pending.length - toApprove.length,
     upiUnclaimed: val(upi)?.summary ? val(upi).summary.unclaimed : null,
     upiUnclaimedTotal: val(upi)?.summary?.unclaimed_total || 0,
@@ -80,11 +83,12 @@ const TONES = {
   idle: "border-slate-200 bg-white text-slate-600",
 };
 
-const Tile = ({ to, icon, tone, label, value, sub }) => {
+const Tile = ({ to, state, icon, tone, label, value, sub }) => {
   const TileIcon = icon;
   return (
   <Link
     to={to}
+    state={state}
     className={`flex min-h-[112px] flex-col justify-between rounded-2xl border p-4 transition hover:shadow-md ${TONES[tone]}`}
   >
     <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide">
@@ -153,13 +157,18 @@ const AccountsToday = () => {
       },
       {
         to: EXPENSES,
+        state: data.oldestToApprove ? { openExpenseId: data.oldestToApprove.id } : undefined,
         icon: FiFileText,
         tone: data.toApprove === null ? "idle" : data.toApprove > 0 ? "warn" : "ok",
         label: "Expenses to approve",
         value: data.toApprove === null ? "Couldn't load" : data.toApprove > 0 ? `${data.toApprove} waiting` : "All done",
         sub:
           data.toApprove > 0
-            ? `${rupees(data.toApproveTotal)} in total`
+            ? `${rupees(data.toApproveTotal)} in total${
+                data.oldestToApprove && data.oldestToApprove.date.slice(0, 7) !== todayIST().slice(0, 7)
+                  ? ` · oldest from ${shortDate(data.oldestToApprove.date)}`
+                  : ""
+              }`
             : data.ownWaiting > 0
               ? `${data.ownWaiting} of yours waiting for admin`
               : null,
