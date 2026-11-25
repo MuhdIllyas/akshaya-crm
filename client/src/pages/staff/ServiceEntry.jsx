@@ -469,7 +469,9 @@ const ServiceEntry = () => {
         
         const formattedStaff = response.data.map(staff => ({
           id: staff.id,
-          display: staff.name
+          display: staff.name,
+          role: staff.role,
+          status: staff.status
         }));
         setStaffList(formattedStaff);
       } catch (error) {
@@ -511,6 +513,20 @@ const ServiceEntry = () => {
   const userRole = localStorage.getItem('role') || 'staff';
   const userId = localStorage.getItem('id');
   const isAdminUser = userRole === 'admin' || userRole === 'superadmin';
+  // A supervisor does their own entries like staff (same limits on this page's list)
+  const isStaffRole = userRole === 'staff' || userRole === 'supervisor';
+
+  // Admin, superadmin and supervisor can save an entry for another staff member
+  // (evening accounts, when that person isn't here). The entry, its charges and
+  // payments, and the application all go to that staff member.
+  const canEnterForOthers = ['admin', 'superadmin', 'supervisor'].includes(userRole);
+  const [entryForStaffId, setEntryForStaffId] = useState('');   // '' = myself
+  const entryForOptions = staffList.filter(s =>
+    String(s.id) !== String(userId) &&
+    String(s.status || 'active').toLowerCase() === 'active' &&
+    String(s.role || '').toLowerCase() !== 'superadmin'
+  );
+  const entryForName = entryForStaffId ? (staffList.find(s => String(s.id) === String(entryForStaffId))?.display || 'another staff member') : null;
 
   // Admin-only staff / wallet filter for today's entries (staff always see all of their own)
   const [moneyStaff, setMoneyStaff] = useState([]);   // staff ids as strings, more than one allowed
@@ -783,7 +799,7 @@ const ServiceEntry = () => {
 
   const canCorrectTransaction = (transaction, entry, type) => {
     if (transaction.is_reversal) return false;
-    if (userRole === 'staff') return isToday(entry.created_at);
+    if (isStaffRole) return isToday(entry.created_at);
     return userRole === 'admin' || userRole === 'superadmin';
   };
 
@@ -1601,7 +1617,7 @@ const ServiceEntry = () => {
       customerName: formData.customerName.trim(),
       phone: formData.phone.trim(),
       status: formData.status,
-      staffId: parseInt(staffId),
+      staffId: parseInt(entryForStaffId || staffId),
       services: formData.services.map(svc => ({
         categoryId: parseInt(svc.category),
         subcategoryId: parseInt(svc.subcategory),
@@ -2010,6 +2026,25 @@ const ServiceEntry = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-8">
+          {canEnterForOthers && !isEditMode && (
+            <div className={`flex flex-wrap items-center gap-3 rounded-lg border p-4 ${entryForStaffId ? 'border-amber-300 bg-amber-50' : 'border-slate-200 bg-slate-50'}`}>
+              <label htmlFor="entry-for-staff" className="text-sm font-semibold text-slate-800">Entry for</label>
+              <select
+                id="entry-for-staff"
+                value={entryForStaffId}
+                onChange={(e) => setEntryForStaffId(e.target.value)}
+                className="min-h-[40px] min-w-[220px] rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-navy-500/30"
+              >
+                <option value="">Myself</option>
+                {entryForOptions.map(s => <option key={s.id} value={s.id}>{s.display}</option>)}
+              </select>
+              <p className={`text-sm ${entryForStaffId ? 'font-medium text-amber-900' : 'text-slate-600'}`}>
+                {entryForStaffId
+                  ? `Saving for ${entryForName}: the service charge, department charge and payments count for them, and they get the application.`
+                  : "Pick a staff member to add a service for someone who isn't here."}
+              </p>
+            </div>
+          )}
           {fromTask && (
             <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-200 flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -3026,7 +3061,7 @@ const ServiceEntry = () => {
                           Edit
                         </button>
                       )}
-                      {isToday(entry.created_at) && entry.is_edited && userRole === 'staff' && (
+                      {isToday(entry.created_at) && entry.is_edited && isStaffRole && (
                         <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-200 text-slate-700">
                           Edited
                         </span>
@@ -3262,7 +3297,7 @@ const ServiceEntry = () => {
                             <FiEdit3 className="h-5 w-5" />
                           </button>
                         )}
-                        {isToday(entry.created_at) && entry.is_edited && userRole === 'staff' && (
+                        {isToday(entry.created_at) && entry.is_edited && isStaffRole && (
                           <span className="px-2 py-1 text-xs font-medium rounded-full bg-slate-200 text-slate-700">
                             Edited
                           </span>
@@ -3431,7 +3466,7 @@ const ServiceEntry = () => {
                 </p>
               </div>
               
-              {userRole === 'staff' && correctionStatus[correctionModal.transaction.id] && (
+              {isStaffRole && correctionStatus[correctionModal.transaction.id] && (
                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                   <p className="text-sm text-blue-800">
                     <FiAlertCircle className="inline mr-1" />

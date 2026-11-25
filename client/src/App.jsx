@@ -358,6 +358,7 @@ const App = () => {
             <Route path="supervisor/accounts" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorAccounts /></ProtectedRoute>} />
             <Route path="supervisor/expenses" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminExpenseManagement /></ProtectedRoute>} />
             <Route path="supervisor/settings" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminSettings /></ProtectedRoute>} />
+            <Route path="supervisor/servicelogs" element={<ProtectedRoute allowedRoles={["supervisor"]}><ServiceLogs /></ProtectedRoute>} />
 
             {/* Unified My Profile route for staff, admin, superadmin */}
             <Route

@@ -13,7 +13,7 @@ import { aadhaarColumns } from '../utils/aadhaar.js';
 import { todayIST, istParts } from '../utils/dates.js';
 import { lockServiceTask, completeServiceTask, afterServiceTaskCompleted } from '../services/serviceTaskLink.js';
 import { scheduleUpiMatch } from "../services/upiMatcher.js";
-import { isStaffLike } from "../utils/roles.js";
+import { isStaffLike, staffLimitsApply, ENTRY_MANAGERS } from "../utils/roles.js";
 
 const router = express.Router();
 
@@ -1833,13 +1833,39 @@ router.post('/entry', authenticateToken, async (req, res) => {
 // ============================================================================
 // 🔥 POST /api/servicemanagement/entry/bulk (WATERFALL CART CHECKOUT)
 // ============================================================================
+/* Whose entry is this? Normally the person saving it. An admin, superadmin or
+   supervisor may save it for another active staff member of their centre
+   (evening accounts, when that staff member isn't there): the entry, its
+   charges and payments, and the application all go to that staff member.
+   Returns { staffId, onBehalf, staffName }. */
+async function resolveEntryStaff(client, user, requestedStaffId) {
+  const me = parseInt(user.id, 10);
+  const target = requestedStaffId ? parseInt(requestedStaffId, 10) : me;
+  if (Number.isNaN(target)) throw httpErr(400, 'staffId must be valid');
+  if (target === me) return { staffId: me, onBehalf: false, staffName: null };
+
+  if (!ENTRY_MANAGERS.includes(String(user.role).toLowerCase())) {
+    throw httpErr(403, 'You can only add service entries for yourself');
+  }
+  const { rows } = await client.query(
+    `SELECT id, name, centre_id, LOWER(COALESCE(status, 'active')) AS status FROM staff WHERE id = $1`,
+    [target]
+  );
+  if (!rows.length) throw httpErr(400, 'That staff member was not found');
+  if (rows[0].status !== 'active') throw httpErr(400, `${rows[0].name} is not active`);
+  if (user.role !== 'superadmin' && Number(rows[0].centre_id) !== Number(user.centre_id)) {
+    throw httpErr(403, 'That staff member belongs to another centre');
+  }
+  return { staffId: target, onBehalf: true, staffName: rows[0].name };
+}
+
 router.post('/entry/bulk', authenticateToken, async (req, res) => {
   const {
     tokenId,
     customerServiceId,
     customerName,
     phone,
-    staffId,
+    staffId: requestedStaffId,
     services,
     payments,
     serviceTaskId
@@ -1851,9 +1877,15 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
 
   const client = await pool.connect();
   let completedServiceTask = null;
+  let onBehalf = null;
 
   try {
     await client.query('BEGIN');
+
+    // Whose entry: the saver, or the staff member an admin/supervisor picked
+    const entryStaff = await resolveEntryStaff(client, req.user, requestedStaffId);
+    const staffId = entryStaff.staffId;
+    if (entryStaff.onBehalf) onBehalf = entryStaff;
 
     // 0. Service task: check it before any money moves (locked until COMMIT)
     const serviceTask = serviceTaskId ? await lockServiceTask(client, serviceTaskId, req.user) : null;
@@ -1976,7 +2008,7 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
       await client.query(`
         INSERT INTO service_tracking (service_entry_id, assigned_to, status, current_step, progress, updated_at)
         VALUES ($1, $2, 'pending', 'Application Received', 0, NOW())
-      `, [newEntryId, req.user.id]);
+      `, [newEntryId, staffId]);
 
       // Fetch Service Name for Logging
       const serviceName = serviceNameById.get(Number(svc.categoryId)) || 'Service';
@@ -2072,6 +2104,34 @@ router.post('/entry/bulk', authenticateToken, async (req, res) => {
 
     if (completedServiceTask) await afterServiceTaskCompleted(completedServiceTask, req.user);
 
+    if (onBehalf) {
+      try {
+        const who = await pool.query('SELECT name FROM staff WHERE id = $1', [req.user.id]);
+        const byName = who.rows[0]?.name || 'Someone';
+        const what = `${results.length} service${results.length === 1 ? '' : 's'} for ${customerName}`;
+        await logActivity({
+          centre_id: req.user.centre_id, related_type: 'service_entry', related_id: results[0]?.serviceEntryId,
+          action: 'Entry Added For Staff',
+          description: `${byName} added ${what} on behalf of ${onBehalf.staffName}`,
+          performed_by: req.user.id, performed_by_role: req.user.role
+        });
+        await notificationService.createBulkNotifications({
+          recipientStaffIds: [onBehalf.staffId],
+          senderStaffId: req.user.id,
+          relatedEntityType: 'service_entry',
+          relatedEntityId: results[0]?.serviceEntryId,
+          type: 'service_entry',
+          category: 'work',
+          title: '📝 Service added for you',
+          message: `${byName} added ${what} under your name.`,
+          priority: 'normal',
+          metadata: { 'Customer': customerName, 'Services': String(results.length) }
+        });
+      } catch (e) {
+        console.error('Non-fatal: on-behalf entry log/notification failed', e);
+      }
+    }
+
     // Return the array of created services back to React!
     res.status(201).json({
       message: 'Bulk services created successfully',
@@ -2140,7 +2200,8 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     if (subcategoryId !== undefined && parseInt(subcategoryId) !== parseInt(existingEntry.subcategory_id)) isFinancialEdit = true;
 
     // Block if they are trying to do a financial edit but have already used their 1 allowed edit
-    if (isStaffLike(req.user.role) && isFinancialEdit && existingEntry.is_edited) {
+    const limited = staffLimitsApply(req.user, existingEntry.staff_id);
+    if (limited && isFinancialEdit && existingEntry.is_edited) {
       await client.query('ROLLBACK');
       return res.status(403).json({ error: 'You have already used your one-time edit for financial details. You can only edit name, phone, and expiry dates.' });
     }
@@ -2202,6 +2263,11 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     }
 
     let finalStaffId = existingEntry.staff_id;
+    // Moving an entry to another staff member: admin, superadmin or supervisor only
+    if (staffId && parseInt(staffId) !== Number(existingEntry.staff_id) && !ENTRY_MANAGERS.includes(req.user.role)) {
+      await client.query('ROLLBACK');
+      return res.status(403).json({ error: 'Only an admin or supervisor can move an entry to another staff member' });
+    }
     if (staffId) {
       const staffResult = await client.query('SELECT id, centre_id FROM staff WHERE id = $1', [parseInt(staffId)]);
       if (staffResult.rows.length === 0) {
@@ -2238,7 +2304,7 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
     updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
     
     // Only lock the entry if they actually changed financial data
-    if (isStaffLike(req.user.role) && isFinancialEdit && !existingEntry.is_edited) {
+    if (limited && isFinancialEdit && !existingEntry.is_edited) {
       updateFields.push(`is_edited = true`);
     }
     
@@ -2593,7 +2659,12 @@ router.get('/transactions/:id/correction-status', authenticateToken, async (req,
     );
     const correctionCount = parseInt(countRes.rows[0].correction_count);
     const correctionsUsed = correctionCount - 1;
-    const canCorrect = isStaffLike(req.user.role) ? correctionsUsed < 2 : true;
+    let ownerId = null;
+    if (tx.reference_id) {
+      const ownerRes = await client.query('SELECT staff_id FROM service_entries WHERE id = $1', [tx.reference_id]);
+      ownerId = ownerRes.rows[0]?.staff_id ?? null;
+    }
+    const canCorrect = staffLimitsApply(req.user, ownerId) ? correctionsUsed < 2 : true;
     
     res.json({ transaction_id: tx.id, correction_group_id: groupId, total_entries: correctionCount, corrections_used: correctionsUsed, max_corrections_staff: 2, can_correct: canCorrect, role: req.user.role, category: tx.category, type: tx.type, reference_id: tx.reference_id });
   } catch (err) {
@@ -2777,8 +2848,8 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       }
     }
 
-    // 🔥 STAFF LIMIT
-    if (isStaffLike(user.role)) {
+    // 🔥 STAFF LIMIT (a supervisor correcting someone else's entry acts for the centre)
+    if (staffLimitsApply(user, trueStaffId)) {
       const countRes = await client.query(
         `SELECT COUNT(*) FROM wallet_transactions 
          WHERE correction_group_id = $1 
@@ -3702,10 +3773,13 @@ router.get('/staff', authenticateToken, async (req, res) => {
   const { centre_id } = req.query;
 
   try {
+    // Salary and personal details only for admin/superadmin: staff and supervisors
+    // use this list for names (pickers, notes, tokens, Service Logs)
+    const fullDetails = ['admin', 'superadmin'].includes(req.user.role);
     let query = `
       SELECT id, username, name, role, department, email, phone,
              status, join_date, photo, employee_id, employment_type,
-             reports_to, salary, dob, gender, emergency_contact, emergency_relationship
+             reports_to${fullDetails ? ', salary, dob, gender, emergency_contact, emergency_relationship' : ''}
       FROM staff
     `;
     const values = [];
@@ -4494,12 +4568,16 @@ router.get("/pending-payments", authenticateToken, async (req, res) => {
     let values = [];
     let idx = 1;
 
-    if (isStaffLike(role)) {
+    // ?scope=centre: a supervisor's Accounts view lists the whole centre;
+    // their own Pending Payments page (no scope) still lists only theirs
+    const centreWide = role === "supervisor" && req.query.scope === "centre";
+
+    if (isStaffLike(role) && !centreWide) {
       conditions.push(`se.staff_id = $${idx++}`);
       values.push(userId);
     }
 
-    if (role === "admin" || role === "superadmin") {
+    if (role === "admin" || role === "superadmin" || centreWide) {
       conditions.push(`st.centre_id = $${idx++}`);
       values.push(CentreId);
     }
@@ -4624,7 +4702,7 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
     // lock the entry: a double tap waits here, then finds nothing pending
     const serviceRes = await client.query(
-      `SELECT se.id, se.total_charges, st.centre_id
+      `SELECT se.id, se.total_charges, se.staff_id, st.centre_id
        FROM service_entries se
        JOIN staff st ON st.id = se.staff_id
        WHERE se.id = $1
@@ -4632,6 +4710,11 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
       [serviceEntryId]
     );
     if (serviceRes.rows.length === 0) throw httpErr(404, "Service entry not found");
+    // Staff collect only their own customers' payments; admin, superadmin and
+    // supervisor collect any in their centre (the money still counts for that staff member)
+    if (req.user.role === "staff" && Number(serviceRes.rows[0].staff_id) !== Number(req.user.id)) {
+      throw httpErr(403, "You can only collect payments for your own service entries");
+    }
 
     const entryCentreId = serviceRes.rows[0].centre_id;
     if (req.user.role !== "superadmin" && Number(entryCentreId) !== Number(req.user.centre_id)) {
@@ -4689,11 +4772,30 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
     const serviceEntry = serviceEntryResult.rows[0];
     const resolvedTeamId = serviceEntry.team_id;
+    // The money counts for the staff member who did the service, whoever collects it
+    const ownerStaffId = serviceEntry.staff_id || req.user.id;
+    const collectedForOther = Number(ownerStaffId) !== Number(req.user.id);
+    let collectorName = null;
+    if (collectedForOther) {
+      const c = await client.query("SELECT name FROM staff WHERE id = $1", [req.user.id]);
+      collectorName = c.rows[0]?.name || null;
+    }
 
     await client.query(
       `UPDATE payments SET original_payment_id = $1 WHERE id = $1`,
       [paymentId]
     );
+
+    // Who collected it (payments.collected_by, migration 2026-11-26). Inside a
+    // savepoint so a database without that column yet still saves the payment.
+    await client.query("SAVEPOINT collected_by");
+    try {
+      await client.query("UPDATE payments SET collected_by = $1 WHERE id = $2", [req.user.id, paymentId]);
+      await client.query("RELEASE SAVEPOINT collected_by");
+    } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT collected_by");
+      console.warn("payments.collected_by not saved (run migrations/2026-11-26-payment-collected-by.sql):", e.message);
+    }
 
     await client.query(
       `UPDATE wallets SET balance = balance + $1 WHERE id = $2`,
@@ -4720,9 +4822,9 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
       `,
       [
         wallet_id,
-        req.user.id,
+        ownerStaffId,
         amount,
-        `Pending payment collected for service #${serviceEntryId}`,
+        `Pending payment collected for service #${serviceEntryId}${collectorName ? ` (collected by ${collectorName})` : ""}`,
         serviceEntryId,
         groupId,
         paymentId,
@@ -4773,12 +4875,16 @@ router.post("/pending-payments/:id/receive-payment", authenticateToken, async (r
 
     // 🔥 NOTIFICATION ENGINE TRIGGER (Notify Admins of collected payment)
     try {
-      // Find all admins for this centre to notify them of the collected revenue
+      // Admins and supervisors of this centre, plus the staff member whose
+      // customer paid; never the person who collected it
       const adminsRes = await client.query(
-        `SELECT id FROM staff WHERE centre_id = $1 AND role IN ('admin', 'superadmin')`,
+        `SELECT id FROM staff
+         WHERE centre_id = $1 AND role IN ('admin', 'superadmin', 'supervisor')
+           AND LOWER(COALESCE(status, 'active')) = 'active'`,
         [serviceEntry.centre_id] // Uses the centre_id we grabbed earlier
       );
-      const adminIds = adminsRes.rows.map(r => r.id);
+      const adminIds = [...new Set([...adminsRes.rows.map(r => r.id), Number(ownerStaffId)])]
+        .filter((id) => Number(id) !== Number(req.user.id));
 
       // Only notify if someone other than the admin is collecting it, or if you just want general alerts
       if (adminIds.length > 0) {
@@ -4845,8 +4951,8 @@ router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) =>
         se.total_charges AS total_bill,
         s.name AS service_name,
         w.name AS wallet_name,
-        st.name AS collected_by_name,
-        st.role AS collected_by_role,
+        COALESCE(cb.name, st.name) AS collected_by_name,
+        COALESCE(cb.role, st.role) AS collected_by_role,
         COALESCE(
           (
             SELECT SUM(amount) 
@@ -4863,6 +4969,8 @@ router.get("/payment-receipt/:paymentId", authenticateToken, async (req, res) =>
       LEFT JOIN wallets w ON p.wallet_id = w.id
       LEFT JOIN wallet_transactions wt ON wt.reference_payment_id = p.id AND wt.type = 'credit'
       LEFT JOIN staff st ON wt.staff_id = st.id
+      -- collected_by read through to_jsonb so this works before its migration has run
+      LEFT JOIN staff cb ON cb.id = (to_jsonb(p) ->> 'collected_by')::int
       WHERE p.id = $1
       LIMIT 1
     `;
@@ -4919,22 +5027,23 @@ router.get("/pending-payments/history", authenticateToken, async (req, res) => {
         return res.status(400).json({ error: "centreId is required for superadmin" });
       }
       CentreId = Number(queryCentreId);
-    } else if (role === "admin") {
+    } else if (role === "admin" || (role === "supervisor" && req.query.scope === "centre")) {
       CentreId = userCentreId;
     } else {
       CentreId = null;
     }
+    const centreWide = role === "supervisor" && req.query.scope === "centre";
 
     let conditions = [];
     let values = [];
     let idx = 1;
 
-    if (isStaffLike(role)) {
+    if (isStaffLike(role) && !centreWide) {
       conditions.push(`se.staff_id = $${idx++}`);
       values.push(userId);
     }
 
-    if (role === "admin" || role === "superadmin") {
+    if (role === "admin" || role === "superadmin" || centreWide) {
       conditions.push(`st.centre_id = $${idx++}`);
       values.push(CentreId);
     }

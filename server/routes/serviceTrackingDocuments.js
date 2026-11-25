@@ -60,7 +60,8 @@ const checkTrackingAccess = async (req, trackingId) => {
   const row = t.rows[0];
 
   if (req.user.role === "superadmin") return row;
-  if (req.user.role === "admin") return row.centre_id === req.user.centre_id ? row : null;
+  // admin and supervisor: any application in their centre; staff: the ones assigned to them
+  if (req.user.role === "admin" || req.user.role === "supervisor") return row.centre_id === req.user.centre_id ? row : null;
   if (isStaffLike(req.user.role)) return row.assigned_to === req.user.id ? row : null;
   return null;
 };

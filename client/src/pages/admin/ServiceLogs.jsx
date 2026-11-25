@@ -788,7 +788,8 @@ const SORTERS = {
 
 const ServiceLogs = () => {
   const navigate = useNavigate();
-  const isAdmin = ['admin', 'superadmin'].includes(localStorage.getItem('role') || 'staff');
+  // admin, superadmin and supervisor get the override edit (a supervisor fixes entries in the evening accounts)
+  const isAdmin = ['admin', 'superadmin', 'supervisor'].includes(localStorage.getItem('role') || 'staff');
   const initial = useMemo(loadSavedFilters, []);
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);

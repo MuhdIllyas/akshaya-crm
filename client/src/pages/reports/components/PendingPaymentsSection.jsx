@@ -491,7 +491,9 @@ const PendingPaymentsSection = ({
     const id = ++reqRef.current;
     if (silent) setRefreshing(true); else setLoading(true);
     try {
-      const response = mode === "history" ? await getPendingPaymentsHistory() : await getPendingPayments();
+      // A supervisor's own Pending Payments page lists only theirs; here, in Accounts, they see the whole centre
+      const params = localStorage.getItem("role") === "supervisor" ? { scope: "centre" } : {};
+      const response = mode === "history" ? await getPendingPaymentsHistory(params) : await getPendingPayments(params);
       if (id !== reqRef.current) return;
       setPendingPayments(normalizePayments(toList(response)));
       setLoadError(false);
