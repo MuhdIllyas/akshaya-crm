@@ -654,6 +654,11 @@ const AdminExpenseManagement = () => {
     const busy = busyId === expense.id;
     const pending = expense.status === "pending";
     const btn = "rounded-lg p-2 transition disabled:opacity-40";
+    // A supervisor's own expense is approved by the admin, not by themselves
+    const ownAsSupervisor = user?.role === "supervisor" && Number(expense.staff_id) === Number(user?.id);
+    if (pending && ownAsSupervisor) {
+      return <span className="text-xs text-slate-500">Waiting for admin</span>;
+    }
     return (
       <div className="flex items-center gap-1">
         {pending && (

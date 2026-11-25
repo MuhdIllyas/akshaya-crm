@@ -382,9 +382,11 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
       { path: "/dashboard/staff/customers", label: "Customers Profile", icon: CustomersIcon }
     ],
-    // Same as staff for now; the Accounts section is added in the next step.
+    // Staff work + the centre's accounts and the settings the accounts need.
     supervisor: [
       { path: "/dashboard/supervisor", label: "My Dashboard", icon: DashboardIcon },
+      { path: "/dashboard/supervisor/accounts", label: "Accounts", icon: ReportsIcon },
+      { path: "/dashboard/supervisor/expenses", label: "Expense Approvals", icon: ExpenseManagementIcon },
       { path: "/dashboard/staff/calendar", label: "Calendar", icon: CalendarIcon },
       { path: "/dashboard/staff/tasks", label: "My Tasks", icon: TasksIcon },
       { path: "/dashboard/staff/notes", label: "Notes", icon: NotesIconWithBadge },
@@ -401,7 +403,8 @@ const DashboardLayout = () => {
       { path: "/dashboard/staff/token", label: "Token Generator", icon: TokenGeneratorIcon },
       { path: "/dashboard/staff/campaigns", label: "Campaigns", icon: CampaignIcon },
       { path: "/dashboard/staff/track_service", label: "Track Service", icon: TrackServiceIcon },
-      { path: "/dashboard/staff/customers", label: "Customers Profile", icon: CustomersIcon }
+      { path: "/dashboard/staff/customers", label: "Customers Profile", icon: CustomersIcon },
+      { path: "/dashboard/supervisor/settings", label: "Settings", icon: SettingsIcon }
     ],
     customer: [
       { path: "/customer/dashboard", label: "Home", icon: DashboardIcon },

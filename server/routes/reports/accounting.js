@@ -24,8 +24,7 @@ router.use(authenticateToken);
 /* Who may see / change the centre's accounts.
    Staff used to be able to read the whole ledger, income, daily summary and
    all wallet balances, and save reconciliation counts (found in the staging test).
-   'supervisor' is kept because the supervisor dashboard reads the nightly close —
-   remove it if supervisors shouldn't see the accounts. */
+   A supervisor keeps their own centre's accounts (centre_id comes from their login). */
 const ACCOUNTING_ROLES = ['admin', 'superadmin', 'supervisor'];
 const requireAccounting = (req, res, next) => {
   if (!ACCOUNTING_ROLES.includes(req.user.role)) {
@@ -266,7 +265,7 @@ router.post('/daily-summary/actual-cash', requireAccounting, async (req, res) =>
 
 // ========== ADD MISCELLANEOUS INCOME / OVERAGE ==========
 router.post('/misc-income', async (req, res) => {
-  if (!['admin', 'superadmin'].includes(req.user.role)) {
+  if (!ACCOUNTING_ROLES.includes(req.user.role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
  
@@ -680,7 +679,7 @@ router.get('/wallet-reconciliations', requireAccounting, async (req, res) => {
    the count no longer change it.
    --------------------------------------------------------------------- */
 router.patch('/wallet-reconciliations/:id/settle', async (req, res) => {
-  if (!['admin', 'superadmin'].includes(req.user.role)) {
+  if (!ACCOUNTING_ROLES.includes(req.user.role)) {
     return res.status(403).json({ error: 'Admin access required' });
   }
  

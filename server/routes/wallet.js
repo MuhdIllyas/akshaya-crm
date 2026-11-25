@@ -352,6 +352,73 @@ router.post('/create', requireManager, async (req, res) => {
 });
 
 // Update a wallet's settings — admin (own centre) / superadmin
+/* PUT /api/wallet/:id/upi-settings — only the UPI payment check settings
+   (upi_match_sources, upi_account_last4). For the supervisor, who keeps the
+   payment check working but doesn't set up or rename wallets. Admin and
+   superadmin can use it too. */
+router.put('/:id/upi-settings', async (req, res) => {
+  if (!['admin', 'superadmin', 'supervisor'].includes(req.user.role)) {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  const id = parseInt(req.params.id, 10);
+  if (Number.isNaN(id)) return res.status(400).json({ error: 'Invalid wallet id' });
+
+  const client = await req.db.connect();
+  try {
+    await client.query('BEGIN');
+    const currentWallet = await client.query('SELECT * FROM wallets WHERE id = $1 FOR UPDATE', [id]);
+    if (currentWallet.rows.length === 0) throw httpError(404, 'Wallet not found');
+    const current = currentWallet.rows[0];
+    if (!isSuper(req) && current.centre_id !== req.user.centre_id) {
+      throw httpError(403, 'You do not have access to this wallet');
+    }
+
+    const upi = readUpiSettings(req.body, current); // not sent = keep
+    const result = await client.query(
+      `UPDATE wallets SET upi_match_sources=$1, upi_account_last4=$2, updated_at=NOW()
+       WHERE id=$3 RETURNING *`,
+      [upi.sources, upi.last4, id]
+    );
+
+    const changes = [];
+    if ((current.upi_match_sources || []).join(', ') !== (upi.sources || []).join(', ')) {
+      changes.push(`UPI check set to "${(upi.sources || []).join(', ') || 'off'}"`);
+    }
+    if ((upi.last4 || null) !== (current.upi_account_last4 || null)) {
+      changes.push(`UPI account set to "${upi.last4 ? 'XX' + upi.last4 : 'any'}"`);
+    }
+    if (changes.length) {
+      await client.query(
+        `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        ['Wallet UPI Settings Updated', req.user.username,
+         `Wallet ${current.name}: ${changes.join(', ')}`, current.centre_id]
+      );
+    }
+    await client.query('COMMIT');
+
+    if (changes.length) {
+      logActivity({
+        centre_id: current.centre_id,
+        related_type: 'wallet',
+        related_id: id,
+        action: 'Wallet Updated',
+        description: `Updated wallet: ${changes.join(', ')}`,
+        performed_by: req.user.id,
+        performed_by_role: req.user.role
+      }).catch((e) => console.error('Non-fatal: wallet activity log failed', e));
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating wallet UPI settings:', err);
+    res.status(err.status || 500).json({ error: err.status ? err.message : 'Failed to update UPI settings' });
+  } finally {
+    client.release();
+  }
+});
+
 // The balance is NEVER changed here, even if the request sends one.
 // Edit forms used to send back the balance they loaded when opened; saving
 // later wiped out every entry made in between (23 Nov 2026: SBI +₹10,000 at

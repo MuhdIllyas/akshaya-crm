@@ -26,7 +26,8 @@ router.use((req, res, next) => {
   });
 });
 
-const isManager = (user) => ["admin", "superadmin"].includes(user.role);
+// supervisor checks the centre's payments too (centreScope keeps them to their own centre)
+const isManager = (user) => ["admin", "superadmin", "supervisor"].includes(user.role);
 
 const centreScope = (req, params) => {
   const { user } = req;

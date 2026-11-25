@@ -1,14 +1,26 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { QRCodeCanvas } from 'qrcode.react';
-import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2, FiImage } from 'react-icons/fi';
+import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2, FiImage, FiCreditCard } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import AdminPrintSettings from '../printing/AdminPrintSettings';
 import PostersSettings from '../printing/PostersSettings';
 import SignInHistory from '../../components/security/SignInHistory';
+import WalletUpiSettings from '../../components/upi/WalletUpiSettings';
+
+// A supervisor only gets what the accounts need: the companion phone and the UPI payment check.
+const SETTINGS_TABS = [
+    { id: 'companion', label: 'Companion App', icon: FiSmartphone, roles: ['admin', 'superadmin', 'supervisor'] },
+    { id: 'upi', label: 'Payment check', icon: FiCreditCard, roles: ['supervisor'] },
+    { id: 'print', label: 'Print Routing', icon: FiPrinter, roles: ['admin', 'superadmin'] },
+    { id: 'posters', label: 'Posters', icon: FiImage, roles: ['admin', 'superadmin'] },
+    { id: 'security', label: 'Security', icon: FiShield, roles: ['admin', 'superadmin'] },
+];
 
 const AdminSettings = () => {
-    const [activeTab, setActiveTab] = useState('companion'); // 'companion', 'print', 'posters', 'security'
+    const role = localStorage.getItem('role');
+    const tabs = SETTINGS_TABS.filter((t) => t.roles.includes(role));
+    const [activeTab, setActiveTab] = useState('companion');
 
     return (
         <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
@@ -18,43 +30,29 @@ const AdminSettings = () => {
                 <h1 className="text-2xl font-bold text-slate-900 mb-4 md:mb-8">Settings</h1>
                 
                 <nav className="flex gap-2 overflow-x-auto md:block md:space-y-2 md:overflow-visible -mx-1 px-1 pb-1 md:pb-0" aria-label="Settings sections">
-                    <button 
-                        onClick={() => setActiveTab('companion')}
-                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'companion' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                        <FiSmartphone className="text-lg" />
-                        Companion App
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('print')}
-                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'print' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                        <FiPrinter className="text-lg" />
-                        Print Routing
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('posters')}
-                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'posters' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                        <FiImage className="text-lg" />
-                        Posters
-                    </button>
-                    <button 
-                        onClick={() => setActiveTab('security')}
-                        className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === 'security' ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
-                    >
-                        <FiShield className="text-lg" />
-                        Security
-                    </button>
+                    {tabs.map((tab) => {
+                        const TabIcon = tab.icon;
+                        return (
+                            <button
+                                key={tab.id}
+                                onClick={() => setActiveTab(tab.id)}
+                                className={`md:w-full shrink-0 whitespace-nowrap flex items-center gap-2 md:gap-3 px-4 py-2.5 min-h-[44px] rounded-xl text-sm md:text-base font-medium transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-navy-500/40 ${activeTab === tab.id ? 'bg-navy-700 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'}`}
+                            >
+                                <TabIcon className="text-lg" />
+                                {tab.label}
+                            </button>
+                        );
+                    })}
                 </nav>
             </div>
 
             {/* Main Content Area */}
             <div className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto">
                 {activeTab === 'companion' && <CompanionSetupTab />}
-                {activeTab === 'print' && <AdminPrintSettings />}
-                {activeTab === 'posters' && <PostersSettings />}
-                {activeTab === 'security' && <SignInHistory />}
+                {activeTab === 'upi' && <WalletUpiSettings />}
+                {activeTab === 'print' && tabs.some((t) => t.id === 'print') && <AdminPrintSettings />}
+                {activeTab === 'posters' && tabs.some((t) => t.id === 'posters') && <PostersSettings />}
+                {activeTab === 'security' && tabs.some((t) => t.id === 'security') && <SignInHistory />}
             </div>
         </div>
     );

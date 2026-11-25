@@ -6,6 +6,19 @@ import { isStaffLike } from "../utils/roles.js";
 
 const router = express.Router();
 
+/* Who approves / rejects / corrects expenses. A supervisor does it for their
+   own centre, but never for their own expenses (those go to the admin). */
+const EXPENSE_MANAGERS = ["admin", "superadmin", "supervisor"];
+const checkCanDecide = (req, exp) => {
+  if (req.user.role !== "superadmin" && Number(exp.centre_id) !== Number(req.user.centre_id)) {
+    return "Access denied";
+  }
+  if (req.user.role === "supervisor" && Number(exp.staff_id) === Number(req.user.id)) {
+    return "Your own expense needs the admin's approval";
+  }
+  return null;
+};
+
 /* ======================================================
    AUTH MIDDLEWARE (same as wallet.js)
 ====================================================== */
@@ -203,10 +216,10 @@ router.post("/", async (req, res) => {
     // 🔥 NEW: NOTIFICATION ENGINE TRIGGER (Notify Admins)
     if (requires_approval) {
       try {
-        // Find all admins for this centre
+        // Admins and supervisors of this centre (never the person who added it)
         const adminsRes = await client.query(
-          `SELECT id FROM staff WHERE centre_id = $1 AND role IN ('admin', 'superadmin')`,
-          [centreId]
+          `SELECT id FROM staff WHERE centre_id = $1 AND role IN ('admin', 'superadmin', 'supervisor') AND id <> $2`,
+          [centreId, staffId]
         );
         const adminIds = adminsRes.rows.map(r => r.id);
 
@@ -287,7 +300,7 @@ router.delete("/:id", async (req, res) => {
     if (expRes.rows.length === 0) throw httpErr(404, "Expense not found");
     const exp = expRes.rows[0];
 
-    const isAdmin = ["admin", "superadmin"].includes(req.user.role);
+    const isAdmin = EXPENSE_MANAGERS.includes(req.user.role);
     const isOwner = exp.staff_id === req.user.id;
     if (req.user.role !== "superadmin" && Number(exp.centre_id) !== Number(req.user.centre_id)) {
       throw httpErr(403, "Access denied");
@@ -402,7 +415,7 @@ router.delete("/:id", async (req, res) => {
    ADMIN – GET ALL EXPENSES (excludes reversals)
 ====================================================== */
 router.get("/", async (req, res) => {
-  if (!["admin", "superadmin"].includes(req.user.role)) {
+  if (!EXPENSE_MANAGERS.includes(req.user.role)) {
     return res.status(403).json({ error: "Access denied" });
   }
   
@@ -438,7 +451,7 @@ router.get("/", async (req, res) => {
    ADMIN – APPROVE EXPENSE (NOW WITH BALANCE CHECK + LOCK)
 ====================================================== */
 router.put("/:id/approve", async (req, res) => {
-  if (!["admin", "superadmin"].includes(req.user.role)) {
+  if (!EXPENSE_MANAGERS.includes(req.user.role)) {
     return res.status(403).json({ error: "Access denied" });
   }
 
@@ -459,6 +472,8 @@ router.put("/:id/approve", async (req, res) => {
       throw new Error("Expense not found or already processed");
     }
     const exp = expRes.rows[0];
+    const denied = checkCanDecide(req, exp);
+    if (denied) throw Object.assign(new Error(denied), { status: 403 });
 
     const finalTeamId = team_id || exp.team_id || null;
 
@@ -556,7 +571,7 @@ router.put("/:id/approve", async (req, res) => {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("Approve expense error:", err);
-    res.status(400).json({ error: err.message });
+    res.status(err.status || 400).json({ error: err.message });
   } finally {
     client.release();
   }
@@ -566,7 +581,7 @@ router.put("/:id/approve", async (req, res) => {
    ADMIN – REJECT EXPENSE
 ====================================================== */
 router.put("/:id/reject", async (req, res) => {
-  if (!["admin", "superadmin"].includes(req.user.role)) {
+  if (!EXPENSE_MANAGERS.includes(req.user.role)) {
     return res.status(403).json({ error: "Access denied" });
   }
   const client = await req.db.connect();
@@ -581,6 +596,8 @@ router.put("/:id/reject", async (req, res) => {
       return res.status(404).json({ error: "Expense not found or already processed" });
     }
     const exp = expRes.rows[0];
+    const denied = checkCanDecide(req, exp);
+    if (denied) return res.status(403).json({ error: denied });
 
     await client.query(
       `UPDATE expenses SET status = 'rejected', approved_at = NOW(), approved_by = $1
@@ -652,7 +669,9 @@ router.put("/:id/correct", async (req, res) => {
     const original = expRes.rows[0];
  
     const isSuperAdmin = req.user.role === "superadmin";
-    const isAdmin = ["admin", "superadmin"].includes(req.user.role);
+    // a supervisor corrects their own expenses as the owner (with the staff limit), not as a manager
+    const isAdmin = EXPENSE_MANAGERS.includes(req.user.role) &&
+      !(req.user.role === "supervisor" && Number(original.staff_id) === Number(req.user.id));
     const isOwner = original.staff_id === req.user.id;
  
     if (!isSuperAdmin && Number(original.centre_id) !== Number(req.user.centre_id)) throw httpErr(403, "Access denied");

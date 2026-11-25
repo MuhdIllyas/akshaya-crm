@@ -38,7 +38,7 @@ export const authMiddleware = (allowedRoles) => async (req, res, next) => {
 const router = express.Router();
 
 // ---> 1. NEW ROUTE: Generate a secure, 15-minute pairing token for the React Admin
-router.get("/generate-pairing-token", authMiddleware([ "admin", "superadmin"]), async (req, res) => {
+router.get("/generate-pairing-token", authMiddleware(["admin", "superadmin", "supervisor"]), async (req, res) => {
     try {
         const centreId = req.user.centre_id;
         
@@ -188,7 +188,7 @@ router.post('/unpair', deviceAuth, async (req, res) => {
 });
 
 // ---> NEW ROUTE: Fetch all registered devices for an Admin's centre
-router.get("/devices", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.get("/devices", authMiddleware(["admin", "superadmin", "supervisor"]), async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT id, device_name, app_version, battery_level, network_status, last_seen, is_active,
@@ -206,7 +206,7 @@ router.get("/devices", authMiddleware(["admin", "superadmin"]), async (req, res)
 });
 
 // ---> NEW ROUTE: Admin unpairs/removes a device from the CRM
-router.delete("/devices/:id", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+router.delete("/devices/:id", authMiddleware(["admin", "superadmin", "supervisor"]), async (req, res) => {
     try {
         const { id } = req.params;
         

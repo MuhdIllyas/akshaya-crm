@@ -1,7 +1,11 @@
 // Where a notification should take you when it's clicked.
 // Used by the toast (NotificationContext) and can be reused by the bell / Notifications page.
 
-const role = () => localStorage.getItem('role') || 'staff';
+// Supervisors use the staff pages (/dashboard/staff/...) for their staff work.
+const role = () => {
+  const r = localStorage.getItem('role') || 'staff';
+  return r === 'supervisor' ? 'staff' : r;
+};
 const hub = () => `/dashboard/${role()}/operationshub`;
 
 export const getNotificationLink = (n) => {

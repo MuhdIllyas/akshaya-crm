@@ -28,7 +28,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-  const allowedRoles = ["admin", "superadmin"];
+  const allowedRoles = ["admin", "superadmin"]; // re-run touches every centre, so not for supervisors
   if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({ error: "Admin access required" });
   }

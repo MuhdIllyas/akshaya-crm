@@ -26,14 +26,14 @@ const authenticateToken = (req, res, next) => {
 };
 router.use(authenticateToken);
 
-// admin: own centre (read + write). superadmin: any centre, read-only. Others: no access.
+// admin and supervisor: own centre (read + write). superadmin: any centre, read-only. Others: no access.
 const VIEW_ROLES = ['admin', 'superadmin', 'supervisor'];
 router.use((req, res, next) => {
   if (!VIEW_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Admin access required' });
   next();
 });
 const requireWriter = (req, res, next) => {
-  if (req.user.role !== 'admin') {
+  if (!['admin', 'supervisor'].includes(req.user.role)) {
     return res.status(403).json({ error: req.user.role === 'superadmin' ? 'Superadmin access is read-only' : 'Admin access required' });
   }
   next();
