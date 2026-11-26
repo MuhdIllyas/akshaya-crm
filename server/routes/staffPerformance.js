@@ -1534,6 +1534,54 @@ router.get('/daily-log', async (req, res) => {
 });
 
 /* ==============================================================
+   GET /api/staffperformance/my-queue
+   Just the counts of the work waiting for me, for the "My queue" chip a
+   supervisor sees on every page (so the accounts don't hide their own work).
+   Same rules as the staff dashboard:
+   - tokens: my centre, assigned to me or unassigned, not completed/cancelled
+   - online_waiting: bookings under review (strict booking mode: my centre's and "any centre" ones)
+   - online_mine: bookings I have taken that are still processing
+============================================================== */
+router.get('/my-queue', async (req, res) => {
+  try {
+    const staffId = parseInt(req.user.id, 10);
+    const centreId = req.user.centre_id;
+    const strictBookings = centreId && (await getBookingMode()) === BOOKING_MODES.STRICT;
+    const [tokens, waiting, mine] = await Promise.all([
+      pool.query(
+        `SELECT COUNT(*)::int AS n
+         FROM tokens t
+         LEFT JOIN campaigns cmp ON t.campaign_id = cmp.id
+         WHERE t.centre_id = $1
+           AND (t.staff_id IS NULL OR t.staff_id::text IN ('', 'null', $2))
+           AND t.status NOT IN ('completed', 'cancelled')
+           AND (t.type = 'normal' OR (t.type = 'campaign' AND CURRENT_DATE BETWEEN cmp.start_date AND cmp.end_date))`,
+        [centreId, String(staffId)]
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM customer_services cs
+         WHERE cs.status = 'under_review'
+           ${strictBookings ? 'AND (cs.requested_centre_id IS NULL OR cs.requested_centre_id = $1)' : ''}`,
+        strictBookings ? [centreId] : []
+      ),
+      pool.query(
+        `SELECT COUNT(*)::int AS n FROM customer_services cs
+         WHERE cs.status = 'processing' AND cs.assigned_staff_id = $1`,
+        [staffId]
+      ),
+    ]);
+    res.json({
+      tokens_waiting: tokens.rows[0].n,
+      online_waiting: waiting.rows[0].n,
+      online_mine: mine.rows[0].n,
+    });
+  } catch (err) {
+    console.error('My queue error:', err.message);
+    res.status(500).json({ error: 'Failed to load your queue' });
+  }
+});
+
+/* ==============================================================
    HYBRID BFF WORKSPACE INIT ROUTE
    Aggregates Performance, Tasks, Events, Recent Activity & Bookings
 ============================================================== */

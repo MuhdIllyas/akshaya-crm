@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   FiAlertTriangle, FiArrowRight, FiBriefcase, FiCalendar, FiCheck, FiClock,
@@ -10,6 +10,7 @@ import { getTokens } from "/src/services/serviceService";
 import { getWalletsForCentre } from "@/services/walletService";
 import { postAttendance } from "/src/services/salaryService";
 import { todayIST, addDays, ymdIST } from "../utils/dates";
+import { fetchCloseTime, shouldOpenMyWork, isEvening, to12h } from "../utils/supervisorHome";
 
 /* Supervisor home (navy with gold accents; works in light and dark mode): the centre's accounts first, then the
    supervisor's own work, applications, performance and events. The full
@@ -164,6 +165,20 @@ const SupervisorDashboard = () => {
   const [now, setNow] = useState(new Date());
   const [punching, setPunching] = useState(false);
   const [showQuick, setShowQuick] = useState(false);
+  const [closeTime, setCloseTime] = useState(null);
+  const navigate = useNavigate();
+
+  // During the day the first home visit of a login opens My Work (the supervisor's staff work);
+  // from the centre's evening time it stays here for the close
+  useEffect(() => {
+    let alive = true;
+    fetchCloseTime().then((ct) => {
+      if (!alive) return;
+      setCloseTime(ct);
+      if (shouldOpenMyWork(ct)) navigate(MY_WORK, { replace: true });
+    });
+    return () => { alive = false; };
+  }, [navigate]);
 
   const refresh = useCallback(() => {
     setLoading(true);
@@ -249,6 +264,9 @@ const SupervisorDashboard = () => {
             <p className="mt-1 text-sm text-slate-200">
               {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })} ·{" "}
               {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              {closeTime && (
+                <> · {isEvening(closeTime, now) ? <strong className="font-semibold text-white">Evening close time</strong> : `Evening close from ${to12h(closeTime)}`}</>
+              )}
             </p>
           </div>
           <div className="flex flex-wrap gap-2">

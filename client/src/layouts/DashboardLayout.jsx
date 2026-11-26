@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { customerAuthHeaders } from '@/tenancy/centres';
 import useLiveOtps from '@/hooks/useLiveOtps';
 import useUpiCreditAlerts from '@/hooks/useUpiCreditAlerts';
+import useMyQueue from '@/hooks/useMyQueue';
 import UpiChip from '@/components/upi/UpiChip';
 import { copyOtp, otpTimeLeft } from '@/utils/otpAlert';
 import { FiCopy } from 'react-icons/fi';
@@ -27,6 +28,9 @@ const DashboardLayout = () => {
   const isCollapsed = collapsedPref && isDesktop;
   const [activePath, setActivePath] = useState(window.location.pathname);
   const location = useLocation();
+  // Keep the highlighted menu item in step with the page, also when it changes
+  // without a menu click (dashboard links, the queue chip, redirects)
+  useEffect(() => { setActivePath(location.pathname); }, [location.pathname]);
   const navigate = useNavigate();
 
   // Top bar "jump to page" box (Ctrl/Cmd + K focuses it)
@@ -480,12 +484,15 @@ const DashboardLayout = () => {
   };
   const quickTokenItem = userNavigation.find((item) => item.label === "Token Generator");
   // Notification / event strip in the top bar (desktop only; not for customers or supervisors)
-  const showTicker = ["staff", "admin", "superadmin"].includes(role) && !!notificationsItem;
+  // supervisors too: they serve customers like staff, even while on the Accounts pages
+  const showTicker = ["staff", "supervisor", "admin", "superadmin"].includes(role) && !!notificationsItem;
   // OTPs from the companion phone: shown live in the top bar, never counted as unread
   const otpsPath = notificationsItem ? `${notificationsItem.path}?tab=otps` : null;
   const { otps: liveOtps } = useLiveOtps({ token, apiBase: API_BASE_URL, enabled: showTicker });
   // UPI payments caught by the companion phone: a live "₹100 received" toast
   useUpiCreditAlerts({ enabled: showTicker });
+  // Supervisor: their own waiting work, shown on every page so the accounts don't hide it
+  const { queue: myQueue, waiting: myQueueWaiting } = useMyQueue({ enabled: role === "supervisor" });
   const quickEntryItem = userNavigation.find((item) => item.label === "Service Entry");
   const userInitials = String(roleDisplayNames[role] || "U").split(" ").filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 
@@ -697,6 +704,11 @@ const DashboardLayout = () => {
                       {item.label}
                     </span>
                   )}
+                  {!isCollapsed && item.label === "My Work" && myQueueWaiting > 0 && (
+                    <span className="ml-auto mr-5 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-bold text-amber-900 ring-1 ring-amber-200" aria-label={`${myQueueWaiting} waiting`}>
+                      {myQueueWaiting > 99 ? "99+" : myQueueWaiting}
+                    </span>
+                  )}
 
                   {/* Enhanced Tooltip */}
                   {isCollapsed && (
@@ -901,6 +913,26 @@ const DashboardLayout = () => {
           )}
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5 sm:gap-2">
+            {role === "supervisor" && myQueue && (
+              <Link
+                to="/dashboard/supervisor/mywork"
+                title="Your walk-in tokens and online bookings waiting"
+                aria-label={`My queue: ${myQueue.tokens_waiting} tokens and ${myQueue.online_waiting} online bookings waiting`}
+                className={`inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors ${
+                  myQueueWaiting > 0
+                    ? "border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100"
+                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                }`}
+              >
+                <span className={`h-2 w-2 shrink-0 rounded-full ${myQueueWaiting > 0 ? "bg-amber-500" : "bg-emerald-500"}`} aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {myQueueWaiting > 0
+                    ? `${myQueue.tokens_waiting} waiting · ${myQueue.online_waiting} online`
+                    : "Queue clear"}
+                </span>
+                <span className="sm:hidden">{myQueueWaiting}</span>
+              </Link>
+            )}
             {(role === "staff" || role === "supervisor" || role === "admin") && <UpiChip />}
             {showTicker && liveOtps.length > 0 && (
               <OtpPill otp={liveOtps[0]} count={liveOtps.length} onOpen={() => otpsPath && navigate(otpsPath)} />

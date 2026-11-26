@@ -18,6 +18,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorAccounts from "./pages/supervisor/SupervisorAccounts";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
+import SupervisorWorkStrip from "./components/SupervisorWorkStrip";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
 import CalendarPage from "./pages/CalendarPage";
 import StaffManagement from "./pages/admin/StaffManagement";
@@ -357,7 +358,7 @@ const App = () => {
             <Route path="supervisor" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorDashboard /></ProtectedRoute>} />
             <Route path="supervisor/accounts" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorAccounts /></ProtectedRoute>} />
             {/* The supervisor's own staff dashboard (token queue, online work, punch in) */}
-            <Route path="supervisor/mywork" element={<ProtectedRoute allowedRoles={["supervisor"]}><StaffDashboard /></ProtectedRoute>} />
+            <Route path="supervisor/mywork" element={<ProtectedRoute allowedRoles={["supervisor"]}><StaffDashboard bannerSlot={<SupervisorWorkStrip />} /></ProtectedRoute>} />
             <Route path="supervisor/expenses" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminExpenseManagement /></ProtectedRoute>} />
             <Route path="supervisor/settings" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminSettings /></ProtectedRoute>} />
             <Route path="supervisor/servicelogs" element={<ProtectedRoute allowedRoles={["supervisor"]}><ServiceLogs /></ProtectedRoute>} />

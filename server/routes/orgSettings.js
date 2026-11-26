@@ -74,6 +74,48 @@ router.put("/booking-poster", authMiddleware(["superadmin"]), async (req, res) =
   }
 });
 
+/* ------------------------------------------------------------------
+   Supervisor evening time, per centre: before it a supervisor's home opens
+   on their own work, from it on the centre accounts (evening close).
+   Stored as org setting "supervisor_close_times" = { "<centre id>": "HH:MM" }.
+   GET /api/org-settings/supervisor-close-time   (any staff; superadmin may pass ?centre_id)
+     → { centre_id, close_time, is_default }
+   PUT /api/org-settings/supervisor-close-time   (admin: own centre; superadmin: ?centre_id / body.centre_id)
+     { close_time: "HH:MM" }
+------------------------------------------------------------------- */
+const DEFAULT_CLOSE_TIME = "18:00";
+const isHHMM = (v) => typeof v === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(v);
+const closeCentreFor = (req) =>
+  Number(req.user.role === "superadmin" ? (req.body?.centre_id ?? req.query.centre_id ?? req.user.centre_id) : req.user.centre_id) || null;
+
+router.get("/supervisor-close-time", authMiddleware(["staff", "supervisor", "admin", "superadmin"]), async (req, res) => {
+  try {
+    const centreId = closeCentreFor(req);
+    const map = (await getSetting("supervisor_close_times")) || {};
+    const saved = centreId ? map[String(centreId)] : null;
+    res.json({ centre_id: centreId, close_time: isHHMM(saved) ? saved : DEFAULT_CLOSE_TIME, is_default: !isHHMM(saved) });
+  } catch (err) {
+    console.error("supervisor close time error:", err.message);
+    res.status(500).json({ error: "Failed to load the evening time" });
+  }
+});
+
+router.put("/supervisor-close-time", authMiddleware(["admin", "superadmin"]), async (req, res) => {
+  const closeTime = req.body?.close_time;
+  if (!isHHMM(closeTime)) return res.status(400).json({ error: "close_time must be HH:MM (24-hour)" });
+  const centreId = closeCentreFor(req);
+  if (!centreId) return res.status(400).json({ error: "centre_id is required" });
+  try {
+    const map = { ...((await getSetting("supervisor_close_times")) || {}) };
+    map[String(centreId)] = closeTime;
+    await setSetting("supervisor_close_times", map, req.user.id);
+    res.json({ centre_id: centreId, close_time: closeTime, is_default: false });
+  } catch (err) {
+    console.error("save supervisor close time error:", err.message);
+    res.status(500).json({ error: err.code === "42P01" ? "Run the centre-bookings migration first" : "Failed to save" });
+  }
+});
+
 router.put("/customer-portal", authMiddleware(["superadmin"]), async (req, res) => {
   const mode = req.body?.customer_portal;
   if (!Object.values(CUSTOMER_PORTAL).includes(mode)) {

@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { QRCodeCanvas } from 'qrcode.react';
-import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2, FiImage, FiCreditCard } from 'react-icons/fi';
+import { FiSmartphone, FiPrinter, FiShield, FiRefreshCw, FiTrash2, FiImage, FiCreditCard, FiClock } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import AdminPrintSettings from '../printing/AdminPrintSettings';
 import PostersSettings from '../printing/PostersSettings';
 import SignInHistory from '../../components/security/SignInHistory';
 import WalletUpiSettings from '../../components/upi/WalletUpiSettings';
+import SupervisorCloseTimeSettings from '../../components/SupervisorCloseTimeSettings';
 
 // A supervisor only gets what the accounts need: the companion phone and the UPI payment check.
 const SETTINGS_TABS = [
@@ -15,6 +16,7 @@ const SETTINGS_TABS = [
     { id: 'print', label: 'Print Routing', icon: FiPrinter, roles: ['admin', 'superadmin'] },
     { id: 'posters', label: 'Posters', icon: FiImage, roles: ['admin', 'superadmin'] },
     { id: 'security', label: 'Security', icon: FiShield, roles: ['admin', 'superadmin'] },
+    { id: 'supervisor', label: 'Supervisor', icon: FiClock, roles: ['admin'] },
 ];
 
 const AdminSettings = () => {
@@ -50,6 +52,7 @@ const AdminSettings = () => {
             <div className="flex-1 min-w-0 p-4 sm:p-6 md:p-8 overflow-y-auto">
                 {activeTab === 'companion' && <CompanionSetupTab />}
                 {activeTab === 'upi' && <WalletUpiSettings />}
+                {activeTab === 'supervisor' && tabs.some((t) => t.id === 'supervisor') && <SupervisorCloseTimeSettings />}
                 {activeTab === 'print' && tabs.some((t) => t.id === 'print') && <AdminPrintSettings />}
                 {activeTab === 'posters' && tabs.some((t) => t.id === 'posters') && <PostersSettings />}
                 {activeTab === 'security' && tabs.some((t) => t.id === 'security') && <SignInHistory />}
