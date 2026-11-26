@@ -1174,7 +1174,8 @@ router.get('/categories', authenticateToken, async (req, res) => {
    the charges set for that service at this centre, and a check:
      check = 'swapped'    service charge and department fee look swapped
                           (entered SC = usual dept AND entered dept = usual SC)
-             'sc_differs' service charge is not the usual one
+             'sc_low'     service charge is below the usual one (more is fine:
+                          a printout with more pages costs more)
              null         fine, or the service has no set charge (bills, transfers…)
    plus a per-staff collection summary and day totals. */
 router.get('/supervisor/day', authenticateToken, async (req, res) => {
@@ -1229,13 +1230,61 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
     );
 
     const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+    const ids = rows.map((e) => e.id);
+
+    // live payments of each entry, with the wallet transaction a correction works on
+    const payRes = ids.length ? await client.query(
+      `SELECT p.id, p.service_entry_id, p.wallet_id, w.name AS wallet_name, p.amount, p.created_at,
+              (SELECT wt.id FROM wallet_transactions wt
+                WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = FALSE
+                ORDER BY wt.id DESC LIMIT 1) AS tx_id
+       FROM payments p
+       LEFT JOIN wallets w ON w.id = p.wallet_id
+       WHERE p.service_entry_id = ANY($1::int[]) AND p.status = 'received'
+         AND COALESCE(p.is_reversal, FALSE) = FALSE
+         AND NOT EXISTS (SELECT 1 FROM wallet_transactions wt
+                         WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE)
+       ORDER BY p.id`,
+      [ids]
+    ) : { rows: [] };
+    const paymentsOf = new Map();
+    for (const p of payRes.rows) {
+      const list = paymentsOf.get(p.service_entry_id) || [];
+      list.push({ id: p.id, walletId: p.wallet_id, walletName: p.wallet_name, amount: r2(p.amount), createdAt: p.created_at, txId: p.tx_id || null });
+      paymentsOf.set(p.service_entry_id, list);
+    }
+
+    // edit history: entry saved again (audit log) or money corrected (reversal transactions)
+    const editedOf = new Map();
+    const note = (id, at, by) => {
+      const cur = editedOf.get(id);
+      if (!cur || new Date(at) > new Date(cur.at)) editedOf.set(id, { at, by: by || (cur && cur.by) || null });
+    };
+    if (ids.length) {
+      const auditRes = await client.query(
+        `SELECT details, performed_by, created_at FROM audit_logs
+         WHERE action = 'Service Entry Updated' AND created_at >= $2::date
+           AND details = ANY($1::text[])`,
+        [ids.map((id) => `Updated service entry ID ${id}`), date]
+      );
+      for (const a of auditRes.rows) note(Number(String(a.details).replace(/\D+/g, '')), a.created_at, a.performed_by);
+      const revRes = await client.query(
+        `SELECT reference_id, MAX(created_at) AS at FROM wallet_transactions
+         WHERE reference_id = ANY($1::int[]) AND COALESCE(is_reversal, FALSE) = TRUE
+           AND description LIKE 'Correction reversal%'
+         GROUP BY reference_id`,
+        [ids]
+      );
+      for (const r of revRes.rows) note(Number(r.reference_id), r.at, null);
+    }
+
     const entries = rows.map((e) => {
       const sc = r2(e.service_charges), dept = r2(e.department_charges);
       const csc = r2(e.conf_sc), cdept = r2(e.conf_dept);
       const total = r2(e.total_charges), received = r2(e.received);
       let check = null;
       if (csc > 0 && cdept > 0 && csc !== cdept && sc === cdept && dept === csc) check = 'swapped';
-      else if (csc > 0 && sc !== csc) check = 'sc_differs';
+      else if (csc > 0 && sc < csc) check = 'sc_low';
       return {
         id: e.id,
         createdAt: e.created_at,
@@ -1252,6 +1301,10 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
         serviceWalletId: e.service_wallet_id,
         status: e.status,
         isEdited: e.is_edited,
+        edited: !!e.is_edited || editedOf.has(e.id),
+        editedAt: editedOf.get(e.id)?.at || null,
+        editedBy: editedOf.get(e.id)?.by || null,
+        payments: paymentsOf.get(e.id) || [],
         serviceCharge: sc,
         departmentCharge: dept,
         totalCharge: total,
@@ -2879,10 +2932,11 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
       `SELECT wt.*, w.name as wallet_name, w.balance, w.centre_id
        FROM wallet_transactions wt
        JOIN wallets w ON wt.wallet_id = w.id
-       WHERE wt.id = $1 
-          OR wt.reference_payment_id = $1
+       WHERE wt.id = $1
+          OR ($2::boolean = FALSE AND wt.reference_payment_id = $1)
+       ORDER BY (wt.id = $1) DESC
        LIMIT 1`,
-      [transactionId]
+      [transactionId, req.body.match === 'transaction']
     );
 
     if (baseRes.rows.length === 0) {
@@ -2957,6 +3011,9 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
         [finalWalletId]
       );
       if (newWalletRes.rows.length === 0) throw new Error('New wallet not found');
+      if (user.role !== 'superadmin' && Number(newWalletRes.rows[0].centre_id) !== Number(original.centre_id)) {
+        throw new Error('That wallet belongs to another centre');
+      }
     }
 
     // 🔥 BALANCE CHECK

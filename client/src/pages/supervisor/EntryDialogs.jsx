@@ -3,9 +3,15 @@ import { toast } from "react-toastify";
 import { FiAlertTriangle, FiTrash2, FiX } from "react-icons/fi";
 
 /* Edit and delete a service entry right on the supervisor's Today's entries page.
-   Edit: customer, phone, service charge, department fee. A changed department
-   fee goes through the correction engine (PUT /transactions/:id/correct), which
-   also fixes the department wallet debit; then PUT /entry/:id saves the rest.
+   Edit: customer, phone, service charge, department fee and the payments.
+   Order of the saves:
+     1. a changed department fee goes through the correction engine
+        (PUT /transactions/:id/correct), which also fixes the department wallet debit
+     2. PUT /entry/:id saves the rest of the entry (new total)
+     3. each changed payment: the correction engine on its wallet transaction
+        (amount and/or wallet; the money moves with it)
+     4. a new payment received: POST /pending-payments/:id/receive-payment
+        (counted for the entry's staff member)
    Delete: DELETE /entry/:id/force with a reason (kept in the audit log). */
 
 const API = import.meta.env.VITE_API_URL;
@@ -59,10 +65,39 @@ export const EditEntryDialog = ({ entry, onClose, onSaved, onFullEdit }) => {
   const [saving, setSaving] = useState(false);
   const set = (k) => (e) => { setForm((f) => ({ ...f, [k]: e.target.value })); setErrors((x) => ({ ...x, [k]: "" })); };
 
+  // payments: the ones already received (editable) and one new one
+  const original = entry.payments || [];
+  const [pays, setPays] = useState(() => original.map((p) => ({ ...p, amount: String(p.amount), walletId: String(p.walletId || "") })));
+  const [newPay, setNewPay] = useState({ amount: "", walletId: "" });
+  const [wallets, setWallets] = useState([]);
+  useEffect(() => {
+    call("GET", "/api/wallet/my-centre-wallets")
+      .then((rows) => setWallets((Array.isArray(rows) ? rows : []).filter((w) => !w.status || w.status === "active")))
+      .catch(() => setWallets([]));
+  }, []);
+  const setPay = (i, k) => (e) => {
+    const v = e.target.value;
+    setPays((list) => list.map((p, j) => (j === i ? { ...p, [k]: v } : p)));
+    setErrors((x) => ({ ...x, [`pay${i}`]: "", paid: "" }));
+  };
+  const setNew = (k) => (e) => {
+    const v = e.target.value;
+    setNewPay((p) => ({ ...p, [k]: v }));
+    setErrors((x) => ({ ...x, newPay: "", paid: "" }));
+  };
+
   const sc = Number(form.sc), dept = Number(form.dept);
   const scChanged = sc !== entry.serviceCharge;
   const deptChanged = dept !== entry.departmentCharge;
-  const moneyChanged = scChanged || deptChanged;
+  const payChanged = (p, i) => Number(p.amount) !== original[i].amount || p.walletId !== String(original[i].walletId || "");
+  const changedPays = pays.map((p, i) => ({ p, i })).filter(({ p, i }) => payChanged(p, i));
+  const newAmount = newPay.amount === "" ? 0 : Number(newPay.amount);
+  const adding = newPay.amount !== "" && newAmount > 0;
+  const moneyChanged = scChanged || deptChanged || changedPays.length > 0 || adding;
+  const total = Math.round(((Number.isFinite(sc) ? sc : 0) + (Number.isFinite(dept) ? dept : 0)) * 100) / 100;
+  const paid = Math.round((pays.reduce((t, p) => t + (Number(p.amount) || 0), 0) + (adding ? newAmount : 0)) * 100) / 100;
+  const due = Math.round((total - paid) * 100) / 100;
+  const knownWallet = (id) => wallets.some((w) => String(w.id) === String(id));
   const hasUsual = entry.usualServiceCharge !== null && entry.usualDepartmentCharge !== null;
   const useUsual = () => {
     setForm((f) => ({
@@ -81,15 +116,28 @@ export const EditEntryDialog = ({ entry, onClose, onSaved, onFullEdit }) => {
     if (form.sc === "" || !Number.isFinite(sc) || sc < 0) errs.sc = "Enter 0 or more";
     if (form.dept === "" || !Number.isFinite(dept) || dept < 0) errs.dept = "Enter 0 or more";
     if (deptChanged && !entry.deptTxId) errs.dept = "This entry has no department payment to correct here. Use Full edit.";
-    if (moneyChanged && form.reason.trim().length < 5) errs.reason = "Say why the charges change (at least 5 characters)";
+    pays.forEach((p, i) => {
+      const a = Number(p.amount);
+      if (p.amount === "" || !Number.isFinite(a) || a < 0) errs[`pay${i}`] = "Enter 0 or more";
+      else if (payChanged(p, i) && !p.txId) errs[`pay${i}`] = "This payment can't be corrected here. Use Full edit.";
+    });
+    if (newPay.amount !== "") {
+      if (!Number.isFinite(newAmount) || newAmount <= 0) errs.newPay = "Enter an amount more than 0, or leave it empty";
+      else if (!newPay.walletId) errs.newPay = "Choose the wallet the money went to";
+    }
+    if (!errs.newPay && paid > total + 0.009) errs.paid = `Paid ${rupees(paid)} is more than the total ${rupees(total)}`;
+    if (moneyChanged && form.reason.trim().length < 5) errs.reason = "Say why it changes (at least 5 characters)";
     setErrors(errs);
     if (Object.keys(errs).length) return;
 
     setSaving(true);
+    const reason = form.reason.trim();
+    let step = 0; // saves that went through, for a clear message if a later one fails
     try {
       // 1. department fee: the correction engine moves the money too
       if (deptChanged) {
-        await call("PUT", `/api/servicemanagement/transactions/${entry.deptTxId}/correct`, { new_amount: dept, reason: form.reason.trim() });
+        await call("PUT", `/api/servicemanagement/transactions/${entry.deptTxId}/correct`, { new_amount: dept, reason, match: "transaction" });
+        step += 1;
       }
       // 2. the rest of the entry
       await call("PUT", `/api/servicemanagement/entry/${entry.id}`, {
@@ -97,13 +145,33 @@ export const EditEntryDialog = ({ entry, onClose, onSaved, onFullEdit }) => {
         phone: form.phone.trim(),
         serviceCharge: sc,
         departmentCharge: dept,
-        totalCharge: Math.round((sc + dept) * 100) / 100,
+        totalCharge: total,
       });
+      step += 1;
+      // 3. corrected payments (amount and/or wallet)
+      for (const { p, i } of changedPays) {
+        const body = { new_amount: Number(p.amount), reason, match: "transaction" };
+        if (p.walletId !== String(original[i].walletId || "")) body.new_wallet_id = Number(p.walletId);
+        await call("PUT", `/api/servicemanagement/transactions/${p.txId}/correct`, body);
+        step += 1;
+      }
+      // 4. money received now
+      if (adding) {
+        await call("POST", `/api/servicemanagement/pending-payments/${entry.id}/receive-payment`, { wallet_id: Number(newPay.walletId), amount: newAmount });
+      }
       toast.success(`Entry ${entry.id} updated`);
       onSaved();
     } catch (err) {
-      toast.error(err.message);
-      setSaving(false);
+      const msg = /insufficient balance/i.test(err.message)
+        ? `${err.message}: the wallet doesn't have enough money for this change`
+        : err.message;
+      if (step > 0) {
+        toast.error(`Part of the change was saved, the rest failed. ${msg}`);
+        onSaved(); // reload so the page shows what is saved now
+      } else {
+        toast.error(msg);
+        setSaving(false);
+      }
     }
   };
 
@@ -150,14 +218,61 @@ export const EditEntryDialog = ({ entry, onClose, onSaved, onFullEdit }) => {
         </div>
       </div>
 
-      <p className="mt-3 text-sm text-slate-600">
-        Total {rupees((Number.isFinite(sc) ? sc : 0) + (Number.isFinite(dept) ? dept : 0))} · paid {rupees(entry.received)}
-        {deptChanged && entry.deptTxId ? " · the department wallet is corrected too" : ""}
-      </p>
+      {deptChanged && entry.deptTxId && (
+        <p className="mt-2 text-sm text-slate-600">The department wallet is corrected too.</p>
+      )}
+
+      {/* ===== Payments ===== */}
+      <fieldset className="mt-5 rounded-xl border border-slate-200 p-4">
+        <legend className="px-1 text-sm font-bold text-slate-900">Payments received</legend>
+        {pays.length === 0 && <p className="mb-3 text-sm text-slate-600">No payment yet.</p>}
+        <ul className="flex flex-col gap-3">
+          {pays.map((p, i) => (
+            <li key={p.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_8rem]">
+              <div>
+                <label htmlFor={`ee-pw-${i}`} className="mb-1 block text-xs font-semibold text-slate-600">Payment {i + 1} · wallet</label>
+                <select id={`ee-pw-${i}`} value={p.walletId} onChange={setPay(i, "walletId")} className={field}>
+                  {!knownWallet(p.walletId) && <option value={p.walletId}>{p.walletName || "Wallet"}</option>}
+                  {wallets.map((w) => <option key={w.id} value={String(w.id)}>{w.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor={`ee-pa-${i}`} className="mb-1 block text-xs font-semibold text-slate-600">Amount (₹)</label>
+                <input id={`ee-pa-${i}`} type="number" min="0" step="1" inputMode="decimal" value={p.amount} onChange={setPay(i, "amount")}
+                  className={field} aria-invalid={!!errors[`pay${i}`]} aria-describedby={errors[`pay${i}`] ? `ee-pay${i}-err` : undefined} />
+              </div>
+              {errors[`pay${i}`] && <p id={`ee-pay${i}-err`} className="text-sm text-red-700 sm:col-span-2">{errors[`pay${i}`]}</p>}
+            </li>
+          ))}
+          <li className={`grid grid-cols-1 gap-2 sm:grid-cols-[1fr_8rem] ${pays.length ? "border-t border-slate-100 pt-3" : ""}`}>
+            <div>
+              <label htmlFor="ee-nw" className="mb-1 block text-xs font-semibold text-slate-600">Add money received · wallet</label>
+              <select id="ee-nw" value={newPay.walletId} onChange={setNew("walletId")} className={field}
+                aria-invalid={!!errors.newPay} aria-describedby={errors.newPay ? "ee-newPay-err" : undefined}>
+                <option value="">Choose a wallet</option>
+                {wallets.map((w) => <option key={w.id} value={String(w.id)}>{w.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="ee-na" className="mb-1 block text-xs font-semibold text-slate-600">Amount (₹)</label>
+              <input id="ee-na" type="number" min="0" step="1" inputMode="decimal" value={newPay.amount} onChange={setNew("amount")}
+                placeholder={due > 0 ? String(due) : "0"} className={field}
+                aria-invalid={!!errors.newPay} aria-describedby={errors.newPay ? "ee-newPay-err" : undefined} />
+            </div>
+            {errors.newPay && <p id="ee-newPay-err" className="text-sm text-red-700 sm:col-span-2">{errors.newPay}</p>}
+          </li>
+        </ul>
+        <p className="mt-3 text-sm text-slate-700" aria-live="polite">
+          Total {rupees(total)} · paid {rupees(paid)}
+          {due > 0 && <strong className="font-semibold text-amber-700"> · {rupees(due)} due</strong>}
+          {due === 0 && total > 0 && <span className="text-emerald-700"> · fully paid</span>}
+        </p>
+        {errors.paid && <p className="mt-1 text-sm text-red-700">{errors.paid}</p>}
+      </fieldset>
 
       {moneyChanged && (
         <div className="mt-4">
-          <label htmlFor="ee-reason" className="mb-1 block text-sm font-semibold text-slate-800">Why are the charges changing?</label>
+          <label htmlFor="ee-reason" className="mb-1 block text-sm font-semibold text-slate-800">Why is it changing? (kept in the audit log)</label>
           <textarea id="ee-reason" rows={2} value={form.reason} onChange={set("reason")} className={`${field} py-2`} aria-invalid={!!errors.reason} aria-describedby={errors.reason ? "ee-reason-err" : undefined} />
           {err("reason")}
         </div>

@@ -18,13 +18,24 @@ const dayLabel = (ymd) =>
 
 const CHECK = {
   swapped: { label: "Swapped?", cls: "bg-red-50 text-red-800 ring-1 ring-red-200", row: "bg-red-50" },
-  sc_differs: { label: "Different from usual", cls: "bg-amber-50 text-amber-900 ring-1 ring-amber-200", row: "bg-amber-50" },
+  sc_low: { label: "Below usual", cls: "bg-amber-50 text-amber-900 ring-1 ring-amber-200", row: "bg-amber-50" },
 };
 
 const checkText = (e) =>
   e.check === "swapped"
     ? `service charge ${rupees(e.serviceCharge)}, department ${rupees(e.departmentCharge)}. Usually service ${rupees(e.usualServiceCharge)}, department ${rupees(e.usualDepartmentCharge)}.`
-    : `service charge ${rupees(e.serviceCharge)}. Usually ${rupees(e.usualServiceCharge)}.`;
+    : `service charge ${rupees(e.serviceCharge)}, less than the usual ${rupees(e.usualServiceCharge)}.`;
+
+// "Edited" marker: the entry was saved again or its money corrected after it was made
+const editedText = (e) =>
+  `Edited${e.editedBy ? ` by ${e.editedBy}` : ""}${e.editedAt ? ` at ${timeOf(e.editedAt)}` : ""}`;
+const EditedTag = ({ e }) => (
+  <span title={editedText(e)}
+    className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-sky-50 px-2 py-0.5 text-xs font-bold text-sky-800 ring-1 ring-sky-200">
+    <FiEdit3 className="h-3 w-3" aria-hidden="true" /> Edited
+    <span className="sr-only">: {editedText(e)}</span>
+  </span>
+);
 
 const Stat = ({ label, value, tone = "bg-slate-50", labelCls = "text-slate-500" }) => (
   <div className={`rounded-xl p-3 ${tone}`}>
@@ -181,6 +192,7 @@ const SupervisorEntries = () => {
             {toCheck.map((e) => (
               <li key={e.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-white p-3">
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${CHECK[e.check].cls}`}>{CHECK[e.check].label}</span>
+                {e.edited && <EditedTag e={e} />}
                 <span className="min-w-[240px] flex-1 text-sm text-slate-700">
                   <strong className="font-semibold text-slate-900">{e.serviceName}{e.subcategoryName ? ` · ${e.subcategoryName}` : ""}</strong>{" "}
                   by {e.staffName} at {timeOf(e.createdAt)}: {checkText(e)}
@@ -245,7 +257,7 @@ const SupervisorEntries = () => {
                         {s.swapped ? (
                           <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${CHECK.swapped.cls}`}>{s.swapped} swapped?</span>
                         ) : s.checks ? (
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${CHECK.sc_differs.cls}`}>{s.checks} to check</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${CHECK.sc_low.cls}`}>{s.checks} to check</span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-emerald-700"><FiCheck className="h-4 w-4" aria-hidden="true" /> OK</span>
                         )}
@@ -321,7 +333,10 @@ const SupervisorEntries = () => {
                   <tr key={e.id} className={`border-t border-slate-100 ${e.check ? CHECK[e.check].row : ""}`}>
                     <td className="whitespace-nowrap px-3 py-3 text-slate-600">{timeOf(e.createdAt)}</td>
                     <td className="px-3 py-3">
-                      <div className="font-medium text-slate-900">{e.customerName || "Customer"}</div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium text-slate-900">{e.customerName || "Customer"}</span>
+                        {e.edited && <EditedTag e={e} />}
+                      </div>
                       <div className="text-xs text-slate-500">ID {e.id}{e.phone ? ` · ${e.phone}` : ""}</div>
                     </td>
                     <td className="px-3 py-3">{e.serviceName}{e.subcategoryName ? ` · ${e.subcategoryName}` : ""}</td>
@@ -339,7 +354,7 @@ const SupervisorEntries = () => {
                       {e.check ? (
                         <span className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-bold ${CHECK[e.check].cls}`}
                           title={checkText(e)}>
-                          {e.check === "sc_differs" ? `Usually ${rupees(e.usualServiceCharge)}` : CHECK[e.check].label}
+                          {e.check === "sc_low" ? `Below usual ${rupees(e.usualServiceCharge)}` : CHECK[e.check].label}
                         </span>
                       ) : (
                         <FiCheck className="h-4 w-4 text-emerald-600" aria-label="OK" />
