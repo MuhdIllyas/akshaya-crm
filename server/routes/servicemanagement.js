@@ -1206,6 +1206,10 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
               s.name AS service_name, sub.name AS subcategory_name,
               COALESCE(${confSc.join(', ')}) AS conf_sc,
               COALESCE(${confDept.join(', ')}) AS conf_dept,
+              (SELECT wt.id FROM wallet_transactions wt
+                WHERE wt.reference_id = se.id AND wt.category = 'Department Payment'
+                  AND COALESCE(wt.is_reversal, FALSE) = FALSE
+                ORDER BY wt.id DESC LIMIT 1) AS dept_tx_id,
               COALESCE((
                 SELECT SUM(p.amount) FROM payments p
                 WHERE p.service_entry_id = se.id AND p.status = 'received'
@@ -1255,6 +1259,7 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
         pending: Math.max(r2(total - received), 0),
         usualServiceCharge: csc || null,
         usualDepartmentCharge: cdept || null,
+        deptTxId: e.dept_tx_id || null, // the live department debit (corrected when the department fee changes)
         check,
       };
     });
@@ -2591,7 +2596,7 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
 
     // 1. Fetch entry to check permissions
     const entryRes = await client.query(`
-      SELECT se.id, se.token_id, se.customer_name, st.centre_id
+      SELECT se.id, se.token_id, se.customer_name, se.staff_id, st.centre_id
       FROM service_entries se
       LEFT JOIN staff st ON se.staff_id = st.id
       WHERE se.id = $1
@@ -2604,15 +2609,26 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
 
     const entry = entryRes.rows[0];
 
-    // 2. Security Check: Only Admins/Superadmins can force delete
-    if (isStaffLike(req.user.role)) {
+    // 2. Security Check: admins/superadmins, and supervisors for other staff's
+    //    entries in their centre (with a reason, kept in the audit log)
+    const isSupervisor = req.user.role === 'supervisor';
+    const deleteReason = String(req.body?.reason || '').trim();
+    if (!['admin', 'superadmin', 'supervisor'].includes(req.user.role)) {
        await client.query('ROLLBACK');
-       return res.status(403).json({ 
-         error: 'Staff are not authorized to hard-delete entries. Please contact an admin.' 
+       return res.status(403).json({
+         error: 'Staff are not authorized to hard-delete entries. Please contact an admin.'
        });
     }
+    if (isSupervisor && Number(entry.staff_id) === Number(req.user.id)) {
+       await client.query('ROLLBACK');
+       return res.status(403).json({ error: 'Your own entries are deleted by the admin' });
+    }
+    if (isSupervisor && deleteReason.length < 5) {
+       await client.query('ROLLBACK');
+       return res.status(400).json({ error: 'Give a reason (at least 5 characters)' });
+    }
 
-    if (req.user.role === 'admin' && entry.centre_id !== req.user.centre_id) {
+    if ((req.user.role === 'admin' || isSupervisor) && entry.centre_id !== req.user.centre_id) {
        await client.query('ROLLBACK');
        return res.status(403).json({ error: 'Unauthorized to delete this entry' });
     }
@@ -2714,7 +2730,7 @@ router.delete('/entry/:id/force', authenticateToken, async (req, res) => {
     `, [
       'Deep Delete Executed',
       req.user.username,
-      `Deep deleted service entry #${id} (${entry.customer_name || 'Unknown'}). Reverted ${txRes.rows.length} financial transactions.`,
+      `Deep deleted service entry #${id} (${entry.customer_name || 'Unknown'}). Reverted ${txRes.rows.length} financial transactions.${deleteReason ? ` Reason (${req.user.role}): ${deleteReason.slice(0, 300)}` : ''}`,
       entry.centre_id
     ]);
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiAlertTriangle, FiCheck, FiEdit3, FiRefreshCw, FiSearch } from "react-icons/fi";
+import { FiAlertTriangle, FiCheck, FiEdit3, FiRefreshCw, FiSearch, FiTrash2 } from "react-icons/fi";
+import { EditEntryDialog, DeleteEntryDialog } from "./EntryDialogs";
 import { todayIST } from "../../utils/dates";
 
 /* Supervisor → Today's entries: one view of the day for the whole centre.
@@ -42,6 +43,9 @@ const SupervisorEntries = () => {
   const [serviceFilter, setServiceFilter] = useState("all");
   const [onlyChecks, setOnlyChecks] = useState(false);
   const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState(null);   // entry in the edit dialog
+  const [deleting, setDeleting] = useState(null); // entry in the delete dialog
+  const me = Number(localStorage.getItem("id"));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -94,7 +98,7 @@ const SupervisorEntries = () => {
   const toCheck = (data?.entries || []).filter((e) => e.check);
 
   // The same override edit the admin uses from Service Logs; the entry stays with its staff member
-  const edit = (e) =>
+  const fullEdit = (e) =>
     navigate("/dashboard/staff/service_entry", {
       state: {
         adminEditEntry: {
@@ -181,7 +185,7 @@ const SupervisorEntries = () => {
                   <strong className="font-semibold text-slate-900">{e.serviceName}{e.subcategoryName ? ` · ${e.subcategoryName}` : ""}</strong>{" "}
                   by {e.staffName} at {timeOf(e.createdAt)}: {checkText(e)}
                 </span>
-                <button type="button" onClick={() => edit(e)} className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-navy-700 hover:bg-slate-50">
+                <button type="button" onClick={() => setEditing(e)} className="inline-flex min-h-[40px] items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-navy-700 hover:bg-slate-50">
                   <FiEdit3 className="h-4 w-4" aria-hidden="true" /> Edit
                 </button>
               </li>
@@ -342,9 +346,17 @@ const SupervisorEntries = () => {
                       )}
                     </td>
                     <td className="px-3 py-3 text-right">
-                      <button type="button" onClick={() => edit(e)} className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 font-semibold text-navy-700 hover:bg-slate-50">
-                        <FiEdit3 className="h-4 w-4" aria-hidden="true" /> Edit
-                      </button>
+                      <div className="flex justify-end gap-1.5">
+                        <button type="button" onClick={() => setEditing(e)} className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 font-semibold text-navy-700 hover:bg-slate-50">
+                          <FiEdit3 className="h-4 w-4" aria-hidden="true" /> Edit
+                        </button>
+                        {Number(e.staffId) !== me && (
+                          <button type="button" onClick={() => setDeleting(e)} aria-label={`Delete entry ${e.id}`} title="Delete"
+                            className="grid h-9 w-9 place-items-center rounded-lg border border-red-200 bg-white text-red-600 hover:bg-red-50">
+                            <FiTrash2 className="h-4 w-4" aria-hidden="true" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -353,6 +365,22 @@ const SupervisorEntries = () => {
           </div>
         )}
       </section>
+
+      {editing && (
+        <EditEntryDialog
+          entry={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => { setEditing(null); load(); }}
+          onFullEdit={() => { const e = editing; setEditing(null); fullEdit(e); }}
+        />
+      )}
+      {deleting && (
+        <DeleteEntryDialog
+          entry={deleting}
+          onClose={() => setDeleting(null)}
+          onDeleted={() => { setDeleting(null); load(); }}
+        />
+      )}
     </div>
   );
 };
