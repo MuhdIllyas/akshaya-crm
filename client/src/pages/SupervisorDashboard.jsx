@@ -9,7 +9,7 @@ import QuickServiceModal from "@/components/QuickServiceModal";
 import { getTokens } from "/src/services/serviceService";
 import { getWalletsForCentre } from "@/services/walletService";
 import { postAttendance } from "/src/services/salaryService";
-import { todayIST, addDays } from "../utils/dates";
+import { todayIST, addDays, ymdIST } from "../utils/dates";
 
 /* Supervisor home (navy with gold accents; works in light and dark mode): the centre's accounts first, then the
    supervisor's own work, applications, performance and events. The full
@@ -220,10 +220,14 @@ const SupervisorDashboard = () => {
   const openDiff = Number(y?.open_short || 0) + Number(y?.open_excess || 0);
   const toMatch = (centre?.upiUnclaimed || 0) + (centre?.bankOpen || 0);
   const matchUnknown = centre && centre.upiUnclaimed === null && !centre.walletsLoaded;
-  const pendingOldest = useMemo(
-    () => [...(centre?.pending || [])].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).slice(0, 5),
-    [centre]
-  );
+  // Today's entries (India date) that are still unpaid, newest first: a quick view for the evening
+  const pendingToday = useMemo(() => {
+    const today = todayIST();
+    return (centre?.pending || [])
+      .filter((p) => p.created_at && ymdIST(p.created_at) === today)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }, [centre]);
+  const pendingTodayDue = pendingToday.reduce((s, p) => s + Number(p.pending_amount || 0), 0);
   const typeLabel = { cash: "Cash", digital: "Digital", bank: "Bank" };
   // null = unknown (wallets not loaded), so nothing shows a false ₹0
   const cashTotal = centre?.walletsLoaded ? (centre.byType.cash?.total ?? 0) : null;
@@ -464,18 +468,21 @@ const SupervisorDashboard = () => {
         </Card>
       </div>
 
-      {/* ===== Pending payments to collect ===== */}
+      {/* ===== Today's pending payments ===== */}
       <Card
         id="sv-pending"
-        title="Pending payments to collect"
+        title={pendingToday.length ? `Today's pending payments · ${rupees(pendingTodayDue)} due` : "Today's pending payments"}
         action={centre?.pending?.length ? <ArrowLink to={ACCOUNTS} state={{ tab: "pending" }}>See all {centre.pending.length}</ArrowLink> : null}
       >
         {!centre ? (
           <div className="h-32 animate-pulse rounded-xl bg-slate-100" aria-busy="true" />
         ) : centre.pending === null ? (
           <p className="text-sm text-slate-600">Couldn't load pending payments.</p>
-        ) : centre.pending.length === 0 ? (
-          <p className="flex items-center gap-2 text-sm text-emerald-700"><FiCheck className="h-4 w-4" aria-hidden="true" /> Nothing pending in the centre</p>
+        ) : pendingToday.length === 0 ? (
+          <p className="flex items-center gap-2 text-sm text-emerald-700">
+            <FiCheck className="h-4 w-4" aria-hidden="true" /> No pending payments from today
+            {centre.pending.length > 0 && <span className="text-slate-500">· {centre.pending.length} older in the full list</span>}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
@@ -483,21 +490,21 @@ const SupervisorDashboard = () => {
                 <tr className="text-left text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-3 py-2 font-semibold">Service</th>
                   <th className="px-3 py-2 font-semibold">Staff</th>
-                  <th className="px-3 py-2 font-semibold">Date</th>
+                  <th className="px-3 py-2 font-semibold">Time</th>
                   <th className="px-3 py-2 text-right font-semibold">Total</th>
                   <th className="px-3 py-2 text-right font-semibold">Due</th>
                   <th className="px-3 py-2"><span className="sr-only">Action</span></th>
                 </tr>
               </thead>
               <tbody>
-                {pendingOldest.map((p) => (
+                {pendingToday.map((p) => (
                   <tr key={p.service_entry_id} className="border-t border-slate-100">
                     <td className="px-3 py-3">
                       <div className="font-semibold text-slate-900">{p.service_name || "Service"}{p.subcategory_name ? ` · ${p.subcategory_name}` : ""}</div>
                       <div className="text-xs text-slate-500">{p.customer_name || "Customer"} · ID {p.service_entry_id}</div>
                     </td>
                     <td className="px-3 py-3">{p.staff_name}</td>
-                    <td className="px-3 py-3 text-slate-600">{shortDate(p.created_at)}</td>
+                    <td className="px-3 py-3 text-slate-600">{new Date(p.created_at).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Kolkata" })}</td>
                     <td className="px-3 py-3 text-right">{rupees(p.total_charges)}</td>
                     <td className="px-3 py-3 text-right font-bold text-amber-700">{rupees(p.pending_amount)}</td>
                     <td className="px-3 py-3 text-right">
@@ -509,7 +516,7 @@ const SupervisorDashboard = () => {
                 ))}
               </tbody>
             </table>
-            <p className="mt-2 text-xs text-slate-500">Oldest first. The money counts for each staff member, whoever collects it.</p>
+            <p className="mt-2 text-xs text-slate-500">Today's entries only, newest first. Older ones are under See all. The money counts for each staff member, whoever collects it.</p>
           </div>
         )}
       </Card>
