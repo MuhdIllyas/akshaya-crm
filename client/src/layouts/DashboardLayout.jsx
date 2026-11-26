@@ -391,7 +391,7 @@ const DashboardLayout = () => {
       { path: "/dashboard/supervisor", label: "Dashboard", icon: DashboardIcon },
       { path: "/dashboard/supervisor/accounts", label: "Accounts", icon: ReportsIcon },
       { path: "/dashboard/supervisor/expenses", label: "Expense Approvals", icon: ExpenseManagementIcon },
-      { path: "/dashboard/supervisor/servicelogs", label: "Service Logs", icon: ServiceLogsIcon },
+      { path: "/dashboard/supervisor/entries", label: "Today's Entries", icon: ServiceLogsIcon },
       { path: "/dashboard/supervisor/mywork", label: "My Work", icon: TasksIcon },
       { path: "/dashboard/staff/calendar", label: "Calendar", icon: CalendarIcon },
       { path: "/dashboard/staff/tasks", label: "My Tasks", icon: TasksIcon },
@@ -459,7 +459,7 @@ const DashboardLayout = () => {
   // Supervisor: the centre's accounts pages come first, then their own work
   const isSupervisor = role === "supervisor";
   const sectionFor = (label) => {
-    if (isSupervisor && ["Dashboard", "Accounts", "Expense Approvals", "Service Logs"].includes(label)) return "Centre";
+    if (isSupervisor && ["Dashboard", "Accounts", "Expense Approvals", "Today's Entries"].includes(label)) return "Centre";
     if (isSupervisor && label === "My Work") return "My work";
     return sectionByLabel[label] || "Main";
   };

@@ -1168,6 +1168,132 @@ router.get('/categories', authenticateToken, async (req, res) => {
   }
 });
 
+/* GET /api/servicemanagement/supervisor/day?date=YYYY-MM-DD   (supervisor, admin; superadmin with ?centre_id)
+   One day's service entries for the whole centre (today by default) for the
+   supervisor's "Today's entries" page: each entry with what has been paid,
+   the charges set for that service at this centre, and a check:
+     check = 'swapped'    service charge and department fee look swapped
+                          (entered SC = usual dept AND entered dept = usual SC)
+             'sc_differs' service charge is not the usual one
+             null         fine, or the service has no set charge (bills, transfers…)
+   plus a per-staff collection summary and day totals. */
+router.get('/supervisor/day', authenticateToken, async (req, res) => {
+  const role = req.user.role;
+  if (!['supervisor', 'admin', 'superadmin'].includes(role)) {
+    return res.status(403).json({ error: 'Access denied' });
+  }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : todayIST();
+  const centreId = role === 'superadmin' ? Number(req.query.centre_id || req.user.centre_id) : Number(req.user.centre_id);
+  if (!centreId) return res.status(400).json({ error: 'centre_id is required' });
+
+  const client = await pool.connect();
+  try {
+    // Charge tables are optional on older databases: use the ones that exist
+    const reg = await client.query(
+      `SELECT to_regclass('public.subcategory_configurations') AS sub, to_regclass('public.service_configurations') AS svc`
+    );
+    const hasSub = !!reg.rows[0].sub;
+    const hasSvc = !!reg.rows[0].svc;
+    const confSc = ['scc.service_charge', 'sub.service_charges', hasSvc ? 'vc.service_charge' : null].filter(Boolean);
+    const confDept = ['scc.department_charge', 'sub.department_charges', hasSvc ? 'vc.department_charge' : null].filter(Boolean);
+    if (!hasSub) { confSc.shift(); confDept.shift(); }
+
+    const { rows } = await client.query(
+      `SELECT se.id, se.created_at, se.customer_name, se.phone, se.token_id, se.expiry_date,
+              se.service_charges, se.department_charges, se.total_charges, se.status, se.is_edited,
+              (to_jsonb(se) ->> 'service_wallet_id')::int AS service_wallet_id, se.category_id, se.subcategory_id,
+              se.staff_id, st.name AS staff_name,
+              s.name AS service_name, sub.name AS subcategory_name,
+              COALESCE(${confSc.join(', ')}) AS conf_sc,
+              COALESCE(${confDept.join(', ')}) AS conf_dept,
+              COALESCE((
+                SELECT SUM(p.amount) FROM payments p
+                WHERE p.service_entry_id = se.id AND p.status = 'received'
+                  AND COALESCE(p.is_reversal, FALSE) = FALSE
+                  AND NOT EXISTS (SELECT 1 FROM wallet_transactions wt
+                                  WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = TRUE)
+              ), 0) AS received
+       FROM service_entries se
+       JOIN staff st ON st.id = se.staff_id
+       LEFT JOIN services s ON s.id = se.category_id::integer
+       LEFT JOIN subcategories sub ON sub.id = se.subcategory_id::integer
+       ${hasSub ? 'LEFT JOIN subcategory_configurations scc ON scc.subcategory_id = se.subcategory_id::integer AND scc.centre_id = st.centre_id' : ''}
+       ${hasSvc ? 'LEFT JOIN service_configurations vc ON vc.service_id = se.category_id::integer AND vc.centre_id = st.centre_id' : ''}
+       WHERE st.centre_id = $1 AND se.created_at::date = $2::date
+       ORDER BY se.created_at DESC`,
+      [centreId, date]
+    );
+
+    const r2 = (n) => Math.round(Number(n || 0) * 100) / 100;
+    const entries = rows.map((e) => {
+      const sc = r2(e.service_charges), dept = r2(e.department_charges);
+      const csc = r2(e.conf_sc), cdept = r2(e.conf_dept);
+      const total = r2(e.total_charges), received = r2(e.received);
+      let check = null;
+      if (csc > 0 && cdept > 0 && csc !== cdept && sc === cdept && dept === csc) check = 'swapped';
+      else if (csc > 0 && sc !== csc) check = 'sc_differs';
+      return {
+        id: e.id,
+        createdAt: e.created_at,
+        customerName: e.customer_name,
+        phone: e.phone,
+        tokenId: e.token_id,
+        expiryDate: e.expiry_date,
+        staffId: e.staff_id,
+        staffName: e.staff_name,
+        serviceName: e.service_name,
+        subcategoryName: e.subcategory_name,
+        categoryId: e.category_id,
+        subcategoryId: e.subcategory_id,
+        serviceWalletId: e.service_wallet_id,
+        status: e.status,
+        isEdited: e.is_edited,
+        serviceCharge: sc,
+        departmentCharge: dept,
+        totalCharge: total,
+        received,
+        pending: Math.max(r2(total - received), 0),
+        usualServiceCharge: csc || null,
+        usualDepartmentCharge: cdept || null,
+        check,
+      };
+    });
+
+    const byStaff = new Map();
+    for (const e of entries) {
+      const s = byStaff.get(e.staffId) || { staffId: e.staffId, staffName: e.staffName, entries: 0, serviceCharge: 0, departmentCharge: 0, total: 0, collected: 0, pending: 0, checks: 0, swapped: 0 };
+      s.entries += 1;
+      s.serviceCharge = r2(s.serviceCharge + e.serviceCharge);
+      s.departmentCharge = r2(s.departmentCharge + e.departmentCharge);
+      s.total = r2(s.total + e.totalCharge);
+      s.collected = r2(s.collected + Math.min(e.received, e.totalCharge));
+      s.pending = r2(s.pending + e.pending);
+      if (e.check) s.checks += 1;
+      if (e.check === 'swapped') s.swapped += 1;
+      byStaff.set(e.staffId, s);
+    }
+    const staff = [...byStaff.values()].sort((a, b) => b.total - a.total);
+    const totals = staff.reduce((t, s) => ({
+      entries: t.entries + s.entries,
+      serviceCharge: r2(t.serviceCharge + s.serviceCharge),
+      departmentCharge: r2(t.departmentCharge + s.departmentCharge),
+      total: r2(t.total + s.total),
+      collected: r2(t.collected + s.collected),
+      pending: r2(t.pending + s.pending),
+      checks: t.checks + s.checks,
+    }), { entries: 0, serviceCharge: 0, departmentCharge: 0, total: 0, collected: 0, pending: 0, checks: 0 });
+
+    // the check is "off" only when none of the day's entries has a usual charge to compare with
+    const chargeCheck = entries.length === 0 || entries.some((e) => e.usualServiceCharge !== null);
+    res.json({ date, centreId, totals, staff, entries, chargeCheck });
+  } catch (err) {
+    console.error('Supervisor day error:', err);
+    res.status(500).json({ error: 'Failed to load the day\'s entries' });
+  } finally {
+    client.release();
+  }
+});
+
 // GET /api/servicemanagement/entries
 router.get('/entries', authenticateToken, async (req, res) => {
   const { today, staff_id, limit, startDate, endDate } = req.query; 

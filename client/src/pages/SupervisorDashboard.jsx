@@ -497,7 +497,7 @@ const SupervisorDashboard = () => {
             {centre.pending.length > 0 && <span className="text-slate-500">· {centre.pending.length} older in the full list</span>}
           </p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[560px] text-sm">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-wide text-slate-500">

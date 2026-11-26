@@ -17,6 +17,7 @@ import PlatformAdmin from "./pages/platform/PlatformAdmin";
 import AdminDashboard from "./pages/AdminDashboard";
 import StaffDashboard from "./pages/StaffDashboard";
 import SupervisorAccounts from "./pages/supervisor/SupervisorAccounts";
+import SupervisorEntries from "./pages/supervisor/SupervisorEntries";
 import SupervisorDashboard from "./pages/SupervisorDashboard";
 import SupervisorWorkStrip from "./components/SupervisorWorkStrip";
 import SuperadminDashboard from "./pages/SuperadminDashboard";
@@ -361,7 +362,8 @@ const App = () => {
             <Route path="supervisor/mywork" element={<ProtectedRoute allowedRoles={["supervisor"]}><StaffDashboard bannerSlot={<SupervisorWorkStrip />} /></ProtectedRoute>} />
             <Route path="supervisor/expenses" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminExpenseManagement /></ProtectedRoute>} />
             <Route path="supervisor/settings" element={<ProtectedRoute allowedRoles={["supervisor"]}><AdminSettings /></ProtectedRoute>} />
-            <Route path="supervisor/servicelogs" element={<ProtectedRoute allowedRoles={["supervisor"]}><ServiceLogs /></ProtectedRoute>} />
+            {/* The day's entries for the whole centre, with the staff collection summary and charge checks (replaces Service Logs) */}
+            <Route path="supervisor/entries" element={<ProtectedRoute allowedRoles={["supervisor"]}><SupervisorEntries /></ProtectedRoute>} />
 
             {/* Unified My Profile route for staff, admin, superadmin */}
             <Route
