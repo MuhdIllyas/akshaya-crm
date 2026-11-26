@@ -39,6 +39,7 @@ const SupervisorEntries = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [staffFilter, setStaffFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
   const [onlyChecks, setOnlyChecks] = useState(false);
   const [search, setSearch] = useState("");
 
@@ -61,14 +62,35 @@ const SupervisorEntries = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  // The day's services (each once, with how many entries), for the service filter
+  const services = useMemo(() => {
+    const map = new Map();
+    for (const e of data?.entries || []) {
+      const key = String(e.categoryId);
+      const s = map.get(key) || { key, name: e.serviceName || "Service", count: 0 };
+      s.count += 1;
+      map.set(key, s);
+    }
+    return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [data]);
+  // A day without the picked service: show all again
+  useEffect(() => {
+    if (serviceFilter !== "all" && data && !services.some((s) => s.key === serviceFilter)) setServiceFilter("all");
+  }, [data, services, serviceFilter]);
+
   const entries = useMemo(() => {
     const q = search.trim().toLowerCase();
     return (data?.entries || []).filter((e) =>
       (staffFilter === "all" || String(e.staffId) === staffFilter) &&
+      (serviceFilter === "all" || String(e.categoryId) === serviceFilter) &&
       (!onlyChecks || e.check) &&
       (!q || [e.customerName, e.phone, e.serviceName, e.subcategoryName, String(e.id)].some((v) => String(v || "").toLowerCase().includes(q)))
     );
-  }, [data, staffFilter, onlyChecks, search]);
+  }, [data, staffFilter, serviceFilter, onlyChecks, search]);
+  const filtered = staffFilter !== "all" || serviceFilter !== "all" || onlyChecks || search.trim() !== "";
+  const shown = entries.reduce((t, e) => ({
+    sc: t.sc + e.serviceCharge, dept: t.dept + e.departmentCharge, total: t.total + e.totalCharge, pending: t.pending + e.pending,
+  }), { sc: 0, dept: 0, total: 0, pending: 0 });
   const toCheck = (data?.entries || []).filter((e) => e.check);
 
   // The same override edit the admin uses from Service Logs; the entry stays with its staff member
@@ -236,7 +258,15 @@ const SupervisorEntries = () => {
       {/* ===== Entries ===== */}
       <section aria-labelledby="sv-list-title" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 id="sv-list-title" className="text-lg font-bold text-slate-900">Entries {data ? `· ${entries.length}` : ""}</h2>
+          <div>
+            <h2 id="sv-list-title" className="text-lg font-bold text-slate-900">Entries {data ? `· ${entries.length}` : ""}</h2>
+            {data && filtered && entries.length > 0 && (
+              <p className="mt-0.5 text-sm text-slate-600" aria-live="polite">
+                Shown: service {rupees(shown.sc)} · dept {rupees(shown.dept)} · total {rupees(shown.total)}
+                {shown.pending > 0 ? ` · ${rupees(shown.pending)} pending` : ""}
+              </p>
+            )}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
             <label className="relative">
               <span className="sr-only">Search entries</span>
@@ -249,6 +279,12 @@ const SupervisorEntries = () => {
               className="min-h-[40px] rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30">
               <option value="all">All staff</option>
               {(data?.staff || []).map((s) => <option key={s.staffId} value={String(s.staffId)}>{s.staffName}</option>)}
+            </select>
+            <label className="sr-only" htmlFor="sv-service-filter">Service</label>
+            <select id="sv-service-filter" value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}
+              className="min-h-[40px] max-w-[220px] rounded-lg border border-slate-300 bg-white px-3 text-sm focus:border-navy-500 focus:outline-none focus:ring-2 focus:ring-navy-500/30">
+              <option value="all">All services</option>
+              {services.map((s) => <option key={s.key} value={s.key}>{s.name} ({s.count})</option>)}
             </select>
             <label className="inline-flex min-h-[40px] items-center gap-2 text-sm text-slate-700">
               <input type="checkbox" checked={onlyChecks} onChange={(e) => setOnlyChecks(e.target.checked)} className="h-4 w-4" />
