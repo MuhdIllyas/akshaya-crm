@@ -11,7 +11,7 @@ import { getWalletsForCentre } from "@/services/walletService";
 import { postAttendance } from "/src/services/salaryService";
 import { todayIST, addDays } from "../utils/dates";
 
-/* Supervisor home (navy and gold): the centre's accounts first, then the
+/* Supervisor home (navy with gold accents; works in light and dark mode): the centre's accounts first, then the
    supervisor's own work, applications, performance and events. The full
    staff dashboard (token queue, online work and so on) is under My Work.
    Every number comes from the same routes the Accounts, Expense Approvals
@@ -127,16 +127,16 @@ const Card = ({ title, id, action, children, className = "" }) => (
   </section>
 );
 
-const GoldLink = ({ to, state, children }) => (
-  <Link to={to} state={state} className="inline-flex items-center gap-1 text-sm font-semibold text-amber-700 hover:text-amber-800">
+const ArrowLink = ({ to, state, children }) => (
+  <Link to={to} state={state} className="inline-flex items-center gap-1 text-sm font-semibold text-navy-700 hover:text-navy-900">
     {children} <FiArrowRight className="h-4 w-4" aria-hidden="true" />
   </Link>
 );
 
 const TONE = {
-  bad: "border-red-200 bg-red-50/60",
-  warn: "border-amber-200 bg-amber-50/60",
-  ok: "border-emerald-200 bg-emerald-50/50",
+  bad: "border-red-200 bg-red-50",
+  warn: "border-amber-200 bg-amber-50",
+  ok: "border-emerald-200 bg-emerald-50",
   idle: "border-slate-200 bg-slate-50",
 };
 const TONE_LABEL = { bad: "text-red-700", warn: "text-amber-800", ok: "text-emerald-700", idle: "text-slate-600" };
@@ -242,7 +242,7 @@ const SupervisorDashboard = () => {
       {/* ===== Welcome banner (navy and gold) ===== */}
       <section aria-label="Welcome" className="flex flex-wrap justify-between gap-5 rounded-2xl bg-navy-700 p-6 text-white">
         <div className="flex min-w-[280px] flex-1 flex-col gap-4">
-          <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-amber-300 px-3 py-1 text-xs font-bold tracking-wide text-navy-900">
+          <span className="inline-flex items-center gap-1.5 self-start rounded-full bg-amber-100 px-3 py-1 text-xs font-bold tracking-wide text-amber-900 ring-1 ring-amber-200">
             <FiShield className="h-3.5 w-3.5" aria-hidden="true" /> SUPERVISOR · CENTRE ACCOUNTS
           </span>
           <div>
@@ -253,7 +253,7 @@ const SupervisorDashboard = () => {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link to={ACCOUNTS} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-amber-300 px-4 text-sm font-bold text-navy-900 hover:bg-amber-200">
+            <Link to={ACCOUNTS} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white px-4 text-sm font-bold text-navy-700 hover:bg-slate-100">
               <FiClock className="h-4 w-4" aria-hidden="true" /> Tonight's close
             </Link>
             <button type="button" onClick={() => setShowQuick(true)} className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-white/15 px-4 text-sm font-semibold hover:bg-white/25">
@@ -286,7 +286,7 @@ const SupervisorDashboard = () => {
             </div>
             {mine && punchState !== "done" && (
               <button type="button" onClick={punch} disabled={punching}
-                className={`min-h-[36px] self-start rounded-lg px-3 text-sm font-bold disabled:opacity-60 ${punchState === "out" ? "bg-rose-300 text-rose-950 hover:bg-rose-200" : "bg-white/20 text-white hover:bg-white/30"}`}>
+                className={`min-h-[36px] self-start rounded-lg px-3 text-sm font-bold disabled:opacity-60 ${punchState === "out" ? "bg-white text-rose-700 hover:bg-rose-50" : "bg-white/20 text-white hover:bg-white/30"}`}>
                 {punching ? "Saving…" : punchState === "out" ? "Punch in" : "Punch out"}
               </button>
             )}
@@ -304,7 +304,7 @@ const SupervisorDashboard = () => {
               className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 disabled:opacity-50">
               <FiRefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} aria-hidden="true" />
             </button>
-            <GoldLink to={ACCOUNTS}>Open Accounts</GoldLink>
+            <ArrowLink to={ACCOUNTS}>Open Accounts</ArrowLink>
           </div>
         }
       >
@@ -378,7 +378,7 @@ const SupervisorDashboard = () => {
 
       {/* ===== My work, performance, events ===== */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2 2xl:grid-cols-3">
-        <Card id="sv-work" title="My work" action={<GoldLink to={MY_WORK}>Open My Work</GoldLink>}>
+        <Card id="sv-work" title="My work" action={<ArrowLink to={MY_WORK}>Open My Work</ArrowLink>}>
           <div className="grid grid-cols-2 gap-3">
             <Stat label="My tokens" value={mine?.activeTokens} />
             <Stat label="Online queue" value={mine ? mine.onlineQueue : null} />
@@ -403,11 +403,11 @@ const SupervisorDashboard = () => {
               <li className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-emerald-500" />Completed <strong>{stats?.completed ?? "–"}</strong></li>
               <li className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-sm bg-rose-500" />Delayed <strong>{stats?.delayed ?? "–"}</strong></li>
             </ul>
-            <div className="mt-3"><GoldLink to="/dashboard/staff/track_service">Track my applications</GoldLink></div>
+            <div className="mt-3"><ArrowLink to="/dashboard/staff/track_service">Track my applications</ArrowLink></div>
           </div>
         </Card>
 
-        <Card id="sv-perf" title="My performance" action={<GoldLink to="/dashboard/staff/performance">Performance</GoldLink>}>
+        <Card id="sv-perf" title="My performance" action={<ArrowLink to="/dashboard/staff/performance">Performance</ArrowLink>}>
           {!mine ? (
             <div className="h-40 animate-pulse rounded-xl bg-slate-100" aria-busy="true" />
           ) : !mine.perf ? (
@@ -416,7 +416,7 @@ const SupervisorDashboard = () => {
             <>
               <div className="flex items-center gap-5">
                 <div className="relative grid h-24 w-24 shrink-0 place-items-center rounded-full"
-                  style={{ background: `conic-gradient(#f59e0b ${score * 3.6}deg, #e2e8f0 0deg)` }}
+                  style={{ background: `conic-gradient(#f59e0b ${score * 3.6}deg, rgba(148, 163, 184, 0.35) 0deg)` }}
                   role="img" aria-label={`Performance score ${score} percent`}>
                   <span className="grid h-[76px] w-[76px] place-items-center rounded-full bg-white text-xl font-bold">{score}%</span>
                 </div>
@@ -442,7 +442,7 @@ const SupervisorDashboard = () => {
           )}
         </Card>
 
-        <Card id="sv-events" title="Events" action={<GoldLink to="/dashboard/staff/calendar">Calendar</GoldLink>} className="lg:col-span-2 2xl:col-span-1">
+        <Card id="sv-events" title="Events" action={<ArrowLink to="/dashboard/staff/calendar">Calendar</ArrowLink>} className="lg:col-span-2 2xl:col-span-1">
           {!mine ? (
             <div className="h-40 animate-pulse rounded-xl bg-slate-100" aria-busy="true" />
           ) : mine.events.length === 0 ? (
@@ -468,7 +468,7 @@ const SupervisorDashboard = () => {
       <Card
         id="sv-pending"
         title="Pending payments to collect"
-        action={centre?.pending?.length ? <GoldLink to={ACCOUNTS} state={{ tab: "pending" }}>See all {centre.pending.length}</GoldLink> : null}
+        action={centre?.pending?.length ? <ArrowLink to={ACCOUNTS} state={{ tab: "pending" }}>See all {centre.pending.length}</ArrowLink> : null}
       >
         {!centre ? (
           <div className="h-32 animate-pulse rounded-xl bg-slate-100" aria-busy="true" />

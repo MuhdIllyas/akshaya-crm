@@ -560,11 +560,11 @@ const DashboardLayout = () => {
         }`}
       >
         {/* Header Section */}
-        <div className={`rounded-2xl border shadow-sm ${isSupervisor ? "border-navy-700 bg-navy-700" : "border-slate-200 bg-white"} ${isCollapsed ? "p-2" : "p-3"}`}>
+        <div className={`rounded-2xl border shadow-sm border-slate-200 bg-white ${isCollapsed ? "p-2" : "p-3"}`}>
           
           <div className={`relative flex items-center ${isCollapsed ? "justify-center" : "justify-between"}`}>
             <div className="flex items-center">
-              <div className={`p-2 rounded-xl ${isSupervisor ? "bg-amber-300 text-navy-900" : "bg-navy-700 text-white"}`}>
+              <div className={`p-2 rounded-xl bg-navy-700 text-white`}>
                 <svg className="h-6 w-6" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                   <path d="M20 7H4C2.89543 7 2 7.89543 2 9V19C2 20.1046 2.89543 21 4 21H20C21.1046 21 22 20.1046 22 19V9C22 7.89543 21.1046 7 20 7Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
                   <path d="M16 21V5C16 4.46957 15.7893 3.96086 15.4142 3.58579C15.0391 3.21071 14.5304 3 14 3H10C9.46957 3 8.96086 3.21071 8.58579 3.58579C8.21071 3.96086 8 4.46957 8 5V21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -572,10 +572,10 @@ const DashboardLayout = () => {
               </div>
               {!isCollapsed && (
                 <div className="ml-3">
-                  <h1 className={`text-base font-semibold ${isSupervisor ? "text-white" : "text-slate-900"}`}>
+                  <h1 className={`text-base font-semibold text-slate-900`}>
                     {role === "customer" ? "Client Suite" : "Office Suite"}
                   </h1>
-                  <p className={isSupervisor ? "text-[11px] font-bold tracking-wider text-amber-300" : "text-slate-500 text-xs"}>
+                  <p className={isSupervisor ? "text-[11px] font-bold tracking-wider text-amber-700" : "text-slate-500 text-xs"}>
                     {role === "customer" ? "Service Portal" : isSupervisor ? "SUPERVISOR" : "Management Portal"}
                   </p>
                 </div>
@@ -584,7 +584,7 @@ const DashboardLayout = () => {
             {!isCollapsed && (
               <button
                 onClick={toggleSidebar}
-                className={`hidden md:block p-2 rounded-lg transition duration-200 ${isSupervisor ? "text-slate-300 hover:text-white hover:bg-white/10" : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"}`}
+                className={`hidden md:block p-2 rounded-lg transition duration-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100`}
                 title="Collapse Sidebar"
               >
                 <CollapseIcon />
@@ -592,7 +592,7 @@ const DashboardLayout = () => {
             )}
             <button
               onClick={() => setIsMobileOpen(false)}
-              className={`md:hidden grid h-11 w-11 place-items-center rounded-lg transition duration-200 ${isSupervisor ? "text-slate-300 hover:text-white hover:bg-white/10" : "text-slate-400 hover:text-slate-900 hover:bg-slate-100"}`}
+              className={`md:hidden grid h-11 w-11 place-items-center rounded-lg transition duration-200 text-slate-400 hover:text-slate-900 hover:bg-slate-100`}
               aria-label="Close menu"
             >
               <CloseIcon />
@@ -600,21 +600,21 @@ const DashboardLayout = () => {
           </div>
           {isCollapsed && (
             <div className="mt-3 flex justify-center">
-              <span className={`grid h-9 w-9 place-items-center overflow-hidden rounded-full text-xs font-semibold ${isSupervisor ? "bg-amber-100 text-navy-900" : "bg-navy-500/10 text-navy-700"}`}><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
+              <span className={`grid h-9 w-9 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700`}><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
             </div>
           )}
           {!isCollapsed && (
-            <div className={`relative mt-3 flex items-center gap-2.5 rounded-xl p-2 border ${isSupervisor ? "bg-white/10 border-white/15" : "bg-slate-50 border-slate-200"}`}>
-              <span className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-semibold ${isSupervisor ? "bg-amber-100 text-navy-900" : "bg-navy-500/10 text-navy-700"}`}><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
+            <div className={`relative mt-3 flex items-center gap-2.5 rounded-xl p-2 border bg-slate-50 border-slate-200`}>
+              <span className={`grid h-9 w-9 shrink-0 place-items-center overflow-hidden rounded-full text-xs font-semibold bg-navy-500/10 text-navy-700`}><UserAvatar photo={profilePhoto} initials={userInitials} /></span>
               <div className="min-w-0 leading-tight">
-                <p className={`truncate text-sm font-semibold ${isSupervisor ? "text-white" : "text-slate-900"}`}>{roleDisplayNames[role] || "User"}</p>
-                <p className={`mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-xs ${isSupervisor ? "text-slate-200" : "text-slate-500"}`}>
+                <p className={`truncate text-sm font-semibold text-slate-900`}>{roleDisplayNames[role] || "User"}</p>
+                <p className={`mt-0.5 flex items-center gap-1.5 whitespace-nowrap text-xs text-slate-500`}>
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400"></span>
                   {role === "customer" ? "Customer" : (
                     <>
                       <span>Online</span>
                       <span className="text-slate-300">•</span>
-                      <span className={isSupervisor ? "truncate rounded-full bg-amber-300 px-1.5 text-[11px] font-bold text-navy-900" : "truncate font-medium text-navy-700"}>
+                      <span className={isSupervisor ? "truncate rounded-full bg-amber-100 px-1.5 text-[11px] font-bold text-amber-900 ring-1 ring-amber-200" : "truncate font-medium text-navy-700"}>
                         {{ superadmin: "Super Admin", admin: "Admin", staff: "Staff", supervisor: "Supervisor" }[role] || role}
                       </span>
                     </>
@@ -632,7 +632,7 @@ const DashboardLayout = () => {
                   </p>
                 )}
                 {role !== "customer" && previousSignIn && (
-                  <p className={`truncate text-[11px] ${isSupervisor ? "text-slate-300" : "text-slate-400"}`} title="Your sign-in before this one">Last sign-in: {previousSignIn}</p>
+                  <p className={`truncate text-[11px] text-slate-400`} title="Your sign-in before this one">Last sign-in: {previousSignIn}</p>
                 )}
               </div>
             </div>
@@ -640,15 +640,15 @@ const DashboardLayout = () => {
         </div>
         
         {/* Navigation Section - Custom scrollbar */}
-        <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-2xl border py-2 shadow-sm ${isSupervisor ? "border-navy-700 bg-navy-700" : "border-slate-200 bg-white"}`}>
+        <div className={`flex-1 min-h-0 overflow-y-auto custom-scrollbar rounded-2xl border py-2 shadow-sm border-slate-200 bg-white`}>
           <nav className={isCollapsed ? "px-2" : "px-3"} aria-label="Main navigation">
             {navSections.map((section) => (
               <div key={section.name} className={showSectionTitles ? "mb-2" : ""}>
                 {showSectionTitles && !isCollapsed && (
-                  <p className={`px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider ${isSupervisor ? "text-amber-300" : "text-slate-400"}`}>{section.name}</p>
+                  <p className={`px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider ${isSupervisor ? "text-amber-700" : "text-slate-400"}`}>{section.name}</p>
                 )}
                 {showSectionTitles && isCollapsed && (
-                  <div className={`mx-3 my-2 border-t ${isSupervisor ? "border-white/15" : "border-slate-200"}`}></div>
+                  <div className={`mx-3 my-2 border-t border-slate-200`}></div>
                 )}
                 <div className="space-y-0.5">
             {section.items.map((item) => {
@@ -670,8 +670,8 @@ const DashboardLayout = () => {
                     isCollapsed ? "justify-center p-3" : "px-3 py-2.5"
                   } ${
                     isActive 
-                      ? (isSupervisor ? "bg-amber-300 text-navy-900 shadow-sm" : "bg-navy-700 text-white shadow-sm")
-                      : (isSupervisor ? "text-slate-200 hover:bg-white/10 hover:text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900")
+                      ? "bg-navy-700 text-white shadow-sm"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                   title={isCollapsed ? item.label : ""}
                 >
@@ -692,9 +692,7 @@ const DashboardLayout = () => {
                   </div>
                   {!isCollapsed && (
                     <span className={`ml-3 font-medium transition-all duration-200 ${
-                      isSupervisor
-                        ? (isActive ? "font-semibold text-navy-900" : "text-slate-200 group-hover:text-white")
-                        : (isActive ? "text-white" : "text-slate-600 group-hover:text-slate-900")
+                      isActive ? "text-white" : "text-slate-600 group-hover:text-slate-900"
                     }`}>
                       {item.label}
                     </span>
@@ -742,7 +740,7 @@ const DashboardLayout = () => {
                     </div>
                   )}
                   {!isCollapsed && isActive && (
-                    <div className={`absolute right-3 w-2 h-2 rounded-full ${isSupervisor ? "bg-navy-900/60" : "bg-white/70"}`}></div>
+                    <div className={`absolute right-3 w-2 h-2 rounded-full bg-white/70`}></div>
                   )}
                 </Link>
               );
