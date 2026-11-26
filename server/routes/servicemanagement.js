@@ -1237,9 +1237,14 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
       `SELECT p.id, p.service_entry_id, p.wallet_id, w.name AS wallet_name, p.amount, p.created_at,
               (SELECT wt.id FROM wallet_transactions wt
                 WHERE wt.reference_payment_id = p.id AND COALESCE(wt.is_reversal, FALSE) = FALSE
-                ORDER BY wt.id DESC LIMIT 1) AS tx_id
+                ORDER BY wt.id DESC LIMIT 1) AS tx_id,
+              (SELECT wt.description FROM wallet_transactions wt
+                WHERE wt.reference_payment_id = p.id AND wt.description LIKE 'Corrected:%'
+                ORDER BY wt.id DESC LIMIT 1) AS correction_desc,
+              col.name AS collected_by_name
        FROM payments p
        LEFT JOIN wallets w ON w.id = p.wallet_id
+       LEFT JOIN staff col ON col.id = (to_jsonb(p) ->> 'collected_by')::int
        WHERE p.service_entry_id = ANY($1::int[]) AND p.status = 'received'
          AND COALESCE(p.is_reversal, FALSE) = FALSE
          AND NOT EXISTS (SELECT 1 FROM wallet_transactions wt
@@ -1254,6 +1259,31 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
       paymentsOf.set(p.service_entry_id, list);
     }
 
+    // history lines per entry: { at, by, text, reason }
+    const historyOf = new Map();
+    const addHistory = (id, item) => {
+      const list = historyOf.get(id) || [];
+      list.push(item);
+      historyOf.set(id, list);
+    };
+    for (const e of rows) addHistory(e.id, { at: e.created_at, by: e.staff_name, text: 'Entry made', first: true });
+    const inr = (n) => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+    for (const p of payRes.rows) {
+      if (p.correction_desc) {
+        // "Corrected: <reason> (Was: ₹5.00 from Counter Cash)"
+        const m = /^Corrected: (.*) \(Was: ₹([\d.]+) from (.*)\)$/.exec(p.correction_desc) || [];
+        let text = m[2] !== undefined ? `Payment ${inr(m[2])} → ${inr(p.amount)}` : `Payment corrected to ${inr(p.amount)}`;
+        if (m[3] && p.wallet_name && m[3] !== p.wallet_name) text += ` (${m[3]} → ${p.wallet_name})`;
+        addHistory(p.service_entry_id, { at: p.created_at, by: null, text, reason: m[1] || null, payCorrection: true });
+        continue;
+      }
+      addHistory(p.service_entry_id, {
+        at: p.created_at,
+        by: p.collected_by_name || null,
+        text: `${inr(p.amount)} received in ${p.wallet_name || 'a wallet'}`,
+      });
+    }
+
     // edit history: entry saved again (audit log) or money corrected (reversal transactions)
     const editedOf = new Map();
     const note = (id, at, by) => {
@@ -1262,12 +1292,51 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
     };
     if (ids.length) {
       const auditRes = await client.query(
-        `SELECT details, performed_by, created_at FROM audit_logs
-         WHERE action = 'Service Entry Updated' AND created_at >= $2::date
-           AND details = ANY($1::text[])`,
-        [ids.map((id) => `Updated service entry ID ${id}`), date]
+        `SELECT a.action, a.details, a.performed_by, a.created_at, st.name AS performer_name,
+                COALESCE(substring(a.details from '^Updated service entry ID ([0-9]+)'),
+                         substring(a.details from ' [|] Entry #([0-9]+)$'))::int AS entry_id
+         FROM audit_logs a
+         LEFT JOIN staff st ON st.username = a.performed_by
+         WHERE a.action IN ('Service Entry Updated', 'Transaction Corrected') AND a.created_at >= $2::date
+           AND COALESCE(substring(a.details from '^Updated service entry ID ([0-9]+)'),
+                        substring(a.details from ' [|] Entry #([0-9]+)$'))::int = ANY($1::int[])
+         ORDER BY a.created_at`,
+        [ids, date]
       );
-      for (const a of auditRes.rows) note(Number(String(a.details).replace(/\D+/g, '')), a.created_at, a.performed_by);
+      const walletIds = new Set();
+      for (const a of auditRes.rows) {
+        const m = /\| Wallet: (\d+) → (\d+)/.exec(a.details || '');
+        if (m) { walletIds.add(Number(m[1])); walletIds.add(Number(m[2])); }
+      }
+      const walletNames = new Map();
+      if (walletIds.size) {
+        const wn = await client.query('SELECT id, name FROM wallets WHERE id = ANY($1::int[])', [[...walletIds]]);
+        for (const w of wn.rows) walletNames.set(Number(w.id), w.name);
+      }
+      const label = { 'Department Payment': 'Department fee', 'Service Payment': 'Payment', 'Service Charge': 'Service charge' };
+      for (const a of auditRes.rows) {
+        const by = a.performer_name || a.performed_by;
+        note(a.entry_id, a.created_at, by);
+        const details = String(a.details || '');
+        const reason = (/\| Reason: (.*?)(?: \| Entry #\d+)?$/.exec(details) || [])[1] || null;
+        let text;
+        if (a.action === 'Service Entry Updated') {
+          const what = (/^Updated service entry ID \d+: (.*?)(?: \| Reason: .*)?$/.exec(details) || [])[1];
+          text = what || 'Entry details saved';
+        } else {
+          const m = /\(([^)]+)\): ₹([\d.]+) → ₹([\d.]+) \| Wallet: (\d+) → (\d+)/.exec(details);
+          if (!m) continue;
+          if (m[1] === 'Service Payment') {
+            // the line is already there from the payment itself: add who did it
+            const line = (historyOf.get(a.entry_id) || []).find((h) => h.payCorrection && !h.by && Math.abs(new Date(h.at) - new Date(a.created_at)) < 60000);
+            if (line) { line.by = by; continue; }
+          }
+          const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+          text = `${label[m[1]] || m[1]} ${fmt(m[2])} → ${fmt(m[3])}`;
+          if (m[4] !== m[5]) text += ` (${walletNames.get(Number(m[4])) || 'wallet'} → ${walletNames.get(Number(m[5])) || 'wallet'})`;
+        }
+        addHistory(a.entry_id, { at: a.created_at, by, text, reason });
+      }
       const revRes = await client.query(
         `SELECT reference_id, MAX(created_at) AS at FROM wallet_transactions
          WHERE reference_id = ANY($1::int[]) AND COALESCE(is_reversal, FALSE) = TRUE
@@ -1305,6 +1374,10 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
         editedAt: editedOf.get(e.id)?.at || null,
         editedBy: editedOf.get(e.id)?.by || null,
         payments: paymentsOf.get(e.id) || [],
+        history: (historyOf.get(e.id) || [])
+          // newest first; "Entry made" always last (its payment is saved in the same moment)
+          .sort((x, y) => (new Date(y.at) - (y.first ? 1e7 : 0)) - (new Date(x.at) - (x.first ? 1e7 : 0)))
+          .map(({ payCorrection, first, ...h }) => h), // eslint-disable-line no-unused-vars
         serviceCharge: sc,
         departmentCharge: dept,
         totalCharge: total,
@@ -2561,7 +2634,20 @@ router.put('/entry/:id', authenticateToken, async (req, res) => {
       }
     }
 
-    await client.query(`INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`, ['Service Entry Updated', req.user.username, `Updated service entry ID ${id}`, centreId]);
+    // What changed, for the entry's history ("Service charge ₹5 → ₹100; Phone … | Reason: …")
+    const money = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+    const diffs = [];
+    const was = existingEntry, now = updatedEntry;
+    if (String(was.customer_name || '') !== String(now.customer_name || '')) diffs.push(`Customer ${was.customer_name || '-'} → ${now.customer_name || '-'}`);
+    if (String(was.phone || '') !== String(now.phone || '')) diffs.push(`Phone ${was.phone || '-'} → ${now.phone || '-'}`);
+    if (Number(was.service_charges) !== Number(now.service_charges)) diffs.push(`Service charge ${money(was.service_charges)} → ${money(now.service_charges)}`);
+    if (Number(was.department_charges) !== Number(now.department_charges)) diffs.push(`Department ${money(was.department_charges)} → ${money(now.department_charges)}`);
+    if (String(was.category_id) !== String(now.category_id) || String(was.subcategory_id) !== String(now.subcategory_id)) diffs.push('Service changed');
+    if (String(was.status || '') !== String(now.status || '')) diffs.push(`Status ${was.status || '-'} → ${now.status || '-'}`);
+    if (Number(was.staff_id) !== Number(now.staff_id)) diffs.push('Staff member changed');
+    const editReason = String(req.body.reason || '').trim().slice(0, 300);
+    const editDetails = `Updated service entry ID ${id}${diffs.length ? `: ${diffs.join('; ')}` : ''}${editReason ? ` | Reason: ${editReason}` : ''}`;
+    await client.query(`INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) VALUES ($1, $2, $3, $4, NOW())`, ['Service Entry Updated', req.user.username, editDetails, centreId]);
 
     const paymentsResult = await client.query(`
       SELECT DISTINCT ON (p.correction_group_id) p.id, p.wallet_id, p.amount, p.status, w.name AS wallet_name, w.wallet_type
@@ -3227,7 +3313,7 @@ router.put('/transactions/:id/correct', authenticateToken, async (req, res) => {
     }
 
     // Audit logging
-    const auditDetails = `Corrected txn #${original.id} (${original.category}): ₹${parseFloat(original.amount).toFixed(2)} → ₹${finalAmount.toFixed(2)} | Wallet: ${original.wallet_id} → ${finalWalletId} | Reason: ${reason}`;
+    const auditDetails = `Corrected txn #${original.id} (${original.category}): ₹${parseFloat(original.amount).toFixed(2)} → ₹${finalAmount.toFixed(2)} | Wallet: ${original.wallet_id} → ${finalWalletId} | Reason: ${reason}${original.reference_id ? ` | Entry #${original.reference_id}` : ''}`;
     
     await client.query(
       `INSERT INTO audit_logs (action, performed_by, details, centre_id, created_at) 
