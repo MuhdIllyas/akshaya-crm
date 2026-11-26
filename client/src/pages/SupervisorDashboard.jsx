@@ -43,17 +43,12 @@ async function loadCentre(me) {
     getJson(`/api/accounting/closing-status?date=${today}`),
     getJson(`/api/expense`),
     getJson(`/api/servicemanagement/pending-payments?scope=centre`),
-    getJson(`/api/upi-credits?status=unclaimed&window=7d`),
+    // today's UPI payments with no entry yet (bank statements are checked at the evening close, not here)
+    getJson(`/api/upi-credits?status=unclaimed&window=today`),
     getWalletsForCentre(),
   ]);
 
   const walletList = Array.isArray(val(wallets)) ? val(wallets) : [];
-  let bankOpen = null;
-  const bankWallets = walletList.filter((w) => w.wallet_type === "bank" && w.status !== "inactive");
-  if (bankWallets.length) {
-    const lists = await Promise.allSettled(bankWallets.map((w) => getJson(`/api/bankstatements?wallet_id=${w.id}`)));
-    bankOpen = lists.reduce((s, r) => s + (r.status === "fulfilled" && r.value[0] ? r.value[0].open_debits || 0 : 0), 0);
-  }
 
   const toApprove = (val(expenses) || []).filter((e) => e.status === "pending" && Number(e.staff_id) !== me);
   const oldestExpense = [...toApprove].sort((a, b) => String(a.expense_date).localeCompare(String(b.expense_date)))[0];
@@ -77,7 +72,7 @@ async function loadCentre(me) {
     pending: pendingList,
     pendingDue: (pendingList || []).reduce((s, p) => s + Number(p.pending_amount || 0), 0),
     upiUnclaimed: val(upi)?.summary ? val(upi).summary.unclaimed : null,
-    bankOpen,
+    upiUnclaimedTotal: val(upi)?.summary?.unclaimed_total || 0,
     walletsLoaded: wallets.status === "fulfilled",
     walletList,
     byType,
@@ -218,8 +213,8 @@ const SupervisorDashboard = () => {
   const yStatus = y?.status || "not_closed";
   const variance = Number(y?.cash_variance || 0);
   const openDiff = Number(y?.open_short || 0) + Number(y?.open_excess || 0);
-  const toMatch = (centre?.upiUnclaimed || 0) + (centre?.bankOpen || 0);
-  const matchUnknown = centre && centre.upiUnclaimed === null && !centre.walletsLoaded;
+  const toMatch = centre?.upiUnclaimed || 0;
+  const matchUnknown = centre && centre.upiUnclaimed === null;
   // Today's entries (India date) that are still unpaid, newest first: a quick view for the evening
   const pendingToday = useMemo(() => {
     const today = todayIST();
@@ -351,9 +346,9 @@ const SupervisorDashboard = () => {
                 sub={centre.oldestExpense ? `Oldest from ${shortDate(centre.oldestExpense.date)}` : "All approved"} />
               <Tile to={ACCOUNTS}
                 tone={matchUnknown ? "idle" : toMatch ? "warn" : "ok"}
-                label="Payments to match"
+                label="UPI to match · today"
                 value={matchUnknown ? "Couldn't load" : toMatch || "None"}
-                sub={`Bank lines ${centre.bankOpen ?? "–"} · UPI (7 days) ${centre.upiUnclaimed ?? "–"}`} />
+                sub={matchUnknown ? "UPI check" : toMatch ? `${rupees(centre.upiUnclaimedTotal)} with no entry yet` : "Every UPI payment has an entry"} />
               <Tile to={ACCOUNTS}
                 tone={!y ? "idle" : openDiff ? "warn" : "ok"}
                 label="Wallet differences"
