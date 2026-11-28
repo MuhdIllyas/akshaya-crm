@@ -62,6 +62,7 @@ export const EntryPanel = ({ entry, day, focus, onClose, onSaved, onFullEdit, on
   const [pays, setPays] = useState(() => original.map((p) => ({ ...p, amount: String(p.amount), walletId: String(p.walletId || ""), open: false })));
   const [collect, setCollect] = useState({ walletId: String(original[0]?.walletId || ""), amount: entry.pending > 0 ? String(entry.pending) : "" });
   const [wallets, setWallets] = useState([]);
+  const [walletsFailed, setWalletsFailed] = useState(false);
   const [errors, setErrors] = useState({});
   const [busy, setBusy] = useState(""); // "save" | "collect"
   const root = useRef(null);
@@ -70,8 +71,11 @@ export const EntryPanel = ({ entry, day, focus, onClose, onSaved, onFullEdit, on
 
   useEffect(() => {
     call("GET", "/api/wallet/my-centre-wallets")
-      .then((rows) => setWallets((Array.isArray(rows) ? rows : []).filter((w) => !w.status || w.status === "active")))
-      .catch(() => setWallets([]));
+      // the same wallets the Service Entry page offers for payments: cash wallets, plus
+      // bank / digital / card wallets that are online (a payment's own wallet always shows)
+      .then((rows) => setWallets((Array.isArray(rows) ? rows : []).filter((w) =>
+        w.wallet_type === "cash" || (["digital", "bank", "card"].includes(w.wallet_type) && w.status === "online"))))
+      .catch(() => { setWallets([]); setWalletsFailed(true); });
   }, []);
 
   // focus: the collect amount, the service charge, or the heading
@@ -148,15 +152,18 @@ export const EntryPanel = ({ entry, day, focus, onClose, onSaved, onFullEdit, on
         await call("PUT", `/api/servicemanagement/transactions/${entry.deptTxId}/correct`, { new_amount: dept, reason, match: "transaction" });
         step += 1;
       }
-      await call("PUT", `/api/servicemanagement/entry/${entry.id}`, {
-        customerName: form.customerName.trim(),
-        phone: form.phone.trim(),
-        serviceCharge: sc,
-        departmentCharge: dept,
-        totalCharge: total,
-        reason: reason || undefined,
-      });
-      step += 1;
+      // the entry itself, only when its own fields change (a payment-only fix leaves it alone)
+      if (scChanged || deptChanged || detailsChanged) {
+        await call("PUT", `/api/servicemanagement/entry/${entry.id}`, {
+          customerName: form.customerName.trim(),
+          phone: form.phone.trim(),
+          serviceCharge: sc,
+          departmentCharge: dept,
+          totalCharge: total,
+          reason: reason || undefined,
+        });
+        step += 1;
+      }
       for (const { p, i } of changedPays) {
         const body = { new_amount: Number(p.amount), reason, match: "transaction" };
         if (p.walletId !== String(original[i].walletId || "")) body.new_wallet_id = Number(p.walletId);
@@ -284,6 +291,7 @@ export const EntryPanel = ({ entry, day, focus, onClose, onSaved, onFullEdit, on
           </p>
         </div>
         {errors.paid && <p className="mt-1 text-sm text-red-700">{errors.paid}</p>}
+        {walletsFailed && <p className="mt-1 text-sm text-red-700">Couldn't load the centre's wallets, so a payment can't be moved to another wallet. Refresh and try again.</p>}
 
         {pays.length === 0 && <p className="mt-2 text-sm text-slate-600">No payment yet.</p>}
         <ul className="mt-2 flex flex-col gap-2">

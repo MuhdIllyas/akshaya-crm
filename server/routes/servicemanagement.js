@@ -1272,8 +1272,12 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
       if (p.correction_desc) {
         // "Corrected: <reason> (Was: ₹5.00 from Counter Cash)"
         const m = /^Corrected: (.*) \(Was: ₹([\d.]+) from (.*)\)$/.exec(p.correction_desc) || [];
-        let text = m[2] !== undefined ? `Payment ${inr(m[2])} → ${inr(p.amount)}` : `Payment corrected to ${inr(p.amount)}`;
-        if (m[3] && p.wallet_name && m[3] !== p.wallet_name) text += ` (${m[3]} → ${p.wallet_name})`;
+        const moved = m[3] && p.wallet_name && m[3] !== p.wallet_name;
+        const sameAmount = m[2] !== undefined && Number(m[2]) === Number(p.amount);
+        let text = m[2] === undefined ? `Payment corrected to ${inr(p.amount)}`
+          : sameAmount && moved ? `Payment ${inr(p.amount)} moved`
+          : `Payment ${inr(m[2])} → ${inr(p.amount)}`;
+        if (moved) text += sameAmount ? ` from ${m[3]} to ${p.wallet_name}` : ` (${m[3]} → ${p.wallet_name})`;
         addHistory(p.service_entry_id, { at: p.created_at, by: null, text, reason: m[1] || null, payCorrection: true });
         continue;
       }
@@ -1332,8 +1336,10 @@ router.get('/supervisor/day', authenticateToken, async (req, res) => {
             if (line) { line.by = by; continue; }
           }
           const fmt = (n) => '₹' + Number(n).toLocaleString('en-IN', { maximumFractionDigits: 2 });
-          text = `${label[m[1]] || m[1]} ${fmt(m[2])} → ${fmt(m[3])}`;
-          if (m[4] !== m[5]) text += ` (${walletNames.get(Number(m[4])) || 'wallet'} → ${walletNames.get(Number(m[5])) || 'wallet'})`;
+          const wFrom = walletNames.get(Number(m[4])) || 'wallet', wTo = walletNames.get(Number(m[5])) || 'wallet';
+          text = Number(m[2]) === Number(m[3]) && m[4] !== m[5]
+            ? `${label[m[1]] || m[1]} ${fmt(m[3])} moved from ${wFrom} to ${wTo}`
+            : `${label[m[1]] || m[1]} ${fmt(m[2])} → ${fmt(m[3])}${m[4] !== m[5] ? ` (${wFrom} → ${wTo})` : ''}`;
         }
         addHistory(a.entry_id, { at: a.created_at, by, text, reason });
       }
